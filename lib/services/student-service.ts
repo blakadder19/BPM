@@ -32,20 +32,24 @@ export async function getStudents(): Promise<StudentListItem[]> {
     .order("full_name");
 
   if (usersErr) throw new Error(`Failed to load students: ${usersErr.message}`);
-  if (!users || users.length === 0) return [];
 
-  const ids = users.map((u) => u.id);
+  const typedUsers = (users ?? []) as UserRow[];
+  if (typedUsers.length === 0) return [];
+
+  const ids = typedUsers.map((u) => u.id);
 
   const { data: profiles } = await supabase
     .from("student_profiles")
     .select("*")
     .in("id", ids);
 
-  const profileMap = new Map(
-    (profiles ?? []).map((p) => [p.id, p])
+  const typedProfiles = (profiles ?? []) as ProfileRow[];
+
+  const profileMap = new Map<string, ProfileRow>(
+    typedProfiles.map((p) => [p.id, p])
   );
 
-  return users.map((u) => toListItem(u, profileMap.get(u.id)));
+  return typedUsers.map((u) => toListItem(u, profileMap.get(u.id)));
 }
 
 export async function updateStudent(
