@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/domain";
@@ -20,13 +21,10 @@ const DEMO_ACCOUNTS: Record<string, { fullName: string; role: UserRole }> = {
   "student@bpm.dance": { fullName: "Student User", role: "student" },
 };
 
-const DEV_FALLBACK_USER: AuthUser = {
-  id: "dev-fallback-admin",
-  email: "admin@bpm.dance",
-  fullName: "Admin User",
-  role: "admin",
-  avatarUrl: null,
-  academyId: "",
+const DEV_USERS: Record<UserRole, AuthUser> = {
+  admin: { id: "dev-admin", email: "admin@bpm.dance", fullName: "Admin User", role: "admin", avatarUrl: null, academyId: "" },
+  teacher: { id: "dev-teacher", email: "teacher@bpm.dance", fullName: "Maria Garcia", role: "teacher", avatarUrl: null, academyId: "" },
+  student: { id: "dev-student", email: "student@bpm.dance", fullName: "Student User", role: "student", avatarUrl: null, academyId: "" },
 };
 
 /**
@@ -41,7 +39,10 @@ const DEV_FALLBACK_USER: AuthUser = {
  * returns a dev-only admin fallback so local navigation isn't blocked.
  */
 export async function getAuthUser(): Promise<AuthUser | null> {
-  if (process.env.NODE_ENV === "development") return DEV_FALLBACK_USER;
+  if (process.env.NODE_ENV === "development") {
+    const role = (await cookies()).get("dev_role")?.value as UserRole | undefined;
+    return DEV_USERS[role ?? "admin"] ?? DEV_USERS.admin;
+  }
 
   const supabase = await createServerSupabaseClient();
 

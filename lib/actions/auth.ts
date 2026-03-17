@@ -18,3 +18,13 @@ export async function signOut(): Promise<void> {
   }
   redirect("/login");
 }
+
+const VALID_DEV_ROLES = new Set(["admin", "teacher", "student"]);
+
+export async function switchDevRole(formData: FormData): Promise<void> {
+  if (process.env.NODE_ENV !== "development") return;
+  const role = formData.get("role") as string;
+  if (!VALID_DEV_ROLES.has(role)) return;
+  const cookieStore = await cookies();
+  cookieStore.set("dev_role", role, { path: "/", httpOnly: true, sameSite: "lax" });
+}

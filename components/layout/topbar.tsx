@@ -1,7 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { switchDevRole } from "@/lib/actions/auth";
 import type { AuthUser } from "@/lib/auth";
 
 const ROLE_BADGE: Record<string, "default" | "success" | "info"> = {
@@ -21,6 +24,9 @@ export function Topbar({ user }: TopbarProps) {
         <Badge variant={ROLE_BADGE[user.role] ?? "default"}>
           {user.role}
         </Badge>
+        {process.env.NODE_ENV === "development" && (
+          <DevRoleSwitcher currentRole={user.role} />
+        )}
       </div>
 
       <div className="flex items-center gap-3">
@@ -34,5 +40,32 @@ export function Topbar({ user }: TopbarProps) {
         <span className="text-sm text-gray-600">{user.email}</span>
       </div>
     </header>
+  );
+}
+
+function DevRoleSwitcher({ currentRole }: { currentRole: string }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+
+  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const fd = new FormData();
+    fd.set("role", e.target.value);
+    startTransition(async () => {
+      await switchDevRole(fd);
+      router.refresh();
+    });
+  }
+
+  return (
+    <select
+      value={currentRole}
+      onChange={handleChange}
+      disabled={isPending}
+      className="rounded border border-dashed border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
+    >
+      <option value="admin">Dev: Admin</option>
+      <option value="teacher">Dev: Teacher</option>
+      <option value="student">Dev: Student</option>
+    </select>
   );
 }
