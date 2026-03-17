@@ -1,41 +1,20 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export interface AuthResult {
   error: string | null;
 }
 
-export async function signIn(formData: FormData): Promise<AuthResult> {
-  const email = formData.get("email") as string;
-  const password = formData.get("password") as string;
-
-  if (!email || !password) {
-    return { error: "Email and password are required." };
-  }
-
-  const supabase = await createServerSupabaseClient();
-
-  const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  const next = formData.get("next") as string;
-  redirect(next || "/dashboard");
-}
+const AUTH_COOKIE_RE = /^sb-.+-auth-token/;
 
 export async function signOut(): Promise<void> {
-  const supabase = await createServerSupabaseClient();
-  try {
-    await supabase.auth.signOut({ scope: "local" });
-  } catch {
-    // Server couldn't reach Supabase — cookies are still cleared locally
+  const cookieStore = await cookies();
+  for (const c of cookieStore.getAll()) {
+    if (AUTH_COOKIE_RE.test(c.name)) {
+      cookieStore.delete(c.name);
+    }
   }
   redirect("/login");
 }
