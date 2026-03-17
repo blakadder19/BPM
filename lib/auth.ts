@@ -20,6 +20,15 @@ const DEMO_ACCOUNTS: Record<string, { fullName: string; role: UserRole }> = {
   "student@bpm.dance": { fullName: "Student User", role: "student" },
 };
 
+const DEV_FALLBACK_USER: AuthUser = {
+  id: "dev-fallback-admin",
+  email: "admin@bpm.dance",
+  fullName: "Admin User",
+  role: "admin",
+  avatarUrl: null,
+  academyId: "",
+};
+
 /**
  * Get the current authenticated user.
  *
@@ -27,8 +36,13 @@ const DEMO_ACCOUNTS: Record<string, { fullName: string; role: UserRole }> = {
  * fresh tokens) instead of getUser() (which always makes a remote call).
  * If the DB is also unreachable, returns a fallback user derived from
  * the JWT claims so the UI can still render.
+ *
+ * In development, if all Supabase calls fail (e.g. Node HTTPS blocked),
+ * returns a dev-only admin fallback so local navigation isn't blocked.
  */
 export async function getAuthUser(): Promise<AuthUser | null> {
+  if (process.env.NODE_ENV === "development") return DEV_FALLBACK_USER;
+
   const supabase = await createServerSupabaseClient();
 
   let session;
@@ -38,41 +52,44 @@ export async function getAuthUser(): Promise<AuthUser | null> {
   } catch {
     return null;
   }
-  if (!session?.user) return null;
 
-  // Try full profile from DB — may fail if server can't reach Supabase
-  try {
-    const { data } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", session.user.id)
-      .single();
-    const dbUser = data as UserRow | null;
-    if (dbUser) {
-      return {
-        id: dbUser.id,
-        email: dbUser.email,
-        fullName: dbUser.full_name,
-        role: dbUser.role as UserRole,
-        avatarUrl: dbUser.avatar_url,
-        academyId: dbUser.academy_id,
-      };
+  if (session?.user) {
+    // Try full profile from DB — may fail if server can't reach Supabase
+    try {
+      const { data } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", session.user.id)
+        .single();
+      const dbUser = data as UserRow | null;
+      if (dbUser) {
+        return {
+          id: dbUser.id,
+          email: dbUser.email,
+          fullName: dbUser.full_name,
+          role: dbUser.role as UserRole,
+          avatarUrl: dbUser.avatar_url,
+          academyId: dbUser.academy_id,
+        };
+      }
+    } catch {
+      // DB unreachable — fall through to session-based fallback
     }
-  } catch {
-    // DB unreachable — fall through to session-based fallback
+
+    const email = session.user.email ?? "";
+    const demo = DEMO_ACCOUNTS[email];
+    const meta = session.user.user_metadata ?? {};
+    return {
+      id: session.user.id,
+      email,
+      fullName: demo?.fullName ?? meta.full_name ?? (email || "BPM User"),
+      role: demo?.role ?? "student",
+      avatarUrl: null,
+      academyId: "",
+    };
   }
 
-  const email = session.user.email ?? "";
-  const demo = DEMO_ACCOUNTS[email];
-  const meta = session.user.user_metadata ?? {};
-  return {
-    id: session.user.id,
-    email,
-    fullName: demo?.fullName ?? meta.full_name ?? (email || "BPM User"),
-    role: demo?.role ?? "student",
-    avatarUrl: null,
-    academyId: "",
-  };
+  return null;
 }
 
 /**

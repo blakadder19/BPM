@@ -4,13 +4,20 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
+const SHORT_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const SHORT_MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
 export function formatDate(date: Date | string): string {
-  return new Date(date).toLocaleDateString("en-IE", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  const d = typeof date === "string" ? new Date(date + "T12:00:00Z") : date;
+  return `${SHORT_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+export function formatShortDate(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00Z");
+  return `${SHORT_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]}`;
 }
 
 export function formatTime(time: string): string {

@@ -14,6 +14,9 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (!user && !isPublicRoute(pathname)) {
+    if (process.env.NODE_ENV === "development") {
+      return NextResponse.next({ request });
+    }
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);

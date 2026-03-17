@@ -19,7 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { formatDate, formatCents, cn } from "@/lib/utils";
+import { formatDate, formatShortDate, formatCents, cn } from "@/lib/utils";
 import {
   BOOKABLE_CLASSES,
   BOOKINGS,
@@ -704,14 +704,3 @@ function SubscriptionsCard({
   );
 }
 
-// ── Helpers ─────────────────────────────────────────────────
-
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr + "T12:00:00Z");
-  return d.toLocaleDateString("en-IE", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-}
