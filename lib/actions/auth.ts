@@ -32,6 +32,10 @@ export async function signIn(formData: FormData): Promise<AuthResult> {
 
 export async function signOut(): Promise<void> {
   const supabase = await createServerSupabaseClient();
-  await supabase.auth.signOut();
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch {
+    // Server couldn't reach Supabase — cookies are still cleared locally
+  }
   redirect("/login");
 }

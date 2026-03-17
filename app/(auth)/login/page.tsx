@@ -1,11 +1,11 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useActionState } from "react";
+import { useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { signIn } from "@/lib/actions/auth";
+import { createClient } from "@/lib/supabase/client";
 
 const DEMO_USERS = [
   { label: "Admin", email: "admin@bpm.dance" },
@@ -15,15 +15,47 @@ const DEMO_USERS = [
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const next = searchParams.get("next") ?? "";
   const callbackError = searchParams.get("error");
 
-  const [state, formAction, isPending] = useActionState(
-    async (_prev: { error: string | null }, formData: FormData) => {
-      return signIn(formData);
-    },
-    { error: callbackError === "auth_callback_failed" ? "Authentication failed. Please try again." : null }
+  const [error, setError] = useState<string | null>(
+    callbackError === "auth_callback_failed"
+      ? "Authentication failed. Please try again."
+      : null
   );
+  const [isPending, setIsPending] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setIsPending(true);
+
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+
+    if (!email || !password) {
+      setError("Email and password are required.");
+      setIsPending(false);
+      return;
+    }
+
+    const supabase = createClient();
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (authError) {
+      setError(authError.message);
+      setIsPending(false);
+      return;
+    }
+
+    router.push(next || "/dashboard");
+    router.refresh();
+  }
 
   function fillDemo(email: string) {
     const emailInput = document.getElementById("email") as HTMLInputElement;
@@ -48,14 +80,13 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {state.error && (
+          {error && (
             <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-              {state.error}
+              {error}
             </div>
           )}
 
-          <form action={formAction} className="space-y-4">
-            <input type="hidden" name="next" value={next} />
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label
                 htmlFor="email"

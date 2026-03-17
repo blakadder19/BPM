@@ -9,8 +9,8 @@ function isPublicRoute(pathname: string): boolean {
   );
 }
 
-export async function middleware(request: NextRequest) {
-  const { supabaseResponse, user } = await updateSession(request);
+export function middleware(request: NextRequest) {
+  const { supabaseResponse, user } = updateSession(request);
   const { pathname } = request.nextUrl;
 
   if (!user && !isPublicRoute(pathname)) {
