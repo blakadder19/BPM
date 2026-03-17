@@ -97,6 +97,34 @@ export type Database = {
         };
         Relationships: [];
       };
+      student_profiles: {
+        Row: {
+          id: string;
+          emergency_contact_name: string | null;
+          emergency_contact_phone: string | null;
+          date_of_birth: string | null;
+          preferred_role: "leader" | "follower" | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          date_of_birth?: string | null;
+          preferred_role?: "leader" | "follower" | null;
+          notes?: string | null;
+        };
+        Update: {
+          emergency_contact_name?: string | null;
+          emergency_contact_phone?: string | null;
+          date_of_birth?: string | null;
+          preferred_role?: "leader" | "follower" | null;
+          notes?: string | null;
+        };
+        Relationships: [];
+      };
       bookable_classes: {
         Row: {
           id: string;

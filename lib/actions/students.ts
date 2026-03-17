@@ -1,6 +1,7 @@
 "use server";
 
-import { updateStudent } from "@/lib/services/student-store";
+import { revalidatePath } from "next/cache";
+import { updateStudent } from "@/lib/services/student-service";
 import type { DanceRole } from "@/types/domain";
 
 export async function updateStudentAction(
@@ -18,8 +19,16 @@ export async function updateStudentAction(
   if (!fullName) return { success: false, error: "Name is required" };
   if (!email) return { success: false, error: "Email is required" };
 
-  const updated = updateStudent(id, { fullName, email, phone, preferredRole });
-  if (!updated) return { success: false, error: "Student not found" };
+  const result = await updateStudent(id, {
+    fullName,
+    email,
+    phone,
+    preferredRole,
+  });
 
-  return { success: true };
+  if (result.success) {
+    revalidatePath("/students");
+  }
+
+  return result;
 }

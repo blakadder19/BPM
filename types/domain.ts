@@ -39,6 +39,20 @@ export interface StudentProfile {
   notes: string | null;
 }
 
+/** Flattened shape for the Admin Students list. */
+export interface StudentListItem {
+  id: string;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  preferredRole: DanceRole | null;
+  /** PROVISIONAL — will be derived from student_subscriptions join */
+  subscriptionName: string | null;
+  /** PROVISIONAL — will be derived from student_subscriptions join */
+  remainingCredits: number | null;
+  joinedAt: string;
+}
+
 export interface TeacherProfile {
   id: string;
   bio: string | null;

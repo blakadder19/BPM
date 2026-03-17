@@ -23,7 +23,8 @@ import {
 import { formatDate } from "@/lib/utils";
 import { getAccessRule, describeAccess } from "@/config/product-access";
 import { updateStudentAction } from "@/lib/actions/students";
-import type { MockStudent, MockSubscription, MockWalletTx } from "@/lib/mock-data";
+import type { StudentListItem } from "@/types/domain";
+import type { MockSubscription, MockWalletTx } from "@/lib/mock-data";
 
 const ROLE_OPTIONS = [
   { value: "leader", label: "Leader" },
@@ -31,7 +32,7 @@ const ROLE_OPTIONS = [
 ];
 
 interface AdminStudentsProps {
-  students: MockStudent[];
+  students: StudentListItem[];
   subscriptions: MockSubscription[];
   walletTransactions: MockWalletTx[];
 }
@@ -44,7 +45,7 @@ export function AdminStudents({
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [editStudent, setEditStudent] = useState<MockStudent | null>(null);
+  const [editStudent, setEditStudent] = useState<StudentListItem | null>(null);
 
   const q = search.toLowerCase();
 
@@ -302,7 +303,7 @@ function EditStudentDialog({
   student,
   onClose,
 }: {
-  student: MockStudent;
+  student: StudentListItem;
   onClose: () => void;
 }) {
   const router = useRouter();
