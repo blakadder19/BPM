@@ -14,6 +14,12 @@ export interface AuthUser {
   academyId: string;
 }
 
+const DEMO_ACCOUNTS: Record<string, { fullName: string; role: UserRole }> = {
+  "admin@bpm.dance": { fullName: "Admin User", role: "admin" },
+  "teacher@bpm.dance": { fullName: "Maria Garcia", role: "teacher" },
+  "student@bpm.dance": { fullName: "Demo Student", role: "student" },
+};
+
 /**
  * Get the current authenticated user.
  *
@@ -56,12 +62,14 @@ export async function getAuthUser(): Promise<AuthUser | null> {
     // DB unreachable — fall through to session-based fallback
   }
 
+  const email = session.user.email ?? "";
+  const demo = DEMO_ACCOUNTS[email];
   const meta = session.user.user_metadata ?? {};
   return {
     id: session.user.id,
-    email: session.user.email ?? "",
-    fullName: meta.full_name ?? session.user.email ?? "BPM User",
-    role: "admin",
+    email,
+    fullName: demo?.fullName ?? meta.full_name ?? (email || "BPM User"),
+    role: demo?.role ?? "student",
     avatarUrl: null,
     academyId: "",
   };

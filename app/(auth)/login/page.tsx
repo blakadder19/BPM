@@ -9,8 +9,8 @@ import { createClient } from "@/lib/supabase/client";
 
 const DEMO_USERS = [
   { label: "Admin", email: "admin@bpm.dance" },
-  { label: "Teacher", email: "maria@bpm.dance" },
-  { label: "Student", email: "alice@test.com" },
+  { label: "Teacher", email: "teacher@bpm.dance" },
+  { label: "Student", email: "student@bpm.dance" },
 ];
 
 export default function LoginPage() {
