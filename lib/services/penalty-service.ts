@@ -180,6 +180,16 @@ export class PenaltyService {
     return [...this.penalties];
   }
 
+  updateResolution(
+    penaltyId: string,
+    resolution: PenaltyResolution
+  ): StoredPenalty | null {
+    const penalty = this.penalties.find((p) => p.id === penaltyId);
+    if (!penalty) return null;
+    penalty.resolution = resolution;
+    return penalty;
+  }
+
   // ── Internal ────────────────────────────────────────────────
 
   private createPenalty(

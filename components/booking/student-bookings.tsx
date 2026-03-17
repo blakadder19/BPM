@@ -2,22 +2,14 @@
 
 import Link from "next/link";
 import { CalendarPlus, Inbox } from "lucide-react";
-import { BOOKINGS } from "@/lib/mock-data";
-import { useUser } from "@/components/providers/user-provider";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime } from "@/lib/utils";
+import type { BookingView } from "@/app/(app)/bookings/page";
 
-export function StudentBookings() {
-  const user = useUser();
-
-  // Mock: match by name. In production, filter by student ID via Supabase.
-  const myBookings = BOOKINGS.filter(
-    (b) => b.studentName === user.fullName
-  );
-
+export function StudentBookings({ bookings }: { bookings: BookingView[] }) {
   return (
     <div className="space-y-6">
       <PageHeader
@@ -33,7 +25,7 @@ export function StudentBookings() {
         }
       />
 
-      {myBookings.length === 0 ? (
+      {bookings.length === 0 ? (
         <EmptyState
           icon={Inbox}
           title="No bookings yet"
@@ -46,7 +38,7 @@ export function StudentBookings() {
         />
       ) : (
         <div className="space-y-3">
-          {myBookings.map((b) => (
+          {bookings.map((b) => (
             <div
               key={b.id}
               className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
@@ -59,14 +51,7 @@ export function StudentBookings() {
                   {b.danceRole && <StatusBadge status={b.danceRole} />}
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                {b.subscriptionName && (
-                  <span className="hidden text-xs text-gray-400 sm:block">
-                    {b.subscriptionName}
-                  </span>
-                )}
-                <StatusBadge status={b.status} />
-              </div>
+              <StatusBadge status={b.status} />
             </div>
           ))}
         </div>

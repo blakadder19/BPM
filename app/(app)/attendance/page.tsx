@@ -350,6 +350,11 @@ function HistoryView() {
     []
   );
 
+  const classMap = useMemo(
+    () => new Map(BOOKABLE_CLASSES.map((bc) => [bc.id, bc])),
+    []
+  );
+
   const q = search.toLowerCase();
 
   const filtered = useMemo(
@@ -405,18 +410,75 @@ function HistoryView() {
           count={filtered.length}
         >
           {filtered.map((a) => (
-            <tr key={a.id}>
-              <Td className="font-medium text-gray-900">{a.studentName}</Td>
-              <Td>{a.classTitle}</Td>
-              <Td>{formatDate(a.date)}</Td>
-              <Td><StatusBadge status={a.status} /></Td>
-              <Td className="capitalize">{a.checkInMethod}</Td>
-              <Td>{a.markedBy}</Td>
-              <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
-            </tr>
+            <HistoryRow key={a.id} record={a} bookableClass={classMap.get(a.bookableClassId)} />
           ))}
         </AdminTable>
       )}
     </div>
+  );
+}
+
+function HistoryRow({
+  record: a,
+  bookableClass: bc,
+}: {
+  record: (typeof ATTENDANCE)[number];
+  bookableClass: (typeof BOOKABLE_CLASSES)[number] | undefined;
+}) {
+  const [currentStatus, setCurrentStatus] = useState(a.status);
+  const [isPending, startTransition] = useTransition();
+
+  function handleStatusChange(newStatus: AttendanceMark) {
+    if (newStatus === currentStatus) return;
+    const prev = currentStatus;
+    setCurrentStatus(newStatus);
+
+    startTransition(async () => {
+      const result = await markStudentAttendance({
+        bookableClassId: a.bookableClassId,
+        studentId: a.studentId,
+        studentName: a.studentName,
+        bookingId: a.bookingId ?? "",
+        classTitle: a.classTitle,
+        date: a.date,
+        classType: (bc?.classType ?? "class") as ClassType,
+        danceStyleId: bc?.styleId ?? null,
+        level: bc?.level ?? null,
+        status: newStatus,
+        markedBy: "Admin User",
+      });
+
+      if (!result.success) setCurrentStatus(prev);
+    });
+  }
+
+  return (
+    <tr className={isPending ? "opacity-60" : undefined}>
+      <Td className="font-medium text-gray-900">{a.studentName}</Td>
+      <Td>{a.classTitle}</Td>
+      <Td>{formatDate(a.date)}</Td>
+      <Td>
+        <select
+          value={currentStatus}
+          onChange={(e) => handleStatusChange(e.target.value as AttendanceMark)}
+          disabled={isPending}
+          className={cn(
+            "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-100",
+            currentStatus === "present" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+            currentStatus === "late" && "border-amber-200 bg-amber-50 text-amber-700",
+            currentStatus === "absent" && "border-red-200 bg-red-50 text-red-700",
+            currentStatus === "excused" && "border-blue-200 bg-blue-50 text-blue-700"
+          )}
+        >
+          <option value="present">Present</option>
+          <option value="late">Late</option>
+          <option value="absent">Absent</option>
+          <option value="excused">Excused</option>
+        </select>
+      </Td>
+      <Td className="capitalize">{a.checkInMethod}</Td>
+      <Td>{a.markedBy}</Td>
+      <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
+    </tr>
   );
 }

@@ -25,7 +25,7 @@ export const NAVIGATION: NavItem[] = [
   { name: "Attendance", href: "/attendance", icon: ClipboardCheck, roles: ["admin", "teacher"] },
   { name: "Students", href: "/students", icon: Users, roles: ["admin"] },
   { name: "Products", href: "/products", icon: Package, roles: ["admin"] },
-  { name: "Penalties", href: "/penalties", icon: AlertTriangle, roles: ["admin"] },
+  { name: "Penalties", href: "/penalties", icon: AlertTriangle, roles: ["admin", "student"] },
   { name: "Settings", href: "/settings", icon: Settings, roles: ["admin"] },
 ];
 
@@ -40,7 +40,7 @@ const ROUTE_ACCESS: { prefix: string; roles: UserRole[] }[] = [
   { prefix: "/attendance", roles: ["admin", "teacher"] },
   { prefix: "/students", roles: ["admin"] },
   { prefix: "/products", roles: ["admin"] },
-  { prefix: "/penalties", roles: ["admin"] },
+  { prefix: "/penalties", roles: ["admin", "student"] },
   { prefix: "/settings", roles: ["admin"] },
 ];
 

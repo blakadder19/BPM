@@ -17,7 +17,7 @@ export interface AuthUser {
 const DEMO_ACCOUNTS: Record<string, { fullName: string; role: UserRole }> = {
   "admin@bpm.dance": { fullName: "Admin User", role: "admin" },
   "teacher@bpm.dance": { fullName: "Maria Garcia", role: "teacher" },
-  "student@bpm.dance": { fullName: "Demo Student", role: "student" },
+  "student@bpm.dance": { fullName: "Student User", role: "student" },
 };
 
 /**

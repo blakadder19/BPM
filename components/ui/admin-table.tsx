@@ -12,9 +12,9 @@ export function AdminTable({ headers, children, count }: AdminTableProps) {
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            {headers.map((h) => (
+            {headers.map((h, i) => (
               <th
-                key={h}
+                key={`${h || "col"}-${i}`}
                 className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
               >
                 {h}

@@ -4,11 +4,8 @@
  */
 
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
-import {
-  LATE_CANCEL_CUTOFF_MINUTES,
-  LATE_CANCEL_FEE_CENTS,
-  NO_SHOW_FEE_CENTS,
-} from "@/config/business-rules";
+import { LATE_CANCEL_CUTOFF_MINUTES } from "@/config/business-rules";
+import { getSettings } from "@/lib/services/settings-store";
 import type { ClassType, PenaltyReason } from "@/types/domain";
 
 /**
@@ -45,5 +42,6 @@ export function penaltiesApplyTo(classType: ClassType): boolean {
  * Get the fee in euro-cents for a given penalty reason.
  */
 export function penaltyFeeCents(reason: PenaltyReason): number {
-  return reason === "late_cancel" ? LATE_CANCEL_FEE_CENTS : NO_SHOW_FEE_CENTS;
+  const s = getSettings();
+  return reason === "late_cancel" ? s.lateCancelFeeCents : s.noShowFeeCents;
 }

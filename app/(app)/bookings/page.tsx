@@ -1,118 +1,47 @@
-"use client";
-
-import { useState } from "react";
-import { useUser } from "@/components/providers/user-provider";
+import { redirect } from "next/navigation";
+import { getAuthUser } from "@/lib/auth";
+import { getBookingService } from "@/lib/services/booking-store";
 import { StudentBookings } from "@/components/booking/student-bookings";
-import { PageHeader } from "@/components/ui/page-header";
-import { SearchInput } from "@/components/ui/search-input";
-import { SelectFilter } from "@/components/ui/select-filter";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { AdminTable, Td } from "@/components/ui/admin-table";
-import { formatDate, formatTime } from "@/lib/utils";
-import { BOOKINGS } from "@/lib/mock-data";
+import { AdminBookings } from "@/components/booking/admin-bookings";
 
-const STATUS_OPTIONS = [
-  { value: "confirmed", label: "Confirmed" },
-  { value: "cancelled", label: "Cancelled" },
-];
-
-const ROLE_OPTIONS = [
-  { value: "leader", label: "Leader" },
-  { value: "follower", label: "Follower" },
-  { value: "none", label: "No role" },
-];
-
-function AdminBookings() {
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-
-  const q = search.toLowerCase();
-
-  const filtered = BOOKINGS.filter((b) => {
-    if (
-      q &&
-      !b.studentName.toLowerCase().includes(q) &&
-      !b.classTitle.toLowerCase().includes(q)
-    ) {
-      return false;
-    }
-    if (statusFilter && b.status !== statusFilter) return false;
-    if (roleFilter === "none" && b.danceRole !== null) return false;
-    if (roleFilter && roleFilter !== "none" && b.danceRole !== roleFilter)
-      return false;
-    return true;
-  });
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Bookings"
-        description="All student bookings across classes."
-      />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="w-full sm:max-w-xs">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Search by student or class…"
-          />
-        </div>
-        <SelectFilter
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={STATUS_OPTIONS}
-          placeholder="All statuses"
-        />
-        <SelectFilter
-          value={roleFilter}
-          onChange={setRoleFilter}
-          options={ROLE_OPTIONS}
-          placeholder="All roles"
-        />
-      </div>
-
-      <AdminTable
-        headers={[
-          "Student",
-          "Class",
-          "Date",
-          "Time",
-          "Role",
-          "Status",
-          "Subscription",
-          "Booked At",
-        ]}
-        count={filtered.length}
-      >
-        {filtered.map((b) => (
-          <tr key={b.id}>
-            <Td className="font-medium text-gray-900">{b.studentName}</Td>
-            <Td>{b.classTitle}</Td>
-            <Td>{formatDate(b.date)}</Td>
-            <Td>{formatTime(b.startTime)}</Td>
-            <Td>
-              {b.danceRole ? <StatusBadge status={b.danceRole} /> : "—"}
-            </Td>
-            <Td>
-              <StatusBadge status={b.status} />
-            </Td>
-            <Td>{b.subscriptionName ?? "—"}</Td>
-            <Td>{formatDate(b.bookedAt)}</Td>
-          </tr>
-        ))}
-      </AdminTable>
-    </div>
-  );
+export interface BookingView {
+  id: string;
+  studentName: string;
+  classTitle: string;
+  date: string;
+  startTime: string;
+  danceRole: string | null;
+  status: string;
+  bookedAt: string;
 }
 
-export default function BookingsPage() {
-  const { role } = useUser();
+export default async function BookingsPage() {
+  const user = await getAuthUser();
+  if (!user) redirect("/login");
 
-  if (role === "student") {
-    return <StudentBookings />;
+  const svc = getBookingService();
+
+  const enrich = (b: (typeof svc.bookings)[number]): BookingView => {
+    const cls = svc.getClass(b.bookableClassId);
+    return {
+      id: b.id,
+      studentName: b.studentName,
+      classTitle: cls?.title ?? "Unknown",
+      date: cls?.date ?? "",
+      startTime: cls?.startTime ?? "",
+      danceRole: b.danceRole,
+      status: b.status,
+      bookedAt: b.bookedAt,
+    };
+  };
+
+  if (user.role === "student") {
+    const mine = svc.bookings
+      .filter((b) => b.studentName === user.fullName)
+      .map(enrich);
+    return <StudentBookings bookings={mine} />;
   }
 
-  return <AdminBookings />;
+  const all = svc.bookings.map(enrich);
+  return <AdminBookings bookings={all} />;
 }

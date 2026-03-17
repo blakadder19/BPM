@@ -24,7 +24,11 @@ export function Topbar({ user }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="relative rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+        <button
+          disabled
+          title="Notifications — coming soon"
+          className="relative rounded-lg p-2 text-gray-300 cursor-not-allowed opacity-50"
+        >
           <Bell className="h-5 w-5" />
         </button>
         <span className="text-sm text-gray-600">{user.email}</span>
