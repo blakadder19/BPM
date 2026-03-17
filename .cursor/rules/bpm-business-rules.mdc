@@ -1,0 +1,43 @@
+---
+description: BPM core business rules — bookings, roles, penalties, memberships, and scheduling
+alwaysApply: true
+---
+
+# BPM Business Rules
+
+## Bookings & Events
+
+- Socials are NOT bookable and do NOT generate penalties
+- Weekly events are NOT bookable until confirmed by admin
+- Student Practice is provisional — make it configurable
+- Only class bookings are subject to penalties and credit deductions
+
+## Role Balancing
+
+Applies to these styles only (configurable list):
+Bachata, Bachata Tradicional, Bachata Partnerwork, Cuban, Salsa Line
+
+Each class booking tracks leader/follower role. Waitlist logic is per-role.
+
+## Penalties (classes only)
+
+- Late cancel: €2
+- No-show: €5
+- No blocking system — penalties are fees, not access restrictions
+- Socials are excluded from all penalty logic
+
+## Credits & Attendance
+
+- If a student does not attend a class, attempt to deduct from their class credits/pack
+- Socials are excluded from credit deduction
+
+## Memberships & Passes
+
+- Student memberships, packs, and credits are supported
+- Promo pass "Beginners 1 and 2": applies to ONE selected style only
+- "Beginners Latin Combo": includes two of three Beginner 1 courses — exact mapping is configurable (mark as PROVISIONAL)
+
+## Teachers & Scheduling
+
+- Teacher pairs rotate by slot
+- Do NOT hardcode teacher assignment logic — keep it data-driven and configurable

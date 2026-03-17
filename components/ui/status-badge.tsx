@@ -1,0 +1,52 @@
+import { Badge } from "./badge";
+
+type BadgeVariant = "default" | "success" | "warning" | "danger" | "info";
+
+const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
+  open:             { label: "Open",           variant: "success" },
+  scheduled:        { label: "Scheduled",      variant: "default" },
+  closed:           { label: "Closed",         variant: "info" },
+  cancelled:        { label: "Cancelled",      variant: "danger" },
+  confirmed:        { label: "Confirmed",      variant: "success" },
+  checked_in:       { label: "Checked In",     variant: "success" },
+  waiting:          { label: "Waiting",        variant: "warning" },
+  offered:          { label: "Offered",        variant: "info" },
+  promoted:         { label: "Promoted",       variant: "success" },
+  expired:          { label: "Expired",        variant: "default" },
+  present:          { label: "Present",        variant: "success" },
+  absent:           { label: "Absent",         variant: "danger" },
+  late:             { label: "Late",           variant: "warning" },
+  excused:          { label: "Excused",        variant: "info" },
+  active:           { label: "Active",         variant: "success" },
+  paused:           { label: "Paused",         variant: "warning" },
+  exhausted:        { label: "Exhausted",      variant: "warning" },
+  membership:       { label: "Membership",     variant: "info" },
+  pack:             { label: "Pack",           variant: "info" },
+  drop_in:          { label: "Drop-in",        variant: "default" },
+  promo_pass:       { label: "Promo Pass",     variant: "warning" },
+  late_cancel:      { label: "Late Cancel",    variant: "warning" },
+  no_show:          { label: "No-show",        variant: "danger" },
+  class:            { label: "Class",          variant: "info" },
+  social:           { label: "Social",         variant: "default" },
+  student_practice: { label: "Practice",       variant: "warning" },
+  leader:           { label: "Leader",         variant: "info" },
+  follower:         { label: "Follower",       variant: "warning" },
+  provisional:      { label: "Provisional",    variant: "warning" },
+  credit_deducted:  { label: "Resolved (credit)", variant: "success" },
+  monetary_pending: { label: "Unresolved",     variant: "danger" },
+  waived:           { label: "Waived",         variant: "default" },
+};
+
+interface StatusBadgeProps {
+  status: string;
+  className?: string;
+}
+
+export function StatusBadge({ status, className }: StatusBadgeProps) {
+  const config = STATUS_MAP[status] ?? { label: status, variant: "default" as BadgeVariant };
+  return (
+    <Badge variant={config.variant} className={className}>
+      {config.label}
+    </Badge>
+  );
+}

@@ -1,0 +1,41 @@
+---
+description: BPM Booking System — project overview, tech stack, architecture, and deliverables
+alwaysApply: true
+---
+
+# BPM Booking System
+
+A lightweight, scalable booking system for Balance Power Motion (BPM), a social dance academy in Dublin.
+
+## Tech Stack
+
+- Next.js (App Router) with TypeScript
+- Tailwind CSS
+- Supabase (database + auth)
+- Zod for server-side validation
+- Stripe: placeholder-ready only — do not implement payments unless explicitly requested
+
+## Architecture Principles
+
+- Build modularly; separate domain logic from UI
+- Keep all business rules configurable where possible
+- Avoid hardcoding academy-specific assumptions unless clearly marked
+- Prefer explicit types and strong validation
+- Generate seed data and fixtures for local testing
+- Add comments only where they clarify non-obvious logic
+- Do not overengineer styling — keep the MVP simple but internally clean
+- Clean, reusable components
+
+## Deliverables per Task
+
+Every major implementation must include:
+1. Actual code changes
+2. Summary of created/modified files
+3. Brief explanation of decisions
+4. Any TODOs still depending on academy confirmation
+
+## Handling Uncertainty
+
+If something is unconfirmed, do NOT guess silently. Either:
+- Implement it as configurable (with a sensible default), or
+- Flag it clearly as `PROVISIONAL` in code and in the task summary

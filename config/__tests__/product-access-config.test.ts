@@ -1,0 +1,273 @@
+/**
+ * Config-level tests for product access rules and event types.
+ *
+ * Validates that:
+ *   - The static config is internally consistent
+ *   - Socials cannot be booked and have no penalties/credits
+ *   - Provisional rules (Bronze/Silver/Gold, Yoga, Latin Combo)
+ *     do not break production booking flows
+ *   - Every product rule produces a human-readable description
+ *   - Credit deduction priority only contains valid product types
+ */
+
+import { describe, it, expect } from "vitest";
+import {
+  PRODUCT_ACCESS_RULES,
+  getAccessRule,
+  describeAccess,
+} from "@/config/product-access";
+import { CLASS_TYPE_CONFIG } from "@/config/event-types";
+import { CREDIT_DEDUCTION_PRIORITY } from "@/config/business-rules";
+import { canAccessClass, type AccessClassContext } from "@/lib/domain/product-access";
+
+// ── Shared contexts ─────────────────────────────────────────
+
+const bachataClass: AccessClassContext = {
+  classType: "class",
+  danceStyleId: "ds-1",
+  level: "Beginner 1",
+};
+
+const cubanClass: AccessClassContext = {
+  classType: "class",
+  danceStyleId: "ds-4",
+  level: "Beginner 1",
+};
+
+const intermediateClass: AccessClassContext = {
+  classType: "class",
+  danceStyleId: "ds-1",
+  level: "Intermediate",
+};
+
+const socialEvent: AccessClassContext = {
+  classType: "social",
+  danceStyleId: null,
+  level: null,
+};
+
+const practiceEvent: AccessClassContext = {
+  classType: "student_practice",
+  danceStyleId: null,
+  level: null,
+};
+
+// ── Config Consistency ──────────────────────────────────────
+
+describe("Product Access Config — Consistency", () => {
+  it("has no duplicate product IDs", () => {
+    const ids = PRODUCT_ACCESS_RULES.map((r) => r.productId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("every rule has a non-empty productId", () => {
+    for (const rule of PRODUCT_ACCESS_RULES) {
+      expect(rule.productId.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("every rule has at least one allowed class type", () => {
+    for (const rule of PRODUCT_ACCESS_RULES) {
+      expect(rule.allowedClassTypes.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("describeAccess returns a non-empty string for every rule", () => {
+    for (const rule of PRODUCT_ACCESS_RULES) {
+      const desc = describeAccess(rule);
+      expect(typeof desc).toBe("string");
+      expect(desc.length).toBeGreaterThan(0);
+    }
+  });
+
+  it("getAccessRule returns undefined for unknown product ID", () => {
+    expect(getAccessRule("nonexistent")).toBeUndefined();
+  });
+});
+
+// ── Event Type Config ───────────────────────────────────────
+
+describe("Event Type Config — Social & Student Practice", () => {
+  it("social is NOT bookable", () => {
+    expect(CLASS_TYPE_CONFIG.social.bookable).toBe(false);
+  });
+
+  it("social has NO penalties", () => {
+    expect(CLASS_TYPE_CONFIG.social.penaltiesApply).toBe(false);
+  });
+
+  it("social has NO credits", () => {
+    expect(CLASS_TYPE_CONFIG.social.creditsApply).toBe(false);
+  });
+
+  it("student_practice is NOT bookable by default", () => {
+    expect(CLASS_TYPE_CONFIG.student_practice.bookable).toBe(false);
+  });
+
+  it("class type has booking, penalties, and credits enabled", () => {
+    expect(CLASS_TYPE_CONFIG.class.bookable).toBe(true);
+    expect(CLASS_TYPE_CONFIG.class.penaltiesApply).toBe(true);
+    expect(CLASS_TYPE_CONFIG.class.creditsApply).toBe(true);
+  });
+});
+
+// ── Credit Deduction Priority ───────────────────────────────
+
+describe("Credit Deduction Priority", () => {
+  const validTypes = ["membership", "pack", "drop_in", "promo_pass"];
+
+  it("contains only valid product types", () => {
+    for (const type of CREDIT_DEDUCTION_PRIORITY) {
+      expect(validTypes).toContain(type);
+    }
+  });
+
+  it("has no duplicates", () => {
+    expect(new Set(CREDIT_DEDUCTION_PRIORITY).size).toBe(CREDIT_DEDUCTION_PRIORITY.length);
+  });
+
+  it("promo_pass is deducted before membership", () => {
+    const promoIdx = CREDIT_DEDUCTION_PRIORITY.indexOf("promo_pass");
+    const memIdx = CREDIT_DEDUCTION_PRIORITY.indexOf("membership");
+    expect(promoIdx).toBeLessThan(memIdx);
+  });
+});
+
+// ── Social Product ──────────────────────────────────────────
+
+describe("Social Product — Isolation", () => {
+  const rule = getAccessRule("p-social")!;
+
+  it("exists in config", () => {
+    expect(rule).toBeDefined();
+  });
+
+  it("only allows social class type", () => {
+    expect(rule.allowedClassTypes).toEqual(["social"]);
+  });
+
+  it("uses social_only style access", () => {
+    expect(rule.styleAccess.type).toBe("social_only");
+  });
+
+  it("cannot access regular classes", () => {
+    expect(canAccessClass(rule, null, null, bachataClass).granted).toBe(false);
+  });
+
+  it("can access social events", () => {
+    expect(canAccessClass(rule, null, null, socialEvent).granted).toBe(true);
+  });
+});
+
+// ── No Product Grants Access to student_practice ────────────
+
+describe("Student Practice — No Product Access", () => {
+  it("no product rule grants access to student_practice", () => {
+    for (const rule of PRODUCT_ACCESS_RULES) {
+      const result = canAccessClass(rule, null, null, practiceEvent);
+      expect(result.granted).toBe(false);
+    }
+  });
+});
+
+// ── Provisional Rules — Production Safety ───────────────────
+
+describe("Provisional Rules — Do Not Break Production Flows", () => {
+  describe("membership tiers (Bronze/Silver/Gold/Rainbow)", () => {
+    const membershipIds = ["p-bronze", "p-silver", "p-gold", "p-rainbow"];
+
+    for (const id of membershipIds) {
+      it(`${id} is marked provisional`, () => {
+        const rule = getAccessRule(id)!;
+        expect(rule.isProvisional).toBe(true);
+        expect(rule.provisionalNote).not.toBeNull();
+      });
+
+      it(`${id} grants access to regular classes`, () => {
+        const rule = getAccessRule(id)!;
+        expect(canAccessClass(rule, null, null, bachataClass).granted).toBe(true);
+        expect(canAccessClass(rule, null, null, cubanClass).granted).toBe(true);
+      });
+
+      it(`${id} does NOT grant access to socials`, () => {
+        const rule = getAccessRule(id)!;
+        expect(canAccessClass(rule, null, null, socialEvent).granted).toBe(false);
+      });
+    }
+  });
+
+  describe("yoga products (empty style list)", () => {
+    const yogaIds = ["p-yoga-bronze", "p-yoga-silver", "p-yoga-gold"];
+
+    for (const id of yogaIds) {
+      it(`${id} is marked provisional`, () => {
+        const rule = getAccessRule(id)!;
+        expect(rule.isProvisional).toBe(true);
+      });
+
+      it(`${id} denies access gracefully (empty style list)`, () => {
+        const rule = getAccessRule(id)!;
+        const result = canAccessClass(rule, null, null, bachataClass);
+        expect(result.granted).toBe(false);
+        expect(result.reason).toContain("style");
+      });
+
+      it(`${id} does not throw or crash`, () => {
+        const rule = getAccessRule(id)!;
+        expect(() => canAccessClass(rule, null, null, bachataClass)).not.toThrow();
+        expect(() => canAccessClass(rule, null, null, socialEvent)).not.toThrow();
+        expect(() => canAccessClass(rule, "ds-1", null, bachataClass)).not.toThrow();
+      });
+    }
+  });
+
+  describe("Latin Combo (course_group)", () => {
+    const rule = getAccessRule("p-latin-combo")!;
+
+    it("is marked provisional", () => {
+      expect(rule.isProvisional).toBe(true);
+    });
+
+    it("grants access when student selected the matching style", () => {
+      const result = canAccessClass(rule, null, ["ds-1", "ds-5"], bachataClass);
+      expect(result.granted).toBe(true);
+    });
+
+    it("denies access for a style NOT in the student's selection", () => {
+      const result = canAccessClass(rule, null, ["ds-1", "ds-5"], cubanClass);
+      expect(result.granted).toBe(false);
+    });
+
+    it("denies access when student selected no styles", () => {
+      expect(canAccessClass(rule, null, null, bachataClass).granted).toBe(false);
+      expect(canAccessClass(rule, null, [], bachataClass).granted).toBe(false);
+    });
+
+    it("respects level restriction (Beginner 1 only)", () => {
+      const result = canAccessClass(rule, null, ["ds-1", "ds-5"], intermediateClass);
+      expect(result.granted).toBe(false);
+    });
+  });
+
+  describe("non-provisional products work correctly", () => {
+    it("Drop-in (p-dropin) grants access to any class, any level", () => {
+      const rule = getAccessRule("p-dropin")!;
+      expect(rule.isProvisional).toBe(false);
+      expect(canAccessClass(rule, null, null, bachataClass).granted).toBe(true);
+      expect(canAccessClass(rule, null, null, intermediateClass).granted).toBe(true);
+    });
+
+    it("Beginners 1&2 (p-beg12) requires matching style selection", () => {
+      const rule = getAccessRule("p-beg12")!;
+      expect(rule.isProvisional).toBe(false);
+
+      expect(canAccessClass(rule, "ds-1", null, bachataClass).granted).toBe(true);
+      expect(canAccessClass(rule, "ds-4", null, bachataClass).granted).toBe(false);
+    });
+
+    it("Beginners 1&2 (p-beg12) enforces level restriction", () => {
+      const rule = getAccessRule("p-beg12")!;
+      expect(canAccessClass(rule, "ds-1", null, intermediateClass).granted).toBe(false);
+    });
+  });
+});

@@ -1,0 +1,34 @@
+---
+description: Next.js + TypeScript coding conventions for BPM
+globs: "**/*.{ts,tsx}"
+alwaysApply: false
+---
+
+# Next.js & TypeScript Conventions
+
+## Types
+
+- Use explicit types everywhere; avoid `any`
+- Define domain types in a shared `types/` directory
+- Validate all external input (API, forms, params) with Zod schemas
+
+## Components
+
+- Functional components only
+- Colocate component-specific logic; extract shared logic into hooks
+- Keep components small and composable
+- Use Tailwind for styling — no CSS modules unless justified
+
+## Project Structure
+
+- `app/` — Next.js App Router pages and layouts
+- `components/` — reusable UI components
+- `lib/` — domain logic, Supabase client, utilities
+- `types/` — shared TypeScript types and Zod schemas
+- `config/` — business rule configuration (role-balanced styles, penalty amounts, etc.)
+
+## Data & Validation
+
+- All mutations go through server actions or API routes
+- Validate with Zod on the server side before any DB write
+- Keep Supabase queries in `lib/` — never call Supabase directly from components
