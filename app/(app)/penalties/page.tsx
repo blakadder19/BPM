@@ -1,10 +1,7 @@
-import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
 import { getPenaltyService } from "@/lib/services/penalty-store";
-import {
-  AdminPenalties,
-  type PenaltyView,
-} from "@/components/penalties/admin-penalties";
+import { AdminPenalties } from "@/components/penalties/admin-penalties";
 import {
   StudentPenalties,
   type StudentPenaltyView,
@@ -32,16 +29,7 @@ export default async function PenaltiesPage() {
     return <StudentPenalties penalties={mine} />;
   }
 
-  const all: PenaltyView[] = svc.penalties.map((p) => ({
-    id: p.id,
-    studentName: p.studentName,
-    classTitle: p.classTitle,
-    date: p.classDate,
-    reason: p.reason,
-    amountCents: p.amountCents,
-    resolution: p.resolution,
-    createdAt: p.createdAt,
-  }));
+  const all = svc.getAllPenalties();
 
   return <AdminPenalties penalties={all} />;
 }

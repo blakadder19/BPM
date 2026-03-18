@@ -21,6 +21,7 @@ function buildPenalties(): StoredPenalty[] {
     subscriptionId: p.subscriptionId,
     creditDeducted: p.creditDeducted,
     createdAt: p.createdAt,
+    notes: p.notes ?? null,
   }));
 }
 

@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, X } from "lucide-react";
+import { Fragment, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  X,
+  ChevronDown,
+  ChevronUp,
+  Pencil,
+} from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
@@ -11,34 +17,46 @@ import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatCents } from "@/lib/utils";
-import { updatePenaltyResolution } from "@/lib/actions/penalties-admin";
+import { PenaltyDetailPanel } from "./penalty-detail-panel";
+import {
+  ResolveConfirmDialog,
+  WaiveConfirmDialog,
+  EditNotesDialog,
+} from "./penalty-dialogs";
+import type { StoredPenalty } from "@/lib/services/penalty-service";
 
-export interface PenaltyView {
-  id: string;
-  studentName: string;
-  classTitle: string;
-  date: string;
-  reason: string;
-  amountCents: number;
-  resolution: string;
-  createdAt: string;
-}
-
-const STATUS_OPTIONS = [
+const REASON_OPTIONS = [
   { value: "late_cancel", label: "Late Cancel" },
   { value: "no_show", label: "No-show" },
 ];
 
 const RESOLUTION_OPTIONS = [
-  { value: "credit_deducted", label: "Resolved (credit)" },
   { value: "monetary_pending", label: "Unresolved" },
+  { value: "credit_deducted", label: "Resolved (credit)" },
   { value: "waived", label: "Waived" },
 ];
 
-export function AdminPenalties({ penalties }: { penalties: PenaltyView[] }) {
+const TABLE_HEADERS = [
+  "",
+  "Student",
+  "Class",
+  "Date",
+  "Reason",
+  "Amount",
+  "Resolution",
+  "Created",
+  "Actions",
+];
+
+export function AdminPenalties({ penalties }: { penalties: StoredPenalty[] }) {
   const [search, setSearch] = useState("");
   const [reasonFilter, setReasonFilter] = useState("");
   const [resolutionFilter, setResolutionFilter] = useState("");
+
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [resolveTarget, setResolveTarget] = useState<StoredPenalty | null>(null);
+  const [waiveTarget, setWaiveTarget] = useState<StoredPenalty | null>(null);
+  const [notesTarget, setNotesTarget] = useState<StoredPenalty | null>(null);
 
   const q = search.toLowerCase();
 
@@ -77,7 +95,7 @@ export function AdminPenalties({ penalties }: { penalties: PenaltyView[] }) {
         </div>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
         <div className="w-full sm:max-w-xs">
           <SearchInput
             value={search}
@@ -88,7 +106,7 @@ export function AdminPenalties({ penalties }: { penalties: PenaltyView[] }) {
         <SelectFilter
           value={reasonFilter}
           onChange={setReasonFilter}
-          options={STATUS_OPTIONS}
+          options={REASON_OPTIONS}
           placeholder="All reasons"
         />
         <SelectFilter
@@ -102,88 +120,112 @@ export function AdminPenalties({ penalties }: { penalties: PenaltyView[] }) {
       {filtered.length === 0 ? (
         <EmptyState
           icon={AlertTriangle}
-          title="No penalties recorded"
-          description="Penalty records will appear when students cancel late or miss classes."
+          title="No penalties found"
+          description="Try a different search or filter, or penalty records will appear when students cancel late or miss classes."
         />
       ) : (
-        <AdminTable
-          headers={[
-            "Student",
-            "Class",
-            "Date",
-            "Reason",
-            "Amount",
-            "Resolution",
-            "Created",
-            "Actions",
-          ]}
-          count={filtered.length}
-        >
-          {filtered.map((p) => (
-            <PenaltyRow key={p.id} penalty={p} />
-          ))}
+        <AdminTable headers={TABLE_HEADERS} count={filtered.length}>
+          {filtered.map((p) => {
+            const isExpanded = expandedId === p.id;
+            return (
+              <Fragment key={p.id}>
+                <tr
+                  className={`cursor-pointer hover:bg-gray-50 ${
+                    p.resolution === "monetary_pending" ? "bg-amber-50/50" : ""
+                  }`}
+                  onClick={() => setExpandedId(isExpanded ? null : p.id)}
+                >
+                  <Td className="w-8">
+                    {isExpanded ? (
+                      <ChevronUp className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-gray-400" />
+                    )}
+                  </Td>
+                  <Td className="font-medium text-gray-900">{p.studentName}</Td>
+                  <Td>{p.classTitle}</Td>
+                  <Td>{formatDate(p.classDate)}</Td>
+                  <Td>
+                    <StatusBadge status={p.reason} />
+                  </Td>
+                  <Td>{formatCents(p.amountCents)}</Td>
+                  <Td>
+                    <StatusBadge status={p.resolution} />
+                  </Td>
+                  <Td>{formatDate(p.createdAt)}</Td>
+                  <Td className="w-36">
+                    <div
+                      className="flex items-center gap-1.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {p.resolution === "monetary_pending" ? (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setResolveTarget(p)}
+                            title="Mark as resolved"
+                          >
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            Resolve
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setWaiveTarget(p)}
+                            title="Waive this penalty"
+                          >
+                            <X className="h-3.5 w-3.5 mr-1" />
+                            Waive
+                          </Button>
+                        </>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                      <button
+                        onClick={() => setNotesTarget(p)}
+                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                        title={p.notes ? "Edit notes" : "Add notes"}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </Td>
+                </tr>
+
+                {isExpanded && (
+                  <PenaltyDetailPanel
+                    penalty={p}
+                    colSpan={TABLE_HEADERS.length}
+                    onEditNotes={() => setNotesTarget(p)}
+                  />
+                )}
+              </Fragment>
+            );
+          })}
         </AdminTable>
       )}
+
+      {resolveTarget && (
+        <ResolveConfirmDialog
+          penalty={resolveTarget}
+          onClose={() => setResolveTarget(null)}
+        />
+      )}
+
+      {waiveTarget && (
+        <WaiveConfirmDialog
+          penalty={waiveTarget}
+          onClose={() => setWaiveTarget(null)}
+        />
+      )}
+
+      {notesTarget && (
+        <EditNotesDialog
+          penalty={notesTarget}
+          onClose={() => setNotesTarget(null)}
+        />
+      )}
     </div>
-  );
-}
-
-function PenaltyRow({ penalty: p }: { penalty: PenaltyView }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-
-  function handleAction(resolution: "credit_deducted" | "waived") {
-    startTransition(async () => {
-      await updatePenaltyResolution(p.id, resolution);
-      router.refresh();
-    });
-  }
-
-  return (
-    <tr
-      className={
-        p.resolution === "monetary_pending" ? "bg-amber-50/50" : undefined
-      }
-    >
-      <Td className="font-medium text-gray-900">{p.studentName}</Td>
-      <Td>{p.classTitle}</Td>
-      <Td>{formatDate(p.date)}</Td>
-      <Td>
-        <StatusBadge status={p.reason} />
-      </Td>
-      <Td>{formatCents(p.amountCents)}</Td>
-      <Td>
-        <StatusBadge status={p.resolution} />
-      </Td>
-      <Td>{formatDate(p.createdAt)}</Td>
-      <Td>
-        {p.resolution === "monetary_pending" ? (
-          <div className="flex items-center gap-1.5">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={isPending}
-              onClick={() => handleAction("credit_deducted")}
-              title="Mark as resolved"
-            >
-              <Check className="h-3.5 w-3.5 mr-1" />
-              Resolve
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={isPending}
-              onClick={() => handleAction("waived")}
-              title="Waive this penalty"
-            >
-              <X className="h-3.5 w-3.5 mr-1" />
-              Waive
-            </Button>
-          </div>
-        ) : (
-          <span className="text-xs text-gray-400">—</span>
-        )}
-      </Td>
-    </tr>
   );
 }

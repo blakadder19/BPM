@@ -32,6 +32,7 @@ export interface StoredPenalty {
   subscriptionId: string | null;
   creditDeducted: number;
   createdAt: string;
+  notes: string | null;
 }
 
 export interface PenaltyWalletTx {
@@ -190,6 +191,16 @@ export class PenaltyService {
     return penalty;
   }
 
+  updateNotes(
+    penaltyId: string,
+    notes: string | null
+  ): StoredPenalty | null {
+    const penalty = this.penalties.find((p) => p.id === penaltyId);
+    if (!penalty) return null;
+    penalty.notes = notes;
+    return penalty;
+  }
+
   // ── Internal ────────────────────────────────────────────────
 
   private createPenalty(
@@ -230,6 +241,7 @@ export class PenaltyService {
       subscriptionId: decision.subscriptionId,
       creditDeducted: decision.creditDeducted,
       createdAt: now,
+      notes: null,
     };
     this.penalties.push(penalty);
 

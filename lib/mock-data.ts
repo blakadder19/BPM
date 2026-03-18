@@ -306,12 +306,13 @@ export interface MockPenalty {
   subscriptionId: string | null;
   creditDeducted: number;
   createdAt: string;
+  notes: string | null;
 }
 
 export const PENALTIES: MockPenalty[] = [
-  { id: "pen-01", studentId: "s-04", studentName: "Dave Keane", bookingId: "b-04", bookableClassId: "bc-01", classTitle: "Bachata Beginner 1", date: "2026-03-09", reason: "no_show", amountCents: 500, resolution: "monetary_pending", subscriptionId: null, creditDeducted: 0, createdAt: "2026-03-09T20:10:00" },
-  { id: "pen-02", studentId: "s-08", studentName: "Hugo Brennan", bookingId: "b-08", bookableClassId: "bc-02", classTitle: "Salsa Line Beginner 1", date: "2026-03-10", reason: "no_show", amountCents: 500, resolution: "credit_deducted", subscriptionId: "sub-08", creditDeducted: 1, createdAt: "2026-03-10T20:10:00" },
-  { id: "pen-03", studentId: "s-04", studentName: "Dave Keane", bookingId: "b-14", bookableClassId: "bc-04", classTitle: "Bachata Beginner 1", date: "2026-03-16", reason: "late_cancel", amountCents: 200, resolution: "monetary_pending", subscriptionId: null, creditDeducted: 0, createdAt: "2026-03-16T15:00:00" },
+  { id: "pen-01", studentId: "s-04", studentName: "Dave Keane", bookingId: "b-04", bookableClassId: "bc-01", classTitle: "Bachata Beginner 1", date: "2026-03-09", reason: "no_show", amountCents: 500, resolution: "monetary_pending", subscriptionId: null, creditDeducted: 0, createdAt: "2026-03-09T20:10:00", notes: "Student did not respond to follow-up email." },
+  { id: "pen-02", studentId: "s-08", studentName: "Hugo Brennan", bookingId: "b-08", bookableClassId: "bc-02", classTitle: "Salsa Line Beginner 1", date: "2026-03-10", reason: "no_show", amountCents: 500, resolution: "credit_deducted", subscriptionId: "sub-08", creditDeducted: 1, createdAt: "2026-03-10T20:10:00", notes: null },
+  { id: "pen-03", studentId: "s-04", studentName: "Dave Keane", bookingId: "b-14", bookableClassId: "bc-04", classTitle: "Bachata Beginner 1", date: "2026-03-16", reason: "late_cancel", amountCents: 200, resolution: "monetary_pending", subscriptionId: null, creditDeducted: 0, createdAt: "2026-03-16T15:00:00", notes: null },
 ];
 
 // ── Subscriptions ───────────────────────────────────────────
