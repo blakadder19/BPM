@@ -1,10 +1,13 @@
 /**
  * Singleton BookingService instance backed by mock data.
+ * Uses STORE_VERSION to force re-init when class shape changes while preserving data.
  * In production, replace with Supabase-backed service.
  */
 
 import { BookingService, type ClassSnapshot, type StoredBooking, type StoredWaitlistEntry } from "./booking-service";
 import { BOOKABLE_CLASSES, BOOKINGS, WAITLIST_ENTRIES, DANCE_STYLES } from "@/lib/mock-data";
+
+const STORE_VERSION = 2;
 
 function buildClassSnapshots(): ClassSnapshot[] {
   return BOOKABLE_CLASSES.map((bc) => {
@@ -37,6 +40,9 @@ function buildBookings(): StoredBooking[] {
     studentName: b.studentName,
     danceRole: b.danceRole,
     status: b.status,
+    source: "subscription" as const,
+    subscriptionName: b.subscriptionName ?? null,
+    adminNote: null,
     bookedAt: b.bookedAt,
     cancelledAt: null,
   }));
@@ -56,15 +62,29 @@ function buildWaitlist(): StoredWaitlistEntry[] {
   }));
 }
 
-const g = globalThis as unknown as { __bpm_bookingSvc?: BookingService };
+const g = globalThis as unknown as {
+  __bpm_bookingSvc?: BookingService;
+  __bpm_bookingSvcV?: number;
+};
 
 export function getBookingService(): BookingService {
-  if (!g.__bpm_bookingSvc) {
-    g.__bpm_bookingSvc = new BookingService(
-      buildBookings(),
-      buildWaitlist(),
-      buildClassSnapshots()
-    );
+  if (!g.__bpm_bookingSvc || g.__bpm_bookingSvcV !== STORE_VERSION) {
+    const existingBookings = g.__bpm_bookingSvc?.bookings;
+    const existingWaitlist = g.__bpm_bookingSvc?.waitlist;
+
+    const bookings = existingBookings?.length
+      ? existingBookings.map((b) => ({
+          ...b,
+          source: b.source ?? ("subscription" as const),
+          subscriptionName: b.subscriptionName ?? null,
+          adminNote: b.adminNote ?? null,
+        }))
+      : buildBookings();
+
+    const waitlist = existingWaitlist?.length ? existingWaitlist : buildWaitlist();
+
+    g.__bpm_bookingSvc = new BookingService(bookings, waitlist, buildClassSnapshots());
+    g.__bpm_bookingSvcV = STORE_VERSION;
   }
   return g.__bpm_bookingSvc;
 }

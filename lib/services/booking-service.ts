@@ -21,6 +21,7 @@ import type {
   DanceRole,
   InstanceStatus,
   BookingStatus,
+  BookingSource,
   WaitlistStatus,
 } from "@/types/domain";
 
@@ -33,6 +34,9 @@ export interface StoredBooking {
   studentName: string;
   danceRole: DanceRole | null;
   status: BookingStatus;
+  source: BookingSource;
+  subscriptionName: string | null;
+  adminNote: string | null;
   bookedAt: string;
   cancelledAt: string | null;
 }
@@ -133,6 +137,8 @@ export class BookingService {
     studentId: string;
     studentName: string;
     danceRole: DanceRole | null;
+    source?: BookingSource;
+    subscriptionName?: string | null;
   }): BookingOutcome {
     const cls = this.classes.get(params.bookableClassId);
     if (!cls) return { type: "rejected", reason: "Class not found." };
@@ -205,6 +211,9 @@ export class BookingService {
       studentName: params.studentName,
       danceRole: params.danceRole,
       status: "confirmed",
+      source: params.source ?? "subscription",
+      subscriptionName: params.subscriptionName ?? null,
+      adminNote: null,
       bookedAt: now,
       cancelledAt: null,
     };
@@ -291,6 +300,9 @@ export class BookingService {
           studentName: entry.studentName,
           danceRole: entry.danceRole,
           status: "confirmed",
+          source: "waitlist_promotion",
+          subscriptionName: null,
+          adminNote: null,
           bookedAt: new Date().toISOString(),
           cancelledAt: null,
         };
@@ -332,5 +344,293 @@ export class BookingService {
     return this.waitlist.filter(
       (w) => w.studentId === studentId && w.status === "waiting"
     );
+  }
+
+  // ── Admin methods ────────────────────────────────────────────
+
+  getAllBookings(): StoredBooking[] {
+    return [...this.bookings];
+  }
+
+  getAllWaitlist(): StoredWaitlistEntry[] {
+    return [...this.waitlist];
+  }
+
+  adminBook(params: {
+    bookableClassId: string;
+    studentId: string;
+    studentName: string;
+    danceRole: DanceRole | null;
+    source: BookingSource;
+    subscriptionName?: string | null;
+    adminNote?: string | null;
+    forceConfirm?: boolean;
+  }): BookingOutcome {
+    const cls = this.classes.get(params.bookableClassId);
+    if (!cls) return { type: "rejected", reason: "Class not found." };
+
+    const existingBooking = this.bookings.find(
+      (b) =>
+        b.bookableClassId === params.bookableClassId &&
+        b.studentId === params.studentId &&
+        this.isActiveBooking(b)
+    );
+    if (existingBooking) {
+      return { type: "rejected", reason: "Student already has an active booking for this class." };
+    }
+
+    const now = new Date().toISOString();
+    const capacity = this.getCapacity(params.bookableClassId)!;
+    const decision = canBook(capacity, params.danceRole);
+
+    if (!decision.allowed && !params.forceConfirm) {
+      return { type: "rejected", reason: decision.reason };
+    }
+
+    const shouldWaitlist = decision.waitlisted && !params.forceConfirm;
+
+    if (shouldWaitlist) {
+      const maxPos = this.waitlist
+        .filter((w) => w.bookableClassId === params.bookableClassId)
+        .reduce((max, w) => Math.max(max, w.position), 0);
+
+      const entry: StoredWaitlistEntry = {
+        id: generateId("wl"),
+        bookableClassId: params.bookableClassId,
+        studentId: params.studentId,
+        studentName: params.studentName,
+        danceRole: params.danceRole,
+        status: "waiting",
+        position: nextWaitlistPosition(maxPos || null),
+        joinedAt: now,
+        promotedAt: null,
+      };
+      this.waitlist.push(entry);
+
+      return {
+        type: "waitlisted",
+        waitlistId: entry.id,
+        position: entry.position,
+        className: cls.title,
+        date: cls.date,
+        reason: decision.reason,
+      };
+    }
+
+    const booking: StoredBooking = {
+      id: generateId("b"),
+      bookableClassId: params.bookableClassId,
+      studentId: params.studentId,
+      studentName: params.studentName,
+      danceRole: params.danceRole,
+      status: "confirmed",
+      source: params.source,
+      subscriptionName: params.subscriptionName ?? null,
+      adminNote: params.adminNote ?? null,
+      bookedAt: now,
+      cancelledAt: null,
+    };
+    this.bookings.push(booking);
+
+    return {
+      type: "confirmed",
+      bookingId: booking.id,
+      className: cls.title,
+      date: cls.date,
+    };
+  }
+
+  cancelBookingAsAdmin(bookingId: string, isLate: boolean): CancelOutcome {
+    const booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking) return { type: "error", reason: "Booking not found." };
+    if (!this.isActiveBooking(booking)) {
+      return { type: "error", reason: "Booking is not active." };
+    }
+
+    const cls = this.classes.get(booking.bookableClassId);
+    if (!cls) return { type: "error", reason: "Class not found." };
+
+    const now = new Date();
+    booking.status = isLate ? "late_cancelled" : "cancelled";
+    booking.cancelledAt = now.toISOString();
+
+    const bookingInfo = {
+      id: booking.id,
+      studentId: booking.studentId,
+      studentName: booking.studentName,
+      danceRole: booking.danceRole,
+    };
+    const classInfo = {
+      id: cls.id,
+      title: cls.title,
+      date: cls.date,
+      startTime: cls.startTime,
+      classType: cls.classType,
+    };
+
+    const capacity = this.getCapacity(booking.bookableClassId);
+    if (!capacity) {
+      return { type: "cancelled", booking: bookingInfo, classInfo, cancelledAt: now.toISOString(), promoted: null };
+    }
+
+    const classWaitlist = this.waitlist.filter(
+      (w) => w.bookableClassId === booking.bookableClassId
+    );
+    const result = findPromotionCandidate(
+      classWaitlist.map((w) => ({
+        id: w.id,
+        studentId: w.studentId,
+        danceRole: w.danceRole,
+        position: w.position,
+        status: w.status,
+      })),
+      booking.danceRole,
+      capacity
+    );
+
+    let promoted: { studentName: string; waitlistId: string } | null = null;
+
+    if (result) {
+      const entry = this.waitlist.find((w) => w.id === result.promoted.id);
+      if (entry) {
+        entry.status = "promoted";
+        entry.promotedAt = new Date().toISOString();
+
+        const newBooking: StoredBooking = {
+          id: generateId("b"),
+          bookableClassId: booking.bookableClassId,
+          studentId: entry.studentId,
+          studentName: entry.studentName,
+          danceRole: entry.danceRole,
+          status: "confirmed",
+          source: "waitlist_promotion",
+          subscriptionName: null,
+          adminNote: null,
+          bookedAt: new Date().toISOString(),
+          cancelledAt: null,
+        };
+        this.bookings.push(newBooking);
+        promoted = { studentName: entry.studentName, waitlistId: entry.id };
+
+        const remaining = this.waitlist.filter(
+          (w) => w.bookableClassId === booking.bookableClassId && w.status === "waiting"
+        );
+        const reindexed = reindexPositions(remaining);
+        for (const r of reindexed) {
+          const original = this.waitlist.find((w) => w.id === r.id);
+          if (original) original.position = r.position;
+        }
+      }
+    }
+
+    return { type: "cancelled", booking: bookingInfo, classInfo, cancelledAt: now.toISOString(), promoted };
+  }
+
+  promoteFromWaitlist(waitlistId: string): { type: "promoted"; bookingId: string } | { type: "error"; reason: string } {
+    const entry = this.waitlist.find((w) => w.id === waitlistId && w.status === "waiting");
+    if (!entry) return { type: "error", reason: "Waitlist entry not found or already promoted." };
+
+    entry.status = "promoted";
+    entry.promotedAt = new Date().toISOString();
+
+    const booking: StoredBooking = {
+      id: generateId("b"),
+      bookableClassId: entry.bookableClassId,
+      studentId: entry.studentId,
+      studentName: entry.studentName,
+      danceRole: entry.danceRole,
+      status: "confirmed",
+      source: "waitlist_promotion",
+      subscriptionName: null,
+      adminNote: null,
+      bookedAt: new Date().toISOString(),
+      cancelledAt: null,
+    };
+    this.bookings.push(booking);
+
+    const remaining = this.waitlist.filter(
+      (w) => w.bookableClassId === entry.bookableClassId && w.status === "waiting"
+    );
+    const reindexed = reindexPositions(remaining);
+    for (const r of reindexed) {
+      const original = this.waitlist.find((w) => w.id === r.id);
+      if (original) original.position = r.position;
+    }
+
+    return { type: "promoted", bookingId: booking.id };
+  }
+
+  removeFromWaitlist(waitlistId: string): boolean {
+    const idx = this.waitlist.findIndex((w) => w.id === waitlistId && w.status === "waiting");
+    if (idx === -1) return false;
+
+    const classId = this.waitlist[idx].bookableClassId;
+    this.waitlist.splice(idx, 1);
+
+    const remaining = this.waitlist.filter(
+      (w) => w.bookableClassId === classId && w.status === "waiting"
+    );
+    const reindexed = reindexPositions(remaining);
+    for (const r of reindexed) {
+      const original = this.waitlist.find((w) => w.id === r.id);
+      if (original) original.position = r.position;
+    }
+
+    return true;
+  }
+
+  restoreBooking(
+    bookingId: string
+  ):
+    | { type: "restored"; restoredTo: "confirmed" | "waitlisted" }
+    | { type: "error"; reason: string } {
+    const booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking) return { type: "error", reason: "Booking not found." };
+    if (booking.status !== "cancelled" && booking.status !== "late_cancelled") {
+      return { type: "error", reason: "Only cancelled bookings can be restored." };
+    }
+
+    const capacity = this.getCapacity(booking.bookableClassId);
+    if (!capacity) {
+      booking.status = "confirmed";
+      booking.cancelledAt = null;
+      return { type: "restored", restoredTo: "confirmed" };
+    }
+
+    const decision = canBook(capacity, booking.danceRole);
+
+    if (decision.allowed && !decision.waitlisted) {
+      booking.status = "confirmed";
+      booking.cancelledAt = null;
+      return { type: "restored", restoredTo: "confirmed" };
+    }
+
+    if (decision.waitlisted || !decision.allowed) {
+      const maxPos = this.waitlist
+        .filter((w) => w.bookableClassId === booking.bookableClassId)
+        .reduce((max, w) => Math.max(max, w.position), 0);
+
+      const entry: StoredWaitlistEntry = {
+        id: generateId("wl"),
+        bookableClassId: booking.bookableClassId,
+        studentId: booking.studentId,
+        studentName: booking.studentName,
+        danceRole: booking.danceRole,
+        status: "waiting",
+        position: nextWaitlistPosition(maxPos || null),
+        joinedAt: new Date().toISOString(),
+        promotedAt: null,
+      };
+      this.waitlist.push(entry);
+
+      booking.status = "cancelled";
+      return { type: "restored", restoredTo: "waitlisted" };
+    }
+
+    return { type: "error", reason: "Class is full and cannot be waitlisted." };
+  }
+
+  refreshClasses(classes: ClassSnapshot[]) {
+    this.classes = new Map(classes.map((c) => [c.id, c]));
   }
 }

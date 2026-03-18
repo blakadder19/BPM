@@ -57,3 +57,31 @@ export function penaltyFeeCents(reason: PenaltyReason): number {
   const s = getSettings();
   return reason === "late_cancel" ? s.lateCancelFeeCents : s.noShowFeeCents;
 }
+
+/**
+ * UI-facing context for cancel dialogs (admin and student).
+ * Computes whether a cancellation at the current moment would be late.
+ */
+export function getCancellationContext(
+  classDate: string,
+  classStartTime: string,
+  cutoffMinutesOverride?: number
+): {
+  isLate: boolean;
+  classStart: Date;
+  minutesUntilStart: number;
+  cutoffMinutes: number;
+} {
+  const s = getSettings();
+  const cutoffMinutes = cutoffMinutesOverride ?? s.lateCancelCutoffMinutes;
+  const classStart = classStartDateTime(classDate, classStartTime);
+  const now = new Date();
+  const msUntilStart = classStart.getTime() - now.getTime();
+  const minutesUntilStart = Math.round(msUntilStart / 60_000);
+  return {
+    isLate: msUntilStart < cutoffMinutes * 60_000,
+    classStart,
+    minutesUntilStart,
+    cutoffMinutes,
+  };
+}

@@ -7,8 +7,13 @@ import { getPresets } from "@/lib/services/pair-preset-store";
 import { getSettings } from "@/lib/services/settings-store";
 import { AdminSchedule } from "@/components/classes/admin-schedule";
 
-export default async function BookableClassesPage() {
+export default async function BookableClassesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ search?: string }>;
+}) {
   await requireRole(["admin", "teacher"]);
+  const params = searchParams ? await searchParams : {};
 
   const instances = getInstances().map((bc) => ({ ...bc }));
   const templates = getTemplates().map((t) => ({ ...t }));
@@ -35,6 +40,7 @@ export default async function BookableClassesPage() {
       teacherNameMap={teacherNameMap}
       pairPresets={pairPresets}
       isDev={isDev}
+      initialSearch={params.search ?? ""}
     />
   );
 }

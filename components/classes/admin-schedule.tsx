@@ -60,6 +60,7 @@ interface AdminScheduleProps {
   teacherNameMap: Record<string, string>;
   pairPresets: PairPreset[];
   isDev?: boolean;
+  initialSearch?: string;
 }
 
 export function AdminSchedule({
@@ -71,10 +72,11 @@ export function AdminSchedule({
   teacherNameMap,
   pairPresets,
   isDev,
+  initialSearch,
 }: AdminScheduleProps) {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch ?? "");
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
