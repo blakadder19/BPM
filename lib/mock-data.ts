@@ -9,6 +9,7 @@ import type {
   BookingStatus,
   CheckInMethod,
   ClassType,
+  CreditsModel,
   DanceRole,
   InstanceStatus,
   PenaltyReason,
@@ -194,25 +195,23 @@ export interface MockProduct {
   allowedLevels: string[] | null;
   isActive: boolean;
   isProvisional: boolean;
+  notes: string | null;
+  validityDescription: string | null;
+  creditsModel: CreditsModel;
 }
 
 export const PRODUCTS: MockProduct[] = [
-  // Memberships
-  { id: "p-bronze", name: "Bronze Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 4500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true },
-  { id: "p-silver", name: "Silver Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true },
-  { id: "p-gold", name: "Gold Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 8000, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true },
-  { id: "p-rainbow", name: "Rainbow Membership", description: "PROVISIONAL — currently treated as all-styles unlimited.", productType: "membership", priceCents: 9500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true },
-  // Yoga
-  { id: "p-yoga-bronze", name: "Yoga Bronze", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 3500, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true },
-  { id: "p-yoga-silver", name: "Yoga Silver", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 5000, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true },
-  { id: "p-yoga-gold", name: "Yoga Gold", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true },
-  // Drop-in
-  { id: "p-dropin", name: "Drop In", description: "One-time class entry, any style.", productType: "drop_in", priceCents: 1000, totalCredits: 1, durationDays: 30, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false },
-  // Promo passes
-  { id: "p-beg12", name: "Beginners 1 & 2 Promo Pass", description: "Beg 1 + Beg 2 for ONE selected style. Valid 8 weeks.", productType: "promo_pass", priceCents: 2500, totalCredits: 16, durationDays: 56, styleName: "1 selected style", allowedLevels: ["Beginner 1", "Beginner 2"], isActive: true, isProvisional: false },
-  { id: "p-latin-combo", name: "Beginners Latin Combo", description: "Beg 1 in TWO of three Latin styles. Valid 8 weeks.", productType: "promo_pass", priceCents: 3500, totalCredits: 16, durationDays: 56, styleName: "Pick 2 of 3 Latin", allowedLevels: ["Beginner 1"], isActive: true, isProvisional: true },
-  // Social
-  { id: "p-social", name: "Social Pass", description: "Entry to social events. Socials are not part of the class booking flow.", productType: "pack", priceCents: 2000, totalCredits: 4, durationDays: 30, styleName: "Socials only", allowedLevels: null, isActive: true, isProvisional: false },
+  { id: "p-bronze", name: "Bronze Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 4500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true, notes: "Tier limits TBD with academy.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
+  { id: "p-silver", name: "Silver Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true, notes: "Tier limits TBD with academy.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
+  { id: "p-gold", name: "Gold Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 8000, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true, notes: "Tier limits TBD with academy.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
+  { id: "p-rainbow", name: "Rainbow Membership", description: "PROVISIONAL — currently treated as all-styles unlimited.", productType: "membership", priceCents: 9500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true, notes: "Confirm full scope with academy.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
+  { id: "p-yoga-bronze", name: "Yoga Bronze", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 3500, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true, notes: "Yoga schedule not yet defined.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
+  { id: "p-yoga-silver", name: "Yoga Silver", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 5000, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true, notes: null, validityDescription: "Monthly rolling", creditsModel: "unlimited" },
+  { id: "p-yoga-gold", name: "Yoga Gold", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true, notes: null, validityDescription: "Monthly rolling", creditsModel: "unlimited" },
+  { id: "p-dropin", name: "Drop In", description: "One-time class entry, any style.", productType: "drop_in", priceCents: 1000, totalCredits: 1, durationDays: 30, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "30 days from purchase", creditsModel: "single_use" },
+  { id: "p-beg12", name: "Beginners 1 & 2 Promo Pass", description: "Beg 1 + Beg 2 for ONE selected style. Valid 8 weeks.", productType: "promo_pass", priceCents: 2500, totalCredits: 16, durationDays: 56, styleName: "1 selected style", allowedLevels: ["Beginner 1", "Beginner 2"], isActive: true, isProvisional: false, notes: null, validityDescription: "8 weeks fixed", creditsModel: "fixed" },
+  { id: "p-latin-combo", name: "Beginners Latin Combo", description: "Beg 1 in TWO of three Latin styles. Valid 8 weeks.", productType: "promo_pass", priceCents: 3500, totalCredits: 16, durationDays: 56, styleName: "Pick 2 of 3 Latin", allowedLevels: ["Beginner 1"], isActive: true, isProvisional: true, notes: "Exact pool mapping configurable.", validityDescription: "8 weeks fixed", creditsModel: "fixed" },
+  { id: "p-social", name: "Social Pass", description: "Entry to social events. Socials are not part of the class booking flow.", productType: "pack", priceCents: 2000, totalCredits: 4, durationDays: 30, styleName: "Socials only", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed" },
 ];
 
 // ── Bookings ────────────────────────────────────────────────

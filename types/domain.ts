@@ -173,6 +173,7 @@ export interface Attendance {
 // ── Commerce ────────────────────────────────────────────────
 
 export type ProductType = "membership" | "pack" | "drop_in" | "promo_pass";
+export type CreditsModel = "unlimited" | "fixed" | "single_use";
 export type SubscriptionStatus = "active" | "paused" | "expired" | "exhausted" | "cancelled";
 export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";
 export type TxType = "credit_used" | "credit_added" | "credit_refunded" | "credit_expired" | "penalty_charged";

@@ -1,13 +1,17 @@
-import { redirect } from "next/navigation";
-import { getAuthUser } from "@/lib/auth";
-import { getProducts } from "@/lib/services/product-store";
+import { requireRole } from "@/lib/auth";
+import { getProducts } from "@/lib/services/product-service";
+import { SUBSCRIPTIONS } from "@/lib/mock-data";
 import { AdminProducts } from "@/components/products/admin-products";
 
 export default async function ProductsPage() {
-  const user = await getAuthUser();
-  if (!user) redirect("/login");
+  await requireRole(["admin"]);
 
-  const products = getProducts().map((p) => ({ ...p }));
+  const products = await getProducts();
 
-  return <AdminProducts products={products} />;
+  return (
+    <AdminProducts
+      products={products}
+      subscriptions={SUBSCRIPTIONS}
+    />
+  );
 }
