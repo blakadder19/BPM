@@ -12,7 +12,7 @@ import {
 export default async function PenaltiesPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ classTitle?: string; date?: string }>;
+  searchParams?: Promise<{ classTitle?: string; date?: string; student?: string }>;
 }) {
   const user = await getAuthUser();
   if (!user) redirect("/login");
@@ -57,6 +57,7 @@ export default async function PenaltiesPage({
       }}
       isDev={isDev}
       initialSearch={params.classTitle ?? ""}
+      initialStudentFilter={params.student ?? ""}
     />
   );
 }

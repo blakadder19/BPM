@@ -64,7 +64,7 @@ export const markAttendanceSchema = z.object({
 export const createProductSchema = z.object({
   name: z.string().min(1),
   description: z.string().nullable(),
-  productType: z.enum(["membership", "pack", "drop_in", "promo_pass"]),
+  productType: z.enum(["membership", "pass", "drop_in"]),
   priceCents: z.number().int().min(0),
   totalCredits: z.number().int().positive().nullable(),
   durationDays: z.number().int().positive().nullable(),

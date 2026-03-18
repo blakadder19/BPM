@@ -2,8 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { getBookingService } from "@/lib/services/booking-store";
+import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getSettings } from "@/lib/services/settings-store";
+import {
+  getSubscription as getSubSync,
+  updateSubscription as updateSubStore,
+} from "@/lib/services/subscription-store";
+import { getTerms } from "@/lib/services/term-store";
+import { findTermForDate, isBeginnerEntryWeek } from "@/lib/domain/term-rules";
+import { isBeginnerEntryClass } from "@/lib/domain/term-rules";
 import {
   getCancellationContext,
   penaltiesApplyTo,
@@ -20,7 +28,7 @@ const VALID_SOURCES = new Set<string>([
 
 export async function adminCreateBookingAction(
   formData: FormData
-): Promise<{ success: boolean; outcome?: string; error?: string }> {
+): Promise<{ success: boolean; outcome?: string; warning?: string; error?: string }> {
   const studentId = (formData.get("studentId") as string)?.trim();
   const studentName = (formData.get("studentName") as string)?.trim();
   const bookableClassId = (formData.get("bookableClassId") as string)?.trim();
@@ -28,6 +36,8 @@ export async function adminCreateBookingAction(
   const source = (formData.get("source") as string)?.trim();
   const subscriptionName =
     (formData.get("subscriptionName") as string)?.trim() || null;
+  const subscriptionId =
+    (formData.get("subscriptionId") as string)?.trim() || null;
   const adminNote = (formData.get("adminNote") as string)?.trim() || null;
   const forceConfirm = formData.get("forceConfirm") === "true";
 
@@ -45,6 +55,63 @@ export async function adminCreateBookingAction(
   }
 
   const svc = getBookingService();
+  const cls = svc.getClass(bookableClassId);
+
+  // Entitlement validation when source is "subscription"
+  if (source === "subscription" && subscriptionId) {
+    const sub = getSubSync(subscriptionId);
+    if (!sub) {
+      return { success: false, error: "Entitlement not found" };
+    }
+
+    // Term validation: check the class date falls within the entitlement's term
+    if (sub.termId && cls) {
+      const terms = getTerms();
+      const classTerm = findTermForDate(terms, cls.date);
+      if (!classTerm || classTerm.id !== sub.termId) {
+        return { success: false, error: "Entitlement is not valid for this class date's term" };
+      }
+    }
+
+    // Credit/class usage validation
+    if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+      if (sub.classesUsed >= sub.classesPerTerm) {
+        return { success: false, error: `All ${sub.classesPerTerm} classes for this term have been used` };
+      }
+    } else if (sub.remainingCredits !== null && sub.remainingCredits <= 0) {
+      return { success: false, error: "No remaining credits on this entitlement" };
+    }
+  }
+
+  // Beginner restriction (E3 — integrated here per plan)
+  // ClassSnapshot doesn't carry level, so we look it up from the schedule store
+  const { getInstances } = await import("@/lib/services/schedule-store");
+  const allInstances = getInstances();
+  const rawInstance = allInstances.find((i) => i.id === bookableClassId);
+  const classLevel = rawInstance?.level ?? null;
+
+  if (cls && isBeginnerEntryClass(classLevel)) {
+    const terms = getTerms();
+    const classTerm = findTermForDate(terms, cls.date);
+    if (classTerm && source === "subscription" && subscriptionId) {
+      const sub = getSubSync(subscriptionId);
+      // Student is "new" to this entitlement if they have no prior confirmed bookings
+      // with the same subscription name during this term
+      const existingBookings = svc.bookings.filter(
+        (b) =>
+          b.studentId === studentId &&
+          b.subscriptionName === (sub?.productName ?? subscriptionName) &&
+          (b.status === "confirmed" || b.status === "checked_in")
+      );
+      if (existingBookings.length === 0 && !isBeginnerEntryWeek(cls.date, classTerm)) {
+        return {
+          success: false,
+          error: "New beginner students can only start in weeks 1–2 of the term.",
+        };
+      }
+    }
+  }
+
   const result = svc.adminBook({
     bookableClassId,
     studentId,
@@ -60,7 +127,20 @@ export async function adminCreateBookingAction(
     return { success: false, error: result.reason };
   }
 
+  // Deduct credit / increment classesUsed on successful booking
+  if (source === "subscription" && subscriptionId) {
+    const sub = getSubSync(subscriptionId);
+    if (sub) {
+      if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+        updateSubStore(sub.id, { classesUsed: sub.classesUsed + 1 });
+      } else if (sub.remainingCredits !== null) {
+        updateSubStore(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+      }
+    }
+  }
+
   revalidatePath("/bookings");
+  revalidatePath("/students");
   return { success: true, outcome: result.type };
 }
 
@@ -129,13 +209,32 @@ export async function adminCheckInBookingAction(
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const svc = getBookingService();
-  const result = svc.checkInBooking(bookingId);
+  const booking = svc.bookings.find((b) => b.id === bookingId);
+  if (!booking) return { success: false, error: "Booking not found" };
 
+  const result = svc.checkInBooking(bookingId);
   if (result.type === "error") {
     return { success: false, error: result.reason };
   }
 
+  const cls = svc.getClass(booking.bookableClassId);
+  if (cls) {
+    const attendanceSvc = getAttendanceService();
+    attendanceSvc.markAttendance({
+      bookableClassId: booking.bookableClassId,
+      studentId: booking.studentId,
+      studentName: booking.studentName,
+      bookingId: booking.id,
+      classTitle: cls.title,
+      date: cls.date,
+      status: "present",
+      markedBy: "admin",
+      checkInMethod: "manual",
+    });
+  }
+
   revalidatePath("/bookings");
+  revalidatePath("/attendance");
   return { success: true };
 }
 

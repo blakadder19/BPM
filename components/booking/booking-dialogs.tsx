@@ -37,6 +37,7 @@ export interface ClassInstanceOption {
   startTime: string;
   endTime: string;
   styleName: string | null;
+  level: string | null;
   location: string;
   status: string;
   maxCapacity: number | null;
@@ -60,8 +61,14 @@ export interface WaitlistEntryView {
 export interface SubscriptionOption {
   id: string;
   productName: string;
+  productType: string;
   status: string;
   remainingCredits: number | null;
+  classesPerTerm: number | null;
+  classesUsed: number;
+  termId: string | null;
+  validFrom: string;
+  validUntil: string | null;
 }
 
 const INPUT_CLASS =
@@ -129,16 +136,31 @@ export function AddBookingDialog({
 
   const subscriptionSearchOptions = useMemo(
     () =>
-      studentSubs.map((s) => ({
-        value: s.id,
-        label: s.productName,
-        detail:
-          s.remainingCredits != null
-            ? `${s.remainingCredits} credits remaining`
-            : s.status,
-      })),
+      studentSubs.map((s) => {
+        let detail: string;
+        if (s.productType === "membership" && s.classesPerTerm !== null) {
+          const remaining = s.classesPerTerm - s.classesUsed;
+          detail = `${s.classesUsed}/${s.classesPerTerm} classes used (${remaining} left)`;
+        } else if (s.productType === "drop_in") {
+          detail = s.remainingCredits != null && s.remainingCredits > 0 ? "1 use available" : "Exhausted";
+        } else if (s.remainingCredits != null) {
+          detail = `${s.remainingCredits} credits remaining`;
+        } else {
+          detail = s.status;
+        }
+        return { value: s.id, label: s.productName, detail };
+      }),
     [studentSubs]
   );
+
+  const selectedSubOption = studentSubs.find((s) => s.id === selectedSubscription);
+  const isEntitlementExhausted = selectedSubOption
+    ? selectedSubOption.productType === "membership" && selectedSubOption.classesPerTerm !== null
+      ? selectedSubOption.classesUsed >= selectedSubOption.classesPerTerm
+      : selectedSubOption.productType === "drop_in"
+        ? (selectedSubOption.remainingCredits ?? 0) <= 0
+        : selectedSubOption.remainingCredits !== null && selectedSubOption.remainingCredits <= 0
+    : false;
 
   useEffect(() => {
     setSelectedSubscription("");
@@ -156,6 +178,7 @@ export function AddBookingDialog({
     if (showSubscription && selectedSubscription) {
       const sub = studentSubs.find((s) => s.id === selectedSubscription);
       fd.set("subscriptionName", sub?.productName ?? "");
+      fd.set("subscriptionId", selectedSubscription);
     }
 
     if (forceConfirm) fd.set("forceConfirm", "true");
@@ -237,6 +260,12 @@ export function AddBookingDialog({
               </div>
             )}
 
+            {selectedClass?.level?.startsWith("Beginner 1") && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                <span className="font-medium">Beginner restriction:</span> New students on a fresh entitlement can only start in weeks 1–2 of the term.
+              </div>
+            )}
+
             {requiresRole && (
               <div>
                 <Label htmlFor="ab-role">Role</Label>
@@ -283,6 +312,12 @@ export function AddBookingDialog({
                     Select a student first.
                   </p>
                 )}
+              </div>
+            )}
+
+            {showSubscription && isEntitlementExhausted && selectedSubscription && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                This entitlement has no remaining classes/credits. The server will reject the booking unless you switch to a different source.
               </div>
             )}
 

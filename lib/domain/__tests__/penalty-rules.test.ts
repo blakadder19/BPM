@@ -7,7 +7,7 @@ const classCtx: ClassContext = { danceStyleId: "ds-1", level: "Beginner 1" };
 function makeSub(overrides: Partial<ActiveSubscription> = {}): ActiveSubscription {
   return {
     id: "sub-1",
-    productType: "pack",
+    productType: "pass",
     remainingCredits: 5,
     danceStyleId: "ds-1",
     allowedLevels: null,
@@ -70,8 +70,8 @@ describe("resolvePenalty", () => {
   it("picks subscription matching the priority order", () => {
     const subs: ActiveSubscription[] = [
       makeSub({ id: "sub-membership", productType: "membership", remainingCredits: 10 }),
-      makeSub({ id: "sub-pack", productType: "pack", remainingCredits: 3 }),
-      makeSub({ id: "sub-promo", productType: "promo_pass", remainingCredits: 1 }),
+      makeSub({ id: "sub-pack", productType: "drop_in", remainingCredits: 3 }),
+      makeSub({ id: "sub-promo", productType: "pass", remainingCredits: 1 }),
     ];
 
     const decision = resolvePenalty("late_cancel", 200, subs, classCtx);

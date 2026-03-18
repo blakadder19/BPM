@@ -57,7 +57,7 @@ function defaults(): AppSettings {
     noShowFeeCents: NO_SHOW_FEE_CENTS,
     lateCancelCutoffMinutes: LATE_CANCEL_CUTOFF_MINUTES,
     lateCancelPenaltiesEnabled: true,
-    noShowPenaltiesEnabled: true,
+    noShowPenaltiesEnabled: false,
     penaltiesApplyToClassOnly: true,
     socialsExcludedFromPenalties: true,
 

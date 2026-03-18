@@ -2,11 +2,13 @@
 
 import { Pencil, Plus } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { getAccessRule, describeAccess } from "@/config/product-access";
 import type { StudentListItem } from "@/types/domain";
 import type {
   MockSubscription,
+  MockTerm,
   MockWalletTx,
   MockBooking,
   MockPenalty,
@@ -15,6 +17,7 @@ import type {
 interface StudentDetailPanelProps {
   student: StudentListItem;
   subscriptions: MockSubscription[];
+  terms: MockTerm[];
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
@@ -26,6 +29,7 @@ interface StudentDetailPanelProps {
 export function StudentDetailPanel({
   student,
   subscriptions,
+  terms,
   walletTransactions,
   bookings,
   penalties,
@@ -33,6 +37,7 @@ export function StudentDetailPanel({
   onEditSub,
   colSpan,
 }: StudentDetailPanelProps) {
+  const termsById = new Map(terms.map((t) => [t.id, t]));
   const subs = subscriptions.filter((s) => s.studentId === student.id);
   const activeSubs = subs.filter((s) => s.status === "active");
   const inactiveSubs = subs.filter((s) => s.status !== "active");
@@ -92,7 +97,7 @@ export function StudentDetailPanel({
             ) : (
               <div className="space-y-2">
                 {activeSubs.map((sub) => (
-                  <SubCard key={sub.id} sub={sub} onEdit={onEditSub} />
+                  <SubCard key={sub.id} sub={sub} termsById={termsById} onEdit={onEditSub} />
                 ))}
                 {inactiveSubs.length > 0 && (
                   <>
@@ -102,7 +107,7 @@ export function StudentDetailPanel({
                       </p>
                     )}
                     {inactiveSubs.map((sub) => (
-                      <SubCard key={sub.id} sub={sub} onEdit={onEditSub} />
+                      <SubCard key={sub.id} sub={sub} termsById={termsById} onEdit={onEditSub} />
                     ))}
                   </>
                 )}
@@ -120,9 +125,11 @@ export function StudentDetailPanel({
                     <div key={s.id} className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 truncate">{s.productName}</span>
                       <span className="font-medium text-gray-900">
-                        {s.remainingCredits === null
-                          ? "∞"
-                          : `${s.remainingCredits}${s.totalCredits !== null ? ` / ${s.totalCredits}` : ""}`}
+                        {s.productType === "membership" && s.classesPerTerm !== null
+                          ? `${s.classesUsed} / ${s.classesPerTerm} classes`
+                          : s.remainingCredits === null
+                            ? "∞"
+                            : `${s.remainingCredits}${s.totalCredits !== null ? ` / ${s.totalCredits}` : ""} credits`}
                       </span>
                     </div>
                   ))}
@@ -232,28 +239,53 @@ function DL({ label, value }: { label: string; value: string }) {
   );
 }
 
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  stripe: "Stripe",
+  cash: "Cash",
+  bank_transfer: "Bank Transfer",
+  manual: "Manual",
+  complimentary: "Complimentary",
+};
+
 function SubCard({
   sub,
+  termsById,
   onEdit,
 }: {
   sub: MockSubscription;
+  termsById: Map<string, MockTerm>;
   onEdit: (sub: MockSubscription) => void;
 }) {
   const rule = getAccessRule(sub.productId);
+  const term = sub.termId ? termsById.get(sub.termId) : null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm">
       <span className="font-medium text-gray-900">{sub.productName}</span>
       <StatusBadge status={sub.status} />
-      <span className="text-gray-500">
-        Credits:{" "}
-        {sub.remainingCredits === null
-          ? "∞"
-          : `${sub.remainingCredits}${sub.totalCredits !== null ? ` / ${sub.totalCredits}` : ""}`}
-      </span>
-      <span className="text-gray-500">
-        {formatDate(sub.validFrom)}
-        {sub.validUntil ? ` → ${formatDate(sub.validUntil)}` : ""}
-      </span>
+      {sub.productType === "membership" && sub.classesPerTerm !== null ? (
+        <span className="text-gray-500">
+          Classes: {sub.classesUsed} / {sub.classesPerTerm}
+        </span>
+      ) : (
+        <span className="text-gray-500">
+          Credits:{" "}
+          {sub.remainingCredits === null
+            ? "∞"
+            : `${sub.remainingCredits}${sub.totalCredits !== null ? ` / ${sub.totalCredits}` : ""}`}
+        </span>
+      )}
+      {term ? (
+        <span className="text-gray-500">{term.name}</span>
+      ) : (
+        <span className="text-gray-500">
+          {formatDate(sub.validFrom)}
+          {sub.validUntil ? ` → ${formatDate(sub.validUntil)}` : ""}
+        </span>
+      )}
+      <Badge variant="default">{PAYMENT_METHOD_LABELS[sub.paymentMethod] ?? sub.paymentMethod}</Badge>
+      {sub.autoRenew && (
+        <span className="text-[10px] text-indigo-600 font-medium">Auto-renew</span>
+      )}
       {sub.selectedStyleName && (
         <span className="text-gray-500">Style: {sub.selectedStyleName}</span>
       )}

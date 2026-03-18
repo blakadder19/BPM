@@ -85,7 +85,7 @@ describe("PenaltyService", () => {
     it("deducts credit when subscription is available", () => {
       const sub: ActiveSubscription = {
         id: "sub-1",
-        productType: "pack",
+        productType: "pass",
         remainingCredits: 5,
         danceStyleId: "ds-1",
         allowedLevels: null,
@@ -104,7 +104,7 @@ describe("PenaltyService", () => {
     it("creates wallet transaction when credit is deducted", () => {
       const sub: ActiveSubscription = {
         id: "sub-1",
-        productType: "pack",
+        productType: "pass",
         remainingCredits: 5,
         danceStyleId: "ds-1",
         allowedLevels: null,
@@ -150,7 +150,7 @@ describe("PenaltyService", () => {
     it("deducts credit when subscription is available", () => {
       const sub: ActiveSubscription = {
         id: "sub-1",
-        productType: "pack",
+        productType: "pass",
         remainingCredits: 3,
         danceStyleId: "ds-1",
         allowedLevels: null,
@@ -214,7 +214,7 @@ describe("PenaltyService", () => {
           subscriptions: [
             {
               id: "sub-1",
-              productType: "pack",
+              productType: "pass",
               remainingCredits: 5,
               danceStyleId: "ds-1",
               allowedLevels: null,

@@ -5,7 +5,7 @@
 
 import { SUBSCRIPTIONS, type MockSubscription } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
-import type { SubscriptionStatus } from "@/types/domain";
+import type { PaymentMethod, ProductType, SubscriptionStatus } from "@/types/domain";
 
 let subs: MockSubscription[] | null = null;
 
@@ -20,33 +20,53 @@ export function getSubscriptions(): MockSubscription[] {
   return init();
 }
 
+export function getSubscription(id: string): MockSubscription | undefined {
+  return init().find((s) => s.id === id);
+}
+
 export function createSubscription(data: {
   studentId: string;
+  productId: string;
   productName: string;
+  productType: ProductType;
   status: SubscriptionStatus;
   totalCredits: number | null;
   remainingCredits: number | null;
   validFrom: string;
   validUntil: string | null;
   notes: string | null;
+  termId: string | null;
+  paymentMethod: PaymentMethod;
+  autoRenew: boolean;
+  classesUsed: number;
+  classesPerTerm: number | null;
+  selectedStyleId?: string | null;
+  selectedStyleName?: string | null;
+  selectedStyleIds?: string[] | null;
+  selectedStyleNames?: string[] | null;
 }): MockSubscription {
   const list = init();
   const sub: MockSubscription = {
     id: generateId("sub"),
     studentId: data.studentId,
-    productId: generateId("p"),
+    productId: data.productId,
     productName: data.productName,
-    productType: "membership",
+    productType: data.productType,
     status: data.status,
     totalCredits: data.totalCredits,
     remainingCredits: data.remainingCredits,
     validFrom: data.validFrom,
     validUntil: data.validUntil,
-    selectedStyleId: null,
-    selectedStyleName: null,
-    selectedStyleIds: null,
-    selectedStyleNames: null,
+    selectedStyleId: data.selectedStyleId ?? null,
+    selectedStyleName: data.selectedStyleName ?? null,
+    selectedStyleIds: data.selectedStyleIds ?? null,
+    selectedStyleNames: data.selectedStyleNames ?? null,
     notes: data.notes,
+    termId: data.termId,
+    paymentMethod: data.paymentMethod,
+    autoRenew: data.autoRenew,
+    classesUsed: data.classesUsed,
+    classesPerTerm: data.classesPerTerm,
   };
   list.push(sub);
   return sub;
@@ -62,6 +82,11 @@ export function updateSubscription(
     validFrom?: string;
     validUntil?: string | null;
     notes?: string | null;
+    termId?: string | null;
+    paymentMethod?: PaymentMethod;
+    autoRenew?: boolean;
+    classesUsed?: number;
+    classesPerTerm?: number | null;
   }
 ): MockSubscription | null {
   const list = init();
@@ -75,6 +100,11 @@ export function updateSubscription(
   if (patch.validFrom !== undefined) sub.validFrom = patch.validFrom;
   if (patch.validUntil !== undefined) sub.validUntil = patch.validUntil;
   if (patch.notes !== undefined) sub.notes = patch.notes;
+  if (patch.termId !== undefined) sub.termId = patch.termId;
+  if (patch.paymentMethod !== undefined) sub.paymentMethod = patch.paymentMethod;
+  if (patch.autoRenew !== undefined) sub.autoRenew = patch.autoRenew;
+  if (patch.classesUsed !== undefined) sub.classesUsed = patch.classesUsed;
+  if (patch.classesPerTerm !== undefined) sub.classesPerTerm = patch.classesPerTerm;
 
   return { ...sub };
 }

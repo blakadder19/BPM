@@ -22,9 +22,11 @@ import {
 import type { StudentListItem } from "@/types/domain";
 import type {
   MockSubscription,
+  MockTerm,
   MockWalletTx,
   MockBooking,
   MockPenalty,
+  MockProduct,
 } from "@/lib/mock-data";
 
 const ROLE_OPTIONS = [
@@ -58,19 +60,25 @@ const TABLE_HEADERS = [
 interface AdminStudentsProps {
   students: StudentListItem[];
   subscriptions: MockSubscription[];
+  terms: MockTerm[];
+  products: MockProduct[];
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
+  initialSearch?: string;
 }
 
 export function AdminStudents({
   students,
   subscriptions,
+  terms,
+  products,
   walletTransactions,
   bookings,
   penalties,
+  initialSearch,
 }: AdminStudentsProps) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch ?? "");
   const [roleFilter, setRoleFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState("");
   const [subStatusFilter, setSubStatusFilter] = useState("");
@@ -220,6 +228,7 @@ export function AdminStudents({
                   <StudentDetailPanel
                     student={s}
                     subscriptions={subscriptions}
+                    terms={terms}
                     walletTransactions={walletTransactions}
                     bookings={bookings}
                     penalties={penalties}
@@ -250,6 +259,8 @@ export function AdminStudents({
       {addSubStudentId && (
         <AddSubscriptionDialog
           studentId={addSubStudentId}
+          products={products}
+          terms={terms}
           onClose={() => setAddSubStudentId(null)}
         />
       )}

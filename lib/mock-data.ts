@@ -12,10 +12,12 @@ import type {
   CreditsModel,
   DanceRole,
   InstanceStatus,
+  PaymentMethod,
   PenaltyReason,
   PenaltyResolution,
   ProductType,
   SubscriptionStatus,
+  TermStatus,
   TxType,
   WaitlistStatus,
 } from "@/types/domain";
@@ -45,6 +47,22 @@ export function styleRequiresRoleBalance(styleName: string | null): boolean {
   if (!styleName) return false;
   return DANCE_STYLES.find((s) => s.name === styleName)?.requiresRoleBalance ?? false;
 }
+
+// ── Terms ────────────────────────────────────────────────────
+
+export interface MockTerm {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: TermStatus;
+  notes: string | null;
+}
+
+export const TERMS: MockTerm[] = [
+  { id: "term-1", name: "Spring Term 2026", startDate: "2026-03-09", endDate: "2026-04-05", status: "active", notes: null },
+  { id: "term-2", name: "Summer Term 2026", startDate: "2026-04-06", endDate: "2026-05-03", status: "upcoming", notes: null },
+];
 
 // ── Class Templates ─────────────────────────────────────────
 
@@ -204,20 +222,34 @@ export interface MockProduct {
   notes: string | null;
   validityDescription: string | null;
   creditsModel: CreditsModel;
+  termBound: boolean;
+  recurring: boolean;
+  classesPerTerm: number | null;
+  autoRenew: boolean;
+  benefits: string[] | null;
 }
 
 export const PRODUCTS: MockProduct[] = [
-  { id: "p-bronze", name: "Bronze Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 4500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true, notes: "Tier limits TBD with academy.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
-  { id: "p-silver", name: "Silver Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true, notes: "Tier limits TBD with academy.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
-  { id: "p-gold", name: "Gold Membership", description: "PROVISIONAL — exact style/usage limits pending confirmation.", productType: "membership", priceCents: 8000, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true, notes: "Tier limits TBD with academy.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
-  { id: "p-rainbow", name: "Rainbow Membership", description: "PROVISIONAL — currently treated as all-styles unlimited.", productType: "membership", priceCents: 9500, totalCredits: null, durationDays: 30, styleName: "All (provisional)", allowedLevels: null, isActive: true, isProvisional: true, notes: "Confirm full scope with academy.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
-  { id: "p-yoga-bronze", name: "Yoga Bronze", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 3500, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true, notes: "Yoga schedule not yet defined.", validityDescription: "Monthly rolling", creditsModel: "unlimited" },
-  { id: "p-yoga-silver", name: "Yoga Silver", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 5000, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true, notes: null, validityDescription: "Monthly rolling", creditsModel: "unlimited" },
-  { id: "p-yoga-gold", name: "Yoga Gold", description: "Yoga-only membership. Yoga classes not yet in schedule.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: 30, styleName: "Yoga only", allowedLevels: null, isActive: true, isProvisional: true, notes: null, validityDescription: "Monthly rolling", creditsModel: "unlimited" },
-  { id: "p-dropin", name: "Drop In", description: "One-time class entry, any style.", productType: "drop_in", priceCents: 1000, totalCredits: 1, durationDays: 30, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "30 days from purchase", creditsModel: "single_use" },
-  { id: "p-beg12", name: "Beginners 1 & 2 Promo Pass", description: "Beg 1 + Beg 2 for ONE selected style. Valid 8 weeks.", productType: "promo_pass", priceCents: 2500, totalCredits: 16, durationDays: 56, styleName: "1 selected style", allowedLevels: ["Beginner 1", "Beginner 2"], isActive: true, isProvisional: false, notes: null, validityDescription: "8 weeks fixed", creditsModel: "fixed" },
-  { id: "p-latin-combo", name: "Beginners Latin Combo", description: "Beg 1 in TWO of three Latin styles. Valid 8 weeks.", productType: "promo_pass", priceCents: 3500, totalCredits: 16, durationDays: 56, styleName: "Pick 2 of 3 Latin", allowedLevels: ["Beginner 1"], isActive: true, isProvisional: true, notes: "Exact pool mapping configurable.", validityDescription: "8 weeks fixed", creditsModel: "fixed" },
-  { id: "p-social", name: "Social Pass", description: "Entry to social events. Socials are not part of the class booking flow.", productType: "pack", priceCents: 2000, totalCredits: 4, durationDays: 30, styleName: "Socials only", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed" },
+  // ── Memberships (term-bound, recurring, classesPerTerm-based) ──
+  { id: "p-mem-4", name: "4 Classes Membership", description: "4 classes per term, all styles, all levels.", productType: "membership", priceCents: 4500, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 4, autoRenew: true, benefits: null },
+  { id: "p-mem-8", name: "8 Classes Membership", description: "8 classes per term, all styles, all levels.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 8, autoRenew: true, benefits: null },
+  { id: "p-mem-12", name: "12 Classes Membership", description: "12 classes per term, all styles, all levels.", productType: "membership", priceCents: 8000, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 12, autoRenew: true, benefits: null },
+  { id: "p-mem-16", name: "16 Classes Membership", description: "16 classes per term, all styles, all levels. Includes member perks.", productType: "membership", priceCents: 9500, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 16, autoRenew: true, benefits: ["Birthday class", "Member giveaways", "Free weekend Student Practice"] },
+
+  // ── Passes (term-bound, non-recurring, fixed credits) ──
+  { id: "p-pass-bronze", name: "Bronze Pass", description: "4 credits for one selected style.", productType: "pass", priceCents: 3000, totalCredits: 4, durationDays: null, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-pass-silver", name: "Silver Pass", description: "8 credits for one selected style.", productType: "pass", priceCents: 5000, totalCredits: 8, durationDays: null, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-pass-gold", name: "Gold Pass", description: "12 credits for one selected style.", productType: "pass", priceCents: 7000, totalCredits: 12, durationDays: null, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+
+  // ── Drop-in ──
+  { id: "p-dropin", name: "Drop In", description: "Single class entry, any style.", productType: "drop_in", priceCents: 1200, totalCredits: 1, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Single use", creditsModel: "single_use", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+
+  // ── Promo passes (kept, mapped to "pass" type) ──
+  { id: "p-beg12", name: "Beginners 1 & 2 Promo Pass", description: "Beg 1 + Beg 2 for ONE selected style. Valid for the term.", productType: "pass", priceCents: 2500, totalCredits: 16, durationDays: 56, styleName: "1 selected style", allowedLevels: ["Beginner 1", "Beginner 2"], isActive: true, isProvisional: false, notes: null, validityDescription: "8 weeks fixed", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-latin-combo", name: "Beginners Latin Combo", description: "Beg 1 in TWO of three Latin styles. Valid for the term.", productType: "pass", priceCents: 3500, totalCredits: 16, durationDays: 56, styleName: "Pick 2 of 3 Latin", allowedLevels: ["Beginner 1"], isActive: true, isProvisional: true, notes: "Exact pool mapping configurable.", validityDescription: "8 weeks fixed", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+
+  // ── Social pass ──
+  { id: "p-social", name: "Social Pass", description: "Entry to social events. Socials are not part of the class booking flow.", productType: "pass", priceCents: 2000, totalCredits: 4, durationDays: 30, styleName: "Socials only", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
 ];
 
 // ── Bookings ────────────────────────────────────────────────
@@ -339,16 +371,21 @@ export interface MockSubscription {
   selectedStyleIds: string[] | null;
   selectedStyleNames: string[] | null;
   notes: string | null;
+  termId: string | null;
+  paymentMethod: PaymentMethod;
+  autoRenew: boolean;
+  classesUsed: number;
+  classesPerTerm: number | null;
 }
 
 export const SUBSCRIPTIONS: MockSubscription[] = [
-  { id: "sub-01", studentId: "s-01", productId: "p-gold", productName: "Gold Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null },
-  { id: "sub-02", studentId: "s-02", productId: "p-silver", productName: "Silver Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null },
-  { id: "sub-03", studentId: "s-03", productId: "p-beg12", productName: "Beginners 1 & 2 Promo Pass", productType: "promo_pass", status: "active", totalCredits: 16, remainingCredits: 12, validFrom: "2026-01-12", validUntil: "2026-03-08", selectedStyleId: "ds-1", selectedStyleName: "Bachata", selectedStyleIds: null, selectedStyleNames: null, notes: "Selected Bachata as promo style." },
-  { id: "sub-04", studentId: "s-04", productId: "p-bronze", productName: "Bronze Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null },
-  { id: "sub-06", studentId: "s-06", productId: "p-rainbow", productName: "Rainbow Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null },
-  { id: "sub-07", studentId: "s-07", productId: "p-latin-combo", productName: "Beginners Latin Combo", productType: "promo_pass", status: "active", totalCredits: 16, remainingCredits: 3, validFrom: "2026-01-15", validUntil: "2026-03-12", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: ["ds-1", "ds-5"], selectedStyleNames: ["Bachata", "Salsa Line"], notes: null },
-  { id: "sub-08", studentId: "s-08", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "active", totalCredits: 1, remainingCredits: 1, validFrom: "2026-03-10", validUntil: "2026-04-09", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Single drop-in before Hugo moved." },
+  { id: "sub-01", studentId: "s-01", productId: "p-mem-12", productName: "12 Classes Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "stripe", autoRenew: true, classesUsed: 3, classesPerTerm: 12 },
+  { id: "sub-02", studentId: "s-02", productId: "p-mem-8", productName: "8 Classes Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "cash", autoRenew: true, classesUsed: 2, classesPerTerm: 8 },
+  { id: "sub-03", studentId: "s-03", productId: "p-beg12", productName: "Beginners 1 & 2 Promo Pass", productType: "pass", status: "active", totalCredits: 16, remainingCredits: 12, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: "ds-1", selectedStyleName: "Bachata", selectedStyleIds: null, selectedStyleNames: null, notes: "Selected Bachata as promo style.", termId: "term-1", paymentMethod: "cash", autoRenew: false, classesUsed: 0, classesPerTerm: null },
+  { id: "sub-04", studentId: "s-04", productId: "p-mem-4", productName: "4 Classes Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "bank_transfer", autoRenew: false, classesUsed: 1, classesPerTerm: 4 },
+  { id: "sub-06", studentId: "s-06", productId: "p-mem-16", productName: "16 Classes Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "stripe", autoRenew: true, classesUsed: 4, classesPerTerm: 16 },
+  { id: "sub-07", studentId: "s-07", productId: "p-latin-combo", productName: "Beginners Latin Combo", productType: "pass", status: "active", totalCredits: 16, remainingCredits: 3, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: ["ds-1", "ds-5"], selectedStyleNames: ["Bachata", "Salsa Line"], notes: null, termId: "term-1", paymentMethod: "manual", autoRenew: false, classesUsed: 0, classesPerTerm: null },
+  { id: "sub-08", studentId: "s-08", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "active", totalCredits: 1, remainingCredits: 1, validFrom: "2026-03-10", validUntil: null, selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Single drop-in before Hugo moved.", termId: null, paymentMethod: "cash", autoRenew: false, classesUsed: 0, classesPerTerm: null },
 ];
 
 // ── Wallet Transactions ─────────────────────────────────────

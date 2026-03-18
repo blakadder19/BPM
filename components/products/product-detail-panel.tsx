@@ -29,21 +29,26 @@ export function ProductDetailPanel({
           <Section title="General">
             <DL label="Description" value={product.description || "—"} />
             <DL label="Price" value={formatCents(product.priceCents)} />
-            <DL
-              label="Credits Model"
-              value={
-                product.creditsModel === "unlimited"
-                  ? "Unlimited"
-                  : product.creditsModel === "single_use"
-                    ? "Single use"
-                    : `Fixed — ${product.totalCredits ?? "?"} credits`
-              }
-            />
+            {product.productType === "membership" && product.classesPerTerm ? (
+              <DL label="Classes / Term" value={`${product.classesPerTerm}`} />
+            ) : (
+              <DL
+                label="Credits Model"
+                value={
+                  product.creditsModel === "unlimited"
+                    ? "Unlimited"
+                    : product.creditsModel === "single_use"
+                      ? "Single use"
+                      : `Fixed — ${product.totalCredits ?? "?"} credits`
+                }
+              />
+            )}
             <DL label="Validity" value={product.validityDescription ?? "—"} />
-            <DL
-              label="Duration"
-              value={product.durationDays ? `${product.durationDays} days` : "No expiry"}
-            />
+            <DL label="Term-bound" value={product.termBound ? "Yes" : "No"} />
+            {product.recurring && <DL label="Recurring" value="Yes (auto-renew eligible)" />}
+            {product.benefits && product.benefits.length > 0 && (
+              <DL label="Benefits" value={product.benefits.join(", ")} />
+            )}
             {product.isProvisional && (
               <div className="mt-2">
                 <Badge variant="warning">Provisional</Badge>

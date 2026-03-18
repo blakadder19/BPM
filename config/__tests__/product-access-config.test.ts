@@ -114,7 +114,7 @@ describe("Event Type Config — Social & Student Practice", () => {
 // ── Credit Deduction Priority ───────────────────────────────
 
 describe("Credit Deduction Priority", () => {
-  const validTypes = ["membership", "pack", "drop_in", "promo_pass"];
+  const validTypes = ["membership", "pass", "drop_in"];
 
   it("contains only valid product types", () => {
     for (const type of CREDIT_DEDUCTION_PRIORITY) {
@@ -127,7 +127,7 @@ describe("Credit Deduction Priority", () => {
   });
 
   it("promo_pass is deducted before membership", () => {
-    const promoIdx = CREDIT_DEDUCTION_PRIORITY.indexOf("promo_pass");
+    const promoIdx = CREDIT_DEDUCTION_PRIORITY.indexOf("pass");
     const memIdx = CREDIT_DEDUCTION_PRIORITY.indexOf("membership");
     expect(promoIdx).toBeLessThan(memIdx);
   });

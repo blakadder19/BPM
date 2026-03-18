@@ -3,6 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   LayoutDashboard,
   Calendar,
+  CalendarRange,
   BookOpen,
   Users,
   Package,
@@ -24,6 +25,7 @@ export const NAVIGATION: NavItem[] = [
   { name: "Bookings", href: "/bookings", icon: BookOpen, roles: ["admin", "teacher", "student"] },
   { name: "Attendance", href: "/attendance", icon: ClipboardCheck, roles: ["admin", "teacher"] },
   { name: "Students", href: "/students", icon: Users, roles: ["admin"] },
+  { name: "Terms", href: "/terms", icon: CalendarRange, roles: ["admin"] },
   { name: "Products", href: "/products", icon: Package, roles: ["admin"] },
   { name: "Penalties", href: "/penalties", icon: AlertTriangle, roles: ["admin", "student"] },
   { name: "Settings", href: "/settings", icon: Settings, roles: ["admin"] },
@@ -39,6 +41,7 @@ const ROUTE_ACCESS: { prefix: string; roles: UserRole[] }[] = [
   { prefix: "/bookings", roles: ["admin", "teacher", "student"] },
   { prefix: "/attendance", roles: ["admin", "teacher"] },
   { prefix: "/students", roles: ["admin"] },
+  { prefix: "/terms", roles: ["admin"] },
   { prefix: "/products", roles: ["admin"] },
   { prefix: "/penalties", roles: ["admin", "student"] },
   { prefix: "/settings", roles: ["admin"] },

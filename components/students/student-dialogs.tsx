@@ -23,7 +23,8 @@ import {
   updateSubscriptionAction,
 } from "@/lib/actions/subscriptions";
 import type { StudentListItem } from "@/types/domain";
-import type { MockSubscription } from "@/lib/mock-data";
+import type { MockSubscription, MockProduct, MockTerm } from "@/lib/mock-data";
+import { DANCE_STYLES } from "@/lib/mock-data";
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100";
@@ -410,29 +411,67 @@ export function DeactivateConfirmDialog({
   );
 }
 
-// ── Add Subscription Dialog ──────────────────────────────────
+// ── Add Subscription Dialog (product-aware) ─────────────────
+
+const PAYMENT_METHOD_OPTIONS = [
+  { value: "cash", label: "Cash" },
+  { value: "bank_transfer", label: "Bank Transfer" },
+  { value: "stripe", label: "Stripe" },
+  { value: "manual", label: "Manual" },
+  { value: "complimentary", label: "Complimentary" },
+];
+
+function groupProducts(products: MockProduct[]) {
+  const memberships = products.filter((p) => p.productType === "membership" && p.isActive);
+  const passes = products.filter((p) => p.productType === "pass" && p.isActive);
+  const dropIns = products.filter((p) => p.productType === "drop_in" && p.isActive);
+  return { memberships, passes, dropIns };
+}
 
 export function AddSubscriptionDialog({
   studentId,
+  products,
+  terms,
   onClose,
 }: {
   studentId: string;
+  products: MockProduct[];
+  terms: MockTerm[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState("");
+  const [selectedTermId, setSelectedTermId] = useState("");
+  const [selectedStyleId, setSelectedStyleId] = useState("");
+
+  const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const selectedTerm = terms.find((t) => t.id === selectedTermId);
+  const groups = groupProducts(products);
+  const eligibleTerms = terms.filter((t) => t.status === "active" || t.status === "upcoming");
+
+  const needsStyleSelector =
+    selectedProduct?.productType === "pass" &&
+    selectedProduct.styleName?.includes("selected style");
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+    formData.set("productId", selectedProductId);
+    formData.set("termId", selectedTermId);
+    if (selectedStyleId) {
+      formData.set("selectedStyleId", selectedStyleId);
+      const style = DANCE_STYLES.find((s) => s.id === selectedStyleId);
+      if (style) formData.set("selectedStyleName", style.name);
+    }
     startTransition(async () => {
       const result = await createSubscriptionAction(formData);
       if (result.success) {
         router.refresh();
         onClose();
       } else {
-        setError(result.error ?? "Failed to create subscription");
+        setError(result.error ?? "Failed to assign entitlement");
       }
     });
   }
@@ -441,12 +480,144 @@ export function AddSubscriptionDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Subscription</DialogTitle>
+          <DialogTitle>Assign Entitlement</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <input type="hidden" name="studentId" value={studentId} />
           <DialogBody className="space-y-4">
-            <SubscriptionFormFields />
+            <div className="space-y-1.5">
+              <Label htmlFor="as-product">Product *</Label>
+              <select
+                id="as-product"
+                value={selectedProductId}
+                onChange={(e) => setSelectedProductId(e.target.value)}
+                className={SELECT_CLASS}
+                required
+              >
+                <option value="">Select product…</option>
+                {groups.memberships.length > 0 && (
+                  <optgroup label="Memberships">
+                    {groups.memberships.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.classesPerTerm ? `(${p.classesPerTerm}/term)` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {groups.passes.length > 0 && (
+                  <optgroup label="Passes">
+                    {groups.passes.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.totalCredits ? `(${p.totalCredits} credits)` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {groups.dropIns.length > 0 && (
+                  <optgroup label="Drop-ins">
+                    {groups.dropIns.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+
+            {selectedProduct?.termBound && (
+              <div className="space-y-1.5">
+                <Label htmlFor="as-term">Term *</Label>
+                <select
+                  id="as-term"
+                  value={selectedTermId}
+                  onChange={(e) => setSelectedTermId(e.target.value)}
+                  className={SELECT_CLASS}
+                  required
+                >
+                  <option value="">Select term…</option>
+                  {eligibleTerms.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.startDate} → {t.endDate})
+                    </option>
+                  ))}
+                </select>
+                {selectedTerm && (
+                  <p className="text-xs text-gray-500">
+                    Dates auto-set: {selectedTerm.startDate} → {selectedTerm.endDate}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {needsStyleSelector && (
+              <div className="space-y-1.5">
+                <Label htmlFor="as-style">Style *</Label>
+                <select
+                  id="as-style"
+                  value={selectedStyleId}
+                  onChange={(e) => setSelectedStyleId(e.target.value)}
+                  className={SELECT_CLASS}
+                  required
+                >
+                  <option value="">Select style…</option>
+                  {DANCE_STYLES.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="as-payment">Payment Method *</Label>
+              <select
+                id="as-payment"
+                name="paymentMethod"
+                className={SELECT_CLASS}
+                required
+              >
+                {PAYMENT_METHOD_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {selectedProduct?.recurring && (
+              <div className="flex items-center gap-2">
+                <input
+                  id="as-autoRenew"
+                  name="autoRenew"
+                  type="checkbox"
+                  defaultChecked
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <Label htmlFor="as-autoRenew" className="!mb-0">Auto-renew</Label>
+              </div>
+            )}
+
+            {selectedProduct && (
+              <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600 space-y-0.5">
+                <p><span className="font-medium">Product:</span> {selectedProduct.name}</p>
+                {selectedProduct.classesPerTerm && (
+                  <p><span className="font-medium">Classes/term:</span> {selectedProduct.classesPerTerm}</p>
+                )}
+                {selectedProduct.totalCredits && (
+                  <p><span className="font-medium">Credits:</span> {selectedProduct.totalCredits}</p>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="as-notes">Notes</Label>
+              <textarea
+                id="as-notes"
+                name="notes"
+                rows={2}
+                className={SELECT_CLASS}
+                placeholder="Optional notes"
+              />
+            </div>
+
             {error && <p className="text-sm text-red-600">{error}</p>}
           </DialogBody>
           <DialogFooter>
@@ -454,7 +625,7 @@ export function AddSubscriptionDialog({
               Cancel
             </Button>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Creating…" : "Add Subscription"}
+              {isPending ? "Assigning…" : "Assign Entitlement"}
             </Button>
           </DialogFooter>
         </form>
@@ -494,22 +665,41 @@ export function EditSubscriptionDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Subscription</DialogTitle>
+          <DialogTitle>Edit Entitlement</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <input type="hidden" name="id" value={sub.id} />
           <DialogBody className="space-y-4">
-            <SubscriptionFormFields
-              defaults={{
-                productName: sub.productName,
-                status: sub.status,
-                totalCredits: sub.totalCredits,
-                remainingCredits: sub.remainingCredits,
-                validFrom: sub.validFrom,
-                validUntil: sub.validUntil,
-                notes: sub.notes,
-              }}
-            />
+            <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
+              <p className="font-medium text-gray-900">{sub.productName}</p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {sub.validFrom}{sub.validUntil ? ` → ${sub.validUntil}` : ""}
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="es-status">Status</Label>
+              <select
+                id="es-status"
+                name="status"
+                defaultValue={sub.status}
+                className={SELECT_CLASS}
+              >
+                {SUB_STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="es-notes">Notes</Label>
+              <textarea
+                id="es-notes"
+                name="notes"
+                rows={2}
+                defaultValue={sub.notes ?? ""}
+                className={SELECT_CLASS}
+                placeholder="Optional notes"
+              />
+            </div>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </DialogBody>
           <DialogFooter>

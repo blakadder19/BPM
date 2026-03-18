@@ -14,8 +14,7 @@ export const LATE_CANCEL_CUTOFF_MINUTES = 60;
 
 /** PROVISIONAL — priority may change after academy confirmation. */
 export const CREDIT_DEDUCTION_PRIORITY: ProductType[] = [
-  "promo_pass",
-  "pack",
+  "pass",
   "drop_in",
   "membership",
 ];
@@ -27,6 +26,11 @@ export const CREDIT_DEDUCTION_PRIORITY: ProductType[] = [
  * PROVISIONAL — configurable per academy.
  */
 export const ALLOWED_ROLE_IMBALANCE = 2;
+
+/**
+ * No-show penalties are OFF by default per academy decision.
+ * The architecture is preserved for later reintroduction via Settings page.
+ */
 
 /** PROVISIONAL — whether Student Practice events are bookable. */
 export const STUDENT_PRACTICE_IS_BOOKABLE = false;

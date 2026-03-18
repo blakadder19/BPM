@@ -4,7 +4,7 @@ import Link from "next/link";
 import { ExternalLink, X as XIcon, Check, Users, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { formatDate, formatTime, formatCents } from "@/lib/utils";
+import { formatDate, formatTime } from "@/lib/utils";
 import type { BookingView } from "@/app/(app)/bookings/page";
 
 interface BookingDetailPanelProps {
@@ -37,15 +37,6 @@ export function BookingDetailPanel({
             <DL label="Name" value={b.studentName} />
             <DL label="Student ID" value={b.studentId ?? "—"} />
             <DL label="Role" value={b.danceRole ?? "None"} />
-            <div className="pt-1">
-              <Link
-                href={`/students?search=${encodeURIComponent(b.studentName)}`}
-                className="inline-flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800"
-              >
-                <ExternalLink className="h-3 w-3" />
-                View Student
-              </Link>
-            </div>
           </Section>
 
           <Section title="Class Instance">
@@ -106,15 +97,19 @@ export function BookingDetailPanel({
           <Section title="Quick Links" className="md:col-span-2">
             <div className="flex flex-wrap gap-2">
               <QuickLink
+                href={`/students?search=${encodeURIComponent(b.studentName)}`}
+                label="View Student"
+              />
+              <QuickLink
                 href={`/classes/bookable?search=${encodeURIComponent(b.classTitle)}`}
                 label="Class Schedule"
               />
               <QuickLink
-                href={`/attendance?classTitle=${encodeURIComponent(b.classTitle)}&date=${b.date}`}
+                href={`/attendance?classTitle=${encodeURIComponent(b.classTitle)}&date=${b.date}&student=${encodeURIComponent(b.studentName)}`}
                 label="Attendance"
               />
               <QuickLink
-                href={`/penalties?classTitle=${encodeURIComponent(b.classTitle)}&date=${b.date}`}
+                href={`/penalties?classTitle=${encodeURIComponent(b.classTitle)}&date=${b.date}&student=${encodeURIComponent(b.studentName)}`}
                 label="Penalties"
               />
               <button

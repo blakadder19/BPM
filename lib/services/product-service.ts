@@ -29,6 +29,11 @@ export async function createProduct(data: {
   notes: string | null;
   validityDescription: string | null;
   creditsModel: CreditsModel;
+  termBound?: boolean;
+  recurring?: boolean;
+  classesPerTerm?: number | null;
+  autoRenew?: boolean;
+  benefits?: string[] | null;
 }): Promise<{ success: boolean; error?: string }> {
   if (isDev) {
     mockCreate(data);
@@ -54,6 +59,11 @@ export async function updateProduct(
     notes?: string | null;
     validityDescription?: string | null;
     creditsModel?: CreditsModel;
+    termBound?: boolean;
+    recurring?: boolean;
+    classesPerTerm?: number | null;
+    autoRenew?: boolean;
+    benefits?: string[] | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   if (isDev) {

@@ -98,6 +98,8 @@ interface AttendanceClientProps {
   isDev?: boolean;
   studentOptions?: StudentOption[];
   initialClassFilter?: string;
+  initialDateFilter?: string;
+  initialStudentSearch?: string;
 }
 
 export function AttendanceClient({
@@ -109,9 +111,12 @@ export function AttendanceClient({
   isDev,
   studentOptions,
   initialClassFilter,
+  initialDateFilter,
+  initialStudentSearch,
 }: AttendanceClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"today" | "history">(initialClassFilter ? "history" : "today");
+  const hasContextFilter = !!(initialClassFilter || initialStudentSearch);
+  const [activeTab, setActiveTab] = useState<"today" | "history">(hasContextFilter ? "history" : "today");
   const [showAddAttendance, setShowAddAttendance] = useState(false);
   const [clearPending, startClear] = useTransition();
   const [clearMsg, setClearMsg] = useState<string | null>(null);
@@ -195,7 +200,9 @@ export function AttendanceClient({
         <HistoryView
           attendanceRecords={attendanceRecords}
           allClasses={allClasses}
-          initialSearch={initialClassFilter}
+          initialSearch={initialStudentSearch || initialClassFilter}
+          initialClassFilter={initialStudentSearch ? initialClassFilter : ""}
+          initialDateFilter={initialStudentSearch ? initialDateFilter : ""}
         />
       )}
 
@@ -524,16 +531,20 @@ function HistoryView({
   attendanceRecords,
   allClasses,
   initialSearch,
+  initialClassFilter,
+  initialDateFilter,
 }: {
   attendanceRecords: StoredAttendance[];
   allClasses: BookableClassProp[];
   initialSearch?: string;
+  initialClassFilter?: string;
+  initialDateFilter?: string;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState(initialSearch ?? "");
   const [statusFilter, setStatusFilter] = useState("");
-  const [dateFilter, setDateFilter] = useState("");
-  const [classFilter, setClassFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState(initialDateFilter ?? "");
+  const [classFilter, setClassFilter] = useState(initialClassFilter ?? "");
   const [markedByFilter, setMarkedByFilter] = useState("");
 
   const dateOptions = useMemo(

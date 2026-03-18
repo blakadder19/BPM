@@ -37,6 +37,11 @@ export function createProduct(data: {
   notes: string | null;
   validityDescription: string | null;
   creditsModel: CreditsModel;
+  termBound?: boolean;
+  recurring?: boolean;
+  classesPerTerm?: number | null;
+  autoRenew?: boolean;
+  benefits?: string[] | null;
 }): MockProduct {
   const list = init();
   const product: MockProduct = {
@@ -54,6 +59,11 @@ export function createProduct(data: {
     notes: data.notes,
     validityDescription: data.validityDescription,
     creditsModel: data.creditsModel,
+    termBound: data.termBound ?? false,
+    recurring: data.recurring ?? false,
+    classesPerTerm: data.classesPerTerm ?? null,
+    autoRenew: data.autoRenew ?? false,
+    benefits: data.benefits ?? null,
   };
   list.push(product);
   return product;
@@ -75,6 +85,11 @@ type ProductPatch = Partial<
     | "notes"
     | "validityDescription"
     | "creditsModel"
+    | "termBound"
+    | "recurring"
+    | "classesPerTerm"
+    | "autoRenew"
+    | "benefits"
   >
 >;
 
@@ -99,6 +114,11 @@ export function updateProduct(
   if (patch.notes !== undefined) product.notes = patch.notes;
   if (patch.validityDescription !== undefined) product.validityDescription = patch.validityDescription;
   if (patch.creditsModel !== undefined) product.creditsModel = patch.creditsModel;
+  if (patch.termBound !== undefined) product.termBound = patch.termBound;
+  if (patch.recurring !== undefined) product.recurring = patch.recurring;
+  if (patch.classesPerTerm !== undefined) product.classesPerTerm = patch.classesPerTerm;
+  if (patch.autoRenew !== undefined) product.autoRenew = patch.autoRenew;
+  if (patch.benefits !== undefined) product.benefits = patch.benefits;
 
   return { ...product };
 }

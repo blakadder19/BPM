@@ -8,7 +8,7 @@ import {
 } from "@/lib/services/product-service";
 import type { CreditsModel, ProductType } from "@/types/domain";
 
-const VALID_TYPES = new Set<string>(["membership", "pack", "drop_in", "promo_pass"]);
+const VALID_TYPES = new Set<string>(["membership", "pass", "drop_in"]);
 const VALID_CREDITS_MODELS = new Set<string>(["unlimited", "fixed", "single_use"]);
 
 function parseOptionalInt(raw: string | null): number | null {

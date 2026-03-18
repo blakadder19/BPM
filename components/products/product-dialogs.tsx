@@ -25,9 +25,8 @@ const SELECT_CLASS =
 
 const TYPE_OPTIONS = [
   { value: "membership", label: "Membership" },
-  { value: "pack", label: "Pack" },
+  { value: "pass", label: "Pass" },
   { value: "drop_in", label: "Drop-in" },
-  { value: "promo_pass", label: "Promo Pass" },
 ];
 
 const CREDITS_MODEL_OPTIONS = [

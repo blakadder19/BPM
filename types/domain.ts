@@ -171,9 +171,23 @@ export interface Attendance {
   notes: string | null;
 }
 
+// ── Terms ────────────────────────────────────────────────────
+
+export type TermStatus = "draft" | "active" | "upcoming" | "past";
+
+export interface Term {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: TermStatus;
+  notes: string | null;
+}
+
 // ── Commerce ────────────────────────────────────────────────
 
-export type ProductType = "membership" | "pack" | "drop_in" | "promo_pass";
+export type ProductType = "membership" | "pass" | "drop_in";
+export type PaymentMethod = "stripe" | "cash" | "bank_transfer" | "manual" | "complimentary";
 export type CreditsModel = "unlimited" | "fixed" | "single_use";
 export type SubscriptionStatus = "active" | "paused" | "expired" | "exhausted" | "cancelled";
 export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";

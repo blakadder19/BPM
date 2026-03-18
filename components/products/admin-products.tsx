@@ -22,9 +22,8 @@ import type { MockProduct, MockSubscription } from "@/lib/mock-data";
 
 const TYPE_OPTIONS = [
   { value: "membership", label: "Membership" },
-  { value: "pack", label: "Pack" },
+  { value: "pass", label: "Pass" },
   { value: "drop_in", label: "Drop-in" },
-  { value: "promo_pass", label: "Promo Pass" },
 ];
 
 const ACTIVE_OPTIONS = [
@@ -42,8 +41,8 @@ const TABLE_HEADERS = [
   "Name",
   "Type",
   "Price",
-  "Credits",
-  "Duration",
+  "Classes / Credits",
+  "Term",
   "Scope",
   "Status",
   "",
@@ -146,13 +145,27 @@ export function AdminProducts({
                   </Td>
                   <Td>{formatCents(p.priceCents)}</Td>
                   <Td>
-                    {p.creditsModel === "unlimited"
-                      ? "∞"
+                    {p.productType === "membership" && p.classesPerTerm
+                      ? `${p.classesPerTerm}/term`
                       : p.creditsModel === "single_use"
                         ? "1 (single)"
-                        : p.totalCredits ?? "—"}
+                        : p.totalCredits
+                          ? `${p.totalCredits} credits`
+                          : "∞"}
                   </Td>
-                  <Td>{p.durationDays ? `${p.durationDays}d` : "—"}</Td>
+                  <Td>
+                    {p.termBound ? (
+                      <span className="inline-flex items-center gap-1">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                        <span className="text-xs text-indigo-700">Term-bound</span>
+                        {p.recurring && (
+                          <span className="text-[10px] text-gray-400 ml-1">recurring</span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400 text-xs">—</span>
+                    )}
+                  </Td>
                   <Td>
                     {rule ? (
                       <span className="text-xs text-gray-600">

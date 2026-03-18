@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useState, useMemo, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
@@ -66,13 +66,15 @@ interface AdminPenaltiesProps {
   penaltyFees: PenaltyFees;
   isDev?: boolean;
   initialSearch?: string;
+  initialStudentFilter?: string;
 }
 
-export function AdminPenalties({ penalties, students, classes, penaltyFees, isDev, initialSearch }: AdminPenaltiesProps) {
+export function AdminPenalties({ penalties, students, classes, penaltyFees, isDev, initialSearch, initialStudentFilter }: AdminPenaltiesProps) {
   const router = useRouter();
   const [search, setSearch] = useState(initialSearch ?? "");
   const [reasonFilter, setReasonFilter] = useState("");
   const [resolutionFilter, setResolutionFilter] = useState("");
+  const [studentFilter, setStudentFilter] = useState(initialStudentFilter ?? "");
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [resolveTarget, setResolveTarget] = useState<StoredPenalty | null>(null);
@@ -88,6 +90,11 @@ export function AdminPenalties({ penalties, students, classes, penaltyFees, isDe
 
   const q = search.toLowerCase();
 
+  const studentFilterOptions = useMemo(() => {
+    const names = Array.from(new Set(penalties.map((p) => p.studentName))).sort();
+    return names.map((n) => ({ value: n, label: n }));
+  }, [penalties]);
+
   const filtered = penalties.filter((p) => {
     if (
       q &&
@@ -96,6 +103,7 @@ export function AdminPenalties({ penalties, students, classes, penaltyFees, isDe
     ) {
       return false;
     }
+    if (studentFilter && p.studentName !== studentFilter) return false;
     if (reasonFilter && p.reason !== reasonFilter) return false;
     if (resolutionFilter && p.resolution !== resolutionFilter) return false;
     return true;
@@ -228,6 +236,12 @@ export function AdminPenalties({ penalties, students, classes, penaltyFees, isDe
           onChange={setResolutionFilter}
           options={RESOLUTION_OPTIONS}
           placeholder="All statuses"
+        />
+        <SelectFilter
+          value={studentFilter}
+          onChange={setStudentFilter}
+          options={studentFilterOptions}
+          placeholder="All students"
         />
       </div>
 

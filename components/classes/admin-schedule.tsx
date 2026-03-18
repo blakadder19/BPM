@@ -322,7 +322,10 @@ export function AdminSchedule({
                             <Badge variant="warning">Not Bookable</Badge>
                           )}
                           {bc.classType === "student_practice" && !settings.studentPracticeBookable && (
-                            <Badge variant="warning">Provisional</Badge>
+                            <>
+                              <Badge variant="warning">Provisional</Badge>
+                              <Badge variant="default">Pay at reception</Badge>
+                            </>
                           )}
                           {isRoleBalanced && <Badge variant="info">RB</Badge>}
                         </div>

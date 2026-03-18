@@ -70,14 +70,14 @@ describe("CreditService", () => {
       expect(sub.status).toBe("exhausted");
     });
 
-    it("selects promo_pass before membership (priority order)", () => {
+    it("selects pass before membership (priority order)", () => {
       const service = new CreditService([
         makeSub({ id: "sub-mem", productId: "p-gold", productType: "membership" }),
         makeSub({
           id: "sub-promo",
           productId: "p-beg12",
           productName: "Beginners 1 & 2 Promo Pass",
-          productType: "promo_pass",
+          productType: "pass",
           totalCredits: 16,
           remainingCredits: 10,
           selectedStyleId: "ds-1",
@@ -104,7 +104,7 @@ describe("CreditService", () => {
           id: "sub-promo",
           productId: "p-beg12",
           productName: "Beginners 1 & 2 Promo Pass",
-          productType: "promo_pass",
+          productType: "pass",
           totalCredits: 16,
           remainingCredits: 10,
           selectedStyleId: "ds-1",
@@ -130,7 +130,7 @@ describe("CreditService", () => {
           id: "sub-combo",
           productId: "p-latin-combo",
           productName: "Beginners Latin Combo",
-          productType: "promo_pass",
+          productType: "pass",
           totalCredits: 16,
           remainingCredits: 5,
           selectedStyleIds: ["ds-1", "ds-5"],
@@ -222,7 +222,7 @@ describe("CreditService", () => {
           id: "sub-1",
           productId: "p-beg12",
           productName: "Beginners 1 & 2 Promo Pass",
-          productType: "promo_pass",
+          productType: "pass",
           totalCredits: 16,
           remainingCredits: 8,
           selectedStyleId: "ds-1",
@@ -255,7 +255,7 @@ describe("CreditService", () => {
           id: "sub-1",
           productId: "p-beg12",
           productName: "Beginners 1 & 2 Promo Pass",
-          productType: "promo_pass",
+          productType: "pass",
           totalCredits: 16,
           remainingCredits: 7,
           selectedStyleId: "ds-1",

@@ -11,7 +11,7 @@ function getToday(): string {
 export default async function AttendancePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ classTitle?: string; date?: string }>;
+  searchParams?: Promise<{ classTitle?: string; date?: string; student?: string }>;
 }) {
   await requireRole(["admin", "teacher"]);
   const params = searchParams ? await searchParams : {};
@@ -46,6 +46,8 @@ export default async function AttendancePage({
       isDev={isDev}
       studentOptions={studentOptions}
       initialClassFilter={params.classTitle ?? ""}
+      initialDateFilter={params.date ?? ""}
+      initialStudentSearch={params.student ?? ""}
     />
   );
 }

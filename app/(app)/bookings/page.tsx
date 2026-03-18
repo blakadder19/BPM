@@ -155,6 +155,7 @@ export default async function BookingsPage({
         startTime: c.startTime,
         endTime: c.endTime,
         styleName: c.styleName,
+        level: c.level ?? null,
         location: c.location,
         status: c.status,
         maxCapacity: c.maxCapacity,
@@ -181,7 +182,18 @@ export default async function BookingsPage({
   const allSubs = getSubscriptions();
   const subscriptionsByStudent: Record<
     string,
-    { id: string; productName: string; status: string; remainingCredits: number | null }[]
+    {
+      id: string;
+      productName: string;
+      productType: string;
+      status: string;
+      remainingCredits: number | null;
+      classesPerTerm: number | null;
+      classesUsed: number;
+      termId: string | null;
+      validFrom: string;
+      validUntil: string | null;
+    }[]
   > = {};
   for (const sub of allSubs) {
     if (sub.status !== "active") continue;
@@ -191,8 +203,14 @@ export default async function BookingsPage({
     subscriptionsByStudent[sub.studentId].push({
       id: sub.id,
       productName: sub.productName,
+      productType: sub.productType,
       status: sub.status,
       remainingCredits: sub.remainingCredits,
+      classesPerTerm: sub.classesPerTerm,
+      classesUsed: sub.classesUsed,
+      termId: sub.termId,
+      validFrom: sub.validFrom,
+      validUntil: sub.validUntil,
     });
   }
 
