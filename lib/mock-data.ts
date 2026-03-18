@@ -159,20 +159,25 @@ export interface MockStudent {
   email: string;
   phone: string | null;
   preferredRole: DanceRole | null;
+  isActive: boolean;
+  notes: string | null;
+  emergencyContactName: string | null;
+  emergencyContactPhone: string | null;
+  dateOfBirth: string | null;
   subscriptionName: string | null;
   remainingCredits: number | null;
   joinedAt: string;
 }
 
 export const STUDENTS: MockStudent[] = [
-  { id: "s-01", fullName: "Alice Murphy", email: "alice@test.com", phone: "+353 86 111 0001", preferredRole: "follower", subscriptionName: "Gold Membership", remainingCredits: null, joinedAt: "2025-09-01" },
-  { id: "s-02", fullName: "Bob O'Brien", email: "bob@test.com", phone: "+353 86 111 0002", preferredRole: "leader", subscriptionName: "Silver Membership", remainingCredits: null, joinedAt: "2025-10-15" },
-  { id: "s-03", fullName: "Carol Walsh", email: "carol@test.com", phone: "+353 86 111 0003", preferredRole: "follower", subscriptionName: "Beginners 1 & 2 Promo Pass", remainingCredits: 12, joinedAt: "2026-01-10" },
-  { id: "s-04", fullName: "Dave Keane", email: "dave@test.com", phone: "+353 86 111 0004", preferredRole: "leader", subscriptionName: "Bronze Membership", remainingCredits: null, joinedAt: "2026-02-01" },
-  { id: "s-05", fullName: "Eve Byrne", email: "eve@test.com", phone: null, preferredRole: "follower", subscriptionName: null, remainingCredits: null, joinedAt: "2026-03-01" },
-  { id: "s-06", fullName: "Finn Doyle", email: "finn@test.com", phone: "+353 86 111 0006", preferredRole: "leader", subscriptionName: "Rainbow Membership", remainingCredits: null, joinedAt: "2025-06-20" },
-  { id: "s-07", fullName: "Grace Kelly", email: "grace@test.com", phone: "+353 86 111 0007", preferredRole: "follower", subscriptionName: "Beginners Latin Combo", remainingCredits: 3, joinedAt: "2025-11-05" },
-  { id: "s-08", fullName: "Hugo Brennan", email: "hugo@test.com", phone: null, preferredRole: "leader", subscriptionName: "Drop In", remainingCredits: 1, joinedAt: "2026-03-10" },
+  { id: "s-01", fullName: "Alice Murphy", email: "alice@test.com", phone: "+353 86 111 0001", preferredRole: "follower", isActive: true, notes: "Experienced dancer, attends regularly.", emergencyContactName: "Tom Murphy", emergencyContactPhone: "+353 86 222 0001", dateOfBirth: "1995-03-12", subscriptionName: "Gold Membership", remainingCredits: null, joinedAt: "2025-09-01" },
+  { id: "s-02", fullName: "Bob O'Brien", email: "bob@test.com", phone: "+353 86 111 0002", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1990-07-22", subscriptionName: "Silver Membership", remainingCredits: null, joinedAt: "2025-10-15" },
+  { id: "s-03", fullName: "Carol Walsh", email: "carol@test.com", phone: "+353 86 111 0003", preferredRole: "follower", isActive: true, notes: "Prefers evening classes.", emergencyContactName: "Mary Walsh", emergencyContactPhone: "+353 86 222 0003", dateOfBirth: null, subscriptionName: "Beginners 1 & 2 Promo Pass", remainingCredits: 12, joinedAt: "2026-01-10" },
+  { id: "s-04", fullName: "Dave Keane", email: "dave@test.com", phone: "+353 86 111 0004", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1988-11-05", subscriptionName: "Bronze Membership", remainingCredits: null, joinedAt: "2026-02-01" },
+  { id: "s-05", fullName: "Eve Byrne", email: "eve@test.com", phone: null, preferredRole: "follower", isActive: true, notes: "New student, considering a membership.", emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: null, subscriptionName: null, remainingCredits: null, joinedAt: "2026-03-01" },
+  { id: "s-06", fullName: "Finn Doyle", email: "finn@test.com", phone: "+353 86 111 0006", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: "Sarah Doyle", emergencyContactPhone: "+353 86 222 0006", dateOfBirth: "1992-01-30", subscriptionName: "Rainbow Membership", remainingCredits: null, joinedAt: "2025-06-20" },
+  { id: "s-07", fullName: "Grace Kelly", email: "grace@test.com", phone: "+353 86 111 0007", preferredRole: "follower", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1998-06-15", subscriptionName: "Beginners Latin Combo", remainingCredits: 3, joinedAt: "2025-11-05" },
+  { id: "s-08", fullName: "Hugo Brennan", email: "hugo@test.com", phone: null, preferredRole: "leader", isActive: false, notes: "Moved abroad. May return in autumn.", emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: null, subscriptionName: "Drop In", remainingCredits: 1, joinedAt: "2026-03-10" },
 ];
 
 // ── Products ────────────────────────────────────────────────
@@ -327,24 +332,17 @@ export interface MockSubscription {
   selectedStyleName: string | null;
   selectedStyleIds: string[] | null;
   selectedStyleNames: string[] | null;
+  notes: string | null;
 }
 
 export const SUBSCRIPTIONS: MockSubscription[] = [
-  // Alice Murphy — Gold Membership (unlimited, all classes)
-  { id: "sub-01", studentId: "s-01", productId: "p-gold", productName: "Gold Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null },
-  // Bob O'Brien — Silver Membership
-  { id: "sub-02", studentId: "s-02", productId: "p-silver", productName: "Silver Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null },
-  // Carol Walsh — Beginners 1 & 2 Promo Pass (selected Bachata)
-  { id: "sub-03", studentId: "s-03", productId: "p-beg12", productName: "Beginners 1 & 2 Promo Pass", productType: "promo_pass", status: "active", totalCredits: 16, remainingCredits: 12, validFrom: "2026-01-12", validUntil: "2026-03-08", selectedStyleId: "ds-1", selectedStyleName: "Bachata", selectedStyleIds: null, selectedStyleNames: null },
-  // Dave Keane — Bronze Membership
-  { id: "sub-04", studentId: "s-04", productId: "p-bronze", productName: "Bronze Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null },
-  // Eve Byrne — no subscription
-  // Finn Doyle — Rainbow Membership
-  { id: "sub-06", studentId: "s-06", productId: "p-rainbow", productName: "Rainbow Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null },
-  // Grace Kelly — Beginners Latin Combo (Bachata + Salsa Line)
-  { id: "sub-07", studentId: "s-07", productId: "p-latin-combo", productName: "Beginners Latin Combo", productType: "promo_pass", status: "active", totalCredits: 16, remainingCredits: 3, validFrom: "2026-01-15", validUntil: "2026-03-12", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: ["ds-1", "ds-5"], selectedStyleNames: ["Bachata", "Salsa Line"] },
-  // Hugo Brennan — Drop In
-  { id: "sub-08", studentId: "s-08", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "active", totalCredits: 1, remainingCredits: 1, validFrom: "2026-03-10", validUntil: "2026-04-09", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null },
+  { id: "sub-01", studentId: "s-01", productId: "p-gold", productName: "Gold Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null },
+  { id: "sub-02", studentId: "s-02", productId: "p-silver", productName: "Silver Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null },
+  { id: "sub-03", studentId: "s-03", productId: "p-beg12", productName: "Beginners 1 & 2 Promo Pass", productType: "promo_pass", status: "active", totalCredits: 16, remainingCredits: 12, validFrom: "2026-01-12", validUntil: "2026-03-08", selectedStyleId: "ds-1", selectedStyleName: "Bachata", selectedStyleIds: null, selectedStyleNames: null, notes: "Selected Bachata as promo style." },
+  { id: "sub-04", studentId: "s-04", productId: "p-bronze", productName: "Bronze Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null },
+  { id: "sub-06", studentId: "s-06", productId: "p-rainbow", productName: "Rainbow Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-01", validUntil: "2026-03-31", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null },
+  { id: "sub-07", studentId: "s-07", productId: "p-latin-combo", productName: "Beginners Latin Combo", productType: "promo_pass", status: "active", totalCredits: 16, remainingCredits: 3, validFrom: "2026-01-15", validUntil: "2026-03-12", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: ["ds-1", "ds-5"], selectedStyleNames: ["Bachata", "Salsa Line"], notes: null },
+  { id: "sub-08", studentId: "s-08", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "active", totalCredits: 1, remainingCredits: 1, validFrom: "2026-03-10", validUntil: "2026-04-09", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Single drop-in before Hugo moved." },
 ];
 
 // ── Wallet Transactions ─────────────────────────────────────
