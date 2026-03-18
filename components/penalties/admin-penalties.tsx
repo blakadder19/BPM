@@ -65,11 +65,12 @@ interface AdminPenaltiesProps {
   classes: ClassOption[];
   penaltyFees: PenaltyFees;
   isDev?: boolean;
+  initialSearch?: string;
 }
 
-export function AdminPenalties({ penalties, students, classes, penaltyFees, isDev }: AdminPenaltiesProps) {
+export function AdminPenalties({ penalties, students, classes, penaltyFees, isDev, initialSearch }: AdminPenaltiesProps) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch ?? "");
   const [reasonFilter, setReasonFilter] = useState("");
   const [resolutionFilter, setResolutionFilter] = useState("");
 

@@ -63,6 +63,9 @@ export interface MockClass {
   followerCap: number | null;
   location: string;
   isActive: boolean;
+  notes?: string | null;
+  /** PROVISIONAL: Future lifecycle state. Currently derived from isActive. */
+  status?: "active" | "inactive" | "archived";
 }
 
 export const CLASSES: MockClass[] = [
@@ -88,24 +91,24 @@ export interface MockTeacherPair {
   id: string;
   classId: string;
   classTitle: string;
-  teacher1: string;
-  teacher2: string | null;
+  teacher1Id: string;
+  teacher2Id: string | null;
   effectiveFrom: string;
   effectiveUntil: string | null;
   isActive: boolean;
 }
 
 export const TEACHER_PAIRS: MockTeacherPair[] = [
-  { id: "tp-01", classId: "c-01", classTitle: "Bachata Beginner 1", teacher1: "María García", teacher2: "Carlos Rivera", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-02", classId: "c-02", classTitle: "Cuban Beginner 2", teacher1: "Carlos Rivera", teacher2: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-03", classId: "c-03", classTitle: "Bachata Beginner 2", teacher1: "María García", teacher2: "Carlos Rivera", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-04", classId: "c-04", classTitle: "Cuban Intermediate", teacher1: "Carlos Rivera", teacher2: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-05", classId: "c-05", classTitle: "Salsa Line Beginner 1", teacher1: "María García", teacher2: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-06", classId: "c-06", classTitle: "Salsa Line Beginner 2", teacher1: "María García", teacher2: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-07", classId: "c-08", classTitle: "Bachata Tradicional Beg 1", teacher1: "María García", teacher2: "Carlos Rivera", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-08", classId: "c-09", classTitle: "Bachata Partnerwork Int", teacher1: "María García", teacher2: "Carlos Rivera", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-09", classId: "c-10", classTitle: "Cuban Beginner 1", teacher1: "Carlos Rivera", teacher2: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-10", classId: "c-14", classTitle: "Afro-Cuban Open", teacher1: "Carlos Rivera", teacher2: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-01", classId: "c-01", classTitle: "Bachata Beginner 1", teacher1Id: "t-01", teacher2Id: "t-02", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-02", classId: "c-02", classTitle: "Cuban Beginner 2", teacher1Id: "t-02", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-03", classId: "c-03", classTitle: "Bachata Beginner 2", teacher1Id: "t-01", teacher2Id: "t-02", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-04", classId: "c-04", classTitle: "Cuban Intermediate", teacher1Id: "t-02", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-05", classId: "c-05", classTitle: "Salsa Line Beginner 1", teacher1Id: "t-01", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-06", classId: "c-06", classTitle: "Salsa Line Beginner 2", teacher1Id: "t-01", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-07", classId: "c-08", classTitle: "Bachata Tradicional Beg 1", teacher1Id: "t-01", teacher2Id: "t-02", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-08", classId: "c-09", classTitle: "Bachata Partnerwork Int", teacher1Id: "t-01", teacher2Id: "t-02", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-09", classId: "c-10", classTitle: "Cuban Beginner 1", teacher1Id: "t-02", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
+  { id: "tp-10", classId: "c-14", classTitle: "Afro-Cuban Open", teacher1Id: "t-02", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
 ];
 
 // ── Bookable Classes ────────────────────────────────────────
@@ -130,6 +133,9 @@ export interface MockBookableClass {
   followerCount: number;
   waitlistCount: number;
   location: string;
+  notes?: string | null;
+  teacherOverride1Id?: string | null;
+  teacherOverride2Id?: string | null;
 }
 
 export const BOOKABLE_CLASSES: MockBookableClass[] = [

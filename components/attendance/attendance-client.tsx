@@ -97,6 +97,7 @@ interface AttendanceClientProps {
   allClasses: BookableClassProp[];
   isDev?: boolean;
   studentOptions?: StudentOption[];
+  initialClassFilter?: string;
 }
 
 export function AttendanceClient({
@@ -107,9 +108,10 @@ export function AttendanceClient({
   allClasses,
   isDev,
   studentOptions,
+  initialClassFilter,
 }: AttendanceClientProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"today" | "history">("today");
+  const [activeTab, setActiveTab] = useState<"today" | "history">(initialClassFilter ? "history" : "today");
   const [showAddAttendance, setShowAddAttendance] = useState(false);
   const [clearPending, startClear] = useTransition();
   const [clearMsg, setClearMsg] = useState<string | null>(null);
@@ -193,6 +195,7 @@ export function AttendanceClient({
         <HistoryView
           attendanceRecords={attendanceRecords}
           allClasses={allClasses}
+          initialSearch={initialClassFilter}
         />
       )}
 
@@ -520,12 +523,14 @@ function SummaryPill({
 function HistoryView({
   attendanceRecords,
   allClasses,
+  initialSearch,
 }: {
   attendanceRecords: StoredAttendance[];
   allClasses: BookableClassProp[];
+  initialSearch?: string;
 }) {
   const router = useRouter();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch ?? "");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");

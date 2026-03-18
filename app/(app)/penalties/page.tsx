@@ -9,9 +9,14 @@ import {
   type StudentPenaltyView,
 } from "@/components/penalties/student-penalties";
 
-export default async function PenaltiesPage() {
+export default async function PenaltiesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ classTitle?: string; date?: string }>;
+}) {
   const user = await getAuthUser();
   if (!user) redirect("/login");
+  const params = searchParams ? await searchParams : {};
 
   const svc = getPenaltyService();
 
@@ -51,6 +56,7 @@ export default async function PenaltiesPage() {
         noShowCents: settings.noShowFeeCents,
       }}
       isDev={isDev}
+      initialSearch={params.classTitle ?? ""}
     />
   );
 }

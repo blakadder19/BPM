@@ -8,8 +8,13 @@ function getToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export default async function AttendancePage() {
+export default async function AttendancePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ classTitle?: string; date?: string }>;
+}) {
   await requireRole(["admin", "teacher"]);
+  const params = searchParams ? await searchParams : {};
 
   const today = getToday();
   const attendanceSvc = getAttendanceService();
@@ -40,6 +45,7 @@ export default async function AttendancePage() {
       allClasses={BOOKABLE_CLASSES}
       isDev={isDev}
       studentOptions={studentOptions}
+      initialClassFilter={params.classTitle ?? ""}
     />
   );
 }

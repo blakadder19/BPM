@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { type HTMLAttributes } from "react";
 
-type BadgeVariant = "default" | "success" | "warning" | "danger" | "info";
+type BadgeVariant = "default" | "success" | "warning" | "danger" | "info" | "neutral";
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   variant?: BadgeVariant;
@@ -13,6 +13,7 @@ const variantStyles: Record<BadgeVariant, string> = {
   warning: "bg-amber-100 text-amber-700",
   danger: "bg-red-100 text-red-700",
   info: "bg-blue-100 text-blue-700",
+  neutral: "bg-gray-200 text-gray-600",
 };
 
 export function Badge({ className, variant = "default", ...props }: BadgeProps) {

@@ -15,10 +15,15 @@ export interface BookingView {
   bookedAt: string;
 }
 
-export default async function BookingsPage() {
+export default async function BookingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ classTitle?: string; date?: string }>;
+}) {
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
+  const params = searchParams ? await searchParams : {};
   const svc = getBookingService();
 
   const enrich = (b: (typeof svc.bookings)[number]): BookingView => {
@@ -43,5 +48,10 @@ export default async function BookingsPage() {
   }
 
   const all = svc.bookings.map(enrich);
-  return <AdminBookings bookings={all} />;
+  return (
+    <AdminBookings
+      bookings={all}
+      initialSearch={params.classTitle ?? ""}
+    />
+  );
 }

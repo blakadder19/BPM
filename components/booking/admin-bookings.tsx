@@ -21,8 +21,8 @@ const ROLE_OPTIONS = [
   { value: "none", label: "No role" },
 ];
 
-export function AdminBookings({ bookings }: { bookings: BookingView[] }) {
-  const [search, setSearch] = useState("");
+export function AdminBookings({ bookings, initialSearch }: { bookings: BookingView[]; initialSearch?: string }) {
+  const [search, setSearch] = useState(initialSearch ?? "");
   const [statusFilter, setStatusFilter] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
 
