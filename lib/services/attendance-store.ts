@@ -1,5 +1,6 @@
 /**
  * Singleton AttendanceService instance backed by mock data.
+ * Uses globalThis to survive HMR module re-evaluation in Next.js dev.
  * In production, replace with Supabase-backed service.
  */
 
@@ -8,6 +9,8 @@ import {
   type StoredAttendance,
 } from "./attendance-service";
 import { ATTENDANCE } from "@/lib/mock-data";
+
+const STORE_VERSION = 2;
 
 function buildRecords(): StoredAttendance[] {
   return ATTENDANCE.map((a) => ({
@@ -26,11 +29,16 @@ function buildRecords(): StoredAttendance[] {
   }));
 }
 
-let instance: AttendanceService | null = null;
+const g = globalThis as unknown as {
+  __bpm_attendanceSvc?: AttendanceService;
+  __bpm_attendanceSvcV?: number;
+};
 
 export function getAttendanceService(): AttendanceService {
-  if (!instance) {
-    instance = new AttendanceService(buildRecords());
+  if (!g.__bpm_attendanceSvc || g.__bpm_attendanceSvcV !== STORE_VERSION) {
+    const existing = g.__bpm_attendanceSvc?.records;
+    g.__bpm_attendanceSvc = new AttendanceService(existing ?? buildRecords());
+    g.__bpm_attendanceSvcV = STORE_VERSION;
   }
-  return instance;
+  return g.__bpm_attendanceSvc;
 }

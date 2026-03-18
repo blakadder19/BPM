@@ -1,10 +1,13 @@
 /**
  * Singleton PenaltyService instance backed by mock data.
+ * Uses globalThis to survive HMR module re-evaluation in Next.js dev.
  * In production, replace with Supabase-backed service.
  */
 
 import { PenaltyService, type StoredPenalty } from "./penalty-service";
 import { PENALTIES } from "@/lib/mock-data";
+
+const STORE_VERSION = 2;
 
 function buildPenalties(): StoredPenalty[] {
   return PENALTIES.map((p) => ({
@@ -25,11 +28,16 @@ function buildPenalties(): StoredPenalty[] {
   }));
 }
 
-let instance: PenaltyService | null = null;
+const g = globalThis as unknown as {
+  __bpm_penaltySvc?: PenaltyService;
+  __bpm_penaltySvcV?: number;
+};
 
 export function getPenaltyService(): PenaltyService {
-  if (!instance) {
-    instance = new PenaltyService(buildPenalties());
+  if (!g.__bpm_penaltySvc || g.__bpm_penaltySvcV !== STORE_VERSION) {
+    const existing = g.__bpm_penaltySvc?.penalties;
+    g.__bpm_penaltySvc = new PenaltyService(existing ?? buildPenalties());
+    g.__bpm_penaltySvcV = STORE_VERSION;
   }
-  return instance;
+  return g.__bpm_penaltySvc;
 }

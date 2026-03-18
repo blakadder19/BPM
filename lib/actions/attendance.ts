@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
@@ -18,10 +19,9 @@ export interface MarkAttendanceResult {
  *
  * Side-effects:
  * - present / late → booking status moves to "checked_in"
- * - absent → no-show penalty is assessed (if class type qualifies)
+ * - absent → no-show penalty assessed (if class type qualifies + no existing penalty)
+ * - changing FROM absent to anything else → waive existing pending penalty
  * - excused → no penalty, booking stays as-is
- *
- * TODO: when QR check-in is implemented, pass checkInMethod: "qr"
  */
 export async function markStudentAttendance(params: {
   bookableClassId: string;
@@ -36,6 +36,7 @@ export async function markStudentAttendance(params: {
   status: AttendanceMark;
   markedBy: string;
   checkInMethod?: CheckInMethod;
+  notes?: string;
 }): Promise<MarkAttendanceResult> {
   if (!params.bookableClassId || !params.studentId || !params.markedBy) {
     return {
@@ -61,6 +62,7 @@ export async function markStudentAttendance(params: {
     status: params.status,
     markedBy: params.markedBy,
     checkInMethod: params.checkInMethod,
+    notes: params.notes ?? null,
   });
 
   if (outcome.type === "error") {
@@ -83,24 +85,66 @@ export async function markStudentAttendance(params: {
   let penaltyCreated = false;
   let penaltyDescription: string | null = null;
 
-  if (params.status === "absent" && params.bookingId) {
-    const penaltyOutcome = penaltySvc.assessNoShowPenalty({
-      studentId: params.studentId,
-      studentName: params.studentName,
-      bookingId: params.bookingId,
-      bookableClassId: params.bookableClassId,
-      classTitle: params.classTitle,
-      classDate: params.date,
-      classType: params.classType,
-      subscriptions: [],
-      classContext: {
-        danceStyleId: params.danceStyleId,
-        level: params.level,
-      },
-    });
-    penaltyCreated = penaltyOutcome.penaltyCreated;
-    penaltyDescription = penaltyOutcome.description;
+  const wasAbsentBefore =
+    outcome.type === "updated" && outcome.previousStatus === "absent";
+  const isAbsentNow = params.status === "absent";
+
+  if (isAbsentNow) {
+    const existing = penaltySvc
+      .getAllPenalties()
+      .find(
+        (p) =>
+          p.bookableClassId === params.bookableClassId &&
+          p.studentId === params.studentId &&
+          p.reason === "no_show"
+      );
+
+    if (existing) {
+      if (existing.resolution === "waived") {
+        penaltySvc.updateResolution(existing.id, "monetary_pending");
+        penaltyCreated = true;
+        penaltyDescription = "No-show penalty reopened.";
+      } else {
+        penaltyDescription = "No-show penalty already exists for this class.";
+      }
+    } else {
+      const penaltyOutcome = penaltySvc.assessNoShowPenalty({
+        studentId: params.studentId,
+        studentName: params.studentName,
+        bookingId: params.bookingId ?? "",
+        bookableClassId: params.bookableClassId,
+        classTitle: params.classTitle,
+        classDate: params.date,
+        classType: params.classType,
+        subscriptions: [],
+        classContext: {
+          danceStyleId: params.danceStyleId,
+          level: params.level,
+        },
+      });
+      penaltyCreated = penaltyOutcome.penaltyCreated;
+      penaltyDescription = penaltyOutcome.description;
+    }
   }
+
+  if (wasAbsentBefore && !isAbsentNow) {
+    const existing = penaltySvc
+      .getAllPenalties()
+      .find(
+        (p) =>
+          p.bookableClassId === params.bookableClassId &&
+          p.studentId === params.studentId &&
+          p.reason === "no_show" &&
+          p.resolution === "monetary_pending"
+      );
+    if (existing) {
+      penaltySvc.updateResolution(existing.id, "waived");
+      penaltyDescription = "No-show penalty auto-waived (attendance changed).";
+    }
+  }
+
+  revalidatePath("/attendance");
+  revalidatePath("/penalties");
 
   return {
     success: true,
@@ -109,4 +153,19 @@ export async function markStudentAttendance(params: {
     penaltyDescription,
     error: null,
   };
+}
+
+/** Dev-only: remove all attendance records from the store. */
+export async function clearAllAttendanceAction(): Promise<{
+  success: boolean;
+  cleared: number;
+  error?: string;
+}> {
+  if (process.env.NODE_ENV !== "development") {
+    return { success: false, cleared: 0, error: "Not available in production" };
+  }
+  const svc = getAttendanceService();
+  const cleared = svc.clearAll();
+  revalidatePath("/attendance");
+  return { success: true, cleared };
 }

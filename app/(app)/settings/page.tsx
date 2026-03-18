@@ -1,14 +1,13 @@
+import { requireRole } from "@/lib/auth";
 import { getSettings } from "@/lib/services/settings-store";
 import { DANCE_STYLES } from "@/lib/mock-data";
 import { SettingsForm } from "@/components/settings/settings-form";
 
-export default function SettingsPage() {
-  const settings = getSettings();
-  const roleBalancedStyles = DANCE_STYLES.filter((s) => s.requiresRoleBalance).map(
-    (s) => s.name
-  );
+export default async function SettingsPage() {
+  await requireRole(["admin"]);
 
-  return (
-    <SettingsForm initialSettings={settings} roleBalancedStyles={roleBalancedStyles} />
-  );
+  const settings = getSettings();
+  const allStyles = DANCE_STYLES.map((s) => ({ id: s.id, name: s.name }));
+
+  return <SettingsForm initialSettings={settings} allStyles={allStyles} />;
 }

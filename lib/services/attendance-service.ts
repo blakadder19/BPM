@@ -146,4 +146,11 @@ export class AttendanceService {
   getAllRecords(): StoredAttendance[] {
     return [...this.records];
   }
+
+  /** Dev-only: remove all records from the store. */
+  clearAll(): number {
+    const count = this.records.length;
+    this.records.length = 0;
+    return count;
+  }
 }

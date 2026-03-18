@@ -56,15 +56,15 @@ function buildWaitlist(): StoredWaitlistEntry[] {
   }));
 }
 
-let instance: BookingService | null = null;
+const g = globalThis as unknown as { __bpm_bookingSvc?: BookingService };
 
 export function getBookingService(): BookingService {
-  if (!instance) {
-    instance = new BookingService(
+  if (!g.__bpm_bookingSvc) {
+    g.__bpm_bookingSvc = new BookingService(
       buildBookings(),
       buildWaitlist(),
       buildClassSnapshots()
     );
   }
-  return instance;
+  return g.__bpm_bookingSvc;
 }

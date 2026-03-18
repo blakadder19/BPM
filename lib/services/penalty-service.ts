@@ -12,6 +12,7 @@ import {
   classStartDateTime,
 } from "@/lib/domain/cancellation-rules";
 import { resolvePenalty } from "@/lib/domain/penalty-rules";
+import { getSettings } from "@/lib/services/settings-store";
 import type { ActiveSubscription, ClassContext } from "@/lib/domain/credit-rules";
 import { generateId } from "@/lib/utils";
 import type { PenaltyReason, PenaltyResolution, TxType, ClassType } from "@/types/domain";
@@ -89,6 +90,10 @@ export class PenaltyService {
     subscriptions: ActiveSubscription[];
     classContext: ClassContext;
   }): PenaltyOutcome {
+    if (!getSettings().lateCancelPenaltiesEnabled) {
+      return noPenalty("No penalty — late cancel penalties are disabled.");
+    }
+
     if (!penaltiesApplyTo(params.classType)) {
       return noPenalty("No penalty — class type excluded from penalties.");
     }
@@ -116,6 +121,10 @@ export class PenaltyService {
     subscriptions: ActiveSubscription[];
     classContext: ClassContext;
   }): PenaltyOutcome {
+    if (!getSettings().noShowPenaltiesEnabled) {
+      return noPenalty("No penalty — no-show penalties are disabled.");
+    }
+
     if (!penaltiesApplyTo(params.classType)) {
       return noPenalty("No penalty — class type excluded from penalties.");
     }
@@ -198,6 +207,57 @@ export class PenaltyService {
     const penalty = this.penalties.find((p) => p.id === penaltyId);
     if (!penalty) return null;
     penalty.notes = notes;
+    return penalty;
+  }
+
+  /** Dev-only: remove all penalties from the store. */
+  clearAll(): number {
+    const count = this.penalties.length;
+    this.penalties.length = 0;
+    this.walletTxs.length = 0;
+    return count;
+  }
+
+  /** Dev-only: remove a penalty from the store entirely. */
+  deletePenalty(penaltyId: string): boolean {
+    const idx = this.penalties.findIndex((p) => p.id === penaltyId);
+    if (idx === -1) return false;
+    this.penalties.splice(idx, 1);
+    return true;
+  }
+
+  /** Admin-only manual penalty entry — bypasses business rule logic. */
+  addPenalty(data: {
+    studentId: string;
+    studentName: string;
+    bookingId: string | null;
+    bookableClassId: string;
+    classTitle: string;
+    classDate: string;
+    reason: PenaltyReason;
+    amountCents: number;
+    resolution: PenaltyResolution;
+    subscriptionId: string | null;
+    creditDeducted: number;
+    notes: string | null;
+  }): StoredPenalty {
+    const penalty: StoredPenalty = {
+      id: generateId("pen"),
+      studentId: data.studentId,
+      studentName: data.studentName,
+      bookingId: data.bookingId,
+      bookableClassId: data.bookableClassId,
+      classTitle: data.classTitle,
+      classDate: data.classDate,
+      reason: data.reason,
+      amountCents: data.amountCents,
+      resolution: data.resolution,
+      subscriptionId: data.subscriptionId,
+      creditDeducted: data.creditDeducted,
+      createdAt: new Date().toISOString(),
+      notes: data.notes,
+    };
+    this.penalties.push(penalty);
     return penalty;
   }
 

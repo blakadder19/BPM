@@ -37,11 +37,11 @@ function buildWalletTxs(): StoredWalletTx[] {
   }));
 }
 
-let instance: CreditService | null = null;
+const g = globalThis as unknown as { __bpm_creditSvc?: CreditService };
 
 export function getCreditService(): CreditService {
-  if (!instance) {
-    instance = new CreditService(buildSubscriptions(), buildWalletTxs());
+  if (!g.__bpm_creditSvc) {
+    g.__bpm_creditSvc = new CreditService(buildSubscriptions(), buildWalletTxs());
   }
-  return instance;
+  return g.__bpm_creditSvc;
 }
