@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isMemoryMode } from "@/lib/config/data-provider";
 import type { UserRole } from "@/types/domain";
 import type { Database } from "@/types/database";
+import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 
@@ -52,6 +53,79 @@ function hasSupabaseConfig(): boolean {
 }
 
 /**
+ * On-demand profile provisioning.
+ * When a real Supabase auth user has no public.users row, create one
+ * (plus student_profiles if applicable). Uses the admin client to
+ * bypass RLS. Ensures at least one academy row exists.
+ *
+ * Silently swallows errors — tables may not exist if migrations
+ * haven't been applied yet.
+ */
+async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise<void> {
+  try {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const admin = createAdminClient();
+    const meta = authUser.user_metadata ?? {};
+
+    // Ensure at least one academy exists
+    const { data: existingAcademyRaw } = await admin
+      .from("academies")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+
+    const existingAcademy = existingAcademyRaw as { id: string } | null;
+    let academyId: string | undefined = existingAcademy?.id;
+
+    if (!academyId) {
+      const { data: newAcademyRaw, error: acadErr } = await admin
+        .from("academies")
+        .insert({ name: "BPM Dublin", slug: "bpm-dublin" } as never)
+        .select("id")
+        .single();
+      if (acadErr || !newAcademyRaw) return;
+      academyId = (newAcademyRaw as { id: string }).id;
+    }
+
+    const role = (meta.role as string) ?? "student";
+    const fullName = (meta.full_name as string) ?? authUser.email ?? "New User";
+    const phone = (meta.phone as string) ?? null;
+
+    const { error: userErr } = await admin.from("users").upsert(
+      {
+        id: authUser.id,
+        academy_id: academyId,
+        email: authUser.email ?? "",
+        full_name: fullName,
+        role,
+        phone,
+      } as never,
+      { onConflict: "id" }
+    );
+
+    if (userErr) {
+      console.warn("[auth] Failed to upsert users row:", userErr.message);
+      return;
+    }
+
+    if (role === "student") {
+      const preferredRole = (meta.preferred_role as string) ?? null;
+      const dateOfBirth = (meta.date_of_birth as string) ?? null;
+      await admin.from("student_profiles").upsert(
+        {
+          id: authUser.id,
+          preferred_role: preferredRole,
+          date_of_birth: dateOfBirth,
+        } as never,
+        { onConflict: "id" }
+      );
+    }
+  } catch {
+    // Tables may not exist — silently skip provisioning
+  }
+}
+
+/**
  * Try to resolve user from a real Supabase session.
  * Returns null if no session, Supabase is unreachable, or not configured.
  */
@@ -97,7 +171,33 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
       };
     }
   } catch {
-    // DB unreachable — fall through to session metadata fallback
+    // DB unreachable — fall through to provisioning attempt
+  }
+
+  // No DB row found — try to create one on demand
+  await ensureSupabaseProfile(session.user);
+
+  // Retry the profile load after provisioning
+  try {
+    const { data } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+    const dbUser = data as UserRow | null;
+    if (dbUser) {
+      return {
+        id: dbUser.id,
+        email: dbUser.email,
+        fullName: dbUser.full_name,
+        role: dbUser.role as UserRole,
+        avatarUrl: dbUser.avatar_url,
+        academyId: dbUser.academy_id,
+        emailConfirmed,
+      };
+    }
+  } catch {
+    // Still unreachable — fall through to metadata fallback
   }
 
   // Fallback: derive identity from session JWT claims / user_metadata

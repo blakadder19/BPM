@@ -101,7 +101,7 @@ export async function createSubscriptionAction(
     termId,
     paymentMethod: paymentMethodRaw as PaymentMethod,
     paymentStatus: paymentStatusRaw as SalePaymentStatus,
-    assignedBy: "Admin",
+    assignedBy: null,
     assignedAt: new Date().toISOString(),
     autoRenew,
     classesUsed: 0,

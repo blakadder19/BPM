@@ -20,7 +20,6 @@ import type { ICreditRepository } from "./interfaces/credit-repository";
 
 import { memoryProductRepo } from "./memory/product-repository";
 import { memoryTermRepo } from "./memory/term-repository";
-import { memorySubscriptionRepo } from "./memory/subscription-repository";
 import { memorySettingsRepo } from "./memory/settings-repository";
 import { memoryBookingRepo } from "./memory/booking-repository";
 import { memoryAttendanceRepo } from "./memory/attendance-repository";
@@ -58,10 +57,12 @@ export function getTermRepo(): ITermRepository {
 }
 
 export function getSubscriptionRepo(): ISubscriptionRepository {
-  return resolveRepo(memorySubscriptionRepo, () => {
+  if (getDataProvider() === "supabase") {
     const { supabaseSubscriptionRepo } = require("./supabase/subscription-repository");
     return supabaseSubscriptionRepo;
-  });
+  }
+  const { hybridSubscriptionRepo } = require("./hybrid-subscription-repository");
+  return hybridSubscriptionRepo;
 }
 
 export function getCocRepo(): ICocRepository {

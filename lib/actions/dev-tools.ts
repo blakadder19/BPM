@@ -1,15 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { STUDENTS, PRODUCTS, TERMS } from "@/lib/mock-data";
+import { STUDENTS, DANCE_STYLES } from "@/lib/mock-data";
 import {
-  getSubscriptions,
   createSubscription,
   updateSubscription,
-} from "@/lib/services/subscription-store";
-import { getBookingRepo, getPenaltyRepo, getStudentRepo, getCocRepo } from "@/lib/repositories";
+} from "@/lib/services/subscription-service";
+import {
+  getBookingRepo,
+  getPenaltyRepo,
+  getStudentRepo,
+  getCocRepo,
+  getSubscriptionRepo,
+  getProductRepo,
+  getTermRepo,
+} from "@/lib/repositories";
 import { getInstances } from "@/lib/services/schedule-store";
-import { DANCE_STYLES } from "@/lib/mock-data";
 import type { DanceRole } from "@/types/domain";
 
 function guardDev() {
@@ -34,32 +40,13 @@ export async function devGetStudentState(studentId: string) {
   const { CURRENT_CODE_OF_CONDUCT } = await import("@/config/code-of-conduct");
   const cocAccepted = await getCocRepo().hasAcceptedVersion(studentId, CURRENT_CODE_OF_CONDUCT.version);
 
-  const mockStudent = STUDENTS.find((s) => s.id === studentId);
+  // Resolve student from repo (handles both mock and real users)
+  const student = await getStudentRepo().getById(studentId);
 
-  if (!mockStudent) {
-    // Real Supabase user not in mock data — try the repository,
-    // then return a minimal shell state so the DevPanel renders.
-    const repoStudent = await getStudentRepo().getById(studentId);
-    return {
-      student: {
-        id: studentId,
-        fullName: repoStudent?.fullName ?? "(real user)",
-        preferredRole: repoStudent?.preferredRole ?? null,
-        cocAccepted,
-      },
-      subscriptions: [] as {
-        id: string; productName: string; productType: string;
-        status: string; classesUsed: number; classesPerTerm: number | null;
-        remainingCredits: number | null; totalCredits: number | null;
-        paymentMethod: string | null; paymentStatus: string | null;
-      }[],
-      bookings: [] as { id: string; classTitle: string; date: string; status: string; subscriptionId: string | null }[],
-      waitlist: [] as { id: string; classTitle: string; date: string; position: number }[],
-      penalties: [] as { id: string; classTitle: string; reason: string; amountCents: number; resolution: string }[],
-    };
-  }
+  // Fetch subscriptions from repo (hybrid: memory + Supabase)
+  const subs = await getSubscriptionRepo().getByStudent(studentId);
 
-  const subs = getSubscriptions().filter((s) => s.studentId === studentId);
+  // Fetch bookings, waitlist, penalties from in-memory services
   const svc = getBookingRepo().getService();
   const bookings = svc.getBookingsForStudent(studentId);
   const waitlist = svc.getWaitlistForStudent(studentId);
@@ -68,9 +55,9 @@ export async function devGetStudentState(studentId: string) {
 
   return {
     student: {
-      id: mockStudent.id,
-      fullName: mockStudent.fullName,
-      preferredRole: mockStudent.preferredRole,
+      id: studentId,
+      fullName: student?.fullName ?? "(unknown user)",
+      preferredRole: student?.preferredRole ?? null,
       cocAccepted,
     },
     subscriptions: subs.map((s) => ({
@@ -120,7 +107,8 @@ export async function devGetProducts(): Promise<
   { id: string; name: string; productType: string; classesPerTerm: number | null; totalCredits: number | null }[]
 > {
   guardDev();
-  return PRODUCTS.filter((p) => p.isActive).map((p) => ({
+  const products = await getProductRepo().getAll();
+  return products.filter((p) => p.isActive).map((p) => ({
     id: p.id,
     name: p.name,
     productType: p.productType,
@@ -168,12 +156,13 @@ export async function devAssignProduct(
   guardDev();
   const studentName = await resolveStudentName(studentId);
   if (!studentName) return { success: false, error: "Student not found" };
-  const product = PRODUCTS.find((p) => p.id === productId);
+  const product = await getProductRepo().getById(productId);
   if (!product) return { success: false, error: "Product not found" };
 
-  const activeTerm = TERMS.find((t) => t.status === "active");
+  const terms = await getTermRepo().getAll();
+  const activeTerm = terms.find((t) => t.status === "active");
 
-  createSubscription({
+  const result = await createSubscription({
     studentId,
     productId: product.id,
     productName: product.name,
@@ -187,7 +176,7 @@ export async function devAssignProduct(
     termId: product.termBound && activeTerm ? activeTerm.id : null,
     paymentMethod: "manual",
     paymentStatus: "complimentary",
-    assignedBy: "Dev Tools",
+    assignedBy: null,
     assignedAt: new Date().toISOString(),
     autoRenew: product.autoRenew,
     classesUsed: 0,
@@ -195,15 +184,15 @@ export async function devAssignProduct(
   });
 
   revalidateAll();
-  return { success: true };
+  return result;
 }
 
 export async function devRemoveEntitlement(
   subscriptionId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const result = updateSubscription(subscriptionId, { status: "exhausted" });
-  if (!result) return { success: false, error: "Subscription not found" };
+  const result = await updateSubscription(subscriptionId, { status: "exhausted" });
+  if (!result.success) return { success: false, error: result.error ?? "Subscription not found" };
   revalidateAll();
   return { success: true };
 }
@@ -212,18 +201,18 @@ export async function devResetEntitlement(
   subscriptionId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const subs = getSubscriptions();
-  const sub = subs.find((s) => s.id === subscriptionId);
+  const sub = await getSubscriptionRepo().getById(subscriptionId);
   if (!sub) return { success: false, error: "Subscription not found" };
 
-  const patch: Parameters<typeof updateSubscription>[1] = {
+  const patch: { status: "active"; classesUsed: number; remainingCredits?: number | null } = {
     status: "active",
     classesUsed: 0,
   };
   if (sub.totalCredits !== null) {
     patch.remainingCredits = sub.totalCredits;
   }
-  updateSubscription(subscriptionId, patch);
+  const result = await updateSubscription(subscriptionId, patch);
+  if (!result.success) return { success: false, error: result.error ?? "Update failed" };
   revalidateAll();
   return { success: true };
 }
