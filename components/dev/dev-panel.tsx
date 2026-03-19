@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Wrench, ChevronDown, ChevronUp, X } from "lucide-react";
+import { SUBSCRIPTION_STATUS_LABELS } from "@/lib/domain/subscription-display-status";
 import {
   devGetStudentState,
   devGetProducts,
@@ -149,7 +150,7 @@ export function DevPanel({ studentId, studentName }: DevPanelProps) {
                         ? `Used ${s.classesUsed}/${s.classesPerTerm} · ${s.classesPerTerm - s.classesUsed} left`
                         : s.remainingCredits !== null
                           ? `${s.remainingCredits} credit${s.remainingCredits !== 1 ? "s" : ""} left`
-                          : s.status}
+                          : SUBSCRIPTION_STATUS_LABELS[s.status] ?? s.status}
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0">

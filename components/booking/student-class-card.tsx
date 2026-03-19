@@ -4,6 +4,7 @@ import { CalendarDays, Clock, MapPin, Users } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime } from "@/lib/utils";
+import { getClassLevelDescription } from "@/config/class-levels";
 import type { BookabilityResult } from "@/lib/domain/bookability";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
 
@@ -77,7 +78,10 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
             </span>
           )}
           {data.level && (
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+            <span
+              className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+              title={getClassLevelDescription(data.level) ?? undefined}
+            >
               {data.level}
             </span>
           )}

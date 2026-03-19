@@ -27,6 +27,7 @@ export async function createProductAction(
 ): Promise<{ success: boolean; error?: string }> {
   const name = (formData.get("name") as string)?.trim();
   const description = (formData.get("description") as string)?.trim() || "";
+  const longDescription = (formData.get("longDescription") as string)?.trim() || null;
   const productType = formData.get("productType") as string;
   const priceCents = Number(formData.get("priceCents"));
   const totalCredits = parseOptionalInt(formData.get("totalCredits") as string);
@@ -46,6 +47,7 @@ export async function createProductAction(
   const result = await createProduct({
     name,
     description,
+    longDescription,
     productType: productType as ProductType,
     priceCents,
     totalCredits,
@@ -68,6 +70,7 @@ export async function updateProductAction(
   const id = formData.get("id") as string;
   const name = (formData.get("name") as string)?.trim();
   const description = (formData.get("description") as string)?.trim() || "";
+  const longDescription = (formData.get("longDescription") as string)?.trim() || null;
   const productType = formData.get("productType") as string;
   const priceCents = Number(formData.get("priceCents"));
   const totalCredits = parseOptionalInt(formData.get("totalCredits") as string);
@@ -89,6 +92,7 @@ export async function updateProductAction(
   const result = await updateProduct(id, {
     name,
     description,
+    longDescription,
     productType: productType as ProductType,
     priceCents,
     totalCredits,

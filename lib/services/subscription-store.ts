@@ -6,7 +6,7 @@
 
 import { SUBSCRIPTIONS, type MockSubscription } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
-import type { PaymentMethod, ProductType, SubscriptionStatus } from "@/types/domain";
+import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
 const g = globalThis as unknown as {
   __bpm_subs?: MockSubscription[];
@@ -40,6 +40,9 @@ export function createSubscription(data: {
   notes: string | null;
   termId: string | null;
   paymentMethod: PaymentMethod;
+  paymentStatus?: SalePaymentStatus;
+  assignedBy?: string | null;
+  assignedAt?: string;
   autoRenew: boolean;
   classesUsed: number;
   classesPerTerm: number | null;
@@ -67,6 +70,9 @@ export function createSubscription(data: {
     notes: data.notes,
     termId: data.termId,
     paymentMethod: data.paymentMethod,
+    paymentStatus: data.paymentStatus ?? "paid",
+    assignedBy: data.assignedBy ?? null,
+    assignedAt: data.assignedAt ?? new Date().toISOString(),
     autoRenew: data.autoRenew,
     classesUsed: data.classesUsed,
     classesPerTerm: data.classesPerTerm,
@@ -87,6 +93,7 @@ export function updateSubscription(
     notes?: string | null;
     termId?: string | null;
     paymentMethod?: PaymentMethod;
+    paymentStatus?: SalePaymentStatus;
     autoRenew?: boolean;
     classesUsed?: number;
     classesPerTerm?: number | null;
@@ -105,6 +112,7 @@ export function updateSubscription(
   if (patch.notes !== undefined) sub.notes = patch.notes;
   if (patch.termId !== undefined) sub.termId = patch.termId;
   if (patch.paymentMethod !== undefined) sub.paymentMethod = patch.paymentMethod;
+  if (patch.paymentStatus !== undefined) sub.paymentStatus = patch.paymentStatus;
   if (patch.autoRenew !== undefined) sub.autoRenew = patch.autoRenew;
   if (patch.classesUsed !== undefined) sub.classesUsed = patch.classesUsed;
   if (patch.classesPerTerm !== undefined) sub.classesPerTerm = patch.classesPerTerm;

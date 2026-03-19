@@ -159,11 +159,22 @@ describe("Social Product — Isolation", () => {
   });
 });
 
-// ── No Product Grants Access to student_practice ────────────
+// ── Student Practice — Member Benefit Access ────────────────
 
-describe("Student Practice — No Product Access", () => {
-  it("no product rule grants access to student_practice", () => {
+describe("Student Practice — Member Benefit Access", () => {
+  const membershipIds = ["p-mem-4", "p-mem-8", "p-mem-12", "p-mem-16"];
+
+  it("membership products grant access to student_practice", () => {
+    for (const id of membershipIds) {
+      const rule = getAccessRule(id)!;
+      const result = canAccessClass(rule, null, null, practiceEvent);
+      expect(result.granted).toBe(true);
+    }
+  });
+
+  it("non-membership products do NOT grant access to student_practice", () => {
     for (const rule of PRODUCT_ACCESS_RULES) {
+      if (membershipIds.includes(rule.productId)) continue;
       const result = canAccessClass(rule, null, null, practiceEvent);
       expect(result.granted).toBe(false);
     }
@@ -173,54 +184,6 @@ describe("Student Practice — No Product Access", () => {
 // ── Provisional Rules — Production Safety ───────────────────
 
 describe("Provisional Rules — Do Not Break Production Flows", () => {
-  describe("membership tiers (Bronze/Silver/Gold/Rainbow)", () => {
-    const membershipIds = ["p-bronze", "p-silver", "p-gold", "p-rainbow"];
-
-    for (const id of membershipIds) {
-      it(`${id} is marked provisional`, () => {
-        const rule = getAccessRule(id)!;
-        expect(rule.isProvisional).toBe(true);
-        expect(rule.provisionalNote).not.toBeNull();
-      });
-
-      it(`${id} grants access to regular classes`, () => {
-        const rule = getAccessRule(id)!;
-        expect(canAccessClass(rule, null, null, bachataClass).granted).toBe(true);
-        expect(canAccessClass(rule, null, null, cubanClass).granted).toBe(true);
-      });
-
-      it(`${id} does NOT grant access to socials`, () => {
-        const rule = getAccessRule(id)!;
-        expect(canAccessClass(rule, null, null, socialEvent).granted).toBe(false);
-      });
-    }
-  });
-
-  describe("yoga products (empty style list)", () => {
-    const yogaIds = ["p-yoga-bronze", "p-yoga-silver", "p-yoga-gold"];
-
-    for (const id of yogaIds) {
-      it(`${id} is marked provisional`, () => {
-        const rule = getAccessRule(id)!;
-        expect(rule.isProvisional).toBe(true);
-      });
-
-      it(`${id} denies access gracefully (empty style list)`, () => {
-        const rule = getAccessRule(id)!;
-        const result = canAccessClass(rule, null, null, bachataClass);
-        expect(result.granted).toBe(false);
-        expect(result.reason).toContain("style");
-      });
-
-      it(`${id} does not throw or crash`, () => {
-        const rule = getAccessRule(id)!;
-        expect(() => canAccessClass(rule, null, null, bachataClass)).not.toThrow();
-        expect(() => canAccessClass(rule, null, null, socialEvent)).not.toThrow();
-        expect(() => canAccessClass(rule, "ds-1", null, bachataClass)).not.toThrow();
-      });
-    }
-  });
-
   describe("Latin Combo (course_group)", () => {
     const rule = getAccessRule("p-latin-combo")!;
 

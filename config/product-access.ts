@@ -46,9 +46,10 @@ export const LATIN_COMBO_POOL_STYLE_IDS = ["ds-1", "ds-4", "ds-5"]; // Bachata, 
 
 export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   // ── Memberships (term-bound, classesPerTerm-based) ─────
+  // Members get access to regular classes + free weekend Student Practice
   {
     productId: "p-mem-4",
-    allowedClassTypes: ["class"],
+    allowedClassTypes: ["class", "student_practice"],
     styleAccess: { type: "all" },
     allowedLevels: null,
     isProvisional: false,
@@ -56,7 +57,7 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   },
   {
     productId: "p-mem-8",
-    allowedClassTypes: ["class"],
+    allowedClassTypes: ["class", "student_practice"],
     styleAccess: { type: "all" },
     allowedLevels: null,
     isProvisional: false,
@@ -64,7 +65,7 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   },
   {
     productId: "p-mem-12",
-    allowedClassTypes: ["class"],
+    allowedClassTypes: ["class", "student_practice"],
     styleAccess: { type: "all" },
     allowedLevels: null,
     isProvisional: false,
@@ -72,7 +73,7 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   },
   {
     productId: "p-mem-16",
-    allowedClassTypes: ["class"],
+    allowedClassTypes: ["class", "student_practice"],
     styleAccess: { type: "all" },
     allowedLevels: null,
     isProvisional: false,

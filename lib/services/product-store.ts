@@ -27,6 +27,7 @@ export function getProduct(id: string): MockProduct | undefined {
 export function createProduct(data: {
   name: string;
   description: string;
+  longDescription?: string | null;
   productType: ProductType;
   priceCents: number;
   totalCredits: number | null;
@@ -48,6 +49,7 @@ export function createProduct(data: {
     id: generateId("p"),
     name: data.name,
     description: data.description,
+    longDescription: data.longDescription ?? null,
     productType: data.productType,
     priceCents: data.priceCents,
     totalCredits: data.totalCredits,
@@ -74,6 +76,7 @@ type ProductPatch = Partial<
     MockProduct,
     | "name"
     | "description"
+    | "longDescription"
     | "productType"
     | "priceCents"
     | "totalCredits"
@@ -103,6 +106,7 @@ export function updateProduct(
 
   if (patch.name !== undefined) product.name = patch.name;
   if (patch.description !== undefined) product.description = patch.description;
+  if (patch.longDescription !== undefined) product.longDescription = patch.longDescription;
   if (patch.productType !== undefined) product.productType = patch.productType;
   if (patch.priceCents !== undefined) product.priceCents = patch.priceCents;
   if (patch.totalCredits !== undefined) product.totalCredits = patch.totalCredits;

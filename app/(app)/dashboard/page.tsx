@@ -3,12 +3,15 @@ import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getSubscriptions } from "@/lib/services/subscription-store";
+import { getProduct } from "@/lib/services/product-store";
 import { getTerms } from "@/lib/services/term-store";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
 import { getTodayStr, isClassInFuture } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
+import { computeMemberBenefits } from "@/lib/domain/member-benefits";
+import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
 import { STUDENTS } from "@/lib/mock-data";
 import { hasAcceptedCurrentVersion } from "@/lib/services/coc-store";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
@@ -92,17 +95,22 @@ export default async function DashboardPage() {
       ? allSubs.filter((s) => s.studentId === student.id && s.status === "active")
       : [];
 
-    const entitlements: StudentEntitlementSummary[] = studentSubs.map((sub) => ({
-      id: sub.id,
-      productName: sub.productName,
-      productType: sub.productType,
-      classesUsed: sub.classesUsed,
-      classesPerTerm: sub.classesPerTerm,
-      remainingCredits: sub.remainingCredits,
-      totalCredits: sub.totalCredits,
-      autoRenew: sub.autoRenew,
-      termName: currentTerm?.name ?? null,
-    }));
+    const entitlements: StudentEntitlementSummary[] = studentSubs.map((sub) => {
+      const product = getProduct(sub.productId);
+      return {
+        id: sub.id,
+        productName: sub.productName,
+        productType: sub.productType,
+        description: product?.description ?? null,
+        classesUsed: sub.classesUsed,
+        classesPerTerm: sub.classesPerTerm,
+        remainingCredits: sub.remainingCredits,
+        totalCredits: sub.totalCredits,
+        autoRenew: sub.autoRenew,
+        termName: currentTerm?.name ?? null,
+        selectedStyleName: sub.selectedStyleName ?? sub.selectedStyleNames?.join(", ") ?? null,
+      };
+    });
 
     const waitlistedCount = student
       ? bookingSvc.getWaitlistForStudent(student.id).length
@@ -111,6 +119,15 @@ export default async function DashboardPage() {
     const cocAccepted = student
       ? hasAcceptedCurrentVersion(student.id, CURRENT_CODE_OF_CONDUCT.version)
       : false;
+
+    const benefits = student
+      ? computeMemberBenefits({
+          dateOfBirth: student.dateOfBirth,
+          referenceDate: todayStr,
+          subscriptions: studentSubs,
+          birthdayClassUsed: isBirthdayClassUsed(student.id, new Date().getFullYear()),
+        })
+      : null;
 
     return (
       <StudentDashboard
@@ -121,6 +138,7 @@ export default async function DashboardPage() {
         entitlements={entitlements}
         waitlistedCount={waitlistedCount}
         codeOfConductAccepted={cocAccepted}
+        benefits={benefits}
       />
     );
   }

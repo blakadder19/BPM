@@ -186,7 +186,8 @@ export interface Term {
 // ── Commerce ────────────────────────────────────────────────
 
 export type ProductType = "membership" | "pass" | "drop_in";
-export type PaymentMethod = "stripe" | "cash" | "bank_transfer" | "manual" | "complimentary";
+export type PaymentMethod = "stripe" | "cash" | "card" | "bank_transfer" | "revolut" | "manual" | "complimentary";
+export type SalePaymentStatus = "paid" | "pending" | "complimentary" | "waived";
 export type CreditsModel = "unlimited" | "fixed" | "single_use";
 export type SubscriptionStatus = "active" | "paused" | "expired" | "exhausted" | "cancelled";
 export type PaymentStatus = "pending" | "completed" | "failed" | "refunded";

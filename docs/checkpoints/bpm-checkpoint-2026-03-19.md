@@ -1,399 +1,339 @@
 # BPM Project Checkpoint — 2026-03-19
 
-## A. Project Snapshot
+## 1. Project Snapshot
 
-**What BPM is:** A lightweight booking system for Balance Power Motion, a social dance academy in Dublin. Students book dance classes, join waitlists, manage cancellations. Admins manage terms, products, student entitlements, attendance, and penalties.
+**What BPM is:** A lightweight booking system for Balance Power Motion (BPM), a social dance academy in Dublin. Students book dance classes, join waitlists, and manage cancellations. Admins manage terms, products, student entitlements, attendance, and penalties.
 
-**Prototype status:** Functional MVP prototype. All core booking flows work end-to-end. No real database, auth, or payments — everything runs in-memory with mock data.
+**Prototype status:** Functional MVP prototype with a complete business layer. All core booking, attendance, and product flows work end-to-end. The product catalog now reflects real academy offerings with accurate membership tiers, benefits, and payment metadata.
 
 **Architecture:**
+
 - Next.js 15 App Router with TypeScript
 - Tailwind CSS for styling
 - In-memory stores seeded from `lib/mock-data.ts`
 - Server actions for all mutations
 - Pure domain functions for business rules
-- Zod for server-side validation (schemas in `types/schemas.ts`)
+- Zod for server-side validation
 - No Supabase connection yet (placeholder only)
-- No Stripe integration (placeholder only)
+- No Stripe/Revolut integration (placeholder only)
 
 **Environment assumptions:**
+
 - Local dev only (`npm run dev`)
 - All data resets on full server restart
-- Critical stores (booking, subscription, penalty, attendance) use `globalThis` to survive HMR
-- Non-critical stores (term, product, student, schedule, teacher) use module-level `let` (reset on HMR)
-- Settings stored on disk (`.data/settings.json`)
+- Critical stores use `globalThis` for HMR persistence
+- Non-critical stores use module-level `let`
+- Settings persisted to `.data/settings.json`
 - Dev-only impersonation via cookies (`dev_role`, `dev_student_id`)
 
 ---
 
-## B. What Is Implemented
+## 2. What Was Added/Refined In This Checkpoint
 
-### Terms
-- **Route:** `/terms` (admin only)
-- **Store:** `lib/services/term-store.ts` (module-level `let`)
-- **Domain:** `lib/domain/term-rules.ts` — `getCurrentTerm`, `findTermForDate`, `getTermWeekNumber`, `isBeginnerEntryWeek`, `isBeginnerEntryClass`
-- **Actions:** `createTermAction`, `updateTermAction`
-- **UI:** Admin table with add/edit dialogs. Columns: name, start/end dates, status, week number
-- **Seed:** 2 terms — Spring 2026 (active, Mar 9 – Apr 5), Summer 2026 (upcoming, Apr 6 – May 3)
-- **Note:** 4-week terms assumed. Beginner intake restricted to weeks 1–2
+This checkpoint finalizes the **academy business layer** — aligning the product catalog, member benefits, payment recording, and historical product display with how BPM actually sells access and grants perks.
 
-### Products
-- **Route:** `/products` (admin only)
-- **Store:** `lib/services/product-store.ts` (module-level `let`)
-- **Service:** `lib/services/product-service.ts` (async wrapper, stubs for production)
-- **Access rules:** `config/product-access.ts` — 12 rules mapping products to allowed class types, styles, levels
-- **Actions:** `createProductAction`, `updateProductAction`, `toggleProductActiveAction`
-- **UI:** Admin table with expandable detail panels, add/edit/deactivate dialogs, search + filters (type, active, provisional)
-- **Seed:** 12 products:
-  - 4 memberships (4/8/12/16 classes per term, EUR 45–95)
-  - 3 passes — Bronze/Silver/Gold (4/8/12 credits, EUR 30–70)
-  - 1 drop-in (1 credit, EUR 12)
-  - 1 Beginners 1&2 Promo Pass (16 credits, EUR 25)
-  - 1 Beginners Latin Combo (16 credits, EUR 35, PROVISIONAL)
-  - 1 Social Pass (4 credits, EUR 20)
+### A. Final Product Catalog
 
-### Students / Entitlements
-- **Route:** `/students` (admin only)
-- **Subscription store:** `lib/services/subscription-store.ts` (uses `globalThis` — HMR-safe)
-- **Domain:** `lib/domain/entitlement-rules.ts` — validates subscriptions against class context, checks style/level/term/usage
-- **Entitlement model:**
-  - **Memberships:** counter-based (`classesUsed` / `classesPerTerm`), term-bound, recurring
-  - **Passes:** credit-based (`remainingCredits` / `totalCredits`), style-restricted, term-bound
-  - **Drop-ins:** single-use credit, not term-bound, all styles
-- **Seed:** 8 students (all active), 7 subscriptions (student s-05 Eve has none)
-- **UI:** Admin students table with detail panels showing student info + entitlements. Add/edit student and subscription dialogs
+- `MockProduct` extended with `longDescription: string | null` and `benefits: string[] | null`
+- All 12 products have realistic `description` and `longDescription` text
+- 4 membership tiers (4/8/12/16 classes per term) include benefit arrays: `["Birthday week free class", "Member giveaways", "Free weekend Student Practice"]`
+- Product store and actions updated to handle `longDescription` in create/update flows
+- Admin product detail panel displays both short and long descriptions
 
-### Classes / Schedule
-- **Route:** `/classes` (admin for templates, student for browsing)
-- **Schedule store:** `lib/services/schedule-store.ts` (module-level `let`)
-- **Class store:** `lib/services/class-store.ts` (templates, module-level `let`)
-- **Admin UI:** Template management (create/edit class templates), teacher assignment
-- **Student UI:** Class browser with search, style/level filters, date-grouped cards
-- **Seed:** 17 bookable class instances across multiple dates, styles, levels
-- **Class types:** `"class"` (bookable), `"social"` (not online-bookable), `"student_practice"` (pay at reception)
+### B. Product & Class Descriptions
 
-### Admin Bookings
-- **Route:** `/bookings` (admin view)
-- **Actions:** `adminCreateBookingAction`, `adminCancelBookingAction`, `adminCheckInBookingAction`, `adminPromoteWaitlistAction`, `adminRemoveFromWaitlistAction`, `adminRestoreBookingAction`, `checkLateCancelStatusAction`
-- **UI:** Full table with expand/collapse detail panels, search, status/role/class filters, quick-link navigation to attendance/penalties/student
-- **Features:** Force-confirm (bypass capacity), late-cancel detection, penalty creation, waitlist promotion, credit refund on cancel, credit re-deduction on restore
+- `MockDanceStyle` extended with `description: string | null` — all 8 dance styles populated with real descriptions
+- New `config/class-levels.ts` defines 4 class levels (Beginner 1, Beginner 2, Intermediate, Open) with descriptions
+- Class-level descriptions surfaced as tooltips on level badges in student class browser
+- Product descriptions shown in student dashboard entitlement cards
 
-### Student Booking Experience
-- **Routes:** `/classes` (browse + book), `/bookings` (my bookings)
-- **Bookability engine:** `lib/domain/bookability.ts` — `computeBookability()` returns one of 7 states:
-  - `bookable` — show Book CTA with entitlement selection
-  - `waitlistable` — show Join Waitlist CTA
-  - `already_booked` — show "You're booked" badge
-  - `already_waitlisted` — show position badge
-  - `restore_available` — show "Cancelled — can be restored" with Restore CTA
-  - `blocked` — show reason text (no entitlement, beginner intake closed, etc.)
-  - `not_bookable` — show reason text (pay at reception, not online-bookable)
-- **Booking action:** `createStudentBooking` — 3-layer duplicate prevention (bookability engine + action + service)
-- **Class card UI:** Color-coded cards (blue=booked, amber=waitlisted, orange=restorable, gray=blocked)
-- **Booking dialog:** Entitlement selector (radio buttons), role selector for partner classes, beginner warnings
+### C. Member Benefits / Perks Logic
 
-### Waitlist
-- **Domain:** `lib/domain/booking-rules.ts` (capacity/role-balance), `lib/domain/waitlist-rules.ts` (promotion candidate selection, reindex)
-- **Service:** Integrated into `BookingService` — `bookClass` auto-waitlists, `cancelBooking/cancelBookingAsAdmin` auto-promotes
-- **Student self-service:** Leave waitlist via `studentLeaveWaitlistAction`
-- **Admin tools:** Manual promote, manual remove
-- **Promotion rules:** Role-aware for partner classes (promotes matching freed role first)
+- New `lib/domain/member-benefits.ts` — pure functions:
+  - `isBirthdayWeek(dateOfBirth, referenceDate)` — 7-day window detection
+  - `isMemberGiveawayEligible(subscriptions)` — active membership check
+  - `hasFreePracticeAccess(subscriptions)` — active membership check
+  - `computeMemberBenefits(opts)` — aggregated `MemberBenefitsSummary`
+- New `lib/services/birthday-benefit-store.ts` — in-memory tracker for birthday free class redemptions per student per year
+- New constants in `config/business-rules.ts`: `BIRTHDAY_WEEK_DURATION_DAYS = 7`, `MEMBERSHIP_BENEFITS` array
+- Student dashboard shows "Member Benefits" card with birthday-week status, giveaway eligibility, free Student Practice indicator
+- Admin student detail panel shows member benefits section with eligibility badges
 
-### Cancellation / Restore
-- **Student cancel guards:**
-  1. Must be authenticated as student
-  2. Must own the booking
-  3. Booking must be `"confirmed"` (not checked_in, not already cancelled)
-  4. Class must not have started (`hasStarted` check)
-- **Late cancel:** Within 60 min of class start → `"late_cancelled"` status + penalty (if enabled)
-- **Regular cancel:** More than 60 min before → `"cancelled"` status, no penalty
-- **Credit restoration:** Always restored on cancel (membership: `classesUsed - 1`, pass: `remainingCredits + 1`)
-- **Student restore guards:** Same ownership/auth + booking must be `cancelled`/`late_cancelled` + class not started
-- **Restore logic:** `restoreBooking()` checks capacity → confirmed if spot available, otherwise added to waitlist
-- **Credit re-deduction:** Only on confirmed restore (not waitlisted)
-- **Duplicate prevention:** `restore_available` state prevents creating a second booking when a restorable cancelled one exists
+### D. Product Access Rules
 
-### Attendance / Missed Logic
-- **Route:** `/attendance` (admin/teacher only)
-- **Service:** `AttendanceService` with `markAttendance`, `getAttendanceForClass`, `getSummary`
-- **Marks:** `"present"` | `"absent"` | `"late"` | `"excused"`
-- **Check-in:** Marking present/late auto-transitions booking to `"checked_in"`
-- **Closure:** `closeAttendanceForPastClasses()` runs on `/attendance` and `/dashboard` page loads
-  - After class start + 60 min: unchecked confirmed bookings → `"missed"` status
-  - No penalty created during closure (no-show is OFF by default)
-  - Idempotent — safe to call multiple times
-- **Absent → penalty:** When attendance marked as `"absent"`, creates no-show penalty (if `noShowPenaltiesEnabled`)
-- **Reconciliation:** If attendance record exists as present/late but booking is still "confirmed", closure auto-checks-in
+- All 4 membership tiers updated to include `"student_practice"` in `allowedClassTypes`
+- Passes and drop-ins remain restricted to `["class"]` only
+- Social pass restricted to `["social"]` only
+- Stale test blocks for non-existent product IDs removed from `product-access-config.test.ts`
 
-### Penalties
-- **Route:** `/penalties` (admin + student views)
-- **Types:** `"late_cancel"` (EUR 2.00), `"no_show"` (EUR 5.00)
-- **Resolutions:** `"credit_deducted"` | `"monetary_pending"` | `"waived"`
-- **Default state:** Late-cancel penalties ON, no-show penalties OFF
-- **Auto-waive:** When attendance changes from absent to any other status, pending no-show penalty is auto-waived
-- **Student view:** Read-only list of own penalties with status badges
+### E. Payment Method & Sales Metadata
 
-### Settings
-- **Route:** `/settings` (admin only)
-- **Storage:** Disk-backed (`.data/settings.json`)
-- **Configurable:** Late-cancel fee, no-show fee, cutoff minutes, penalty toggles, role imbalance limit, role-balanced styles, class-type bookability, waitlist offer expiry, provisional notes
+- `PaymentMethod` type extended: added `"card"` and `"revolut"` (now 7 values: stripe, cash, card, bank_transfer, revolut, manual, complimentary)
+- New `SalePaymentStatus` type: `"paid" | "pending" | "complimentary" | "waived"`
+- `MockSubscription` extended with `paymentStatus`, `assignedBy`, `assignedAt` fields
+- Subscription store, service, and actions updated to handle all new fields
+- Admin "Add Subscription" dialog includes Payment Method (7 options) and Payment Status (4 options) dropdowns
+- Admin "Edit Subscription" dialog supports status updates with friendly labels
+- SubCard renders payment method badge, payment status badge (if not "paid"), and assignedBy/assignedAt metadata
 
-### Dev-Only Testing Tools
-- **Student impersonation:** Topbar dropdown to impersonate any seeded student (sets `dev_student_id` cookie)
-- **Role switcher:** Topbar dropdown to switch between admin/teacher/student
-- **Dev panel:** Floating pink-bordered panel (bottom-right) with god-mode actions:
-  - Toggle preferred role (leader/follower)
-  - Assign/remove/reset entitlements
-  - Add/cancel bookings
-  - Join/leave waitlist
-  - Add/waive penalties
-- **Guard:** All dev actions protected by `guardDev()` — throws in production
+### F. Historical Status Display Labels
+
+- New `lib/domain/subscription-display-status.ts`:
+  - `deriveDisplayStatus(sub, allStudentSubs)` — context-aware label derivation
+  - `SUBSCRIPTION_STATUS_LABELS` — reusable label map
+- Status mapping logic:
+  - `active` → **Active**
+  - `paused` → **Paused**
+  - `exhausted` → **Finished** (all credits/classes consumed)
+  - `expired` + newer active sub of same type → **Replaced**
+  - `expired` (no replacement) → **Expired**
+  - `cancelled` → **Cancelled**
+- `StatusBadge` updated: `exhausted` entry now shows "Finished", new entries for `finished` and `replaced`
+- `SubCard` in student detail panel uses `deriveDisplayStatus()` with full student subscription context
+- Admin edit form shows "Finished" label for the internal `exhausted` value
+- Dev panel uses `SUBSCRIPTION_STATUS_LABELS` for friendly fallback text
+- Booking dialogs show "Finished" instead of "Exhausted" for consumed drop-ins
+- **"Exhausted" no longer appears anywhere as a user-facing label**
+
+### G. Student Dashboard Improvements
+
+- Entitlement cards show product description and selected style name
+- New "Member Benefits" card for active members showing birthday, giveaway, and practice eligibility
+- Benefits computed server-side via `computeMemberBenefits()` and passed as props
+
+### H. Admin Students Improvements
+
+- Active vs historical products clearly separated with count headers
+- Historical products use contextual status badges (Finished/Expired/Cancelled/Replaced)
+- Active subscriptions render with white background; historical with muted background and opacity
+- Payment metadata (method, status, assignedBy, assignedAt) displayed on every subscription card
+
+### I. Seed Data Enhancements
+
+- Alice has a historical expired 8 Classes Membership (sub-01-hist) plus active 12 Classes Membership — demonstrates Replaced status
+- Eve has a complimentary drop-in
+- Finn's DOB set to March 21 for birthday-week testing
+- Eve's DOB set to March 20 for birthday-week testing
+- Payment methods diversified: card, cash, bank_transfer, revolut, complimentary
+- All subscriptions include paymentStatus, assignedBy, assignedAt metadata
 
 ---
 
-## C. Business Rules Currently Enforced
+## 3. Business Rules Currently Enforced
 
-### Terms & Scheduling
-- Terms are 4-week periods with status: draft, active, upcoming, past
-- Memberships are term-bound — subscription term must match class term
-- Beginner 1 classes restricted to weeks 1–2 of the term (intake window)
+### Membership Tiers
 
-### Products & Entitlements
-- Memberships: counter-based usage (classesUsed / classesPerTerm), term-bound, auto-renew flag
-- Passes: credit-based (remainingCredits / totalCredits), style-restricted via access rules
+- 4 / 8 / 12 / 16 classes per 4-week term
+- Counter-based usage: `classesUsed` / `classesPerTerm`
+- Term-bound, auto-renew flag supported
+- Benefits: birthday-week free class, member giveaways, free weekend Student Practice
+
+### Pass / Drop-in Separation
+
+- Passes: credit-based (`remainingCredits` / `totalCredits`), style-restricted via access rules, term-bound
 - Drop-ins: single-use (1 credit), not term-bound, all styles/levels
-- Beginners Latin Combo: PROVISIONAL — pick 2 of 3 styles (Bachata, Cuban, Salsa Line)
-- Social Pass: restricted to social class type only
+- Promo passes: Beginners 1&2 (single style), Latin Combo (PROVISIONAL, 2-of-3 styles)
 
-### Booking Rules
-- Only `"class"` type is online-bookable
-- Socials: not online-bookable (controlled by `settings.socialsBookable`)
-- Student Practice: not bookable, shows "Pay at reception"
-- Duplicate booking prevention: cannot create second booking for same student + class instance
-- Cancelled booking: shows "restore_available" instead of allowing new booking
-- Role balance enforced for partner dance styles (configurable list)
-- Allowed role imbalance: 2 (configurable)
+### Birthday Eligibility Foundation
 
-### Cancellation Rules
-- Cancel allowed only before class start
-- More than 60 min before: free cancel, full credit/usage refund
-- Within 60 min (late cancel): allowed with warning, penalty fee if `lateCancelPenaltiesEnabled`
-- After class start: cancel blocked
-- Credit always restored on cancel regardless of late/regular
+- `isBirthdayWeek()` detects if current date falls within 7 days of student's birthday
+- Birthday benefit store tracks one-time redemptions per student per year
+- Birthday eligibility visible in student dashboard and admin student panel
+- Auto-application during booking not yet implemented (foundation only)
 
-### Attendance Rules
-- Check-in open from class start until +60 min after start
-- After +60 min: unchecked confirmed bookings transition to `"missed"` (not cancelled)
-- No penalty created for missed by default (no-show OFF)
-- Marking absent explicitly → no-show penalty (if enabled)
-- Marking present/late → auto-transitions booking to checked_in
+### Giveaway Eligibility
 
-### Penalty Rules
-- Late cancel fee: EUR 2.00 (default, configurable)
-- No-show fee: EUR 5.00 (default, configurable)
-- Late-cancel penalties: ON by default
-- No-show penalties: OFF by default
-- Socials: excluded from all penalties
-- Student Practice: excluded from penalties
-- Resolution: credit_deducted (if matching subscription found), monetary_pending (fee owed), waived
+- Any student with an active membership subscription is flagged as giveaway-eligible
+- Visible in admin student detail panel and student dashboard
 
-### Restore Rules
-- Only cancelled/late_cancelled bookings can be restored
-- Must be before class start
-- Capacity/role-balance checked via `restoreBooking()` → confirmed if spot available, waitlisted if full
-- Credit re-deducted only on confirmed restore
-- Restore available from both My Bookings page and Classes page
+### Free Student Practice Member Benefit
 
----
+- Membership access rules include `"student_practice"` in `allowedClassTypes`
+- `hasFreePracticeAccess()` returns true for any active membership holder
+- Visible in student dashboard benefits card and admin student panel
 
-## D. Current User Flows
+### Payment Method & Status Capture
 
-### Admin assigns entitlement
-1. Admin opens `/students` → expands student → clicks "Add Subscription"
-2. Selects product, term, payment method → submits
-3. Subscription created in store, student detail panel updates
+- 7 payment methods: stripe, cash, card, bank_transfer, revolut, manual, complimentary
+- 4 payment statuses: paid, pending, complimentary, waived
+- Admin can set payment method and status when assigning products
+- Sales metadata (assignedBy, assignedAt) recorded on every subscription
 
-### Student books a class
-1. Student opens `/classes` → sees class cards with bookability state
-2. Clicks "Book" on a bookable card → dialog opens with entitlement selector
-3. Selects entitlement (auto-selected if only one), optionally selects role
-4. Submits → `createStudentBooking` validates, deducts credit, creates booking
-5. Success confirmation in dialog → `/bookings`, `/classes`, `/dashboard` revalidated
-6. Dashboard entitlement counts update immediately
+### Historical Status Display Mapping
 
-### Student joins waitlist
-1. Same as booking flow but class is full → card shows "Join Waitlist"
-2. Clicks → same dialog but with waitlist badge
-3. Submits → added to waitlist at next position, no credit deducted
-4. When a spot opens (another student cancels): auto-promoted to confirmed booking
-
-### Student cancels booking
-1. Student opens `/bookings` → sees upcoming booking with "Cancel" button
-2. Clicks Cancel → dialog opens, checks late-cancel status
-3. If > 60 min before: "No penalty will apply" message
-4. If < 60 min: late-cancel warning with fee amount
-5. If class started: blocked with "Class has already started" message
-6. Confirms → booking cancelled, credit restored, penalty created if late + enabled
-
-### Student restores cancelled booking
-1. From `/bookings` "Recently Cancelled" section → clicks "Restore"
-2. Or from `/classes` card showing "Cancelled — can be restored" → clicks "Restore Booking"
-3. Dialog checks eligibility (class not started, booking is cancelled)
-4. Confirms → `restoreBooking()` checks capacity → confirmed or waitlisted
-5. If confirmed: credit re-deducted. If waitlisted: no credit consumed
-
-### Admin checks attendance
-1. Admin/teacher opens `/attendance` → sees today's classes with student lists
-2. Closure auto-runs: past classes' unchecked bookings become "missed"
-3. Marks students as present/late/absent/excused
-4. Present/late → booking transitions to checked_in
-5. Absent → no-show penalty created (if enabled)
-
-### Dashboard entitlement updates
-1. After any booking/cancel/restore action → `revalidatePath("/dashboard")`
-2. Dashboard RSC re-runs → reads subscription store (globalThis-backed)
-3. `classesUsed` / `remainingCredits` reflect the latest mutations
-
----
-
-## E. Current Dev/Test Setup
-
-### How to run
-```bash
-npm run dev
-```
-Opens at `http://localhost:3000`. Starts in admin mode by default.
-
-### Role switcher
-- Topbar has a yellow-bordered dropdown: Admin / Teacher / Student
-- Switch to "Student" to see the student experience
-- Admin/Teacher see admin-facing pages
-
-### Student impersonation
-- When in Student role, a pink-bordered dropdown appears next to role switcher
-- Lists all 8 seeded students
-- Select any student → all student pages reflect that student's data
-- No password needed
-
-### Dev panel (god mode)
-- When impersonating a student, a floating pink panel appears at bottom-right
-- Click "DEV" to expand
-- Quick actions to modify entitlements, bookings, penalties for the impersonated student
-- Useful for testing edge cases without navigating through the full UI
-
-### Seeded students worth testing
-
-| Student | Subscription | Good for testing |
+| Internal Status | Condition | Display Label |
 |---|---|---|
-| Alice Murphy (s-01) | 12 Classes Membership (3/12 used) | Standard booking flow, plenty of classes left |
-| Bob O'Brien (s-02) | 8 Classes Membership (2/8 used) | Leader role, medium usage |
-| Carol Walsh (s-03) | Beginners 1&2 Pass (12/16 credits) | Beginner restriction testing, style-restricted pass |
-| Dave Keane (s-04) | 4 Classes Membership (1/4 used) | Low-capacity membership, nearly full testing |
-| Eve Byrne (s-05) | No subscription | "No valid entitlement" blocked state |
-| Finn Doyle (s-06) | 16 Classes Membership (4/16 used) | High-capacity membership |
-| Grace Kelly (s-07) | Beginners Latin Combo (3/16 credits, PROVISIONAL) | Course-group style matching |
-| Hugo Brennan (s-08) | Drop-in (1 credit) | Single-use testing, runs out after 1 booking |
+| `active` | — | **Active** |
+| `paused` | — | **Paused** |
+| `exhausted` | — | **Finished** |
+| `expired` | Newer active sub of same type exists | **Replaced** |
+| `expired` | No active replacement | **Expired** |
+| `cancelled` | — | **Cancelled** |
 
-### Useful test scenarios
-1. **Book + cancel + restore:** Impersonate Alice → book a class → cancel → see in "Recently Cancelled" → restore
-2. **Entitlement exhaustion:** Use Dev Panel to reset Hugo's drop-in → book once → try to book again (should be blocked)
-3. **Waitlist flow:** Book until a class is full → switch to another student → try to book (waitlist) → go back → cancel → check promotion
-4. **Late cancel:** Use a class starting within 60 min → attempt cancel → see late warning
-5. **Beginner restriction:** Impersonate Carol → try booking a Beginner 1 class in week 3+ → should be blocked
-6. **No entitlement:** Impersonate Eve → try booking → should see "No valid entitlement"
-7. **Restore from classes page:** Cancel a booking → go to /classes → see orange card → click "Restore Booking"
+### Pre-existing Rules (unchanged)
+
+- Terms: 4-week cycles, beginner intake restricted to weeks 1–2
+- Booking: 10-step bookability engine, duplicate prevention, role balance
+- Cancellation: free >60min, late-cancel <60min with penalty, blocked after start
+- Attendance: present/late/absent/excused with credit and penalty side-effects
+- Penalties: late_cancel EUR 2.00, no_show EUR 5.00 (no-show OFF by default)
+- Waitlist: role-aware FIFO with auto-promotion on cancellation
+- Code of Conduct: versioned acceptance required before booking
+- Check-in: QR/token foundation, self-check-in with configurable time window
 
 ---
 
-## F. Known Limitations / Open Issues
+## 4. Current User/Admin Flows Affected
+
+### Admin Assigns Product
+
+1. Admin opens `/students` → expands student → clicks "Add"
+2. Selects product, term, payment method, payment status → submits
+3. Subscription created with full sales metadata (paymentMethod, paymentStatus, assignedBy, assignedAt)
+4. Student detail panel updates immediately showing the new subscription
+
+### Admin Records Payment Method/Status
+
+- Payment method dropdown includes: Stripe, Cash, Card, Bank Transfer, Revolut, Manual/Admin Grant, Complimentary
+- Payment status dropdown includes: Paid, Pending, Complimentary, Waived
+- Both visible on subscription cards in admin student panel
+
+### Student Sees Product and Benefits
+
+- Student dashboard shows active entitlements with description, usage stats, and selected style
+- Members see a "Member Benefits" card showing:
+  - Birthday week free class eligibility (with current-year status)
+  - Member giveaway eligibility
+  - Free weekend Student Practice access
+
+### Admin Sees Active vs History Clearly
+
+- Active Products section with count header, white card backgrounds
+- Product History section with count header, muted backgrounds
+- Historical products show contextual status: Finished (used up), Expired (term ended), Cancelled (manually closed), Replaced (superseded by newer active sub)
+
+---
+
+## 5. Known Limitations / Next Gaps
+
+### Business Layer Gaps
+
+- **Birthday free class not auto-applied during booking:** The eligibility foundation exists (detection, tracking, UI), but the booking action does not yet automatically grant a free class during birthday week. Manual handling required.
+- **Giveaway distribution not automated:** Eligibility is tracked, but there is no mechanism to assign or track specific giveaway items.
+- **Student Practice booking behavior:** Members have access-rule entitlement for student_practice, but the class type is still "Pay at reception" / not online-bookable. The free-access benefit is informational only.
 
 ### Architecture / Persistence
+
 - **In-memory only:** All data resets on full server restart. No database.
-- **HMR inconsistency:** Critical stores (booking, subscription, penalty, attendance) use `globalThis`; non-critical stores (term, product, student, schedule, teacher) use module-level `let` and reset on HMR. This causes no user-visible bugs currently but is inconsistent.
-- **Settings on disk:** Settings use `.data/settings.json` — survives restart but not portable.
-- **No real auth:** Dev-only cookie-based role switching. No Supabase auth connected.
-- **No real payments:** Stripe is placeholder-only. No payment flow.
+- **No real authentication:** Dev-only cookie-based role switching.
+- **No real payments:** Stripe and Revolut are payment method options only — no gateway integration.
+- **No email/SMS notifications.**
+- **HMR inconsistency:** Critical stores use `globalThis`; non-critical stores use module-level `let`.
 
-### Data / Model
-- **Student denormalization:** `subscriptionName` and `remainingCredits` on MockStudent are stale display shortcuts, not synced with subscription store.
-- **MockProduct vs Product type gap:** MockProduct has extra fields (`termBound`, `recurring`, `classesPerTerm`, `autoRenew`, `benefits`) not in the canonical Product type. Needs reconciliation before DB migration.
-- **MockSubscription vs StudentSubscription type gap:** MockSubscription has extra fields (`productName`, `productType`, `selectedStyleId/Name/Ids/Names`, `classesUsed`, `classesPerTerm`, `paymentMethod`, `autoRenew`, `termId`). Significant schema gap.
-- **Course-group style matching:** The `course_group` branch in `entitlement-rules.ts` has an incomplete fallback — returns `false` when `selectedStyleNames` is empty.
+### Data Model
 
-### Booking / Waitlist
-- **Waitlist promotion doesn't deduct credits:** When a student is auto-promoted from waitlist, the new booking has `subscriptionId: null`. No credit is consumed. This means promoted students get a free class.
-- **Admin bookings allow duplicates over cancelled:** `adminBook` doesn't check for existing cancelled bookings (student path does).
-- **No-show penalties pass empty subscriptions:** `markStudentAttendance` passes `subscriptions: []` to `assessNoShowPenalty`, so credit-deduction resolution never works for no-shows.
-- **Admin dashboard uses hardcoded MOCK_TODAY:** `components/dashboard/admin-dashboard.tsx` has `MOCK_TODAY = "2026-03-17"` instead of live date.
+- **MockProduct vs Product type gap:** MockProduct has extra fields not in canonical Product type.
+- **MockSubscription vs StudentSubscription type gap:** Significant schema gap needing reconciliation before DB migration.
+- **Waitlist promotion doesn't deduct credits:** Auto-promoted students get a free class.
+- **Admin dashboard uses hardcoded MOCK_TODAY** instead of live date.
 
-### UX
-- **No QR check-in:** Only manual check-in implemented. QR is a placeholder type.
-- **No email notifications:** No booking confirmation, waitlist promotion, or penalty notification emails.
-- **No payment collection:** Monetary penalties are tracked but not collectible.
-- **Attendance page reads from static BOOKABLE_CLASSES seed:** For today-filter purposes. Runtime-added class instances won't appear.
+### Pre-existing Test Issues
+
+- 8 penalty-related test failures exist due to no-show penalties being OFF by default. These are pre-existing and unrelated to the business-layer changes.
 
 ---
 
-## G. Recommended Next Phase
+## 6. Recommended Next Phase
 
-**Phase 3: Waitlist Credit Deduction + Data Consistency Hardening**
+**Phase: Data Consistency Hardening + Waitlist Credit Fix**
 
-Priority fixes before adding new features:
-1. **Waitlist promotion credit deduction** — when auto-promoted, link to the student's subscription and deduct credit
-2. **Migrate remaining stores to globalThis** — term, product, student, schedule, teacher stores
-3. **Fix admin dashboard MOCK_TODAY** — use live date like student dashboard
-4. **Fix no-show penalty subscription lookup** — pass actual student subscriptions instead of empty array
-5. **Fix course_group style matching fallback** — complete the Latin Combo logic
-6. **Reconcile Mock types with canonical types** — prepare for DB migration
+Priority fixes before adding new features or migrating to a database:
+
+1. **Waitlist promotion credit deduction** — when auto-promoted from waitlist, link to subscription and deduct credit
+2. **Birthday free class auto-application** — integrate birthday eligibility check into booking action so the free class is granted automatically
+3. **Fix admin dashboard MOCK_TODAY** — use live date
+4. **Fix no-show penalty subscription lookup** — pass actual student subscriptions
+5. **Migrate remaining stores to globalThis** — consistency across HMR
+6. **Reconcile Mock types with canonical types** — prepare for Supabase migration
 
 After hardening:
-- **Phase 4: Supabase Integration** — real database, real auth, data persistence
-- **Phase 5: Payment Integration** — Stripe for subscriptions, penalty collection
+
+- **Supabase Integration** — real database, real auth, data persistence
+- **Payment Integration** — Stripe/Revolut for subscriptions, penalty collection
+- **Student Self-Registration** — public signup flow
 
 ---
 
-## H. Resume Instructions
+## 7. Files Changed In This Checkpoint
+
+### New Files
+
+| File | Purpose |
+|---|---|
+| `config/class-levels.ts` | Class level definitions with descriptions |
+| `lib/domain/member-benefits.ts` | Birthday week, giveaway, practice benefit logic |
+| `lib/domain/subscription-display-status.ts` | Academy-friendly historical status derivation |
+| `lib/services/birthday-benefit-store.ts` | Birthday free class redemption tracker |
+
+### Modified Files (22)
+
+| File | Change Summary |
+|---|---|
+| `types/domain.ts` | Added `card`, `revolut` to PaymentMethod; added `SalePaymentStatus` type |
+| `lib/mock-data.ts` | Extended MockProduct (longDescription), MockDanceStyle (description), MockSubscription (paymentStatus, assignedBy, assignedAt); enriched seed data |
+| `lib/services/product-store.ts` | `longDescription` in create/update |
+| `lib/services/product-service.ts` | `longDescription` passthrough |
+| `lib/actions/products.ts` | `longDescription` from form data |
+| `lib/services/subscription-store.ts` | `paymentStatus`, `assignedBy`, `assignedAt` in create/update |
+| `lib/services/subscription-service.ts` | Payment metadata passthrough |
+| `lib/actions/subscriptions.ts` | Payment status validation, sales metadata capture |
+| `lib/actions/dev-tools.ts` | Payment metadata on dev-assigned products |
+| `config/business-rules.ts` | `BIRTHDAY_WEEK_DURATION_DAYS`, `MEMBERSHIP_BENEFITS` constants |
+| `config/product-access.ts` | `student_practice` added to membership allowedClassTypes |
+| `config/__tests__/product-access-config.test.ts` | Removed stale tests, added student_practice tests |
+| `components/ui/status-badge.tsx` | Remapped `exhausted` → "Finished"; added `finished`, `replaced` entries |
+| `components/products/product-detail-panel.tsx` | Displays `longDescription` |
+| `components/booking/student-class-card.tsx` | Class level tooltip descriptions |
+| `components/booking/booking-dialogs.tsx` | "Exhausted" → "Finished" label |
+| `components/dashboard/student-dashboard.tsx` | Product description, selected style, member benefits card |
+| `components/students/admin-students.tsx` | Benefits computation for student detail panel |
+| `components/students/student-detail-panel.tsx` | `deriveDisplayStatus()` integration, benefits section, payment metadata display |
+| `components/students/student-dialogs.tsx` | Friendly status labels, payment status dropdown |
+| `components/dev/dev-panel.tsx` | `SUBSCRIPTION_STATUS_LABELS` for friendly status text |
+| `app/(app)/dashboard/page.tsx` | Benefits computation, product description in entitlements |
+
+---
+
+## 8. Resume Instructions
 
 ### Quick start
+
 ```bash
 cd /Users/lopezmalejandro/Desktop/BPM
 npm run dev
 # Open http://localhost:3000
 ```
 
-### How to understand the codebase
-1. Start with `lib/mock-data.ts` — all seed data lives here
-2. Read `types/domain.ts` — all domain types
-3. Read `lib/domain/` — pure business rule functions
-4. Read `lib/services/` — in-memory stores and service classes
-5. Read `lib/actions/` — server actions (API layer)
-6. Read `app/(app)/` — routes and server components
-7. Read `components/` — UI components grouped by module
+### Testing the new business-layer features
 
-### Key architectural patterns
-- **Server actions** for all mutations — never mutate from client directly
-- **Pure domain functions** for business rules — no store access, all data passed as arguments
-- **Bookability engine** (`computeBookability`) is the central authority for what a student can do with a class
-- **Singleton stores** on `globalThis` for data that must survive HMR
-- **`revalidatePath`** after every mutation to trigger server component re-renders
+1. **Product descriptions:** Go to `/products` → expand any product → see short + long description
+2. **Member benefits:** Switch to Student role → impersonate Finn Doyle (s-06, birthday March 21) → see birthday-week eligibility on dashboard
+3. **Payment metadata:** Admin `/students` → expand any student → see payment method/status badges on subscriptions
+4. **Historical status:** Admin `/students` → expand Alice (s-01) → see active 12 Classes Membership and historical 8 Classes Membership showing "Replaced"
+5. **Class level tooltips:** Student `/classes` → hover over level badges (Beginner 1, Intermediate, etc.)
+6. **Revolut payment:** Admin `/students` → expand Finn → see Revolut payment method on subscription
 
-### Where to find things
+### Where to find the new code
+
 | What | Where |
 |---|---|
-| Seed data (students, products, classes, bookings) | `lib/mock-data.ts` |
+| Member benefits logic | `lib/domain/member-benefits.ts` |
+| Birthday benefit tracker | `lib/services/birthday-benefit-store.ts` |
+| Historical status derivation | `lib/domain/subscription-display-status.ts` |
+| Class level config | `config/class-levels.ts` |
 | Business rule constants | `config/business-rules.ts` |
 | Product access rules | `config/product-access.ts` |
-| Bookability engine | `lib/domain/bookability.ts` |
-| Booking service (core) | `lib/services/booking-service.ts` |
-| Student booking action | `lib/actions/booking.ts` |
-| Student cancel/restore actions | `lib/actions/booking-student.ts` |
-| Admin booking actions | `lib/actions/bookings-admin.ts` |
-| Attendance closure | `lib/actions/attendance.ts` |
-| Cancellation rules | `lib/domain/cancellation-rules.ts` |
-| Datetime utilities | `lib/domain/datetime.ts` |
-| Dev tools (god mode) | `lib/actions/dev-tools.ts` |
-| Dev panel UI | `components/dev/dev-panel.tsx` |
-| Settings | `lib/services/settings-store.ts` |
 
 ### Conversation history
-Prior implementation work is documented in the agent transcript: `64101b49-939e-40ba-9db7-cf6b39fac98c`. Search by module name or filename for context on design decisions.
+
+Prior implementation work is documented in agent transcripts: `dff6013f-fed0-439c-b94d-da9d37b0b84f` (business-layer implementation).

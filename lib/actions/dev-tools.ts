@@ -61,6 +61,8 @@ export async function devGetStudentState(studentId: string) {
       classesPerTerm: s.classesPerTerm,
       remainingCredits: s.remainingCredits,
       totalCredits: s.totalCredits,
+      paymentMethod: s.paymentMethod,
+      paymentStatus: s.paymentStatus,
     })),
     bookings: bookings
       .filter((b) => b.status === "confirmed" || b.status === "checked_in")
@@ -156,6 +158,9 @@ export async function devAssignProduct(
     notes: "Created via dev tools",
     termId: product.termBound && activeTerm ? activeTerm.id : null,
     paymentMethod: "manual",
+    paymentStatus: "complimentary",
+    assignedBy: "Dev Tools",
+    assignedAt: new Date().toISOString(),
     autoRenew: product.autoRenew,
     classesUsed: 0,
     classesPerTerm: product.classesPerTerm,

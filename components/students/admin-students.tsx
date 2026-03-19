@@ -11,6 +11,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
+import { computeMemberBenefits } from "@/lib/domain/member-benefits";
+import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
 import { StudentDetailPanel } from "./student-detail-panel";
 import {
   AddStudentDialog,
@@ -232,6 +234,12 @@ export function AdminStudents({
                     walletTransactions={walletTransactions}
                     bookings={bookings}
                     penalties={penalties}
+                    benefits={computeMemberBenefits({
+                      dateOfBirth: s.dateOfBirth,
+                      referenceDate: new Date().toISOString().slice(0, 10),
+                      subscriptions: subscriptions.filter((sub) => sub.studentId === s.id),
+                      birthdayClassUsed: isBirthdayClassUsed(s.id, new Date().getFullYear()),
+                    })}
                     onAddSub={() => setAddSubStudentId(s.id)}
                     onEditSub={setEditSub}
                     colSpan={TABLE_HEADERS.length}

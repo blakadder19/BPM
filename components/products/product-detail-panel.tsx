@@ -28,6 +28,11 @@ export function ProductDetailPanel({
           {/* ── General Info ── */}
           <Section title="General">
             <DL label="Description" value={product.description || "—"} />
+            {product.longDescription && (
+              <p className="mt-1 text-sm text-gray-600 leading-relaxed">
+                {product.longDescription}
+              </p>
+            )}
             <DL label="Price" value={formatCents(product.priceCents)} />
             {product.productType === "membership" && product.classesPerTerm ? (
               <DL label="Classes / Term" value={`${product.classesPerTerm}`} />

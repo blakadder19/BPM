@@ -142,7 +142,7 @@ export function AddBookingDialog({
           const remaining = s.classesPerTerm - s.classesUsed;
           detail = `${s.classesUsed}/${s.classesPerTerm} classes used (${remaining} left)`;
         } else if (s.productType === "drop_in") {
-          detail = s.remainingCredits != null && s.remainingCredits > 0 ? "1 use available" : "Exhausted";
+          detail = s.remainingCredits != null && s.remainingCredits > 0 ? "1 use available" : "Finished";
         } else if (s.remainingCredits != null) {
           detail = `${s.remainingCredits} credits remaining`;
         } else {

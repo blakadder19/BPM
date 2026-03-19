@@ -37,3 +37,16 @@ export const STUDENT_PRACTICE_IS_BOOKABLE = false;
 
 /** PROVISIONAL — hours before a waitlist offer expires. */
 export const WAITLIST_OFFER_EXPIRY_HOURS = 4;
+
+/** Birthday week: number of days the birthday free-class window is open. */
+export const BIRTHDAY_WEEK_DURATION_DAYS = 7;
+
+/**
+ * Standard membership benefits — all membership tiers include these.
+ * Used for display and eligibility checks.
+ */
+export const MEMBERSHIP_BENEFITS = [
+  "Birthday week free class",
+  "Member giveaways",
+  "Free weekend Student Practice",
+] as const;

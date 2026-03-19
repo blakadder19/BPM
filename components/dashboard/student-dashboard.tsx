@@ -13,6 +13,10 @@ import {
   CreditCard,
   RefreshCw,
   ScrollText,
+  Gift,
+  Star,
+  Music,
+  Cake,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -21,6 +25,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { CocAcceptanceDialog } from "@/components/booking/coc-acceptance-dialog";
 import { formatDate, formatCents } from "@/lib/utils";
+import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ProductType } from "@/types/domain";
 
 export interface StudentBookingSummary {
@@ -54,12 +59,14 @@ export interface StudentEntitlementSummary {
   id: string;
   productName: string;
   productType: ProductType;
+  description: string | null;
   classesUsed: number;
   classesPerTerm: number | null;
   remainingCredits: number | null;
   totalCredits: number | null;
   autoRenew: boolean;
   termName: string | null;
+  selectedStyleName: string | null;
 }
 
 interface StudentDashboardProps {
@@ -70,6 +77,7 @@ interface StudentDashboardProps {
   entitlements?: StudentEntitlementSummary[];
   waitlistedCount?: number;
   codeOfConductAccepted?: boolean;
+  benefits?: MemberBenefitsSummary | null;
 }
 
 export function StudentDashboard({
@@ -80,6 +88,7 @@ export function StudentDashboard({
   entitlements = [],
   waitlistedCount = 0,
   codeOfConductAccepted,
+  benefits,
 }: StudentDashboardProps) {
   const firstName = fullName.split(" ")[0];
   const unresolvedPenalties = penalties.filter(
@@ -203,7 +212,13 @@ export function StudentDashboard({
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                       <StatusBadge status={e.productType} />
                       {e.termName && <span>{e.termName}</span>}
+                      {e.selectedStyleName && (
+                        <span className="text-indigo-600">{e.selectedStyleName}</span>
+                      )}
                     </div>
+                    {e.description && (
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{e.description}</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {e.productType === "membership" && e.classesPerTerm !== null && (
@@ -229,6 +244,60 @@ export function StudentDashboard({
                   </div>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Member Benefits */}
+      {benefits?.isMember && (
+        <Card className="border-indigo-200 bg-indigo-50/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-indigo-500" />
+              Member Benefits
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-indigo-100">
+              <div className="flex items-center gap-3 px-6 py-3">
+                <Cake className="h-4 w-4 text-indigo-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">Birthday Week Free Class</p>
+                  <p className="text-xs text-gray-500">One free class during your birthday week</p>
+                </div>
+                <span className="shrink-0">
+                  {benefits.birthdayWeekEligible ? (
+                    benefits.birthdayFreeClassUsed ? (
+                      <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">Used</span>
+                    ) : (
+                      <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">Available now</span>
+                    )
+                  ) : (
+                    <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-500">Not birthday week</span>
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 px-6 py-3">
+                <Gift className="h-4 w-4 text-indigo-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">Member Giveaways</p>
+                  <p className="text-xs text-gray-500">Eligible for exclusive member giveaways</p>
+                </div>
+                <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                  Eligible
+                </span>
+              </div>
+              <div className="flex items-center gap-3 px-6 py-3">
+                <Music className="h-4 w-4 text-indigo-400 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">Free Weekend Student Practice</p>
+                  <p className="text-xs text-gray-500">Free access to weekend practice sessions</p>
+                </div>
+                <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                  Included
+                </span>
+              </div>
             </div>
           </CardContent>
         </Card>

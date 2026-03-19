@@ -7,7 +7,7 @@ import {
 } from "@/lib/services/subscription-service";
 import { getProduct } from "@/lib/services/product-store";
 import { getTerm } from "@/lib/services/term-store";
-import type { PaymentMethod, ProductType, SubscriptionStatus } from "@/types/domain";
+import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
 const VALID_STATUSES = new Set<string>([
   "active",
@@ -20,9 +20,18 @@ const VALID_STATUSES = new Set<string>([
 const VALID_PAYMENT_METHODS = new Set<string>([
   "stripe",
   "cash",
+  "card",
   "bank_transfer",
+  "revolut",
   "manual",
   "complimentary",
+]);
+
+const VALID_PAYMENT_STATUSES = new Set<string>([
+  "paid",
+  "pending",
+  "complimentary",
+  "waived",
 ]);
 
 function parseCredits(raw: string | null): number | null {
@@ -38,6 +47,7 @@ export async function createSubscriptionAction(
   const productId = (formData.get("productId") as string)?.trim();
   const termId = (formData.get("termId") as string)?.trim() || null;
   const paymentMethodRaw = (formData.get("paymentMethod") as string)?.trim();
+  const paymentStatusRaw = (formData.get("paymentStatus") as string)?.trim() || "paid";
   const autoRenew = formData.get("autoRenew") === "on" || formData.get("autoRenew") === "true";
   const notes = (formData.get("notes") as string)?.trim() || null;
   const selectedStyleId = (formData.get("selectedStyleId") as string)?.trim() || null;
@@ -47,6 +57,9 @@ export async function createSubscriptionAction(
   if (!productId) return { success: false, error: "Please select a product" };
   if (!paymentMethodRaw || !VALID_PAYMENT_METHODS.has(paymentMethodRaw)) {
     return { success: false, error: "Invalid payment method" };
+  }
+  if (!VALID_PAYMENT_STATUSES.has(paymentStatusRaw)) {
+    return { success: false, error: "Invalid payment status" };
   }
 
   const product = getProduct(productId);
@@ -88,6 +101,9 @@ export async function createSubscriptionAction(
     notes,
     termId,
     paymentMethod: paymentMethodRaw as PaymentMethod,
+    paymentStatus: paymentStatusRaw as SalePaymentStatus,
+    assignedBy: "Admin",
+    assignedAt: new Date().toISOString(),
     autoRenew,
     classesUsed: 0,
     classesPerTerm,

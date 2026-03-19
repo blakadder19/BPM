@@ -19,6 +19,7 @@ export async function getProducts(): Promise<MockProduct[]> {
 export async function createProduct(data: {
   name: string;
   description: string;
+  longDescription?: string | null;
   productType: ProductType;
   priceCents: number;
   totalCredits: number | null;
@@ -48,6 +49,7 @@ export async function updateProduct(
   patch: {
     name?: string;
     description?: string;
+    longDescription?: string | null;
     productType?: ProductType;
     priceCents?: number;
     totalCredits?: number | null;

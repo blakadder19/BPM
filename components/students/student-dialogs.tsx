@@ -33,7 +33,7 @@ const SUB_STATUS_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "paused", label: "Paused" },
   { value: "expired", label: "Expired" },
-  { value: "exhausted", label: "Exhausted" },
+  { value: "exhausted", label: "Finished" },
   { value: "cancelled", label: "Cancelled" },
 ];
 
@@ -415,10 +415,19 @@ export function DeactivateConfirmDialog({
 
 const PAYMENT_METHOD_OPTIONS = [
   { value: "cash", label: "Cash" },
+  { value: "card", label: "Card" },
   { value: "bank_transfer", label: "Bank Transfer" },
+  { value: "revolut", label: "Revolut" },
   { value: "stripe", label: "Stripe" },
-  { value: "manual", label: "Manual" },
+  { value: "manual", label: "Manual / Admin Grant" },
   { value: "complimentary", label: "Complimentary" },
+];
+
+const PAYMENT_STATUS_OPTIONS = [
+  { value: "paid", label: "Paid" },
+  { value: "pending", label: "Pending" },
+  { value: "complimentary", label: "Complimentary" },
+  { value: "waived", label: "Waived" },
 ];
 
 function groupProducts(products: MockProduct[]) {
@@ -568,18 +577,33 @@ export function AddSubscriptionDialog({
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="as-payment">Payment Method *</Label>
-              <select
-                id="as-payment"
-                name="paymentMethod"
-                className={SELECT_CLASS}
-                required
-              >
-                {PAYMENT_METHOD_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="as-payment">Payment Method *</Label>
+                <select
+                  id="as-payment"
+                  name="paymentMethod"
+                  className={SELECT_CLASS}
+                  required
+                >
+                  {PAYMENT_METHOD_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="as-paymentStatus">Payment Status</Label>
+                <select
+                  id="as-paymentStatus"
+                  name="paymentStatus"
+                  defaultValue="paid"
+                  className={SELECT_CLASS}
+                >
+                  {PAYMENT_STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {selectedProduct?.recurring && (

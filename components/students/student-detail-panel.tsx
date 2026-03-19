@@ -1,10 +1,12 @@
 "use client";
 
-import { Pencil, Plus } from "lucide-react";
+import { Pencil, Plus, Star } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { getAccessRule, describeAccess } from "@/config/product-access";
+import { deriveDisplayStatus } from "@/lib/domain/subscription-display-status";
+import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { StudentListItem } from "@/types/domain";
 import type {
   MockSubscription,
@@ -21,6 +23,7 @@ interface StudentDetailPanelProps {
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
+  benefits?: MemberBenefitsSummary | null;
   onAddSub: () => void;
   onEditSub: (sub: MockSubscription) => void;
   colSpan: number;
@@ -33,6 +36,7 @@ export function StudentDetailPanel({
   walletTransactions,
   bookings,
   penalties,
+  benefits,
   onAddSub,
   onEditSub,
   colSpan,
@@ -79,6 +83,31 @@ export function StudentDetailPanel({
             <DL label="Notes" value={student.notes ?? "—"} />
           </Section>
 
+          {/* ── Member Benefits (admin view) ── */}
+          {benefits?.isMember && (
+            <Section title="Member Benefits">
+              <div className="flex flex-wrap gap-2">
+                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                  benefits.birthdayWeekEligible
+                    ? benefits.birthdayFreeClassUsed
+                      ? "bg-gray-100 text-gray-600"
+                      : "bg-green-100 text-green-700"
+                    : "bg-gray-100 text-gray-500"
+                }`}>
+                  Birthday class: {benefits.birthdayWeekEligible
+                    ? benefits.birthdayFreeClassUsed ? "used" : "eligible"
+                    : "not birthday week"}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                  Giveaway eligible
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                  Free Student Practice
+                </span>
+              </div>
+            </Section>
+          )}
+
           {/* ── Subscriptions section ── */}
           <Section
             title="Subscriptions"
@@ -96,18 +125,21 @@ export function StudentDetailPanel({
               <p className="text-sm text-gray-400">No subscriptions yet.</p>
             ) : (
               <div className="space-y-2">
+                {activeSubs.length > 0 && (
+                  <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                    Active Products ({activeSubs.length})
+                  </p>
+                )}
                 {activeSubs.map((sub) => (
-                  <SubCard key={sub.id} sub={sub} termsById={termsById} onEdit={onEditSub} />
+                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} onEdit={onEditSub} />
                 ))}
                 {inactiveSubs.length > 0 && (
                   <>
-                    {activeSubs.length > 0 && (
-                      <p className="pt-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                        History
-                      </p>
-                    )}
+                    <p className="pt-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                      Product History ({inactiveSubs.length})
+                    </p>
                     {inactiveSubs.map((sub) => (
-                      <SubCard key={sub.id} sub={sub} termsById={termsById} onEdit={onEditSub} />
+                      <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} onEdit={onEditSub} />
                     ))}
                   </>
                 )}
@@ -244,26 +276,48 @@ function DL({ label, value }: { label: string; value: string }) {
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   stripe: "Stripe",
   cash: "Cash",
+  card: "Card",
   bank_transfer: "Bank Transfer",
+  revolut: "Revolut",
   manual: "Manual",
   complimentary: "Complimentary",
 };
 
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  paid: "Paid",
+  pending: "Pending",
+  complimentary: "Comp",
+  waived: "Waived",
+};
+
 function SubCard({
   sub,
+  allStudentSubs,
   termsById,
   onEdit,
 }: {
   sub: MockSubscription;
+  allStudentSubs: MockSubscription[];
   termsById: Map<string, MockTerm>;
   onEdit: (sub: MockSubscription) => void;
 }) {
   const rule = getAccessRule(sub.productId);
   const term = sub.termId ? termsById.get(sub.termId) : null;
+  const isActive = sub.status === "active";
+  const displayStatus = deriveDisplayStatus(sub, allStudentSubs);
+
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm">
-      <span className="font-medium text-gray-900">{sub.productName}</span>
-      <StatusBadge status={sub.status} />
+    <div
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-4 py-3 text-sm ${
+        isActive
+          ? "border-gray-200 bg-white"
+          : "border-gray-100 bg-gray-50 opacity-80"
+      }`}
+    >
+      <span className={`font-medium ${isActive ? "text-gray-900" : "text-gray-500"}`}>
+        {sub.productName}
+      </span>
+      <StatusBadge status={displayStatus} />
       {sub.productType === "membership" && sub.classesPerTerm !== null ? (
         <span className="text-gray-500">
           Used {sub.classesUsed} / {sub.classesPerTerm} · {sub.classesPerTerm - sub.classesUsed} left
@@ -286,6 +340,11 @@ function SubCard({
         </span>
       )}
       <Badge variant="default">{PAYMENT_METHOD_LABELS[sub.paymentMethod] ?? sub.paymentMethod}</Badge>
+      {sub.paymentStatus && sub.paymentStatus !== "paid" && (
+        <Badge variant="warning">
+          {PAYMENT_STATUS_LABELS[sub.paymentStatus] ?? sub.paymentStatus}
+        </Badge>
+      )}
       {sub.autoRenew && (
         <span className="text-[10px] text-indigo-600 font-medium">Auto-renew</span>
       )}
@@ -301,6 +360,12 @@ function SubCard({
         <span className="text-xs text-gray-400">{describeAccess(rule)}</span>
       )}
       {rule?.isProvisional && <StatusBadge status="provisional" />}
+      {sub.assignedBy && (
+        <span className="text-xs text-gray-400">
+          Assigned by {sub.assignedBy}
+          {sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}
+        </span>
+      )}
       {sub.notes && (
         <span className="w-full text-xs text-gray-400 italic">{sub.notes}</span>
       )}

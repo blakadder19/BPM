@@ -5,7 +5,7 @@ import {
   updateSubscription as mockUpdate,
 } from "@/lib/services/subscription-store";
 import type { MockSubscription } from "@/lib/mock-data";
-import type { PaymentMethod, ProductType, SubscriptionStatus } from "@/types/domain";
+import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -31,6 +31,9 @@ export async function createSubscription(data: {
   notes: string | null;
   termId: string | null;
   paymentMethod: PaymentMethod;
+  paymentStatus?: SalePaymentStatus;
+  assignedBy?: string | null;
+  assignedAt?: string;
   autoRenew: boolean;
   classesUsed: number;
   classesPerTerm: number | null;
@@ -58,6 +61,7 @@ export async function updateSubscription(
     notes?: string | null;
     termId?: string | null;
     paymentMethod?: PaymentMethod;
+    paymentStatus?: SalePaymentStatus;
     autoRenew?: boolean;
     classesUsed?: number;
     classesPerTerm?: number | null;
