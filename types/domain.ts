@@ -131,8 +131,7 @@ export type BookingSource = "subscription" | "drop_in" | "admin" | "waitlist_pro
 export type WaitlistStatus = "waiting" | "offered" | "promoted" | "expired";
 export type AttendanceMark = "present" | "absent" | "late" | "excused";
 
-/** TODO: add "qr" when QR check-in is implemented */
-export type CheckInMethod = "manual" | "qr";
+export type CheckInMethod = "manual" | "qr" | "self";
 
 export interface Booking {
   id: string;
@@ -252,7 +251,7 @@ export interface Payment {
 // ── Ops ─────────────────────────────────────────────────────
 
 export type PenaltyReason = "late_cancel" | "no_show";
-export type PenaltyResolution = "credit_deducted" | "monetary_pending" | "waived";
+export type PenaltyResolution = "credit_deducted" | "monetary_pending" | "waived" | "attendance_corrected";
 
 export interface Penalty {
   id: string;

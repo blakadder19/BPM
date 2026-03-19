@@ -22,7 +22,7 @@ export default async function PenaltiesPage({
 
   if (user.role === "student") {
     const mine: StudentPenaltyView[] = svc.penalties
-      .filter((p) => p.studentName === user.fullName)
+      .filter((p) => p.studentName === user.fullName && p.resolution !== "attendance_corrected")
       .map((p) => ({
         id: p.id,
         classTitle: p.classTitle,

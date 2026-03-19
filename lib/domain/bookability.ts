@@ -65,6 +65,7 @@ export interface BookabilityContext {
   terms: TermLike[];
   accessRulesMap: Map<string, ProductAccessRule>;
   studentPreferredRole: DanceRole | null;
+  codeOfConductAccepted: boolean;
 }
 
 // ── Engine ──────────────────────────────────────────────────

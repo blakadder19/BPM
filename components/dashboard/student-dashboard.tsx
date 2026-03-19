@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -11,12 +12,14 @@ import {
   Clock,
   CreditCard,
   RefreshCw,
+  ScrollText,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
+import { CocAcceptanceDialog } from "@/components/booking/coc-acceptance-dialog";
 import { formatDate, formatCents } from "@/lib/utils";
 import type { ProductType } from "@/types/domain";
 
@@ -66,6 +69,7 @@ interface StudentDashboardProps {
   termInfo?: StudentTermInfo | null;
   entitlements?: StudentEntitlementSummary[];
   waitlistedCount?: number;
+  codeOfConductAccepted?: boolean;
 }
 
 export function StudentDashboard({
@@ -75,6 +79,7 @@ export function StudentDashboard({
   termInfo,
   entitlements = [],
   waitlistedCount = 0,
+  codeOfConductAccepted,
 }: StudentDashboardProps) {
   const firstName = fullName.split(" ")[0];
   const unresolvedPenalties = penalties.filter(
@@ -103,6 +108,11 @@ export function StudentDashboard({
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Code of Conduct Banner */}
+      {codeOfConductAccepted === false && (
+        <CocBanner />
       )}
 
       {/* Stats */}
@@ -198,10 +208,15 @@ export function StudentDashboard({
                   <div className="flex items-center gap-2 shrink-0">
                     {e.productType === "membership" && e.classesPerTerm !== null && (
                       <span className="text-sm font-medium text-gray-700">
-                        {e.classesPerTerm - e.classesUsed} / {e.classesPerTerm} left
+                        Used {e.classesUsed} / {e.classesPerTerm} · {e.classesPerTerm - e.classesUsed} left
                       </span>
                     )}
-                    {e.productType !== "membership" && e.remainingCredits !== null && (
+                    {e.productType !== "membership" && e.remainingCredits !== null && e.totalCredits !== null && (
+                      <span className="text-sm font-medium text-gray-700">
+                        Used {e.totalCredits - e.remainingCredits} / {e.totalCredits} · {e.remainingCredits} left
+                      </span>
+                    )}
+                    {e.productType !== "membership" && e.remainingCredits !== null && e.totalCredits === null && (
                       <span className="text-sm font-medium text-gray-700">
                         {e.remainingCredits} credit{e.remainingCredits !== 1 ? "s" : ""} left
                       </span>
@@ -321,5 +336,36 @@ export function StudentDashboard({
         </Card>
       )}
     </div>
+  );
+}
+
+function CocBanner() {
+  const [showDialog, setShowDialog] = useState(false);
+
+  return (
+    <>
+      <Card className="border-amber-200 bg-amber-50">
+        <CardContent className="flex items-center gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-amber-100">
+            <ScrollText className="h-6 w-6 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-900">Code of Conduct Required</p>
+            <p className="text-xs text-amber-700">
+              Please review and accept the Code of Conduct before booking any classes.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setShowDialog(true)}>
+            Review & Accept
+          </Button>
+        </CardContent>
+      </Card>
+      {showDialog && (
+        <CocAcceptanceDialog
+          onClose={() => setShowDialog(false)}
+          onAccepted={() => setShowDialog(false)}
+        />
+      )}
+    </>
   );
 }

@@ -1,9 +1,11 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
+import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getSubscriptions } from "@/lib/services/subscription-store";
 import { isClassInFuture } from "@/lib/domain/datetime";
+import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { STUDENTS, DANCE_STYLES } from "@/lib/mock-data";
 import { StudentBookings } from "@/components/booking/student-bookings";
 import { AdminBookings } from "@/components/booking/admin-bookings";
@@ -45,6 +47,7 @@ export interface BookingView {
   leaderCount: number;
   followerCount: number;
   waitlistCount: number;
+  checkInToken: string | null;
 }
 
 export default async function BookingsPage({
@@ -125,13 +128,22 @@ export default async function BookingsPage({
       leaderCount: activeForClass.filter((x) => x.danceRole === "leader").length,
       followerCount: activeForClass.filter((x) => x.danceRole === "follower").length,
       waitlistCount: waitlistForClass.length,
+      checkInToken: b.checkInToken ?? null,
     };
   }
 
   if (user.role === "student") {
+    const attSvc = getAttendanceService();
     const mine = allBookings
       .filter((b) => b.studentName === user.fullName)
-      .map(enrichBooking);
+      .map(enrichBooking)
+      .map((b) => {
+        const attRecord = attSvc.getRecord(b.classId ?? "", b.studentId);
+        return {
+          ...b,
+          status: resolveStudentVisibleStatus(b.status, attRecord?.status),
+        };
+      });
 
     const myWaitlist = allWaitlist
       .filter((w) => w.studentName === user.fullName && w.status === "waiting")

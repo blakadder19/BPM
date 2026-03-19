@@ -9,6 +9,8 @@ import { getTerms } from "@/lib/services/term-store";
 import { getAccessRulesMap } from "@/config/product-access";
 import { STUDENTS, DANCE_STYLES } from "@/lib/mock-data";
 import { computeBookability, type BookabilityContext, type ClassInstanceInfo } from "@/lib/domain/bookability";
+import { hasAcceptedCurrentVersion } from "@/lib/services/coc-store";
+import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import type { DanceRole } from "@/types/domain";
 
 export interface BookingResult {
@@ -135,7 +137,12 @@ export async function createStudentBooking(input: {
     terms,
     accessRulesMap,
     studentPreferredRole: danceRole ?? student.preferredRole,
+    codeOfConductAccepted: hasAcceptedCurrentVersion(student.id, CURRENT_CODE_OF_CONDUCT.version),
   };
+
+  if (!ctx.codeOfConductAccepted) {
+    return { success: false, error: "You must accept the Code of Conduct before booking." };
+  }
 
   const result = computeBookability(ctx);
 

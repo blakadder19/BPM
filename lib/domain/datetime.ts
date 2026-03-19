@@ -9,7 +9,15 @@
  * explicit Europe/Dublin handling here.
  */
 
-const ATTENDANCE_CLOSURE_MINUTES = 60;
+import { getSettings } from "@/lib/services/settings-store";
+
+function getClosureMinutes(): number {
+  try {
+    return getSettings().attendanceClosureMinutes;
+  } catch {
+    return 60;
+  }
+}
 
 export function classStartDT(date: string, startTime: string): Date {
   return new Date(`${date}T${startTime}:00`);
@@ -44,8 +52,9 @@ export function isClassInFuture(date: string, startTime: string): boolean {
  * After this point, unchecked confirmed bookings should be marked as missed.
  */
 export function isAfterClosureWindow(date: string, startTime: string): boolean {
+  const mins = getClosureMinutes();
   const closure = classStartDT(date, startTime);
-  closure.setMinutes(closure.getMinutes() + ATTENDANCE_CLOSURE_MINUTES);
+  closure.setMinutes(closure.getMinutes() + mins);
   return getNow() > closure;
 }
 
@@ -55,7 +64,8 @@ export function isAfterClosureWindow(date: string, startTime: string): boolean {
 export function isCheckInOpen(date: string, startTime: string): boolean {
   const now = getNow();
   const start = classStartDT(date, startTime);
-  const closure = new Date(start.getTime() + ATTENDANCE_CLOSURE_MINUTES * 60_000);
+  const mins = getClosureMinutes();
+  const closure = new Date(start.getTime() + mins * 60_000);
   return now >= start && now <= closure;
 }
 

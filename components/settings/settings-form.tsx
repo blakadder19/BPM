@@ -246,7 +246,42 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
             </CardContent>
           </Card>
 
-          {/* ── 5. Provisional / Pending Decisions ───────────── */}
+          {/* ── 5. Attendance & Check-In ────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Attendance & Check-In</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <NumberField
+                id="attendanceClosureMinutes"
+                label="Attendance closure window (minutes after class start)"
+                value={s.attendanceClosureMinutes}
+                onChange={(v) => setNum("attendanceClosureMinutes", v)}
+                hint="After this window, unchecked confirmed bookings become missed."
+              />
+              <NumberField
+                id="selfCheckInOpensMinutesBefore"
+                label="Self check-in opens (minutes before class)"
+                value={s.selfCheckInOpensMinutesBefore}
+                onChange={(v) => setNum("selfCheckInOpensMinutesBefore", v)}
+                hint="How early students can check themselves in."
+              />
+              <CheckboxField
+                name="selfCheckInEnabled"
+                label="Student self check-in enabled"
+                checked={s.selfCheckInEnabled}
+                onChange={(v) => setBool("selfCheckInEnabled", v)}
+              />
+              <CheckboxField
+                name="qrCheckInEnabled"
+                label="QR code check-in enabled"
+                checked={s.qrCheckInEnabled}
+                onChange={(v) => setBool("qrCheckInEnabled", v)}
+              />
+            </CardContent>
+          </Card>
+
+          {/* ── 6. Provisional / Pending Decisions ───────────── */}
           <Card className="lg:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2">

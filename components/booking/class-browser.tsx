@@ -27,17 +27,22 @@ import {
   studentRestoreBookingAction,
   checkRestoreEligibilityAction,
 } from "@/lib/actions/booking-student";
+import { CocAcceptanceDialog } from "./coc-acceptance-dialog";
 
 interface ClassBrowserProps {
   classes: ClassCardData[];
+  codeOfConductAccepted?: boolean;
 }
 
-export function ClassBrowser({ classes }: ClassBrowserProps) {
+export function ClassBrowser({ classes, codeOfConductAccepted = true }: ClassBrowserProps) {
   const [search, setSearch] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
   const [bookDialogTarget, setBookDialogTarget] = useState<ClassCardData | null>(null);
   const [restoreBookingId, setRestoreBookingId] = useState<string | null>(null);
+  const [showCocDialog, setShowCocDialog] = useState(false);
+  const [cocAccepted, setCocAccepted] = useState(codeOfConductAccepted);
+  const [pendingBookTarget, setPendingBookTarget] = useState<ClassCardData | null>(null);
 
   const restoreClassData = useMemo(() => {
     if (!restoreBookingId) return null;
@@ -93,7 +98,21 @@ export function ClassBrowser({ classes }: ClassBrowserProps) {
   }, [filtered]);
 
   function handleBook(data: ClassCardData) {
+    if (!cocAccepted) {
+      setPendingBookTarget(data);
+      setShowCocDialog(true);
+      return;
+    }
     setBookDialogTarget(data);
+  }
+
+  function handleCocAccepted() {
+    setCocAccepted(true);
+    setShowCocDialog(false);
+    if (pendingBookTarget) {
+      setBookDialogTarget(pendingBookTarget);
+      setPendingBookTarget(null);
+    }
   }
 
   function handleRestore(bookingId: string) {
@@ -169,6 +188,7 @@ export function ClassBrowser({ classes }: ClassBrowserProps) {
                     data={c}
                     onBook={handleBook}
                     onRestore={handleRestore}
+                    onAcceptCoc={!cocAccepted ? () => setShowCocDialog(true) : undefined}
                   />
                 ))}
               </div>
@@ -203,6 +223,16 @@ export function ClassBrowser({ classes }: ClassBrowserProps) {
           bookingId={restoreBookingId}
           classData={restoreClassData}
           onClose={() => setRestoreBookingId(null)}
+        />
+      )}
+
+      {showCocDialog && (
+        <CocAcceptanceDialog
+          onClose={() => {
+            setShowCocDialog(false);
+            setPendingBookTarget(null);
+          }}
+          onAccepted={handleCocAccepted}
         />
       )}
     </div>

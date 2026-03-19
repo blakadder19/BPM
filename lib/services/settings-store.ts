@@ -42,6 +42,12 @@ export interface AppSettings {
   // Waitlist
   waitlistOfferExpiryHours: number;
 
+  // Attendance & Check-in
+  attendanceClosureMinutes: number;
+  selfCheckInEnabled: boolean;
+  selfCheckInOpensMinutesBefore: number;
+  qrCheckInEnabled: boolean;
+
   // Provisional notes
   provisionalNotes: string;
 }
@@ -71,6 +77,11 @@ function defaults(): AppSettings {
     studentPracticeBookable: STUDENT_PRACTICE_IS_BOOKABLE,
 
     waitlistOfferExpiryHours: WAITLIST_OFFER_EXPIRY_HOURS,
+
+    attendanceClosureMinutes: 60,
+    selfCheckInEnabled: true,
+    selfCheckInOpensMinutesBefore: 15,
+    qrCheckInEnabled: true,
 
     provisionalNotes: DEFAULT_PROVISIONAL_NOTES,
   };

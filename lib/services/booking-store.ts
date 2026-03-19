@@ -6,8 +6,9 @@
 
 import { BookingService, type ClassSnapshot, type StoredBooking, type StoredWaitlistEntry } from "./booking-service";
 import { BOOKABLE_CLASSES, BOOKINGS, WAITLIST_ENTRIES, DANCE_STYLES } from "@/lib/mock-data";
+import { generateCheckInToken } from "@/lib/domain/checkin-token";
 
-const STORE_VERSION = 4;
+const STORE_VERSION = 5;
 
 function buildClassSnapshots(): ClassSnapshot[] {
   return BOOKABLE_CLASSES.map((bc) => {
@@ -46,6 +47,7 @@ function buildBookings(): StoredBooking[] {
     adminNote: null,
     bookedAt: b.bookedAt,
     cancelledAt: null,
+    checkInToken: b.status === "confirmed" || b.status === "checked_in" ? generateCheckInToken() : null,
   }));
 }
 
@@ -80,6 +82,7 @@ export function getBookingService(): BookingService {
           subscriptionId: b.subscriptionId ?? null,
           subscriptionName: b.subscriptionName ?? null,
           adminNote: b.adminNote ?? null,
+          checkInToken: b.checkInToken ?? null,
         }))
       : buildBookings();
 

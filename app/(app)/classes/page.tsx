@@ -11,6 +11,8 @@ import { getAccessRulesMap } from "@/config/product-access";
 import { DANCE_STYLES, STUDENTS } from "@/lib/mock-data";
 import { isClassInFuture } from "@/lib/domain/datetime";
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
+import { hasAcceptedCurrentVersion } from "@/lib/services/coc-store";
+import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { AdminTemplates } from "@/components/classes/admin-templates";
 import { ClassBrowser } from "@/components/booking/class-browser";
 import type { ClassCardData } from "@/components/booking/student-class-card";
@@ -120,6 +122,7 @@ export default async function ClassesPage() {
         terms,
         accessRulesMap,
         studentPreferredRole: student?.preferredRole ?? null,
+        codeOfConductAccepted: hasAcceptedCurrentVersion(studentId, CURRENT_CODE_OF_CONDUCT.version),
       };
 
       const bookability = computeBookability(ctx);
@@ -141,7 +144,8 @@ export default async function ClassesPage() {
       };
     });
 
-    return <ClassBrowser classes={classCards} />;
+    const cocAccepted = hasAcceptedCurrentVersion(studentId, CURRENT_CODE_OF_CONDUCT.version);
+    return <ClassBrowser classes={classCards} codeOfConductAccepted={cocAccepted} />;
   }
 
   const templates = getTemplates().map((t) => ({ ...t }));

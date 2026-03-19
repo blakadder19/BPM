@@ -6,8 +6,12 @@ import { getSubscriptions } from "@/lib/services/subscription-store";
 import { getTerms } from "@/lib/services/term-store";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
 import { getTodayStr, isClassInFuture } from "@/lib/domain/datetime";
-import { closeAttendanceForPastClasses } from "@/lib/actions/attendance";
+import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
+import { getAttendanceService } from "@/lib/services/attendance-store";
+import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { STUDENTS } from "@/lib/mock-data";
+import { hasAcceptedCurrentVersion } from "@/lib/services/coc-store";
+import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import {
   StudentDashboard,
@@ -21,7 +25,7 @@ export default async function DashboardPage() {
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
-  await closeAttendanceForPastClasses();
+  runAttendanceClosure();
 
   if (user.role === "student") {
     const bookingSvc = getBookingService();
@@ -31,6 +35,8 @@ export default async function DashboardPage() {
       (s) => s.fullName === user.fullName || s.email === user.email
     );
 
+    const attendanceSvc = getAttendanceService();
+
     const upcomingBookings: StudentBookingSummary[] = bookingSvc.bookings
       .filter(
         (b) =>
@@ -39,6 +45,7 @@ export default async function DashboardPage() {
       )
       .map((b) => {
         const cls = bookingSvc.getClass(b.bookableClassId);
+        const attRecord = attendanceSvc.getRecord(b.bookableClassId, b.studentId);
         return {
           id: b.id,
           classTitle: cls?.title ?? "Unknown",
@@ -47,7 +54,7 @@ export default async function DashboardPage() {
           endTime: cls?.endTime ?? "",
           location: cls?.location ?? "",
           danceRole: b.danceRole,
-          status: b.status,
+          status: resolveStudentVisibleStatus(b.status, attRecord?.status),
         };
       })
       .filter((b) => isClassInFuture(b.date, b.startTime))
@@ -57,7 +64,7 @@ export default async function DashboardPage() {
       );
 
     const penalties: StudentPenaltySummary[] = penaltySvc.penalties
-      .filter((p) => p.studentName === user.fullName)
+      .filter((p) => p.studentName === user.fullName && p.resolution !== "attendance_corrected")
       .map((p) => ({
         id: p.id,
         classTitle: p.classTitle,
@@ -101,6 +108,10 @@ export default async function DashboardPage() {
       ? bookingSvc.getWaitlistForStudent(student.id).length
       : 0;
 
+    const cocAccepted = student
+      ? hasAcceptedCurrentVersion(student.id, CURRENT_CODE_OF_CONDUCT.version)
+      : false;
+
     return (
       <StudentDashboard
         fullName={user.fullName}
@@ -109,6 +120,7 @@ export default async function DashboardPage() {
         termInfo={termInfo}
         entitlements={entitlements}
         waitlistedCount={waitlistedCount}
+        codeOfConductAccepted={cocAccepted}
       />
     );
   }

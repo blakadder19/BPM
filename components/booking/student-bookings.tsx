@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarPlus, Inbox, XCircle, RotateCcw } from "lucide-react";
+import { CalendarPlus, Inbox, XCircle, RotateCcw, QrCode, LogIn } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -21,6 +21,8 @@ import { checkLateCancelStatusAction } from "@/lib/actions/bookings-admin";
 import { studentCancelBookingAction } from "@/lib/actions/booking-student";
 import { studentRestoreBookingAction, checkRestoreEligibilityAction } from "@/lib/actions/booking-student";
 import { studentLeaveWaitlistAction } from "@/lib/actions/waitlist-student";
+import { studentSelfCheckInAction } from "@/lib/actions/checkin";
+import { CheckInQrDialog } from "./checkin-qr";
 import type { BookingView, StudentWaitlistView } from "@/app/(app)/bookings/page";
 
 export function StudentBookings({
@@ -69,6 +71,8 @@ export function StudentBookings({
 
   const [cancelTarget, setCancelTarget] = useState<BookingView | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<BookingView | null>(null);
+  const [qrTarget, setQrTarget] = useState<BookingView | null>(null);
+  const [checkInTarget, setCheckInTarget] = useState<BookingView | null>(null);
 
   return (
     <div className="space-y-6">
@@ -111,6 +115,10 @@ export function StudentBookings({
                   booking={b}
                   showCancel={b.status === "confirmed"}
                   onCancel={() => setCancelTarget(b)}
+                  showCheckIn={b.status === "confirmed"}
+                  onCheckIn={() => setCheckInTarget(b)}
+                  showQr={b.status === "confirmed" && !!b.checkInToken}
+                  onShowQr={() => setQrTarget(b)}
                 />
               ))
             )}
@@ -172,6 +180,23 @@ export function StudentBookings({
           onClose={() => setRestoreTarget(null)}
         />
       )}
+
+      {qrTarget && qrTarget.checkInToken && (
+        <CheckInQrDialog
+          token={qrTarget.checkInToken}
+          classTitle={qrTarget.classTitle}
+          date={formatDate(qrTarget.date)}
+          startTime={formatTime(qrTarget.startTime)}
+          onClose={() => setQrTarget(null)}
+        />
+      )}
+
+      {checkInTarget && (
+        <StudentCheckInDialog
+          booking={checkInTarget}
+          onClose={() => setCheckInTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -182,12 +207,20 @@ function BookingCard({
   onCancel,
   showRestore,
   onRestore,
+  showCheckIn,
+  onCheckIn,
+  showQr,
+  onShowQr,
 }: {
   booking: BookingView;
   showCancel?: boolean;
   onCancel?: () => void;
   showRestore?: boolean;
   onRestore?: () => void;
+  showCheckIn?: boolean;
+  onCheckIn?: () => void;
+  showQr?: boolean;
+  onShowQr?: () => void;
 }) {
   return (
     <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -202,6 +235,18 @@ function BookingCard({
       </div>
       <div className="flex items-center gap-2">
         <StatusBadge status={b.status} />
+        {showQr && onShowQr && (
+          <Button variant="outline" size="sm" onClick={onShowQr}>
+            <QrCode className="h-4 w-4 mr-1" />
+            QR
+          </Button>
+        )}
+        {showCheckIn && onCheckIn && (
+          <Button variant="outline" size="sm" onClick={onCheckIn} className="text-emerald-700 border-emerald-200 hover:bg-emerald-50">
+            <LogIn className="h-4 w-4 mr-1" />
+            Check In
+          </Button>
+        )}
         {showCancel && onCancel && (
           <Button variant="ghost" size="sm" onClick={onCancel}>
             <XCircle className="h-4 w-4 mr-1" />
@@ -507,6 +552,86 @@ function StudentRestoreDialog({
                 disabled={isPending || !eligibility?.eligible}
               >
                 {isPending ? "Restoring…" : "Restore Booking"}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function StudentCheckInDialog({
+  booking,
+  onClose,
+}: {
+  booking: BookingView;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState<{ success: boolean; error?: string } | null>(null);
+
+  function handleCheckIn() {
+    startTransition(async () => {
+      const res = await studentSelfCheckInAction(booking.id);
+      setResult(res);
+      if (res.success) {
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Self Check-In</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          {result ? (
+            result.success ? (
+              <div className="flex flex-col items-center gap-2 py-4">
+                <div className="rounded-full bg-emerald-100 p-3">
+                  <LogIn className="h-6 w-6 text-emerald-600" />
+                </div>
+                <p className="text-lg font-semibold text-gray-900">Checked In</p>
+                <p className="text-sm text-gray-500">
+                  You are checked in for {booking.classTitle}.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+                {result.error}
+              </div>
+            )
+          ) : (
+            <>
+              <p className="text-sm text-gray-600">
+                Check in for <span className="font-medium text-gray-900">{booking.classTitle}</span>
+                <br />
+                {formatDate(booking.date)} at {formatTime(booking.startTime)}
+              </p>
+              <p className="text-xs text-gray-400">
+                Self check-in is available starting 15 minutes before class and
+                until the attendance closure window. You can also show your QR
+                code to staff.
+              </p>
+            </>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          {result ? (
+            <Button onClick={onClose}>
+              {result.success ? "Done" : "Close"}
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button onClick={handleCheckIn} disabled={isPending}>
+                {isPending ? "Checking in…" : "Confirm Check-In"}
               </Button>
             </>
           )}

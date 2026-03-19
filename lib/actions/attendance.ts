@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
-import { isAfterClosureWindow } from "@/lib/domain/datetime";
-import { getInstances } from "@/lib/services/schedule-store";
+import { getSubscriptions } from "@/lib/services/subscription-store";
+import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import type { AttendanceMark, CheckInMethod, ClassType } from "@/types/domain";
 
 export interface MarkAttendanceResult {
@@ -25,6 +25,51 @@ export interface MarkAttendanceResult {
  * - changing FROM absent to anything else → waive existing pending penalty
  * - excused → no penalty, booking stays as-is
  */
+/**
+ * Whether an attendance status means the student attended.
+ */
+function isAttended(status: AttendanceMark): boolean {
+  return status === "present" || status === "late";
+}
+
+/**
+ * Whether an attendance status means the student did NOT attend.
+ */
+function isNotAttended(status: AttendanceMark): boolean {
+  return status === "absent" || status === "excused";
+}
+
+/**
+ * Adjust entitlement credits/classesUsed when attendance changes.
+ * present/late = consume (no-op if already consumed)
+ * absent/excused = restore (give back)
+ */
+function adjustEntitlement(
+  bookingSubscriptionId: string | null,
+  previousConsumed: boolean,
+  newConsumed: boolean,
+) {
+  if (!bookingSubscriptionId || previousConsumed === newConsumed) return;
+
+  const subs = getSubscriptions();
+  const sub = subs.find((s) => s.id === bookingSubscriptionId);
+  if (!sub) return;
+
+  if (previousConsumed && !newConsumed) {
+    if (sub.productType === "membership") {
+      sub.classesUsed = Math.max(0, sub.classesUsed - 1);
+    } else if (sub.remainingCredits !== null) {
+      sub.remainingCredits += 1;
+    }
+  } else if (!previousConsumed && newConsumed) {
+    if (sub.productType === "membership") {
+      sub.classesUsed += 1;
+    } else if (sub.remainingCredits !== null) {
+      sub.remainingCredits = Math.max(0, sub.remainingCredits - 1);
+    }
+  }
+}
+
 export async function markStudentAttendance(params: {
   bookableClassId: string;
   studentId: string;
@@ -77,19 +122,46 @@ export async function markStudentAttendance(params: {
     };
   }
 
-  if (
-    (params.status === "present" || params.status === "late") &&
-    params.bookingId
-  ) {
-    bookingSvc.checkInBooking(params.bookingId);
+  const previousStatus = outcome.type === "updated" ? outcome.previousStatus : null;
+  const newStatus = params.status;
+
+  // ── Booking status synchronization ──
+  // present/late → checked_in; absent/excused → revert to confirmed
+  if (params.bookingId) {
+    if (isAttended(newStatus)) {
+      bookingSvc.checkInBooking(params.bookingId);
+    } else if (isNotAttended(newStatus)) {
+      bookingSvc.revertCheckIn(params.bookingId);
+    }
   }
 
+  // ── Credit/class restoration logic ──
+  // Booking already consumed at booking time. Absent/excused = restore.
+  // If changing from absent→present, re-consume.
+  if (params.bookingId) {
+    const booking = bookingSvc.bookings.find((b) => b.id === params.bookingId);
+    const subId = booking?.subscriptionId ?? null;
+
+    const prevConsumed = previousStatus ? isAttended(previousStatus) || previousStatus === null : true;
+    const newConsumed = isAttended(newStatus);
+
+    if (previousStatus === null) {
+      // First time marking: credit was consumed at booking time.
+      // If not attended, restore.
+      if (!newConsumed) {
+        adjustEntitlement(subId, true, false);
+      }
+    } else {
+      adjustEntitlement(subId, prevConsumed, newConsumed);
+    }
+  }
+
+  // ── Penalty logic ──
   let penaltyCreated = false;
   let penaltyDescription: string | null = null;
 
-  const wasAbsentBefore =
-    outcome.type === "updated" && outcome.previousStatus === "absent";
-  const isAbsentNow = params.status === "absent";
+  const wasAbsentBefore = previousStatus === "absent";
+  const isAbsentNow = newStatus === "absent";
 
   if (isAbsentNow) {
     const existing = penaltySvc
@@ -137,16 +209,18 @@ export async function markStudentAttendance(params: {
           p.bookableClassId === params.bookableClassId &&
           p.studentId === params.studentId &&
           p.reason === "no_show" &&
-          p.resolution === "monetary_pending"
+          (p.resolution === "monetary_pending" || p.resolution === "waived")
       );
     if (existing) {
-      penaltySvc.updateResolution(existing.id, "waived");
-      penaltyDescription = "No-show penalty auto-waived (attendance changed).";
+      penaltySvc.updateResolution(existing.id, "attendance_corrected");
+      penaltyDescription = "No-show penalty voided (attendance corrected).";
     }
   }
 
   revalidatePath("/attendance");
   revalidatePath("/penalties");
+  revalidatePath("/dashboard");
+  revalidatePath("/bookings");
 
   return {
     success: true,
@@ -158,59 +232,24 @@ export async function markStudentAttendance(params: {
 }
 
 /**
- * Close attendance for classes past the closure window (+60 min after start).
- * Confirmed bookings without check-in become "missed".
- * No penalty is created — no-show fees are OFF by default.
- *
- * This can be called on a cron, on page load, or manually by admin.
- * It is idempotent.
+ * Server action wrapper: runs attendance closure AND revalidates.
+ * Only call from actual server-action contexts (form actions, client invocations),
+ * never during page render. For render-safe usage, import runAttendanceClosure
+ * directly from lib/domain/attendance-closure.ts.
  */
 export async function closeAttendanceForPastClasses(): Promise<{
   classesProcessed: number;
   bookingsMarkedMissed: number;
 }> {
-  const bookingSvc = getBookingService();
-  const instances = getInstances();
-  const attendanceSvc = getAttendanceService();
+  const result = runAttendanceClosure();
 
-  let classesProcessed = 0;
-  let bookingsMarkedMissed = 0;
-
-  for (const cls of instances) {
-    if (!isAfterClosureWindow(cls.date, cls.startTime)) continue;
-
-    const unchecked = bookingSvc.getUncheckedBookingsForClass(cls.id);
-    if (unchecked.length === 0) continue;
-
-    classesProcessed++;
-
-    for (const booking of unchecked) {
-      const alreadyMarked = attendanceSvc
-        .getAllRecords()
-        .some(
-          (r) =>
-            r.bookableClassId === cls.id &&
-            r.studentId === booking.studentId &&
-            (r.status === "present" || r.status === "late")
-        );
-
-      if (alreadyMarked) {
-        bookingSvc.checkInBooking(booking.id);
-        continue;
-      }
-
-      bookingSvc.markMissed(booking.id);
-      bookingsMarkedMissed++;
-    }
-  }
-
-  if (bookingsMarkedMissed > 0) {
+  if (result.bookingsMarkedMissed > 0) {
     revalidatePath("/bookings");
     revalidatePath("/attendance");
     revalidatePath("/dashboard");
   }
 
-  return { classesProcessed, bookingsMarkedMissed };
+  return result;
 }
 
 /** Dev-only: remove all attendance records from the store. */

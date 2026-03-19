@@ -53,7 +53,8 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   intake_closed:    { label: "Intake Closed",  variant: "warning" },
   credit_deducted:  { label: "Resolved (credit)", variant: "success" },
   monetary_pending: { label: "Unresolved",     variant: "danger" },
-  waived:           { label: "Waived",         variant: "default" },
+  waived:                { label: "Waived",              variant: "default" },
+  attendance_corrected:  { label: "Attendance Corrected", variant: "default" },
 };
 
 interface StatusBadgeProps {

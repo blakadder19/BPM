@@ -126,10 +126,12 @@ export function StudentDetailPanel({
                       <span className="text-gray-600 truncate">{s.productName}</span>
                       <span className="font-medium text-gray-900">
                         {s.productType === "membership" && s.classesPerTerm !== null
-                          ? `${s.classesUsed} / ${s.classesPerTerm} classes`
+                          ? `Used ${s.classesUsed} / ${s.classesPerTerm} · ${s.classesPerTerm - s.classesUsed} left`
                           : s.remainingCredits === null
                             ? "∞"
-                            : `${s.remainingCredits}${s.totalCredits !== null ? ` / ${s.totalCredits}` : ""} credits`}
+                            : s.totalCredits !== null
+                              ? `Used ${s.totalCredits - s.remainingCredits} / ${s.totalCredits} · ${s.remainingCredits} left`
+                              : `${s.remainingCredits} credit${s.remainingCredits !== 1 ? "s" : ""} left`}
                       </span>
                     </div>
                   ))}
@@ -264,14 +266,15 @@ function SubCard({
       <StatusBadge status={sub.status} />
       {sub.productType === "membership" && sub.classesPerTerm !== null ? (
         <span className="text-gray-500">
-          Classes: {sub.classesUsed} / {sub.classesPerTerm}
+          Used {sub.classesUsed} / {sub.classesPerTerm} · {sub.classesPerTerm - sub.classesUsed} left
         </span>
       ) : (
         <span className="text-gray-500">
-          Credits:{" "}
           {sub.remainingCredits === null
             ? "∞"
-            : `${sub.remainingCredits}${sub.totalCredits !== null ? ` / ${sub.totalCredits}` : ""}`}
+            : sub.totalCredits !== null
+              ? `Used ${sub.totalCredits - sub.remainingCredits} / ${sub.totalCredits} · ${sub.remainingCredits} left`
+              : `${sub.remainingCredits} credit${sub.remainingCredits !== 1 ? "s" : ""} left`}
         </span>
       )}
       {term ? (

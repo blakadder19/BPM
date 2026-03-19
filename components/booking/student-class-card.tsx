@@ -36,9 +36,10 @@ interface StudentClassCardProps {
   data: ClassCardData;
   onBook: (data: ClassCardData) => void;
   onRestore?: (bookingId: string) => void;
+  onAcceptCoc?: () => void;
 }
 
-export function StudentClassCard({ data, onBook, onRestore }: StudentClassCardProps) {
+export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: StudentClassCardProps) {
   const b = data.bookability;
   const spotsLeft =
     data.maxCapacity != null ? data.maxCapacity - data.totalBooked : null;
@@ -125,20 +126,25 @@ export function StudentClassCard({ data, onBook, onRestore }: StudentClassCardPr
               ? () => onRestore(b.bookingId)
               : undefined
           }
+          onAcceptCoc={onAcceptCoc}
         />
       </div>
     </div>
   );
 }
 
+const COC_REASON_MATCH = /code of conduct/i;
+
 function BookabilityAction({
   bookability: b,
   onBook,
   onRestore,
+  onAcceptCoc,
 }: {
   bookability: SerializedBookability;
   onBook: () => void;
   onRestore?: () => void;
+  onAcceptCoc?: () => void;
 }) {
   switch (b.status) {
     case "bookable":
@@ -186,6 +192,16 @@ function BookabilityAction({
         </div>
       );
     case "blocked":
+      if (onAcceptCoc && COC_REASON_MATCH.test(b.reason)) {
+        return (
+          <div className="space-y-2">
+            <p className="text-center text-xs text-amber-700">{b.reason}</p>
+            <Button variant="secondary" className="w-full" onClick={onAcceptCoc}>
+              Accept Code of Conduct
+            </Button>
+          </div>
+        );
+      }
       return (
         <p className="text-center text-sm text-gray-500 py-1">{b.reason}</p>
       );

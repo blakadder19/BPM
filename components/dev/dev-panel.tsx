@@ -17,6 +17,8 @@ import {
   devAddPenalty,
   devWaivePenalty,
   devSwitchRole,
+  devAcceptCoc,
+  devRevokeCoc,
 } from "@/lib/actions/dev-tools";
 import type { DanceRole } from "@/types/domain";
 
@@ -115,6 +117,27 @@ export function DevPanel({ studentId, studentName }: DevPanelProps) {
               </div>
             </Section>
 
+            {/* Code of Conduct */}
+            <Section title="Code of Conduct" defaultOpen={false}>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-600">
+                  Status:{" "}
+                  <strong className={state.student.cocAccepted ? "text-emerald-600" : "text-red-600"}>
+                    {state.student.cocAccepted ? "Accepted" : "Not Accepted"}
+                  </strong>
+                </span>
+                {state.student.cocAccepted ? (
+                  <Btn onClick={() => act(() => devRevokeCoc(studentId))} disabled={isPending}>
+                    Revoke
+                  </Btn>
+                ) : (
+                  <Btn onClick={() => act(() => devAcceptCoc(studentId))} disabled={isPending}>
+                    Accept
+                  </Btn>
+                )}
+              </div>
+            </Section>
+
             {/* Entitlements */}
             <Section title={`Entitlements (${state.subscriptions.length})`} defaultOpen>
               {state.subscriptions.map((s) => (
@@ -122,10 +145,10 @@ export function DevPanel({ studentId, studentName }: DevPanelProps) {
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-gray-800 truncate">{s.productName}</p>
                     <p className="text-[10px] text-gray-400">
-                      {s.productType === "membership"
-                        ? `${s.classesUsed}/${s.classesPerTerm} used`
+                      {s.productType === "membership" && s.classesPerTerm !== null
+                        ? `Used ${s.classesUsed}/${s.classesPerTerm} · ${s.classesPerTerm - s.classesUsed} left`
                         : s.remainingCredits !== null
-                          ? `${s.remainingCredits} credits left`
+                          ? `${s.remainingCredits} credit${s.remainingCredits !== 1 ? "s" : ""} left`
                           : s.status}
                     </p>
                   </div>

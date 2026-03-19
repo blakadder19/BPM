@@ -41,11 +41,16 @@ export async function devGetStudentState(studentId: string) {
   const penaltySvc = getPenaltyService();
   const penalties = penaltySvc.penalties.filter((p) => p.studentId === studentId);
 
+  const { hasAcceptedCurrentVersion } = await import("@/lib/services/coc-store");
+  const { CURRENT_CODE_OF_CONDUCT } = await import("@/config/code-of-conduct");
+  const cocAccepted = hasAcceptedCurrentVersion(studentId, CURRENT_CODE_OF_CONDUCT.version);
+
   return {
     student: {
       id: student.id,
       fullName: student.fullName,
       preferredRole: student.preferredRole,
+      cocAccepted,
     },
     subscriptions: subs.map((s) => ({
       id: s.id,
@@ -371,4 +376,27 @@ export async function devSwitchRole(
   student.preferredRole = student.preferredRole === "leader" ? "follower" : "leader";
   revalidateAll();
   return { success: true, newRole: student.preferredRole };
+}
+
+// ── Code of Conduct mutations ───────────────────────────────
+
+export async function devAcceptCoc(
+  studentId: string
+): Promise<{ success: boolean; error?: string }> {
+  guardDev();
+  const { acceptCoc } = await import("@/lib/services/coc-store");
+  const { CURRENT_CODE_OF_CONDUCT } = await import("@/config/code-of-conduct");
+  acceptCoc(studentId, CURRENT_CODE_OF_CONDUCT.version);
+  revalidateAll();
+  return { success: true };
+}
+
+export async function devRevokeCoc(
+  studentId: string
+): Promise<{ success: boolean; error?: string }> {
+  guardDev();
+  const { revokeAcceptance } = await import("@/lib/services/coc-store");
+  revokeAcceptance(studentId);
+  revalidateAll();
+  return { success: true };
 }

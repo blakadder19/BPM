@@ -2,7 +2,7 @@ import { requireRole } from "@/lib/auth";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getTodayStr } from "@/lib/domain/datetime";
-import { closeAttendanceForPastClasses } from "@/lib/actions/attendance";
+import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { BOOKABLE_CLASSES, STUDENTS } from "@/lib/mock-data";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
 
@@ -16,7 +16,7 @@ export default async function AttendancePage({
   await requireRole(["admin", "teacher"]);
   const params = searchParams ? await searchParams : {};
 
-  await closeAttendanceForPastClasses();
+  runAttendanceClosure();
 
   const today = getTodayStr();
   const attendanceSvc = getAttendanceService();

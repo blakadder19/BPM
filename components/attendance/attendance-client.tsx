@@ -14,6 +14,7 @@ import {
   CalendarDays,
   Plus,
   Trash2,
+  QrCode,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDate, cn } from "@/lib/utils";
 import { markStudentAttendance } from "@/lib/actions/attendance";
+import { validateTokenCheckInAction } from "@/lib/actions/checkin";
 import type { AttendanceMark, ClassType } from "@/types/domain";
 import type { StoredAttendance } from "@/lib/services/attendance-service";
 
@@ -189,6 +191,8 @@ export function AttendanceClient({
         </nav>
       </div>
 
+      <TokenCheckInPanel />
+
       {activeTab === "today" ? (
         <TodayView
           mockToday={mockToday}
@@ -230,6 +234,72 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
     >
       {label}
     </button>
+  );
+}
+
+// ── Token Check-In Panel ────────────────────────────────────
+
+function TokenCheckInPanel() {
+  const router = useRouter();
+  const [token, setToken] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const [result, setResult] = useState<{
+    success: boolean;
+    studentName?: string;
+    classTitle?: string;
+    error?: string;
+  } | null>(null);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!token.trim()) return;
+    setResult(null);
+    startTransition(async () => {
+      const res = await validateTokenCheckInAction(token.trim());
+      setResult(res);
+      if (res.success) {
+        setToken("");
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <QrCode className="h-4 w-4 text-indigo-600" />
+        <h3 className="text-sm font-semibold text-indigo-900">QR / Token Check-In</h3>
+      </div>
+      <form onSubmit={handleSubmit} className="flex items-center gap-2">
+        <input
+          type="text"
+          value={token}
+          onChange={(e) => {
+            setToken(e.target.value);
+            setResult(null);
+          }}
+          placeholder="Enter or scan check-in token…"
+          className="flex-1 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-mono placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+        />
+        <Button type="submit" disabled={isPending || !token.trim()} size="sm">
+          {isPending ? "Validating…" : "Check In"}
+        </Button>
+      </form>
+      {result && (
+        <div
+          className={cn(
+            "mt-2 rounded-lg px-3 py-2 text-sm",
+            result.success
+              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              : "bg-red-50 text-red-700 border border-red-200"
+          )}
+        >
+          {result.success
+            ? `${result.studentName} checked in for ${result.classTitle}`
+            : result.error}
+        </div>
+      )}
+    </div>
   );
 }
 

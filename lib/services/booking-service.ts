@@ -16,6 +16,7 @@ import {
   reindexPositions,
 } from "@/lib/domain/waitlist-rules";
 import { generateId } from "@/lib/utils";
+import { generateCheckInToken } from "@/lib/domain/checkin-token";
 import type {
   ClassType,
   DanceRole,
@@ -40,6 +41,7 @@ export interface StoredBooking {
   adminNote: string | null;
   bookedAt: string;
   cancelledAt: string | null;
+  checkInToken: string | null;
 }
 
 export interface StoredWaitlistEntry {
@@ -229,6 +231,7 @@ export class BookingService {
       adminNote: null,
       bookedAt: now,
       cancelledAt: null,
+      checkInToken: generateCheckInToken(),
     };
     this.bookings.push(booking);
 
@@ -247,6 +250,14 @@ export class BookingService {
     if (booking.status !== "confirmed") return { type: "error", reason: "Booking is not active." };
     booking.status = "checked_in";
     return { type: "checked_in" };
+  }
+
+  revertCheckIn(bookingId: string): { type: "reverted" } | { type: "error"; reason: string } {
+    const booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking) return { type: "error", reason: "Booking not found." };
+    if (booking.status !== "checked_in") return { type: "error", reason: "Booking is not checked in." };
+    booking.status = "confirmed";
+    return { type: "reverted" };
   }
 
   cancelBooking(bookingId: string, cancelledAt?: Date): CancelOutcome {
@@ -319,6 +330,7 @@ export class BookingService {
           adminNote: null,
           bookedAt: new Date().toISOString(),
           cancelledAt: null,
+          checkInToken: generateCheckInToken(),
         };
         this.bookings.push(newBooking);
 
@@ -445,6 +457,7 @@ export class BookingService {
       adminNote: params.adminNote ?? null,
       bookedAt: now,
       cancelledAt: null,
+      checkInToken: generateCheckInToken(),
     };
     this.bookings.push(booking);
 
@@ -525,6 +538,7 @@ export class BookingService {
           adminNote: null,
           bookedAt: new Date().toISOString(),
           cancelledAt: null,
+          checkInToken: generateCheckInToken(),
         };
         this.bookings.push(newBooking);
         promoted = { studentName: entry.studentName, waitlistId: entry.id };
@@ -563,6 +577,7 @@ export class BookingService {
       adminNote: null,
       bookedAt: new Date().toISOString(),
       cancelledAt: null,
+      checkInToken: generateCheckInToken(),
     };
     this.bookings.push(booking);
 
@@ -612,6 +627,7 @@ export class BookingService {
     if (!capacity) {
       booking.status = "confirmed";
       booking.cancelledAt = null;
+      booking.checkInToken = generateCheckInToken();
       return { type: "restored", restoredTo: "confirmed" };
     }
 
@@ -620,6 +636,7 @@ export class BookingService {
     if (decision.allowed && !decision.waitlisted) {
       booking.status = "confirmed";
       booking.cancelledAt = null;
+      booking.checkInToken = generateCheckInToken();
       return { type: "restored", restoredTo: "confirmed" };
     }
 
@@ -670,6 +687,10 @@ export class BookingService {
     return this.bookings.filter(
       (b) => b.bookableClassId === classId && b.status === "confirmed"
     );
+  }
+
+  findByCheckInToken(token: string): StoredBooking | undefined {
+    return this.bookings.find((b) => b.checkInToken === token);
   }
 
   refreshClasses(classes: ClassSnapshot[]) {
