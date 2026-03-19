@@ -1,33 +1,124 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import Link from "next/link";
-import { CalendarDays, Clock, MapPin, Users, Inbox } from "lucide-react";
-import { BOOKABLE_CLASSES, styleRequiresRoleBalance } from "@/lib/mock-data";
-import { isBookableClassType } from "@/lib/domain/booking-rules";
+import { useState, useMemo, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { Inbox } from "lucide-react";
 import { formatDate, formatTime } from "@/lib/utils";
 import { SearchInput } from "@/components/ui/search-input";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { SelectFilter } from "@/components/ui/select-filter";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { StudentClassCard, type ClassCardData } from "./student-class-card";
+import {
+  StudentBookDialog,
+  type BookDialogClass,
+} from "./student-book-dialog";
+import {
+  studentRestoreBookingAction,
+  checkRestoreEligibilityAction,
+} from "@/lib/actions/booking-student";
 
-export function ClassBrowser() {
+interface ClassBrowserProps {
+  classes: ClassCardData[];
+}
+
+export function ClassBrowser({ classes }: ClassBrowserProps) {
   const [search, setSearch] = useState("");
+  const [styleFilter, setStyleFilter] = useState("");
+  const [levelFilter, setLevelFilter] = useState("");
+  const [bookDialogTarget, setBookDialogTarget] = useState<ClassCardData | null>(null);
+  const [restoreBookingId, setRestoreBookingId] = useState<string | null>(null);
 
-  const available = useMemo(() => {
-    const classes = BOOKABLE_CLASSES.filter(
-      (bc) => bc.status === "open" && isBookableClassType(bc.classType)
-    );
-    if (!search) return classes;
-    const q = search.toLowerCase();
-    return classes.filter(
-      (bc) =>
-        bc.title.toLowerCase().includes(q) ||
-        bc.styleName?.toLowerCase().includes(q) ||
-        bc.level?.toLowerCase().includes(q)
-    );
-  }, [search]);
+  const restoreClassData = useMemo(() => {
+    if (!restoreBookingId) return null;
+    return classes.find(
+      (c) =>
+        c.bookability.status === "restore_available" &&
+        c.bookability.bookingId === restoreBookingId
+    ) ?? null;
+  }, [restoreBookingId, classes]);
+
+  const styleOptions = useMemo(() => {
+    const names = [...new Set(classes.map((c) => c.styleName).filter(Boolean))] as string[];
+    return names.sort().map((n) => ({ value: n, label: n }));
+  }, [classes]);
+
+  const levelOptions = useMemo(() => {
+    const levels = [...new Set(classes.map((c) => c.level).filter(Boolean))] as string[];
+    return levels.sort().map((l) => ({ value: l, label: l }));
+  }, [classes]);
+
+  const filtered = useMemo(() => {
+    let result = classes;
+
+    if (search) {
+      const q = search.toLowerCase();
+      result = result.filter(
+        (c) =>
+          c.title.toLowerCase().includes(q) ||
+          c.styleName?.toLowerCase().includes(q) ||
+          c.level?.toLowerCase().includes(q)
+      );
+    }
+    if (styleFilter) {
+      result = result.filter((c) => c.styleName === styleFilter);
+    }
+    if (levelFilter) {
+      result = result.filter((c) => c.level === levelFilter);
+    }
+    return result;
+  }, [classes, search, styleFilter, levelFilter]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, ClassCardData[]>();
+    for (const c of filtered) {
+      const existing = map.get(c.date);
+      if (existing) {
+        existing.push(c);
+      } else {
+        map.set(c.date, [c]);
+      }
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
+
+  function handleBook(data: ClassCardData) {
+    setBookDialogTarget(data);
+  }
+
+  function handleRestore(bookingId: string) {
+    setRestoreBookingId(bookingId);
+  }
+
+  const dialogClass: BookDialogClass | null = bookDialogTarget
+    ? {
+        id: bookDialogTarget.id,
+        title: bookDialogTarget.title,
+        date: bookDialogTarget.date,
+        startTime: bookDialogTarget.startTime,
+        endTime: bookDialogTarget.endTime,
+        location: bookDialogTarget.location,
+        styleName: bookDialogTarget.styleName,
+        level: bookDialogTarget.level,
+        danceStyleRequiresBalance: bookDialogTarget.danceStyleRequiresBalance,
+        spotsLeft:
+          bookDialogTarget.maxCapacity != null
+            ? bookDialogTarget.maxCapacity - bookDialogTarget.totalBooked
+            : null,
+      }
+    : null;
+
+  const bookabilityForDialog = bookDialogTarget?.bookability;
 
   return (
     <div className="space-y-6">
@@ -36,91 +127,194 @@ export function ClassBrowser() {
         description="Browse and book upcoming classes."
       />
 
-      <div className="w-full sm:max-w-xs">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search by name, style, or level…"
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="w-full sm:max-w-xs">
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search by name, style, or level…"
+          />
+        </div>
+        <SelectFilter
+          value={styleFilter}
+          onChange={setStyleFilter}
+          options={styleOptions}
+          placeholder="All styles"
+        />
+        <SelectFilter
+          value={levelFilter}
+          onChange={setLevelFilter}
+          options={levelOptions}
+          placeholder="All levels"
         />
       </div>
 
-      {available.length === 0 ? (
+      {grouped.length === 0 ? (
         <EmptyState
           icon={Inbox}
-          title="No classes available"
-          description="There are no open classes to book right now. Check back soon!"
+          title="No classes found"
+          description="Try adjusting your filters or check back later."
         />
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {available.map((bc) => {
-            const spotsLeft =
-              bc.maxCapacity != null ? bc.maxCapacity - bc.bookedCount : null;
-            const roleRequired = styleRequiresRoleBalance(bc.styleName);
-
-            return (
-              <div
-                key={bc.id}
-                className="flex flex-col rounded-xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md"
-              >
-                <div className="flex-1 p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="text-base font-semibold text-gray-900">
-                      {bc.title}
-                    </h3>
-                    {roleRequired && (
-                      <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-                        Role required
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    <StatusBadge status={bc.classType} />
-                    {bc.level && (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                        {bc.level}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="mt-4 space-y-2 text-sm text-gray-600">
-                    <div className="flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4 shrink-0 text-gray-400" />
-                      {formatDate(bc.date)}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4 shrink-0 text-gray-400" />
-                      {formatTime(bc.startTime)} – {formatTime(bc.endTime)}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 shrink-0 text-gray-400" />
-                      {bc.location}
-                    </div>
-                    {spotsLeft !== null && (
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 shrink-0 text-gray-400" />
-                        <span
-                          className={
-                            spotsLeft <= 3 ? "font-medium text-amber-600" : ""
-                          }
-                        >
-                          {spotsLeft} {spotsLeft === 1 ? "spot" : "spots"} left
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-100 p-4">
-                  <Link href={`/bookings/new?classId=${bc.id}`}>
-                    <Button className="w-full">Book this class</Button>
-                  </Link>
-                </div>
+        <div className="space-y-8">
+          {grouped.map(([date, items]) => (
+            <section key={date}>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-gray-400">
+                {formatDate(date)}
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {items.map((c) => (
+                  <StudentClassCard
+                    key={c.id}
+                    data={c}
+                    onBook={handleBook}
+                    onRestore={handleRestore}
+                  />
+                ))}
               </div>
-            );
-          })}
+            </section>
+          ))}
         </div>
       )}
+
+      {bookDialogTarget && dialogClass && bookabilityForDialog && (
+        (bookabilityForDialog.status === "bookable" || bookabilityForDialog.status === "waitlistable") && (
+          <StudentBookDialog
+            cls={dialogClass}
+            entitlements={bookabilityForDialog.entitlements}
+            autoSelected={
+              bookabilityForDialog.status === "bookable"
+                ? bookabilityForDialog.autoSelected
+                : undefined
+            }
+            isWaitlist={bookabilityForDialog.status === "waitlistable"}
+            waitlistReason={
+              bookabilityForDialog.status === "waitlistable"
+                ? bookabilityForDialog.reason
+                : undefined
+            }
+            onClose={() => setBookDialogTarget(null)}
+          />
+        )
+      )}
+
+      {restoreBookingId && restoreClassData && (
+        <ClassRestoreDialog
+          bookingId={restoreBookingId}
+          classData={restoreClassData}
+          onClose={() => setRestoreBookingId(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function ClassRestoreDialog({
+  bookingId,
+  classData,
+  onClose,
+}: {
+  bookingId: string;
+  classData: ClassCardData;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [eligibility, setEligibility] = useState<{
+    eligible: boolean;
+    reason?: string;
+  } | null>(null);
+  const [result, setResult] = useState<{
+    restoredTo: "confirmed" | "waitlisted";
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    checkRestoreEligibilityAction(bookingId).then((res) => {
+      if (!cancelled) setEligibility(res);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingId]);
+
+  function handleRestore() {
+    startTransition(async () => {
+      const res = await studentRestoreBookingAction(bookingId);
+      if (res.success) {
+        setResult({ restoredTo: res.restoredTo! });
+        router.refresh();
+      } else {
+        setError(res.error ?? "Failed to restore booking");
+      }
+    });
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Restore Booking</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <div className="space-y-1 text-sm text-gray-600">
+            <p className="font-medium text-gray-900">{classData.title}</p>
+            <p>
+              {formatDate(classData.date)} · {formatTime(classData.startTime)}
+            </p>
+            {classData.location && <p>{classData.location}</p>}
+            <div className="mt-1">
+              <StatusBadge status="cancelled" />
+            </div>
+          </div>
+
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {result ? (
+            <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
+              {result.restoredTo === "confirmed"
+                ? "Booking restored! Your spot is confirmed."
+                : "The class is full. You have been added to the waitlist."}
+            </div>
+          ) : eligibility === null ? (
+            <p className="text-sm text-gray-400">Checking eligibility…</p>
+          ) : !eligibility.eligible ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {eligibility.reason ?? "This booking cannot be restored."}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">
+              Would you like to restore this booking? If a spot is available,
+              your booking will be confirmed. Otherwise, you will be added to
+              the waitlist.
+            </p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          {result || (eligibility && !eligibility.eligible) ? (
+            <Button variant="ghost" onClick={onClose}>
+              Close
+            </Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRestore}
+                disabled={isPending || !eligibility?.eligible}
+              >
+                {isPending ? "Restoring…" : "Restore Booking"}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

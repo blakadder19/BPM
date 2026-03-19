@@ -35,6 +35,7 @@ export interface StoredBooking {
   danceRole: DanceRole | null;
   status: BookingStatus;
   source: BookingSource;
+  subscriptionId: string | null;
   subscriptionName: string | null;
   adminNote: string | null;
   bookedAt: string;
@@ -138,6 +139,7 @@ export class BookingService {
     studentName: string;
     danceRole: DanceRole | null;
     source?: BookingSource;
+    subscriptionId?: string | null;
     subscriptionName?: string | null;
   }): BookingOutcome {
     const cls = this.classes.get(params.bookableClassId);
@@ -155,6 +157,16 @@ export class BookingService {
     );
     if (existingBooking) {
       return { type: "rejected", reason: "You already have an active booking for this class." };
+    }
+
+    const cancelledBooking = this.bookings.find(
+      (b) =>
+        b.bookableClassId === params.bookableClassId &&
+        b.studentId === params.studentId &&
+        (b.status === "cancelled" || b.status === "late_cancelled")
+    );
+    if (cancelledBooking) {
+      return { type: "rejected", reason: "You have a cancelled booking for this class. Please restore it instead." };
     }
 
     const existingWaitlist = this.waitlist.find(
@@ -212,6 +224,7 @@ export class BookingService {
       danceRole: params.danceRole,
       status: "confirmed",
       source: params.source ?? "subscription",
+      subscriptionId: params.subscriptionId ?? null,
       subscriptionName: params.subscriptionName ?? null,
       adminNote: null,
       bookedAt: now,
@@ -301,6 +314,7 @@ export class BookingService {
           danceRole: entry.danceRole,
           status: "confirmed",
           source: "waitlist_promotion",
+          subscriptionId: null,
           subscriptionName: null,
           adminNote: null,
           bookedAt: new Date().toISOString(),
@@ -362,6 +376,7 @@ export class BookingService {
     studentName: string;
     danceRole: DanceRole | null;
     source: BookingSource;
+    subscriptionId?: string | null;
     subscriptionName?: string | null;
     adminNote?: string | null;
     forceConfirm?: boolean;
@@ -425,6 +440,7 @@ export class BookingService {
       danceRole: params.danceRole,
       status: "confirmed",
       source: params.source,
+      subscriptionId: params.subscriptionId ?? null,
       subscriptionName: params.subscriptionName ?? null,
       adminNote: params.adminNote ?? null,
       bookedAt: now,
@@ -504,6 +520,7 @@ export class BookingService {
           danceRole: entry.danceRole,
           status: "confirmed",
           source: "waitlist_promotion",
+          subscriptionId: null,
           subscriptionName: null,
           adminNote: null,
           bookedAt: new Date().toISOString(),
@@ -541,6 +558,7 @@ export class BookingService {
       danceRole: entry.danceRole,
       status: "confirmed",
       source: "waitlist_promotion",
+      subscriptionId: null,
       subscriptionName: null,
       adminNote: null,
       bookedAt: new Date().toISOString(),
@@ -628,6 +646,30 @@ export class BookingService {
     }
 
     return { type: "error", reason: "Class is full and cannot be waitlisted." };
+  }
+
+  /**
+   * Transition a confirmed booking to "missed" after the attendance
+   * closure window has passed without a check-in.
+   */
+  markMissed(bookingId: string): { type: "missed" } | { type: "error"; reason: string } {
+    const booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking) return { type: "error", reason: "Booking not found." };
+    if (booking.status !== "confirmed") {
+      return { type: "error", reason: "Only confirmed bookings can be marked as missed." };
+    }
+    booking.status = "missed";
+    return { type: "missed" };
+  }
+
+  /**
+   * Get all confirmed (not checked-in) bookings for a given class.
+   * Used by attendance closure to find bookings that should become "missed".
+   */
+  getUncheckedBookingsForClass(classId: string): StoredBooking[] {
+    return this.bookings.filter(
+      (b) => b.bookableClassId === classId && b.status === "confirmed"
+    );
   }
 
   refreshClasses(classes: ClassSnapshot[]) {

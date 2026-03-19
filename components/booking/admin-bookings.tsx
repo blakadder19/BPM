@@ -33,6 +33,7 @@ const STATUS_OPTIONS = [
   { value: "checked_in", label: "Checked In" },
   { value: "cancelled", label: "Cancelled" },
   { value: "late_cancelled", label: "Late Cancelled" },
+  { value: "missed", label: "Missed" },
 ];
 
 const ROLE_OPTIONS = [

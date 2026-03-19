@@ -173,7 +173,14 @@ export const BOOKABLE_CLASSES: MockBookableClass[] = [
   // Next week (open)
   { id: "bc-12", classId: "c-01", title: "Bachata Beginner 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-03-23", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 4, leaderCount: 2, followerCount: 2, waitlistCount: 0, location: "Studio A" },
   { id: "bc-13", classId: "c-04", title: "Cuban Intermediate", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Intermediate", date: "2026-03-23", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 2, leaderCount: 1, followerCount: 1, waitlistCount: 0, location: "Studio B" },
-  { id: "bc-14", classId: "c-09", title: "Bachata Partnerwork Int", classType: "class", styleName: "Bachata Partnerwork", styleId: "ds-3", level: "Intermediate", date: "2026-03-25", startTime: "20:00", endTime: "21:00", status: "scheduled", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-14", classId: "c-09", title: "Bachata Partnerwork Int", classType: "class", styleName: "Bachata Partnerwork", styleId: "ds-3", level: "Intermediate", date: "2026-03-25", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  // Week 3 Beginner 1 classes (beginner intake closed)
+  { id: "bc-15", classId: "c-01", title: "Bachata Beginner 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-03-30", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 6, leaderCount: 3, followerCount: 3, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-16", classId: "c-10", title: "Cuban Beginner 1", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Beginner 1", date: "2026-04-02", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 8, leaderCount: 4, followerCount: 4, waitlistCount: 0, location: "Studio A" },
+  // Full-capacity class to demonstrate waitlist
+  { id: "bc-17", classId: "c-07", title: "Reggaeton Open", classType: "class", styleName: "Reggaeton", styleId: "ds-6", level: "Open", date: "2026-03-24", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 25, leaderCount: 0, followerCount: 0, waitlistCount: 1, location: "Studio B" },
+  // Week 3 non-beginner class
+  { id: "bc-18", classId: "c-03", title: "Bachata Beginner 2", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 2", date: "2026-03-30", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 4, leaderCount: 2, followerCount: 2, waitlistCount: 0, location: "Studio A" },
 ];
 
 // ── Students ────────────────────────────────────────────────
@@ -202,7 +209,7 @@ export const STUDENTS: MockStudent[] = [
   { id: "s-05", fullName: "Eve Byrne", email: "eve@test.com", phone: null, preferredRole: "follower", isActive: true, notes: "New student, considering a membership.", emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: null, subscriptionName: null, remainingCredits: null, joinedAt: "2026-03-01" },
   { id: "s-06", fullName: "Finn Doyle", email: "finn@test.com", phone: "+353 86 111 0006", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: "Sarah Doyle", emergencyContactPhone: "+353 86 222 0006", dateOfBirth: "1992-01-30", subscriptionName: "Rainbow Membership", remainingCredits: null, joinedAt: "2025-06-20" },
   { id: "s-07", fullName: "Grace Kelly", email: "grace@test.com", phone: "+353 86 111 0007", preferredRole: "follower", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1998-06-15", subscriptionName: "Beginners Latin Combo", remainingCredits: 3, joinedAt: "2025-11-05" },
-  { id: "s-08", fullName: "Hugo Brennan", email: "hugo@test.com", phone: null, preferredRole: "leader", isActive: false, notes: "Moved abroad. May return in autumn.", emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: null, subscriptionName: "Drop In", remainingCredits: 1, joinedAt: "2026-03-10" },
+  { id: "s-08", fullName: "Hugo Brennan", email: "hugo@test.com", phone: null, preferredRole: "leader", isActive: true, notes: "Has a single drop-in credit.", emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: null, subscriptionName: "Drop In", remainingCredits: 1, joinedAt: "2026-03-10" },
 ];
 
 // ── Products ────────────────────────────────────────────────
@@ -264,21 +271,23 @@ export interface MockBooking {
   startTime: string;
   danceRole: DanceRole | null;
   status: BookingStatus;
+  subscriptionId: string | null;
   subscriptionName: string | null;
   bookedAt: string;
 }
 
 export const BOOKINGS: MockBooking[] = [
-  { id: "b-01", bookableClassId: "bc-04", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionName: "Monthly Unlimited", bookedAt: "2026-03-14T10:00:00" },
-  { id: "b-02", bookableClassId: "bc-04", studentId: "s-02", studentName: "Bob O'Brien", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionName: "10-Class Pack", bookedAt: "2026-03-14T11:30:00" },
-  { id: "b-03", bookableClassId: "bc-04", studentId: "s-03", studentName: "Carol Walsh", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionName: "Beginners 1 & 2 Pass", bookedAt: "2026-03-14T14:00:00" },
-  { id: "b-04", bookableClassId: "bc-04", studentId: "s-06", studentName: "Finn Doyle", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionName: "Monthly Unlimited", bookedAt: "2026-03-15T09:00:00" },
-  { id: "b-05", bookableClassId: "bc-04", studentId: "s-04", studentName: "Dave Keane", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "cancelled", subscriptionName: "5-Class Pack", bookedAt: "2026-03-14T16:00:00" },
-  { id: "b-06", bookableClassId: "bc-05", studentId: "s-07", studentName: "Grace Kelly", classTitle: "Cuban Beginner 2", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionName: "10-Class Pack", bookedAt: "2026-03-15T08:00:00" },
-  { id: "b-07", bookableClassId: "bc-06", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Salsa Line Beginner 1", date: "2026-03-17", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionName: "Monthly Unlimited", bookedAt: "2026-03-15T12:00:00" },
-  { id: "b-08", bookableClassId: "bc-07", studentId: "s-08", studentName: "Hugo Brennan", classTitle: "Reggaeton Open", date: "2026-03-17", startTime: "20:00", danceRole: null, status: "confirmed", subscriptionName: "Single Class Drop-in", bookedAt: "2026-03-16T10:00:00" },
-  { id: "b-09", bookableClassId: "bc-12", studentId: "s-02", studentName: "Bob O'Brien", classTitle: "Bachata Beginner 1", date: "2026-03-23", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionName: "10-Class Pack", bookedAt: "2026-03-17T07:00:00" },
-  { id: "b-10", bookableClassId: "bc-12", studentId: "s-05", studentName: "Eve Byrne", classTitle: "Bachata Beginner 1", date: "2026-03-23", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionName: null, bookedAt: "2026-03-17T08:30:00" },
+  { id: "b-01", bookableClassId: "bc-04", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-01", subscriptionName: "12 Classes Membership", bookedAt: "2026-03-14T10:00:00" },
+  { id: "b-02", bookableClassId: "bc-04", studentId: "s-02", studentName: "Bob O'Brien", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionId: "sub-02", subscriptionName: "8 Classes Membership", bookedAt: "2026-03-14T11:30:00" },
+  { id: "b-03", bookableClassId: "bc-04", studentId: "s-03", studentName: "Carol Walsh", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-03", subscriptionName: "Beginners 1 & 2 Promo Pass", bookedAt: "2026-03-14T14:00:00" },
+  { id: "b-04", bookableClassId: "bc-04", studentId: "s-06", studentName: "Finn Doyle", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionId: "sub-06", subscriptionName: "16 Classes Membership", bookedAt: "2026-03-15T09:00:00" },
+  { id: "b-05", bookableClassId: "bc-04", studentId: "s-04", studentName: "Dave Keane", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "cancelled", subscriptionId: "sub-04", subscriptionName: "4 Classes Membership", bookedAt: "2026-03-14T16:00:00" },
+  { id: "b-06", bookableClassId: "bc-05", studentId: "s-07", studentName: "Grace Kelly", classTitle: "Cuban Beginner 2", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-07", subscriptionName: "Beginners Latin Combo", bookedAt: "2026-03-15T08:00:00" },
+  { id: "b-07", bookableClassId: "bc-06", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Salsa Line Beginner 1", date: "2026-03-17", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-01", subscriptionName: "12 Classes Membership", bookedAt: "2026-03-15T12:00:00" },
+  { id: "b-08", bookableClassId: "bc-07", studentId: "s-08", studentName: "Hugo Brennan", classTitle: "Reggaeton Open", date: "2026-03-17", startTime: "20:00", danceRole: null, status: "confirmed", subscriptionId: "sub-08", subscriptionName: "Drop In", bookedAt: "2026-03-16T10:00:00" },
+  { id: "b-09", bookableClassId: "bc-12", studentId: "s-02", studentName: "Bob O'Brien", classTitle: "Bachata Beginner 1", date: "2026-03-23", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionId: "sub-02", subscriptionName: "8 Classes Membership", bookedAt: "2026-03-17T07:00:00" },
+  { id: "b-10", bookableClassId: "bc-12", studentId: "s-05", studentName: "Eve Byrne", classTitle: "Bachata Beginner 1", date: "2026-03-23", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: null, subscriptionName: null, bookedAt: "2026-03-17T08:30:00" },
+  { id: "b-11", bookableClassId: "bc-08", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Bachata Tradicional Beg 1", date: "2026-03-18", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-01", subscriptionName: "12 Classes Membership", bookedAt: "2026-03-16T14:00:00" },
 ];
 
 // ── Waitlist ─────────────────────────────────────────────────
@@ -297,6 +306,7 @@ export interface MockWaitlistEntry {
 export const WAITLIST_ENTRIES: MockWaitlistEntry[] = [
   { id: "wl-01", bookableClassId: "bc-04", studentId: "s-08", studentName: "Hugo Brennan", danceRole: "leader", status: "waiting", position: 1, joinedAt: "2026-03-15T17:00:00" },
   { id: "wl-02", bookableClassId: "bc-04", studentId: "s-05", studentName: "Eve Byrne", danceRole: "follower", status: "waiting", position: 2, joinedAt: "2026-03-15T18:30:00" },
+  { id: "wl-03", bookableClassId: "bc-17", studentId: "s-04", studentName: "Dave Keane", danceRole: null, status: "waiting", position: 1, joinedAt: "2026-03-17T12:00:00" },
 ];
 
 // ── Attendance ──────────────────────────────────────────────

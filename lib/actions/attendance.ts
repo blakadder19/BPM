@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
+import { isAfterClosureWindow } from "@/lib/domain/datetime";
+import { getInstances } from "@/lib/services/schedule-store";
 import type { AttendanceMark, CheckInMethod, ClassType } from "@/types/domain";
 
 export interface MarkAttendanceResult {
@@ -153,6 +155,62 @@ export async function markStudentAttendance(params: {
     penaltyDescription,
     error: null,
   };
+}
+
+/**
+ * Close attendance for classes past the closure window (+60 min after start).
+ * Confirmed bookings without check-in become "missed".
+ * No penalty is created — no-show fees are OFF by default.
+ *
+ * This can be called on a cron, on page load, or manually by admin.
+ * It is idempotent.
+ */
+export async function closeAttendanceForPastClasses(): Promise<{
+  classesProcessed: number;
+  bookingsMarkedMissed: number;
+}> {
+  const bookingSvc = getBookingService();
+  const instances = getInstances();
+  const attendanceSvc = getAttendanceService();
+
+  let classesProcessed = 0;
+  let bookingsMarkedMissed = 0;
+
+  for (const cls of instances) {
+    if (!isAfterClosureWindow(cls.date, cls.startTime)) continue;
+
+    const unchecked = bookingSvc.getUncheckedBookingsForClass(cls.id);
+    if (unchecked.length === 0) continue;
+
+    classesProcessed++;
+
+    for (const booking of unchecked) {
+      const alreadyMarked = attendanceSvc
+        .getAllRecords()
+        .some(
+          (r) =>
+            r.bookableClassId === cls.id &&
+            r.studentId === booking.studentId &&
+            (r.status === "present" || r.status === "late")
+        );
+
+      if (alreadyMarked) {
+        bookingSvc.checkInBooking(booking.id);
+        continue;
+      }
+
+      bookingSvc.markMissed(booking.id);
+      bookingsMarkedMissed++;
+    }
+  }
+
+  if (bookingsMarkedMissed > 0) {
+    revalidatePath("/bookings");
+    revalidatePath("/attendance");
+    revalidatePath("/dashboard");
+  }
+
+  return { classesProcessed, bookingsMarkedMissed };
 }
 
 /** Dev-only: remove all attendance records from the store. */

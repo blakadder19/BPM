@@ -17,6 +17,7 @@ import {
   penaltiesApplyTo,
   penaltyFeeCents,
 } from "@/lib/domain/cancellation-rules";
+import { isAfterClosureWindow } from "@/lib/domain/datetime";
 import type { BookingSource, DanceRole } from "@/types/domain";
 
 const VALID_SOURCES = new Set<string>([
@@ -163,11 +164,27 @@ export async function adminCancelBookingAction(
   if (!cls) return { success: false, error: "Class not found" };
 
   const ctx = getCancellationContext(cls.date, cls.startTime);
+
+  if (ctx.hasStarted) {
+    return { success: false, error: "Cannot cancel — class has already started" };
+  }
+
   const isLate = ctx.isLate;
 
   const result = svc.cancelBookingAsAdmin(bookingId, isLate);
   if (result.type === "error") {
     return { success: false, error: result.reason };
+  }
+
+  if (booking.subscriptionId) {
+    const sub = getSubSync(booking.subscriptionId);
+    if (sub) {
+      if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {
+        updateSubStore(sub.id, { classesUsed: sub.classesUsed - 1 });
+      } else if (sub.remainingCredits !== null) {
+        updateSubStore(sub.id, { remainingCredits: sub.remainingCredits + 1 });
+      }
+    }
   }
 
   let penaltyCreated = false;
@@ -195,6 +212,9 @@ export async function adminCancelBookingAction(
 
   revalidatePath("/bookings");
   revalidatePath("/penalties");
+  revalidatePath("/dashboard");
+  revalidatePath("/classes");
+  revalidatePath("/students");
   return {
     success: true,
     isLate,
@@ -212,12 +232,16 @@ export async function adminCheckInBookingAction(
   const booking = svc.bookings.find((b) => b.id === bookingId);
   if (!booking) return { success: false, error: "Booking not found" };
 
+  const cls = svc.getClass(booking.bookableClassId);
+  if (cls && isAfterClosureWindow(cls.date, cls.startTime)) {
+    return { success: false, error: "Check-in window has closed (60 min after class start)" };
+  }
+
   const result = svc.checkInBooking(bookingId);
   if (result.type === "error") {
     return { success: false, error: result.reason };
   }
 
-  const cls = svc.getClass(booking.bookableClassId);
   if (cls) {
     const attendanceSvc = getAttendanceService();
     attendanceSvc.markAttendance({
@@ -273,6 +297,7 @@ export async function checkLateCancelStatusAction(
 ): Promise<{
   success: boolean;
   isLate?: boolean;
+  hasStarted?: boolean;
   classStart?: string;
   cutoffMinutes?: number;
   minutesUntilStart?: number;
@@ -293,6 +318,7 @@ export async function checkLateCancelStatusAction(
   return {
     success: true,
     isLate: ctx.isLate,
+    hasStarted: ctx.hasStarted,
     classStart: ctx.classStart.toISOString(),
     cutoffMinutes: ctx.cutoffMinutes,
     minutesUntilStart: ctx.minutesUntilStart,
@@ -311,10 +337,32 @@ export async function adminRestoreBookingAction(
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const svc = getBookingService();
+  const booking = svc.bookings.find((b) => b.id === bookingId);
+  if (!booking) return { success: false, error: "Booking not found" };
+
+  const cls = svc.getClass(booking.bookableClassId);
+  if (cls) {
+    const ctx = getCancellationContext(cls.date, cls.startTime);
+    if (ctx.hasStarted) {
+      return { success: false, error: "Cannot restore — class has already started" };
+    }
+  }
+
   const result = svc.restoreBooking(bookingId);
 
   if (result.type === "error") {
     return { success: false, error: result.reason };
+  }
+
+  if (result.restoredTo === "confirmed" && booking.subscriptionId) {
+    const sub = getSubSync(booking.subscriptionId);
+    if (sub) {
+      if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+        updateSubStore(sub.id, { classesUsed: sub.classesUsed + 1 });
+      } else if (sub.remainingCredits !== null) {
+        updateSubStore(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+      }
+    }
   }
 
   const penaltySvc = getPenaltyService();
@@ -323,6 +371,8 @@ export async function adminRestoreBookingAction(
 
   revalidatePath("/bookings");
   revalidatePath("/penalties");
+  revalidatePath("/dashboard");
+  revalidatePath("/classes");
 
   return {
     success: true,

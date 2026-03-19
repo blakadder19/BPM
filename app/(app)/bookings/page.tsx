@@ -3,9 +3,21 @@ import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getSubscriptions } from "@/lib/services/subscription-store";
+import { isClassInFuture } from "@/lib/domain/datetime";
 import { STUDENTS, DANCE_STYLES } from "@/lib/mock-data";
 import { StudentBookings } from "@/components/booking/student-bookings";
 import { AdminBookings } from "@/components/booking/admin-bookings";
+
+export interface StudentWaitlistView {
+  id: string;
+  classTitle: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  position: number;
+  danceRole: string | null;
+}
 
 export interface BookingView {
   id: string;
@@ -120,7 +132,26 @@ export default async function BookingsPage({
     const mine = allBookings
       .filter((b) => b.studentName === user.fullName)
       .map(enrichBooking);
-    return <StudentBookings bookings={mine} />;
+
+    const myWaitlist = allWaitlist
+      .filter((w) => w.studentName === user.fullName && w.status === "waiting")
+      .map((w) => {
+        const cls = svc.getClass(w.bookableClassId);
+        return {
+          id: w.id,
+          classTitle: cls?.title ?? "Unknown",
+          date: cls?.date ?? "",
+          startTime: cls?.startTime ?? "",
+          endTime: cls?.endTime ?? "",
+          location: cls?.location ?? "",
+          position: w.position,
+          danceRole: w.danceRole,
+        };
+      })
+      .filter((w) => isClassInFuture(w.date, w.startTime))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+
+    return <StudentBookings bookings={mine} waitlistEntries={myWaitlist} />;
   }
 
   const enriched = allBookings.map(enrichBooking);
@@ -130,13 +161,11 @@ export default async function BookingsPage({
     fullName: s.fullName,
   }));
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-
   const classInstanceOptions = instances
     .filter(
       (c) =>
         (c.status === "open" || c.status === "scheduled") &&
-        c.date >= todayStr
+        isClassInFuture(c.date, c.startTime)
     )
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
     .map((c) => {

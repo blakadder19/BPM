@@ -1,26 +1,23 @@
 /**
- * Pure domain logic for cancellation timing and penalty applicability.
- * Reads runtime settings from the settings store so admin changes
- * take effect without redeployment.
+ * Domain logic for cancellation timing and penalty applicability.
+ * Uses shared datetime utilities from datetime.ts.
  */
 
 import { getSettings } from "@/lib/services/settings-store";
+import { classStartDT, getNow, minutesUntilStart } from "@/lib/domain/datetime";
 import type { ClassType, PenaltyReason } from "@/types/domain";
 
 /**
- * Build a Date from a date string (YYYY-MM-DD) and time string (HH:MM).
+ * @deprecated — use classStartDT from datetime.ts directly
  */
 export function classStartDateTime(date: string, startTime: string): Date {
-  return new Date(`${date}T${startTime}:00`);
+  return classStartDT(date, startTime);
 }
 
 /**
  * A cancellation is "late" when it occurs within the cutoff window
- * before the class starts. Cancellations after the class has started
- * are also treated as late.
- *
- * Reads `lateCancelCutoffMinutes` from settings unless an explicit
- * override is passed.
+ * before the class starts AND the class has NOT already started.
+ * Once the class has started, cancellation is blocked at the action layer.
  */
 export function isLateCancellation(
   classStart: Date,
@@ -29,38 +26,25 @@ export function isLateCancellation(
 ): boolean {
   const cutoff = cutoffMinutes ?? getSettings().lateCancelCutoffMinutes;
   const msUntilClass = classStart.getTime() - cancelledAt.getTime();
+  if (msUntilClass < 0) return true; // past class — should not reach here
   return msUntilClass < cutoff * 60 * 1000;
 }
 
-/**
- * Whether penalties (late-cancel / no-show) apply to this class type,
- * based on the current admin settings.
- */
 export function penaltiesApplyTo(classType: ClassType): boolean {
   const s = getSettings();
-
-  if (classType === "social") {
-    return !s.socialsExcludedFromPenalties;
-  }
-
-  if (classType === "student_practice") {
-    return !s.penaltiesApplyToClassOnly;
-  }
-
+  if (classType === "social") return !s.socialsExcludedFromPenalties;
+  if (classType === "student_practice") return !s.penaltiesApplyToClassOnly;
   return true;
 }
 
-/**
- * Get the fee in euro-cents for a given penalty reason.
- */
 export function penaltyFeeCents(reason: PenaltyReason): number {
   const s = getSettings();
   return reason === "late_cancel" ? s.lateCancelFeeCents : s.noShowFeeCents;
 }
 
 /**
- * UI-facing context for cancel dialogs (admin and student).
- * Computes whether a cancellation at the current moment would be late.
+ * Full cancellation context for a class.
+ * Returns whether the class has started, whether cancel is late, etc.
  */
 export function getCancellationContext(
   classDate: string,
@@ -68,20 +52,21 @@ export function getCancellationContext(
   cutoffMinutesOverride?: number
 ): {
   isLate: boolean;
+  hasStarted: boolean;
   classStart: Date;
   minutesUntilStart: number;
   cutoffMinutes: number;
 } {
   const s = getSettings();
   const cutoffMinutes = cutoffMinutesOverride ?? s.lateCancelCutoffMinutes;
-  const classStart = classStartDateTime(classDate, classStartTime);
-  const now = new Date();
-  const msUntilStart = classStart.getTime() - now.getTime();
-  const minutesUntilStart = Math.round(msUntilStart / 60_000);
+  const mins = minutesUntilStart(classDate, classStartTime);
+  const classStart = classStartDT(classDate, classStartTime);
+  const hasStarted = mins <= 0;
   return {
-    isLate: msUntilStart < cutoffMinutes * 60_000,
+    isLate: !hasStarted && mins < cutoffMinutes,
+    hasStarted,
     classStart,
-    minutesUntilStart,
+    minutesUntilStart: mins,
     cutoffMinutes,
   };
 }

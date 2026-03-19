@@ -126,7 +126,7 @@ export interface BookableClass {
 
 // ── Bookings ────────────────────────────────────────────────
 
-export type BookingStatus = "confirmed" | "checked_in" | "cancelled" | "late_cancelled";
+export type BookingStatus = "confirmed" | "checked_in" | "cancelled" | "late_cancelled" | "missed";
 export type BookingSource = "subscription" | "drop_in" | "admin" | "waitlist_promotion";
 export type WaitlistStatus = "waiting" | "offered" | "promoted" | "expired";
 export type AttendanceMark = "present" | "absent" | "late" | "excused";

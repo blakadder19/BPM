@@ -27,4 +27,20 @@ export async function switchDevRole(formData: FormData): Promise<void> {
   if (!VALID_DEV_ROLES.has(role)) return;
   const cookieStore = await cookies();
   cookieStore.set("dev_role", role, { path: "/", httpOnly: true, sameSite: "lax" });
+  if (role !== "student") {
+    cookieStore.delete("dev_student_id");
+  }
+}
+
+export async function switchDevStudent(studentId: string): Promise<void> {
+  if (process.env.NODE_ENV !== "development") return;
+  const cookieStore = await cookies();
+  cookieStore.set("dev_role", "student", { path: "/", httpOnly: true, sameSite: "lax" });
+  cookieStore.set("dev_student_id", studentId, { path: "/", httpOnly: true, sameSite: "lax" });
+}
+
+export async function getDevStudentId(): Promise<string | null> {
+  if (process.env.NODE_ENV !== "development") return null;
+  const cookieStore = await cookies();
+  return cookieStore.get("dev_student_id")?.value ?? null;
 }

@@ -1,5 +1,6 @@
 /**
  * Mutable in-memory subscription store, seeded from mock data.
+ * Uses globalThis to survive HMR module re-evaluation in Next.js dev.
  * In production, replace with Supabase-backed service.
  */
 
@@ -7,13 +8,15 @@ import { SUBSCRIPTIONS, type MockSubscription } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 import type { PaymentMethod, ProductType, SubscriptionStatus } from "@/types/domain";
 
-let subs: MockSubscription[] | null = null;
+const g = globalThis as unknown as {
+  __bpm_subs?: MockSubscription[];
+};
 
 function init(): MockSubscription[] {
-  if (!subs) {
-    subs = SUBSCRIPTIONS.map((s) => ({ ...s }));
+  if (!g.__bpm_subs) {
+    g.__bpm_subs = SUBSCRIPTIONS.map((s) => ({ ...s }));
   }
-  return subs;
+  return g.__bpm_subs;
 }
 
 export function getSubscriptions(): MockSubscription[] {

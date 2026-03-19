@@ -2,22 +2,34 @@ import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
+import { getSubscriptions } from "@/lib/services/subscription-store";
+import { getTerms } from "@/lib/services/term-store";
+import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
+import { getTodayStr, isClassInFuture } from "@/lib/domain/datetime";
+import { closeAttendanceForPastClasses } from "@/lib/actions/attendance";
+import { STUDENTS } from "@/lib/mock-data";
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import {
   StudentDashboard,
   type StudentBookingSummary,
   type StudentPenaltySummary,
+  type StudentTermInfo,
+  type StudentEntitlementSummary,
 } from "@/components/dashboard/student-dashboard";
-
-const MOCK_TODAY = "2026-03-17";
 
 export default async function DashboardPage() {
   const user = await getAuthUser();
   if (!user) redirect("/login");
 
+  await closeAttendanceForPastClasses();
+
   if (user.role === "student") {
     const bookingSvc = getBookingService();
     const penaltySvc = getPenaltyService();
+
+    const student = STUDENTS.find(
+      (s) => s.fullName === user.fullName || s.email === user.email
+    );
 
     const upcomingBookings: StudentBookingSummary[] = bookingSvc.bookings
       .filter(
@@ -38,7 +50,7 @@ export default async function DashboardPage() {
           status: b.status,
         };
       })
-      .filter((b) => b.date >= MOCK_TODAY)
+      .filter((b) => isClassInFuture(b.date, b.startTime))
       .sort(
         (a, b) =>
           a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)
@@ -55,11 +67,48 @@ export default async function DashboardPage() {
         resolution: p.resolution,
       }));
 
+    const terms = getTerms();
+    const todayStr = getTodayStr();
+    const currentTerm = getCurrentTerm(terms, todayStr);
+    let termInfo: StudentTermInfo | null = null;
+    if (currentTerm) {
+      termInfo = {
+        name: currentTerm.name,
+        startDate: currentTerm.startDate,
+        endDate: currentTerm.endDate,
+        weekNumber: getTermWeekNumber(todayStr, currentTerm),
+      };
+    }
+
+    const allSubs = getSubscriptions();
+    const studentSubs = student
+      ? allSubs.filter((s) => s.studentId === student.id && s.status === "active")
+      : [];
+
+    const entitlements: StudentEntitlementSummary[] = studentSubs.map((sub) => ({
+      id: sub.id,
+      productName: sub.productName,
+      productType: sub.productType,
+      classesUsed: sub.classesUsed,
+      classesPerTerm: sub.classesPerTerm,
+      remainingCredits: sub.remainingCredits,
+      totalCredits: sub.totalCredits,
+      autoRenew: sub.autoRenew,
+      termName: currentTerm?.name ?? null,
+    }));
+
+    const waitlistedCount = student
+      ? bookingSvc.getWaitlistForStudent(student.id).length
+      : 0;
+
     return (
       <StudentDashboard
         fullName={user.fullName}
         upcomingBookings={upcomingBookings}
         penalties={penalties}
+        termInfo={termInfo}
+        entitlements={entitlements}
+        waitlistedCount={waitlistedCount}
       />
     );
   }

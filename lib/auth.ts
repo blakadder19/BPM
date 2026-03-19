@@ -27,6 +27,20 @@ const DEV_USERS: Record<UserRole, AuthUser> = {
   student: { id: "dev-student", email: "student@bpm.dance", fullName: "Student User", role: "student", avatarUrl: null, academyId: "" },
 };
 
+function resolveDevStudent(studentId: string): AuthUser | null {
+  const { STUDENTS } = require("@/lib/mock-data");
+  const student = STUDENTS.find((s: { id: string }) => s.id === studentId);
+  if (!student) return null;
+  return {
+    id: student.id,
+    email: student.email,
+    fullName: student.fullName,
+    role: "student" as UserRole,
+    avatarUrl: null,
+    academyId: "",
+  };
+}
+
 /**
  * Get the current authenticated user.
  *
@@ -40,7 +54,15 @@ const DEV_USERS: Record<UserRole, AuthUser> = {
  */
 export async function getAuthUser(): Promise<AuthUser | null> {
   if (process.env.NODE_ENV === "development") {
-    const role = (await cookies()).get("dev_role")?.value as UserRole | undefined;
+    const cookieStore = await cookies();
+    const role = cookieStore.get("dev_role")?.value as UserRole | undefined;
+    if (role === "student") {
+      const studentId = cookieStore.get("dev_student_id")?.value;
+      if (studentId) {
+        const impersonated = resolveDevStudent(studentId);
+        if (impersonated) return impersonated;
+      }
+    }
     return DEV_USERS[role ?? "admin"] ?? DEV_USERS.admin;
   }
 

@@ -7,7 +7,7 @@
 import { BookingService, type ClassSnapshot, type StoredBooking, type StoredWaitlistEntry } from "./booking-service";
 import { BOOKABLE_CLASSES, BOOKINGS, WAITLIST_ENTRIES, DANCE_STYLES } from "@/lib/mock-data";
 
-const STORE_VERSION = 2;
+const STORE_VERSION = 4;
 
 function buildClassSnapshots(): ClassSnapshot[] {
   return BOOKABLE_CLASSES.map((bc) => {
@@ -41,6 +41,7 @@ function buildBookings(): StoredBooking[] {
     danceRole: b.danceRole,
     status: b.status,
     source: "subscription" as const,
+    subscriptionId: b.subscriptionId ?? null,
     subscriptionName: b.subscriptionName ?? null,
     adminNote: null,
     bookedAt: b.bookedAt,
@@ -76,6 +77,7 @@ export function getBookingService(): BookingService {
       ? existingBookings.map((b) => ({
           ...b,
           source: b.source ?? ("subscription" as const),
+          subscriptionId: b.subscriptionId ?? null,
           subscriptionName: b.subscriptionName ?? null,
           adminNote: b.adminNote ?? null,
         }))

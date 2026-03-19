@@ -8,6 +8,9 @@ import {
   Calendar,
   MapPin,
   Inbox,
+  Clock,
+  CreditCard,
+  RefreshCw,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -15,6 +18,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatCents } from "@/lib/utils";
+import type { ProductType } from "@/types/domain";
 
 export interface StudentBookingSummary {
   id: string;
@@ -36,16 +40,41 @@ export interface StudentPenaltySummary {
   resolution: string;
 }
 
+export interface StudentTermInfo {
+  name: string;
+  startDate: string;
+  endDate: string;
+  weekNumber: number;
+}
+
+export interface StudentEntitlementSummary {
+  id: string;
+  productName: string;
+  productType: ProductType;
+  classesUsed: number;
+  classesPerTerm: number | null;
+  remainingCredits: number | null;
+  totalCredits: number | null;
+  autoRenew: boolean;
+  termName: string | null;
+}
+
 interface StudentDashboardProps {
   fullName: string;
   upcomingBookings: StudentBookingSummary[];
   penalties: StudentPenaltySummary[];
+  termInfo?: StudentTermInfo | null;
+  entitlements?: StudentEntitlementSummary[];
+  waitlistedCount?: number;
 }
 
 export function StudentDashboard({
   fullName,
   upcomingBookings,
   penalties,
+  termInfo,
+  entitlements = [],
+  waitlistedCount = 0,
 }: StudentDashboardProps) {
   const firstName = fullName.split(" ")[0];
   const unresolvedPenalties = penalties.filter(
@@ -59,8 +88,25 @@ export function StudentDashboard({
         description="Your dance classes at a glance."
       />
 
+      {/* Current Term Banner */}
+      {termInfo && (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-100">
+              <Calendar className="h-6 w-6 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-blue-900">{termInfo.name}</p>
+              <p className="text-xs text-blue-700">
+                Week {termInfo.weekNumber} · {formatDate(termInfo.startDate)} – {formatDate(termInfo.endDate)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <Link href="/bookings">
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-4">
@@ -71,13 +117,29 @@ export function StudentDashboard({
                 <p className="text-2xl font-bold text-gray-900">
                   {upcomingBookings.length}
                 </p>
-                <p className="text-sm text-gray-500">Upcoming bookings</p>
+                <p className="text-sm text-gray-500">Upcoming</p>
               </div>
             </CardContent>
           </Card>
         </Link>
 
-        <Link href="/bookings/new">
+        <Link href="/bookings">
+          <Card className="transition-shadow hover:shadow-md">
+            <CardContent className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-amber-50">
+                <Clock className="h-6 w-6 text-amber-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-gray-900">
+                  {waitlistedCount}
+                </p>
+                <p className="text-sm text-gray-500">Waitlisted</p>
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link href="/classes">
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
@@ -94,8 +156,8 @@ export function StudentDashboard({
         <Link href="/penalties">
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-amber-50">
-                <AlertTriangle className="h-6 w-6 text-amber-600" />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-red-50">
+                <AlertTriangle className="h-6 w-6 text-red-500" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-gray-900">
@@ -107,6 +169,55 @@ export function StudentDashboard({
           </Card>
         </Link>
       </div>
+
+      {/* Entitlements */}
+      {entitlements.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-gray-400" />
+              My Entitlements
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-gray-100">
+              {entitlements.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center justify-between gap-3 px-6 py-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {e.productName}
+                    </p>
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <StatusBadge status={e.productType} />
+                      {e.termName && <span>{e.termName}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {e.productType === "membership" && e.classesPerTerm !== null && (
+                      <span className="text-sm font-medium text-gray-700">
+                        {e.classesPerTerm - e.classesUsed} / {e.classesPerTerm} left
+                      </span>
+                    )}
+                    {e.productType !== "membership" && e.remainingCredits !== null && (
+                      <span className="text-sm font-medium text-gray-700">
+                        {e.remainingCredits} credit{e.remainingCredits !== 1 ? "s" : ""} left
+                      </span>
+                    )}
+                    {e.autoRenew && (
+                      <span title="Auto-renew">
+                        <RefreshCw className="h-3.5 w-3.5 text-green-500" />
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upcoming bookings */}
       <Card>
@@ -129,7 +240,7 @@ export function StudentDashboard({
               title="No upcoming bookings"
               description="You haven't booked any classes yet."
               action={
-                <Link href="/bookings/new">
+                <Link href="/classes">
                   <Button>Browse classes</Button>
                 </Link>
               }
