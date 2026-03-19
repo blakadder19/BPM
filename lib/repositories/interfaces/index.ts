@@ -1,0 +1,10 @@
+export type { IStudentRepository, CreateStudentData, StudentPatch } from "./student-repository";
+export type { IProductRepository, CreateProductData, ProductPatch } from "./product-repository";
+export type { ITermRepository, CreateTermData, TermPatch } from "./term-repository";
+export type { ISubscriptionRepository, CreateSubscriptionData, SubscriptionPatch } from "./subscription-repository";
+export type { ICocRepository } from "./coc-repository";
+export type { ISettingsRepository } from "./settings-repository";
+export type { IBookingRepository } from "./booking-repository";
+export type { IAttendanceRepository } from "./attendance-repository";
+export type { IPenaltyRepository } from "./penalty-repository";
+export type { ICreditRepository } from "./credit-repository";

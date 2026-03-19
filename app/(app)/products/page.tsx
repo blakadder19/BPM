@@ -1,17 +1,19 @@
 import { requireRole } from "@/lib/auth";
-import { getProducts } from "@/lib/services/product-service";
-import { SUBSCRIPTIONS } from "@/lib/mock-data";
+import { getProductRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { AdminProducts } from "@/components/products/admin-products";
 
 export default async function ProductsPage() {
   await requireRole(["admin"]);
 
-  const products = await getProducts();
+  const [products, subscriptions] = await Promise.all([
+    getProductRepo().getAll(),
+    getSubscriptionRepo().getAll(),
+  ]);
 
   return (
     <AdminProducts
       products={products}
-      subscriptions={SUBSCRIPTIONS}
+      subscriptions={subscriptions}
     />
   );
 }

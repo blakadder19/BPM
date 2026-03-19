@@ -1,19 +1,17 @@
-import {
-  getProducts as mockGetAll,
-  createProduct as mockCreate,
-  updateProduct as mockUpdate,
-  toggleProductActive as mockToggle,
-} from "@/lib/services/product-store";
+/**
+ * Product service — delegates to the repository selected by DATA_PROVIDER.
+ */
+
+import { getProductRepo } from "@/lib/repositories";
 import type { MockProduct } from "@/lib/mock-data";
 import type { CreditsModel, ProductType } from "@/types/domain";
 
-const isDev = process.env.NODE_ENV === "development";
-
 export async function getProducts(): Promise<MockProduct[]> {
-  if (isDev) return mockGetAll();
+  return getProductRepo().getAll();
+}
 
-  // PROVISIONAL: production reads from products table
-  return [];
+export async function getProduct(id: string): Promise<MockProduct | null> {
+  return getProductRepo().getById(id);
 }
 
 export async function createProduct(data: {
@@ -36,12 +34,12 @@ export async function createProduct(data: {
   autoRenew?: boolean;
   benefits?: string[] | null;
 }): Promise<{ success: boolean; error?: string }> {
-  if (isDev) {
-    mockCreate(data);
+  try {
+    await getProductRepo().create(data);
     return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
-
-  return { success: false, error: "Production product creation not yet implemented" };
 }
 
 export async function updateProduct(
@@ -68,25 +66,17 @@ export async function updateProduct(
     benefits?: string[] | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
-  if (isDev) {
-    const result = mockUpdate(id, patch);
-    return result
-      ? { success: true }
-      : { success: false, error: "Product not found" };
-  }
-
-  return { success: false, error: "Production product update not yet implemented" };
+  const result = await getProductRepo().update(id, patch);
+  return result
+    ? { success: true }
+    : { success: false, error: "Product not found" };
 }
 
 export async function toggleProductActive(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  if (isDev) {
-    const result = mockToggle(id);
-    return result
-      ? { success: true }
-      : { success: false, error: "Product not found" };
-  }
-
-  return { success: false, error: "Production toggle not yet implemented" };
+  const result = await getProductRepo().toggleActive(id);
+  return result
+    ? { success: true }
+    : { success: false, error: "Product not found" };
 }

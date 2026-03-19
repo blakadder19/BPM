@@ -4,14 +4,17 @@ import { getAssignments } from "@/lib/services/teacher-store";
 import { buildTeacherNameMap } from "@/lib/services/teacher-roster-store";
 import { getSettings } from "@/lib/services/settings-store";
 import { getInstances } from "@/lib/services/schedule-store";
-import { getBookingService } from "@/lib/services/booking-store";
-import { getSubscriptions } from "@/lib/services/subscription-store";
-import { getTerms } from "@/lib/services/term-store";
+import {
+  getBookingRepo,
+  getSubscriptionRepo,
+  getTermRepo,
+  getStudentRepo,
+  getCocRepo,
+} from "@/lib/repositories";
 import { getAccessRulesMap } from "@/config/product-access";
-import { DANCE_STYLES, STUDENTS } from "@/lib/mock-data";
+import { DANCE_STYLES } from "@/lib/mock-data";
 import { isClassInFuture } from "@/lib/domain/datetime";
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
-import { hasAcceptedCurrentVersion } from "@/lib/services/coc-store";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { AdminTemplates } from "@/components/classes/admin-templates";
 import { ClassBrowser } from "@/components/booking/class-browser";
@@ -22,9 +25,9 @@ export default async function ClassesPage() {
 
   if (user.role === "student") {
     const instances = getInstances();
-    const svc = getBookingService();
-    const terms = getTerms();
-    const allSubs = getSubscriptions();
+    const svc = getBookingRepo().getService();
+    const terms = await getTermRepo().getAll();
+    const allSubs = await getSubscriptionRepo().getAll();
     const accessRulesMap = getAccessRulesMap();
 
     svc.refreshClasses(
@@ -50,9 +53,7 @@ export default async function ClassesPage() {
       })
     );
 
-    const student = STUDENTS.find(
-      (s) => s.fullName === user.fullName || s.email === user.email
-    );
+    const student = await getStudentRepo().getById(user.id);
 
     const studentId = student?.id ?? "";
     const studentSubs = allSubs.filter(
@@ -60,6 +61,8 @@ export default async function ClassesPage() {
     );
     const studentBookings = svc.getBookingsForStudent(studentId);
     const studentWaitlist = svc.getWaitlistForStudent(studentId);
+
+    const cocAccepted = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
 
     const futureInstances = instances
       .filter((c) => isClassInFuture(c.date, c.startTime))
@@ -122,7 +125,7 @@ export default async function ClassesPage() {
         terms,
         accessRulesMap,
         studentPreferredRole: student?.preferredRole ?? null,
-        codeOfConductAccepted: hasAcceptedCurrentVersion(studentId, CURRENT_CODE_OF_CONDUCT.version),
+        codeOfConductAccepted: cocAccepted,
       };
 
       const bookability = computeBookability(ctx);
@@ -144,7 +147,6 @@ export default async function ClassesPage() {
       };
     });
 
-    const cocAccepted = hasAcceptedCurrentVersion(studentId, CURRENT_CODE_OF_CONDUCT.version);
     return <ClassBrowser classes={classCards} codeOfConductAccepted={cocAccepted} />;
   }
 

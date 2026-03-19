@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,6 +19,7 @@ export default function LoginPage() {
   const router = useRouter();
   const next = searchParams.get("next") ?? "";
   const callbackError = searchParams.get("error");
+  const confirmed = searchParams.get("confirmed") === "1";
 
   const [error, setError] = useState<string | null>(
     callbackError === "auth_callback_failed"
@@ -80,6 +82,12 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {confirmed && !error && (
+            <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
+              Email confirmed successfully. Please sign in.
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
@@ -124,7 +132,14 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <div className="mt-6 border-t border-gray-100 pt-4">
+          <p className="mt-6 text-center text-sm text-gray-500">
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
+              Sign up
+            </Link>
+          </p>
+
+          <div className="mt-4 border-t border-gray-100 pt-4">
             <p className="mb-3 text-center text-xs font-medium text-gray-400">
               DEMO ACCOUNTS (password: password123)
             </p>

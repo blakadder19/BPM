@@ -1,11 +1,11 @@
 import { requireRole } from "@/lib/auth";
-import { getTerms } from "@/lib/services/term-store";
+import { getTermRepo } from "@/lib/repositories";
 import { AdminTerms } from "@/components/terms/admin-terms";
 
 export default async function TermsPage() {
   await requireRole(["admin"]);
 
-  const terms = getTerms();
+  const terms = await getTermRepo().getAll();
 
   return <AdminTerms terms={terms} />;
 }

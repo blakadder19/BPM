@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
-import { getBookingService } from "@/lib/services/booking-store";
-import { getAttendanceService } from "@/lib/services/attendance-store";
+import {
+  getBookingRepo,
+  getAttendanceRepo,
+  getSubscriptionRepo,
+  getStudentRepo,
+} from "@/lib/repositories";
 import { getInstances } from "@/lib/services/schedule-store";
-import { getSubscriptions } from "@/lib/services/subscription-store";
 import { isClassInFuture } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
-import { STUDENTS, DANCE_STYLES } from "@/lib/mock-data";
+import { DANCE_STYLES } from "@/lib/mock-data";
 import { StudentBookings } from "@/components/booking/student-bookings";
 import { AdminBookings } from "@/components/booking/admin-bookings";
 
@@ -59,7 +62,7 @@ export default async function BookingsPage({
   if (!user) redirect("/login");
 
   const params = searchParams ? await searchParams : {};
-  const svc = getBookingService();
+  const svc = getBookingRepo().getService();
 
   const instances = getInstances();
   svc.refreshClasses(
@@ -133,7 +136,7 @@ export default async function BookingsPage({
   }
 
   if (user.role === "student") {
-    const attSvc = getAttendanceService();
+    const attSvc = getAttendanceRepo().getService();
     const mine = allBookings
       .filter((b) => b.studentName === user.fullName)
       .map(enrichBooking)
@@ -168,7 +171,8 @@ export default async function BookingsPage({
 
   const enriched = allBookings.map(enrichBooking);
 
-  const studentOptions = STUDENTS.filter((s) => s.isActive).map((s) => ({
+  const allStudents = await getStudentRepo().getAll();
+  const studentOptions = allStudents.filter((s) => s.isActive).map((s) => ({
     id: s.id,
     fullName: s.fullName,
   }));
@@ -220,7 +224,7 @@ export default async function BookingsPage({
       joinedAt: w.joinedAt,
     }));
 
-  const allSubs = getSubscriptions();
+  const allSubs = await getSubscriptionRepo().getAll();
   const subscriptionsByStudent: Record<
     string,
     {

@@ -1,62 +1,61 @@
 # BPM — Latest Checkpoint
 
 **Date:** 2026-03-19
-**Full checkpoint:** [`docs/checkpoints/bpm-checkpoint-2026-03-19.md`](./bpm-checkpoint-2026-03-19.md)
+**Full checkpoint:** [`docs/checkpoints/bpm-checkpoint-2026-03-19-real-auth.md`](./bpm-checkpoint-2026-03-19-real-auth.md)
 
 ---
 
 ## Current State
 
-- Terms foundation: 4-week cycles, active/upcoming/past, beginner entry restriction (weeks 1–2)
-- Products: 12 products — 4 memberships (4/8/12/16), 3 passes, 2 promo passes, 1 drop-in, 1 social pass
-- Product descriptions: short + long descriptions on all products, dance style descriptions, class-level descriptions with tooltips
-- Student entitlements: subscription store with credit/class tracking, payment metadata (method, status, assignedBy, assignedAt)
-- Member benefits: birthday-week free class foundation, giveaway eligibility, free weekend Student Practice — all computed and displayed
-- Payment methods: 7 options including Revolut and Card; 4 payment statuses (paid, pending, complimentary, waived)
-- Historical status display: Finished / Expired / Cancelled / Replaced — context-aware derivation, no more "Exhausted"
-- Active vs historical products clearly separated in admin with contextual status badges
-- Class schedule: templates + date-specific instances, 8 dance styles with descriptions, role-balance flags
-- Admin bookings: full CRUD, cancel/restore, check-in, waitlist management
-- Student booking: 10-step bookability engine, duplicate prevention, restore-available
-- Waitlist: automatic role-aware FIFO with promotion on cancellation
-- Cancellation/restore: credit restoration, late-cancel penalties, reversible before class start
-- Code of Conduct: versioned acceptance, enforced before booking
-- QR/token check-in: per-booking tokens, QR display, token validation, self-check-in
-- Attendance closure: unchecked confirmed → missed after configurable window
-- Attendance corrections: state machine with credit reversal and penalty lifecycle
-- Penalties: late_cancel / no_show, 4 resolution types, student-hidden for corrections
-- Settings: configurable penalty fees, check-in rules, role balance, class type bookability
-- Dev tools: role switcher, student impersonation, God Mode panel with full domain actions
+The BPM project has transitioned from a pure in-memory prototype to a hybrid system with real Supabase auth.
+
+### Infrastructure
+- Real Supabase Auth (email/password, email confirmation)
+- Brevo SMTP for transactional emails (confirmation, configured in Supabase dashboard)
+- Hybrid repository layer: mock data coexists with real Supabase users
+- Repository abstraction: 10 domain interfaces with memory, Supabase, and hybrid implementations
+- `createAdminClient()` properly configured for server-side operations
+
+### Auth Flow
+- Signup → email confirmation via Brevo → auth callback (PKCE + implicit) → onboarding → dashboard
+- `emailConfirmed` guard blocks unconfirmed users from all protected routes
+- BFCache guard prevents stale page display on browser Back
+- Dev tools allowlist for real authenticated emails (`DEV_TOOL_ALLOWED_EMAILS`)
+
+### Business Layer (unchanged from prior checkpoint)
+- Terms, products (12), subscriptions, bookings, waitlist, attendance, penalties
+- 4 membership tiers with benefits (birthday, giveaways, free practice)
+- Payment metadata (7 methods, 4 statuses)
+- Code of Conduct versioned acceptance
+- QR/token check-in, attendance state machine
 
 ## Latest Milestone
 
-**Product catalog, member benefits, payment metadata, and historical status display refinement.**
+**Real auth integration, Brevo SMTP, onboarding/CoC flow, hybrid repository layer.**
 
-Key additions: final product catalog with descriptions, birthday-week eligibility foundation, giveaway eligibility, free Student Practice member benefit, Revolut payment method, payment status/metadata recording, academy-friendly historical status labels (Finished/Expired/Cancelled/Replaced).
+Key additions: real Supabase email/password auth, Brevo SMTP confirmation emails, signup + email confirmation + onboarding flow, hybrid student/CoC repositories bridging mock and real data, emailConfirmed route guard, dev tools allowlist for real users, admin client server-side fix.
 
 ## What Works
 
-- Complete product catalog reflecting real academy offerings with 4 membership tiers
-- Member benefits visible in student dashboard and admin panel (birthday, giveaway, practice)
-- Admin product assignment with payment method (including Revolut) and status recording
-- Historical subscriptions display truthful contextual status instead of "Exhausted"
-- Complete student booking flow: browse → accept CoC → book → view QR → cancel → restore
-- Admin attendance: manual check-in, token check-in, attendance marking with state machine
-- Credit management: consumption on book, restoration on cancel/absent/excused
-- Waitlist with automatic role-aware promotion
-- Penalties with full lifecycle including attendance-correction hiding
-- 166 non-penalty tests passing, TypeScript clean
+- Real users can sign up, receive confirmation emails, and complete onboarding
+- Real users appear in Admin Students (hybrid student repo)
+- Dev tools work for real allowlisted email without impersonation
+- CoC acceptance persists (Supabase or memory fallback)
+- All pre-existing mock/admin flows unaffected
+- TypeScript clean, build passes
 
 ## What Remains
 
-- Birthday free class not auto-applied during booking (foundation only)
-- In-memory only — no production persistence (Supabase migration needed)
-- No real authentication (dev cookie-based only)
-- No real payments (Stripe/Revolut placeholder-ready)
-- Waitlist promotion doesn't deduct credits
-- No email/SMS notifications
-- No student self-registration
+- **Migration 00009 not applied** — `coc_acceptances` table missing on remote Supabase; CoC falls back to memory
+- **Subscriptions/bookings/penalties still memory-only** — real users can't have persistent subscriptions assigned
+- **DATA_PROVIDER defaults to "memory"** — intentional, but limits real Supabase persistence
+- **Waitlist promotion doesn't deduct credits**
+- **Birthday free class not auto-applied during booking**
+- **No real payments** (Stripe/Revolut placeholder-ready)
+- **No email notifications** (booking confirmations, cancellations)
 
-## Next Recommended Phase
+## Next Recommended Step
 
-**Data Consistency Hardening:** Waitlist credit deduction, birthday free class auto-application, fix admin MOCK_TODAY, reconcile Mock/canonical types. Then: Supabase integration, real auth, payment integration.
+1. **Apply migration 00009 to remote Supabase** (SQL Editor)
+2. **Hybridize subscription repo** so real users can have persistent product assignments
+3. **Reconcile mock types with Supabase schema** for full DB mode readiness

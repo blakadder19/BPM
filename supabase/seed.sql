@@ -22,8 +22,6 @@ values (
 
 
 -- ── Auth users ──────────────────────────────────────────────
--- Insert into Supabase auth.users; the handle_new_user trigger
--- auto-creates rows in users + student_profiles/teacher_profiles.
 
 insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token)
 values
@@ -47,7 +45,7 @@ values
    format('{"full_name":"Carlos Rivera","role":"teacher","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
    now(), now(), '', ''),
 
-  -- Students
+  -- Students (8 to match mock-data)
   ('00000000-0000-0000-0000-000000000000', 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001', 'authenticated', 'authenticated',
    'alice@test.com', crypt('password123', gen_salt('bf')), now(),
    '{"provider":"email","providers":["email"]}',
@@ -76,6 +74,24 @@ values
    'eve@test.com', crypt('password123', gen_salt('bf')), now(),
    '{"provider":"email","providers":["email"]}',
    format('{"full_name":"Eve Byrne","role":"student","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
+   now(), now(), '', ''),
+
+  ('00000000-0000-0000-0000-000000000000', 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00006', 'authenticated', 'authenticated',
+   'fiona@test.com', crypt('password123', gen_salt('bf')), now(),
+   '{"provider":"email","providers":["email"]}',
+   format('{"full_name":"Fiona Doyle","role":"student","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
+   now(), now(), '', ''),
+
+  ('00000000-0000-0000-0000-000000000000', 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00007', 'authenticated', 'authenticated',
+   'gary@test.com', crypt('password123', gen_salt('bf')), now(),
+   '{"provider":"email","providers":["email"]}',
+   format('{"full_name":"Gary Nolan","role":"student","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
+   now(), now(), '', ''),
+
+  ('00000000-0000-0000-0000-000000000000', 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00008', 'authenticated', 'authenticated',
+   'hannah@test.com', crypt('password123', gen_salt('bf')), now(),
+   '{"provider":"email","providers":["email"]}',
+   format('{"full_name":"Hannah Ryan","role":"student","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
    now(), now(), '', '');
 
 
@@ -94,11 +110,23 @@ where id = 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00003';
 
 -- ── Enrich student profiles ─────────────────────────────────
 
-update student_profiles set preferred_role = 'follower' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001';
-update student_profiles set preferred_role = 'leader'   where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00002';
-update student_profiles set preferred_role = 'follower' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00003';
-update student_profiles set preferred_role = 'leader'   where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00004';
-update student_profiles set preferred_role = 'follower' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00005';
+update student_profiles set preferred_role = 'follower', date_of_birth = '1995-03-22' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001';
+update student_profiles set preferred_role = 'leader',   date_of_birth = '1992-07-15' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00002';
+update student_profiles set preferred_role = 'follower', date_of_birth = '1998-11-30' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00003';
+update student_profiles set preferred_role = 'leader',   date_of_birth = '1990-01-10' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00004';
+update student_profiles set preferred_role = 'follower', date_of_birth = '1996-06-05' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00005';
+update student_profiles set preferred_role = 'leader',   date_of_birth = '1993-09-18' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00006';
+update student_profiles set preferred_role = 'follower', date_of_birth = '1997-04-12' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00007';
+update student_profiles set preferred_role = 'leader',   date_of_birth = '1994-12-28' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00008';
+
+
+-- ── Terms ───────────────────────────────────────────────────
+
+insert into terms (id, academy_id, name, start_date, end_date, status) values
+  ('00000000-0000-0000-0001-000000000001', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   'Term 1 – 2026', '2026-01-12', '2026-02-06', 'past'),
+  ('00000000-0000-0000-0001-000000000002', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   'Term 2 – 2026', '2026-02-10', '2026-03-27', 'active');
 
 
 -- ── Dance styles ────────────────────────────────────────────
@@ -115,32 +143,20 @@ insert into dance_styles (id, name, requires_role_balance, sort_order) values
 
 
 -- ── Class templates (weekly schedule) ───────────────────────
--- day_of_week: 0=Sunday, 1=Monday, ..., 5=Friday, 6=Saturday
 
--- Monday
 insert into classes (id, academy_id, dance_style_id, title, class_type, level, day_of_week, start_time, end_time, max_capacity, leader_cap, follower_cap, location) values
   ('e0e0e0e0-0000-0000-0000-000000000001', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000001', 'Bachata Beginner 1',     'class', 'Beginner 1',     1, '19:00', '20:00', 20, 10, 10, 'BPM Studio A'),
   ('e0e0e0e0-0000-0000-0000-000000000002', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000004', 'Cuban Beginner 2',       'class', 'Beginner 2',     1, '19:00', '20:00', 20, 10, 10, 'BPM Studio B'),
   ('e0e0e0e0-0000-0000-0000-000000000003', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000001', 'Bachata Beginner 2',     'class', 'Beginner 2',     1, '20:00', '21:00', 20, 10, 10, 'BPM Studio A'),
   ('e0e0e0e0-0000-0000-0000-000000000004', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000004', 'Cuban Intermediate',     'class', 'Intermediate',   1, '20:00', '21:00', 16, 8,  8,  'BPM Studio B'),
-
--- Tuesday
   ('e0e0e0e0-0000-0000-0000-000000000005', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000005', 'Salsa Line Beginner 1',  'class', 'Beginner 1',     2, '19:00', '20:00', 20, 10, 10, 'BPM Studio A'),
   ('e0e0e0e0-0000-0000-0000-000000000006', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000005', 'Salsa Line Beginner 2',  'class', 'Beginner 2',     2, '20:00', '21:00', 20, 10, 10, 'BPM Studio A'),
   ('e0e0e0e0-0000-0000-0000-000000000007', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000006', 'Reggaeton Open',         'class', 'Open',           2, '20:00', '21:00', 25, null, null, 'BPM Studio B'),
-
--- Wednesday
   ('e0e0e0e0-0000-0000-0000-000000000008', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000002', 'Bachata Tradicional Beg 1', 'class', 'Beginner 1',  3, '19:00', '20:00', 20, 10, 10, 'BPM Studio A'),
   ('e0e0e0e0-0000-0000-0000-000000000009', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000003', 'Bachata Partnerwork Int',   'class', 'Intermediate', 3, '20:00', '21:00', 16, 8,  8,  'BPM Studio A'),
-
--- Thursday
   ('e0e0e0e0-0000-0000-0000-000000000010', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000004', 'Cuban Beginner 1',          'class', 'Beginner 1',  4, '19:00', '20:00', 20, 10, 10, 'BPM Studio A'),
   ('e0e0e0e0-0000-0000-0000-000000000011', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000007', 'Ladies Styling Open',       'class', 'Open',         4, '20:00', '21:00', 20, null, null, 'BPM Studio A'),
-
--- Friday
   ('e0e0e0e0-0000-0000-0000-000000000012', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', null,                                    'BPM Friday Social',         'social', null,         5, '21:00', '01:00', null, null, null, 'BPM Studio'),
-
--- Saturday
   ('e0e0e0e0-0000-0000-0000-000000000013', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', null,                                    'Student Practice',          'student_practice', null, 6, '14:00', '15:00', null, null, null, 'BPM Studio A'),
   ('e0e0e0e0-0000-0000-0000-000000000014', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'd0d0d0d0-0000-0000-0000-000000000008', 'Afro-Cuban Open',           'class', 'Open',         6, '15:00', '16:00', 20, null, null, 'BPM Studio A');
 
@@ -160,9 +176,7 @@ insert into teacher_pairs (class_id, teacher_1_id, teacher_2_id, effective_from)
   ('e0e0e0e0-0000-0000-0000-000000000014', 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00003', null,                                     '2025-01-01');
 
 
--- ── Bookable class instances (next week sample) ─────────────
--- Generate instances for next Mon–Sat from active class templates.
--- status = 'open' for classes, 'scheduled' for socials/practice.
+-- ── Bookable class instances ────────────────────────────────
 
 do $$
 declare
@@ -172,13 +186,11 @@ declare
 begin
   for _class in select * from classes where is_active = true
   loop
-    -- Calculate next occurrence of this day_of_week
     _next_day := current_date + ((7 + _class.day_of_week - extract(dow from current_date)::int) % 7);
     if _next_day <= current_date then
       _next_day := _next_day + 7;
     end if;
 
-    -- Socials and student_practice stay 'scheduled'; classes open for booking
     if _class.class_type = 'class' then
       _status := 'open';
     else
@@ -198,87 +210,114 @@ begin
 end $$;
 
 
--- ── Products (catalog) ──────────────────────────────────────
+-- ── Products (full catalog matching mock-data) ──────────────
 
-insert into products (id, academy_id, name, description, product_type, price_cents, total_credits, duration_days, dance_style_id, allowed_levels, metadata) values
-  -- Monthly Unlimited Membership
-  ('f0f0f0f0-0000-0000-0000-000000000001',
-   'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   'Monthly Unlimited',
-   'Unlimited access to all classes for one month.',
-   'membership', 8000, null, 30, null, null, '{}'),
+insert into products (id, academy_id, name, description, long_description, product_type, price_cents, total_credits, duration_days, dance_style_id, allowed_levels, term_bound, recurring, classes_per_term, auto_renew, benefits, credits_model, is_provisional, metadata) values
+  -- 4 Classes Membership
+  ('f0f0f0f0-0000-0000-0000-000000000001', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   '4 Classes Membership', '4 classes per term, any style.', '4 classes per 4-week term. Includes birthday-week free class, member giveaway eligibility, and free weekend Student Practice.',
+   'membership', 4000, null, null, null, null, true, true, 4, true,
+   '{"1 free class during birthday week","Member giveaway eligibility","Free weekend Student Practice"}',
+   'unlimited', false, '{}'),
 
-  -- 10-Class Pack
-  ('f0f0f0f0-0000-0000-0000-000000000002',
-   'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   '10-Class Pack',
-   '10 classes, any style, valid for 3 months.',
-   'pack', 7000, 10, 90, null, null, '{}'),
+  -- 8 Classes Membership
+  ('f0f0f0f0-0000-0000-0000-000000000002', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   '8 Classes Membership', '8 classes per term, any style.', '8 classes per 4-week term. Includes birthday-week free class, member giveaway eligibility, and free weekend Student Practice.',
+   'membership', 6500, null, null, null, null, true, true, 8, true,
+   '{"1 free class during birthday week","Member giveaway eligibility","Free weekend Student Practice"}',
+   'unlimited', false, '{}'),
 
-  -- 5-Class Pack
-  ('f0f0f0f0-0000-0000-0000-000000000003',
-   'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   '5-Class Pack',
-   '5 classes, any style, valid for 2 months.',
-   'pack', 4000, 5, 60, null, null, '{}'),
+  -- 12 Classes Membership
+  ('f0f0f0f0-0000-0000-0000-000000000003', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   '12 Classes Membership', '12 classes per term, any style.', '12 classes per 4-week term. Includes birthday-week free class, member giveaway eligibility, and free weekend Student Practice.',
+   'membership', 8500, null, null, null, null, true, true, 12, true,
+   '{"1 free class during birthday week","Member giveaway eligibility","Free weekend Student Practice"}',
+   'unlimited', false, '{}'),
 
-  -- Single Class Drop-in
-  ('f0f0f0f0-0000-0000-0000-000000000004',
-   'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   'Single Class Drop-in',
-   'One-time class entry.',
-   'drop_in', 1000, 1, 30, null, null, '{}'),
+  -- 16 Classes Membership
+  ('f0f0f0f0-0000-0000-0000-000000000004', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   '16 Classes Membership', '16 classes per term. Maximum flexibility.', '16 classes per 4-week term. Includes birthday-week free class, member giveaway eligibility, and free weekend Student Practice.',
+   'membership', 10000, null, null, null, null, true, true, 16, true,
+   '{"1 free class during birthday week","Member giveaway eligibility","Free weekend Student Practice"}',
+   'unlimited', false, '{}'),
 
-  -- Beginners 1 & 2 Pass (style-specific promo)
-  ('f0f0f0f0-0000-0000-0000-000000000005',
-   'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   'Beginners 1 & 2 Pass',
-   'Covers Beginner 1 and Beginner 2 for ONE selected style. Valid 8 weeks.',
-   'promo_pass', 2500, 16, 56, null, '{Beginner 1,Beginner 2}',
-   '{"style_required": true, "description_note": "Student picks one style at purchase."}'),
+  -- Beginners 1 & 2 Pass
+  ('f0f0f0f0-0000-0000-0000-000000000005', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   'Beginners 1 & 2 Pass', 'Covers Beg 1 and Beg 2 for one style.', 'Access to Beginner 1 and Beginner 2 for ONE selected style. Valid for 8 weeks (2 terms).',
+   'pass', 2500, 16, 56, null, '{Beginner 1,Beginner 2}', true, false, null, false,
+   null, 'fixed', false,
+   '{"style_required": true}'),
 
   -- Beginners Latin Combo (PROVISIONAL)
-  ('f0f0f0f0-0000-0000-0000-000000000006',
-   'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   'Beginners Latin Combo',
-   'Covers Beginner 1 in TWO of three Latin styles (Bachata, Cuban, Salsa Line). Valid 8 weeks. PROVISIONAL.',
-   'promo_pass', 3500, 16, 56, null, '{Beginner 1}',
-   '{"is_provisional": true, "pick_n_styles": 2, "eligible_styles": ["Bachata", "Cuban", "Salsa Line"]}');
+  ('f0f0f0f0-0000-0000-0000-000000000006', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   'Beginners Latin Combo', 'Beg 1 in two of three Latin styles.', 'Covers Beginner 1 in TWO of three Latin styles (Bachata, Cuban, Salsa Line). Valid for 8 weeks (2 terms). PROVISIONAL.',
+   'pass', 3500, 16, 56, null, '{Beginner 1}', true, false, null, false,
+   null, 'fixed', true,
+   '{"pick_n_styles": 2, "eligible_styles": ["Bachata", "Cuban", "Salsa Line"]}'),
+
+  -- Single Class Drop-in
+  ('f0f0f0f0-0000-0000-0000-000000000007', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
+   'Single Class Drop-in', 'One-time class entry.', 'Pay-per-class entry for any open class. No membership required.',
+   'drop_in', 1200, 1, 1, null, null, false, false, null, false,
+   null, 'single_use', false, '{}');
 
 
--- ── Sample subscriptions ────────────────────────────────────
+-- ── Subscriptions with payment metadata ─────────────────────
 
-insert into student_subscriptions (id, student_id, product_id, status, total_credits, remaining_credits, valid_from, valid_until, dance_style_id, allowed_levels) values
-  -- Alice: Monthly Unlimited
+insert into student_subscriptions (id, student_id, product_id, status, total_credits, remaining_credits, valid_from, valid_until, dance_style_id, allowed_levels, payment_method, payment_status, assigned_at, term_id, classes_used, classes_per_term, auto_renew, selected_style_names) values
+  -- Alice: 8 Classes Membership (paid via Revolut)
   ('11111111-0000-0000-0000-000000000001',
    'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001',
-   'f0f0f0f0-0000-0000-0000-000000000001',
-   'active', null, null, current_date, current_date + 30, null, null),
+   'f0f0f0f0-0000-0000-0000-000000000002',
+   'active', null, null, '2026-02-10', '2026-03-27', null, null,
+   'revolut', 'paid', now(),
+   '00000000-0000-0000-0001-000000000002', 3, 8, true, null),
 
-  -- Bob: 10-Class Pack (7 remaining)
+  -- Bob: Beginners 1 & 2 Pass for Bachata (paid via card)
   ('11111111-0000-0000-0000-000000000002',
    'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00002',
-   'f0f0f0f0-0000-0000-0000-000000000002',
-   'active', 10, 7, current_date - 14, current_date + 76, null, null),
+   'f0f0f0f0-0000-0000-0000-000000000005',
+   'active', 16, 12, '2026-02-10', '2026-04-06',
+   'd0d0d0d0-0000-0000-0000-000000000001', '{Beginner 1,Beginner 2}',
+   'card', 'paid', now(),
+   '00000000-0000-0000-0001-000000000002', 4, null, false, '{"Bachata"}'),
 
-  -- Carol: Beginners 1 & 2 Pass for Bachata
+  -- Carol: 4 Classes Membership (paid via bank transfer)
   ('11111111-0000-0000-0000-000000000003',
    'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00003',
-   'f0f0f0f0-0000-0000-0000-000000000005',
-   'active', 16, 14, current_date - 7, current_date + 49,
-   'd0d0d0d0-0000-0000-0000-000000000001', '{Beginner 1,Beginner 2}'),
+   'f0f0f0f0-0000-0000-0000-000000000001',
+   'active', null, null, '2026-02-10', '2026-03-27', null, null,
+   'bank_transfer', 'paid', now(),
+   '00000000-0000-0000-0001-000000000002', 2, 4, true, null),
 
-  -- Dave: 5-Class Pack (3 remaining)
+  -- Dave: 16 Classes Membership (paid cash)
   ('11111111-0000-0000-0000-000000000004',
    'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00004',
+   'f0f0f0f0-0000-0000-0000-000000000004',
+   'active', null, null, '2026-02-10', '2026-03-27', null, null,
+   'cash', 'paid', now(),
+   '00000000-0000-0000-0001-000000000002', 6, 16, true, null),
+
+  -- Fiona: 12 Classes Membership (complimentary via admin)
+  ('11111111-0000-0000-0000-000000000005',
+   'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00006',
    'f0f0f0f0-0000-0000-0000-000000000003',
-   'active', 5, 3, current_date - 21, current_date + 39, null, null);
+   'active', null, null, '2026-02-10', '2026-03-27', null, null,
+   'manual', 'complimentary', now(),
+   '00000000-0000-0000-0001-000000000002', 1, 12, false, null);
 
-  -- Eve: no active subscription (will need a drop-in)
+
+-- ── Code of Conduct acceptances ─────────────────────────────
+
+insert into coc_acceptances (student_id, version, accepted_at) values
+  ('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001', '1.0', '2026-01-20T10:00:00Z'),
+  ('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00002', '1.0', '2026-02-01T14:30:00Z'),
+  ('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00006', '1.0', '2026-01-25T09:15:00Z'),
+  ('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00003', '1.0', '2026-02-05T11:00:00Z'),
+  ('c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00004', '1.0', '2026-02-08T16:00:00Z');
 
 
--- ── Sample bookings (for the generated bookable_classes) ────
--- Book Alice and Bob into Bachata Beg 1 (next Monday)
+-- ── Sample bookings ─────────────────────────────────────────
 
 do $$
 declare
@@ -294,13 +333,6 @@ begin
     insert into bookings (bookable_class_id, student_id, dance_role, status, subscription_id) values
       (_bclass_id, 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001', 'follower', 'confirmed', '11111111-0000-0000-0000-000000000001'),
       (_bclass_id, 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00002', 'leader',   'confirmed', '11111111-0000-0000-0000-000000000002');
-
-    -- Wallet transactions for Bob's pack credit
-    update student_subscriptions set remaining_credits = remaining_credits - 1 where id = '11111111-0000-0000-0000-000000000002';
-    insert into wallet_transactions (student_id, subscription_id, booking_id, tx_type, credits, balance_after, description)
-    select 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00002', '11111111-0000-0000-0000-000000000002', b.id, 'credit_used', -1, 6,
-           'Booked Bachata Beginner 1'
-    from bookings b where b.bookable_class_id = _bclass_id and b.student_id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00002';
   end if;
 end $$;
 

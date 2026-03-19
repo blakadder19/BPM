@@ -28,7 +28,7 @@ interface DevPanelProps {
   studentName: string;
 }
 
-type StudentState = Awaited<ReturnType<typeof devGetStudentState>>;
+type StudentState = Awaited<ReturnType<typeof devGetStudentState>> | null;
 type ProductOption = { id: string; name: string; productType: string; classesPerTerm: number | null; totalCredits: number | null };
 type ClassOption = { id: string; title: string; date: string; startTime: string; requiresRole: boolean };
 

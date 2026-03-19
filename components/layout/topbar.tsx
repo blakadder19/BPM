@@ -22,19 +22,21 @@ interface TopbarProps {
   user: AuthUser;
   devStudents?: StudentOption[];
   devStudentId?: string | null;
+  showDevControls?: boolean;
 }
 
-export function Topbar({ user, devStudents, devStudentId }: TopbarProps) {
+export function Topbar({ user, devStudents, devStudentId, showDevControls }: TopbarProps) {
+  const showControls = showDevControls ?? (process.env.NODE_ENV === "development");
   return (
     <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
       <div className="flex items-center gap-3">
         <Badge variant={ROLE_BADGE[user.role] ?? "default"}>
           {user.role}
         </Badge>
-        {process.env.NODE_ENV === "development" && (
+        {showControls && (
           <>
             <DevRoleSwitcher currentRole={user.role} />
-            {user.role === "student" && devStudents && devStudents.length > 0 && (
+            {devStudents && devStudents.length > 0 && (
               <DevStudentSwitcher
                 students={devStudents}
                 currentStudentId={devStudentId ?? null}

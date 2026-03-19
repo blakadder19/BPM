@@ -1,16 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { STUDENTS, PRODUCTS, TERMS, type MockProduct } from "@/lib/mock-data";
+import { STUDENTS, PRODUCTS, TERMS } from "@/lib/mock-data";
 import {
   getSubscriptions,
   createSubscription,
   updateSubscription,
 } from "@/lib/services/subscription-store";
-import { getBookingService } from "@/lib/services/booking-store";
+import { getBookingRepo, getPenaltyRepo, getStudentRepo, getCocRepo } from "@/lib/repositories";
 import { getInstances } from "@/lib/services/schedule-store";
 import { DANCE_STYLES } from "@/lib/mock-data";
-import { getPenaltyService } from "@/lib/services/penalty-store";
 import type { DanceRole } from "@/types/domain";
 
 function guardDev() {
@@ -31,25 +30,47 @@ function revalidateAll() {
 
 export async function devGetStudentState(studentId: string) {
   guardDev();
-  const student = STUDENTS.find((s) => s.id === studentId);
-  if (!student) return null;
+
+  const { CURRENT_CODE_OF_CONDUCT } = await import("@/config/code-of-conduct");
+  const cocAccepted = await getCocRepo().hasAcceptedVersion(studentId, CURRENT_CODE_OF_CONDUCT.version);
+
+  const mockStudent = STUDENTS.find((s) => s.id === studentId);
+
+  if (!mockStudent) {
+    // Real Supabase user not in mock data — try the repository,
+    // then return a minimal shell state so the DevPanel renders.
+    const repoStudent = await getStudentRepo().getById(studentId);
+    return {
+      student: {
+        id: studentId,
+        fullName: repoStudent?.fullName ?? "(real user)",
+        preferredRole: repoStudent?.preferredRole ?? null,
+        cocAccepted,
+      },
+      subscriptions: [] as {
+        id: string; productName: string; productType: string;
+        status: string; classesUsed: number; classesPerTerm: number | null;
+        remainingCredits: number | null; totalCredits: number | null;
+        paymentMethod: string | null; paymentStatus: string | null;
+      }[],
+      bookings: [] as { id: string; classTitle: string; date: string; status: string; subscriptionId: string | null }[],
+      waitlist: [] as { id: string; classTitle: string; date: string; position: number }[],
+      penalties: [] as { id: string; classTitle: string; reason: string; amountCents: number; resolution: string }[],
+    };
+  }
 
   const subs = getSubscriptions().filter((s) => s.studentId === studentId);
-  const svc = getBookingService();
+  const svc = getBookingRepo().getService();
   const bookings = svc.getBookingsForStudent(studentId);
   const waitlist = svc.getWaitlistForStudent(studentId);
-  const penaltySvc = getPenaltyService();
+  const penaltySvc = getPenaltyRepo().getService();
   const penalties = penaltySvc.penalties.filter((p) => p.studentId === studentId);
-
-  const { hasAcceptedCurrentVersion } = await import("@/lib/services/coc-store");
-  const { CURRENT_CODE_OF_CONDUCT } = await import("@/config/code-of-conduct");
-  const cocAccepted = hasAcceptedCurrentVersion(studentId, CURRENT_CODE_OF_CONDUCT.version);
 
   return {
     student: {
-      id: student.id,
-      fullName: student.fullName,
-      preferredRole: student.preferredRole,
+      id: mockStudent.id,
+      fullName: mockStudent.fullName,
+      preferredRole: mockStudent.preferredRole,
       cocAccepted,
     },
     subscriptions: subs.map((s) => ({
@@ -133,13 +154,20 @@ export async function devGetOpenClasses(): Promise<
 
 // ── Entitlement mutations ────────────────────────────────────
 
+async function resolveStudentName(studentId: string): Promise<string | null> {
+  const mock = STUDENTS.find((s) => s.id === studentId);
+  if (mock) return mock.fullName;
+  const repo = await getStudentRepo().getById(studentId);
+  return repo?.fullName ?? null;
+}
+
 export async function devAssignProduct(
   studentId: string,
   productId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const student = STUDENTS.find((s) => s.id === studentId);
-  if (!student) return { success: false, error: "Student not found" };
+  const studentName = await resolveStudentName(studentId);
+  if (!studentName) return { success: false, error: "Student not found" };
   const product = PRODUCTS.find((p) => p.id === productId);
   if (!product) return { success: false, error: "Product not found" };
 
@@ -208,10 +236,10 @@ export async function devAddBooking(
   danceRole: DanceRole | null
 ): Promise<{ success: boolean; error?: string; result?: string }> {
   guardDev();
-  const student = STUDENTS.find((s) => s.id === studentId);
-  if (!student) return { success: false, error: "Student not found" };
+  const studentName = await resolveStudentName(studentId);
+  if (!studentName) return { success: false, error: "Student not found" };
 
-  const svc = getBookingService();
+  const svc = getBookingRepo().getService();
 
   const instances = getInstances();
   svc.refreshClasses(
@@ -240,7 +268,7 @@ export async function devAddBooking(
   const outcome = svc.adminBook({
     bookableClassId: classId,
     studentId,
-    studentName: student.fullName,
+    studentName,
     danceRole,
     source: "admin",
     subscriptionName: "Dev Tools",
@@ -259,7 +287,7 @@ export async function devCancelBooking(
   bookingId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const svc = getBookingService();
+  const svc = getBookingRepo().getService();
   const result = svc.cancelBooking(bookingId);
   revalidateAll();
   if (result.type === "error") return { success: false, error: result.reason };
@@ -274,10 +302,10 @@ export async function devJoinWaitlist(
   danceRole: DanceRole | null
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const student = STUDENTS.find((s) => s.id === studentId);
-  if (!student) return { success: false, error: "Student not found" };
+  const studentName = await resolveStudentName(studentId);
+  if (!studentName) return { success: false, error: "Student not found" };
 
-  const svc = getBookingService();
+  const svc = getBookingRepo().getService();
 
   const instances = getInstances();
   svc.refreshClasses(
@@ -306,7 +334,7 @@ export async function devJoinWaitlist(
   const outcome = svc.bookClass({
     bookableClassId: classId,
     studentId,
-    studentName: student.fullName,
+    studentName,
     danceRole,
   });
 
@@ -320,7 +348,7 @@ export async function devLeaveWaitlist(
   waitlistId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const svc = getBookingService();
+  const svc = getBookingRepo().getService();
   const removed = svc.removeFromWaitlist(waitlistId);
   revalidateAll();
   if (!removed) return { success: false, error: "Entry not found" };
@@ -334,13 +362,13 @@ export async function devAddPenalty(
   reason: "late_cancel" | "no_show"
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const student = STUDENTS.find((s) => s.id === studentId);
-  if (!student) return { success: false, error: "Student not found" };
+  const studentName = await resolveStudentName(studentId);
+  if (!studentName) return { success: false, error: "Student not found" };
 
-  const penaltySvc = getPenaltyService();
+  const penaltySvc = getPenaltyRepo().getService();
   penaltySvc.addPenalty({
     studentId,
-    studentName: student.fullName,
+    studentName,
     bookingId: null,
     bookableClassId: "dev-class",
     classTitle: "Dev Test Class",
@@ -361,7 +389,7 @@ export async function devWaivePenalty(
   penaltyId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const penaltySvc = getPenaltyService();
+  const penaltySvc = getPenaltyRepo().getService();
   const penalty = penaltySvc.penalties.find((p) => p.id === penaltyId);
   if (!penalty) return { success: false, error: "Penalty not found" };
   penalty.resolution = "waived";
@@ -376,11 +404,20 @@ export async function devSwitchRole(
   studentId: string
 ): Promise<{ success: boolean; newRole?: string; error?: string }> {
   guardDev();
-  const student = STUDENTS.find((s) => s.id === studentId);
+  const mock = STUDENTS.find((s) => s.id === studentId);
+  if (mock) {
+    mock.preferredRole = mock.preferredRole === "leader" ? "follower" : "leader";
+    revalidateAll();
+    return { success: true, newRole: mock.preferredRole };
+  }
+  // Real user — toggle via repository
+  const repo = getStudentRepo();
+  const student = await repo.getById(studentId);
   if (!student) return { success: false, error: "Student not found" };
-  student.preferredRole = student.preferredRole === "leader" ? "follower" : "leader";
+  const newRole = student.preferredRole === "leader" ? "follower" : "leader";
+  await repo.update(studentId, { preferredRole: newRole });
   revalidateAll();
-  return { success: true, newRole: student.preferredRole };
+  return { success: true, newRole };
 }
 
 // ── Code of Conduct mutations ───────────────────────────────
@@ -389,9 +426,8 @@ export async function devAcceptCoc(
   studentId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const { acceptCoc } = await import("@/lib/services/coc-store");
   const { CURRENT_CODE_OF_CONDUCT } = await import("@/config/code-of-conduct");
-  acceptCoc(studentId, CURRENT_CODE_OF_CONDUCT.version);
+  await getCocRepo().accept(studentId, CURRENT_CODE_OF_CONDUCT.version);
   revalidateAll();
   return { success: true };
 }
@@ -400,8 +436,7 @@ export async function devRevokeCoc(
   studentId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
-  const { revokeAcceptance } = await import("@/lib/services/coc-store");
-  revokeAcceptance(studentId);
+  await getCocRepo().revoke(studentId);
   revalidateAll();
   return { success: true };
 }

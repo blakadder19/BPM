@@ -1,11 +1,13 @@
 import { requireRole } from "@/lib/auth";
-import { getStudents } from "@/lib/services/student-service";
-import { getSubscriptions } from "@/lib/services/subscription-service";
+import {
+  getStudentRepo,
+  getSubscriptionRepo,
+  getProductRepo,
+  getTermRepo,
+  getBookingRepo,
+  getPenaltyRepo,
+} from "@/lib/repositories";
 import { getWalletTransactions } from "@/lib/services/wallet-service";
-import { getBookingService } from "@/lib/services/booking-store";
-import { getPenaltyService } from "@/lib/services/penalty-store";
-import { getProducts } from "@/lib/services/product-store";
-import { getTerms } from "@/lib/services/term-store";
 import { AdminStudents } from "@/components/students/admin-students";
 
 export default async function StudentsPage({
@@ -16,17 +18,16 @@ export default async function StudentsPage({
   await requireRole(["admin"]);
   const params = searchParams ? await searchParams : {};
 
-  const [students, subscriptions, walletTransactions] = await Promise.all([
-    getStudents(),
-    getSubscriptions(),
+  const [students, subscriptions, walletTransactions, products, terms] = await Promise.all([
+    getStudentRepo().getAll(),
+    getSubscriptionRepo().getAll(),
     getWalletTransactions(),
+    getProductRepo().getAll(),
+    getTermRepo().getAll(),
   ]);
 
-  const products = getProducts();
-  const terms = getTerms();
-
-  const bookingSvc = getBookingService();
-  const penaltySvc = getPenaltyService();
+  const bookingSvc = getBookingRepo().getService();
+  const penaltySvc = getPenaltyRepo().getService();
   const bookings = bookingSvc.getAllBookings().map((b) => {
     const cls = bookingSvc.getClass(b.bookableClassId);
     return {

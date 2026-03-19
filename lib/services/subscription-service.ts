@@ -1,19 +1,25 @@
-import {
-  getSubscriptions as mockGetAll,
-  getSubscription as mockGetOne,
-  createSubscription as mockCreate,
-  updateSubscription as mockUpdate,
-} from "@/lib/services/subscription-store";
+/**
+ * Subscription service — delegates to the repository selected by DATA_PROVIDER.
+ */
+
+import { getSubscriptionRepo } from "@/lib/repositories";
+import { getSubscription as mockGetOne } from "@/lib/services/subscription-store";
 import type { MockSubscription } from "@/lib/mock-data";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
-const isDev = process.env.NODE_ENV === "development";
-
 export async function getSubscriptions(): Promise<MockSubscription[]> {
-  if (isDev) return mockGetAll();
-  return [];
+  return getSubscriptionRepo().getAll();
 }
 
+export async function getSubscriptionsByStudent(studentId: string): Promise<MockSubscription[]> {
+  return getSubscriptionRepo().getByStudent(studentId);
+}
+
+/**
+ * Synchronous access — only works reliably in memory mode.
+ * Used by domain logic that currently needs sync access (credit-store, booking rules).
+ * PROVISIONAL: will be refactored to async when those callers are updated.
+ */
 export function getSubscriptionSync(id: string): MockSubscription | undefined {
   return mockGetOne(id);
 }
@@ -42,11 +48,12 @@ export async function createSubscription(data: {
   selectedStyleIds?: string[] | null;
   selectedStyleNames?: string[] | null;
 }): Promise<{ success: boolean; error?: string }> {
-  if (isDev) {
-    mockCreate(data);
+  try {
+    await getSubscriptionRepo().create(data);
     return { success: true };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
-  return { success: false, error: "Production subscription creation not yet implemented" };
 }
 
 export async function updateSubscription(
@@ -67,11 +74,8 @@ export async function updateSubscription(
     classesPerTerm?: number | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
-  if (isDev) {
-    const result = mockUpdate(id, patch);
-    return result
-      ? { success: true }
-      : { success: false, error: "Subscription not found" };
-  }
-  return { success: false, error: "Production subscription update not yet implemented" };
+  const result = await getSubscriptionRepo().update(id, patch);
+  return result
+    ? { success: true }
+    : { success: false, error: "Subscription not found" };
 }

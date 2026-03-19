@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { isMemoryMode } from "@/lib/config/data-provider";
 
 export interface AuthResult {
   error: string | null;
@@ -11,11 +12,40 @@ const AUTH_COOKIE_RE = /^sb-.+-auth-token/;
 
 export async function signOut(): Promise<void> {
   const cookieStore = await cookies();
+
+  // If Supabase is configured, sign out through the server client
+  if (
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ) {
+    try {
+      const { createServerSupabaseClient } = await import(
+        "@/lib/supabase/server"
+      );
+      const supabase = await createServerSupabaseClient();
+      await supabase.auth.signOut();
+    } catch {
+      // Supabase unreachable — fall through to manual cookie cleanup
+    }
+  }
+
+  // Clear any remaining auth cookies manually
   for (const c of cookieStore.getAll()) {
     if (AUTH_COOKIE_RE.test(c.name)) {
       cookieStore.delete(c.name);
     }
   }
+
+  // Clear dev cookies if in memory/dev mode
+  if (isMemoryMode()) {
+    try {
+      cookieStore.delete("dev_role");
+      cookieStore.delete("dev_student_id");
+    } catch {
+      // Ignore
+    }
+  }
+
   redirect("/login");
 }
 

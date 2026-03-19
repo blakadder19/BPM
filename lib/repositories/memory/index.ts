@@ -1,0 +1,10 @@
+export { memoryStudentRepo } from "./student-repository";
+export { memoryProductRepo } from "./product-repository";
+export { memoryTermRepo } from "./term-repository";
+export { memorySubscriptionRepo } from "./subscription-repository";
+export { memoryCocRepo } from "./coc-repository";
+export { memorySettingsRepo } from "./settings-repository";
+export { memoryBookingRepo } from "./booking-repository";
+export { memoryAttendanceRepo } from "./attendance-repository";
+export { memoryPenaltyRepo } from "./penalty-repository";
+export { memoryCreditRepo } from "./credit-repository";

@@ -5,8 +5,7 @@ import {
   createSubscription,
   updateSubscription,
 } from "@/lib/services/subscription-service";
-import { getProduct } from "@/lib/services/product-store";
-import { getTerm } from "@/lib/services/term-store";
+import { getProductRepo, getTermRepo } from "@/lib/repositories";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
 const VALID_STATUSES = new Set<string>([
@@ -62,14 +61,14 @@ export async function createSubscriptionAction(
     return { success: false, error: "Invalid payment status" };
   }
 
-  const product = getProduct(productId);
+  const product = await getProductRepo().getById(productId);
   if (!product) return { success: false, error: "Product not found" };
 
   let validFrom: string;
   let validUntil: string | null;
 
   if (termId) {
-    const term = getTerm(termId);
+    const term = await getTermRepo().getById(termId);
     if (!term) return { success: false, error: "Term not found" };
     validFrom = term.startDate;
     validUntil = term.endDate;

@@ -1,8 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getPenaltyService } from "@/lib/services/penalty-store";
-import { getSettings } from "@/lib/services/settings-store";
-import { STUDENTS, CLASSES } from "@/lib/mock-data";
+import { getPenaltyRepo, getStudentRepo, getSettingsRepo } from "@/lib/repositories";
+import { CLASSES } from "@/lib/mock-data";
 import { AdminPenalties } from "@/components/penalties/admin-penalties";
 import {
   StudentPenalties,
@@ -18,7 +17,7 @@ export default async function PenaltiesPage({
   if (!user) redirect("/login");
   const params = searchParams ? await searchParams : {};
 
-  const svc = getPenaltyService();
+  const svc = getPenaltyRepo().getService();
 
   if (user.role === "student") {
     const mine: StudentPenaltyView[] = svc.penalties
@@ -37,9 +36,10 @@ export default async function PenaltiesPage({
   }
 
   const all = svc.getAllPenalties();
-  const settings = getSettings();
+  const settings = await getSettingsRepo().get();
 
-  const studentOptions = STUDENTS.map((s) => ({ id: s.id, fullName: s.fullName }));
+  const allStudents = await getStudentRepo().getAll();
+  const studentOptions = allStudents.map((s) => ({ id: s.id, fullName: s.fullName }));
   const classOptions = CLASSES
     .filter((c) => c.classType === "class")
     .map((c) => ({ id: c.id, title: c.title }));

@@ -1,0 +1,10 @@
+export { supabaseStudentRepo } from "./student-repository";
+export { supabaseProductRepo } from "./product-repository";
+export { supabaseTermRepo } from "./term-repository";
+export { supabaseSubscriptionRepo } from "./subscription-repository";
+export { supabaseCocRepo } from "./coc-repository";
+export { supabaseSettingsRepo } from "./settings-repository";
+export { supabaseBookingRepo } from "./booking-repository";
+export { supabaseAttendanceRepo } from "./attendance-repository";
+export { supabasePenaltyRepo } from "./penalty-repository";
+export { supabaseCreditRepo } from "./credit-repository";

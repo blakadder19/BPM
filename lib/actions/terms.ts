@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createTerm, updateTerm } from "@/lib/services/term-store";
+import { getTermRepo } from "@/lib/repositories";
 import type { TermStatus } from "@/types/domain";
 
 const VALID_STATUSES = new Set<string>(["draft", "active", "upcoming", "past"]);
@@ -21,7 +21,7 @@ export async function createTermAction(
   if (endDate < startDate) return { success: false, error: "End date must be after start date" };
   if (!VALID_STATUSES.has(statusRaw)) return { success: false, error: "Invalid status" };
 
-  createTerm({
+  await getTermRepo().create({
     name,
     startDate,
     endDate,
@@ -50,7 +50,7 @@ export async function updateTermAction(
   if (endDate < startDate) return { success: false, error: "End date must be after start date" };
   if (!VALID_STATUSES.has(statusRaw)) return { success: false, error: "Invalid status" };
 
-  const result = updateTerm(id, {
+  const result = await getTermRepo().update(id, {
     name,
     startDate,
     endDate,
