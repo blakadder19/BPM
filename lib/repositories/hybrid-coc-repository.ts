@@ -43,8 +43,9 @@ export const hybridCocRepo: ICocRepository = {
     const primary = pickRepo(studentId);
     try {
       return await primary.getAcceptance(studentId);
-    } catch {
+    } catch (err) {
       if (primary !== memoryCocRepo) {
+        console.warn("[hybridCocRepo] Supabase getAcceptance failed, falling back to memory:", err instanceof Error ? err.message : err);
         return memoryCocRepo.getAcceptance(studentId);
       }
       return null;
@@ -55,8 +56,9 @@ export const hybridCocRepo: ICocRepository = {
     const primary = pickRepo(studentId);
     try {
       return await primary.hasAcceptedVersion(studentId, version);
-    } catch {
+    } catch (err) {
       if (primary !== memoryCocRepo) {
+        console.warn("[hybridCocRepo] Supabase hasAcceptedVersion failed, falling back to memory:", err instanceof Error ? err.message : err);
         return memoryCocRepo.hasAcceptedVersion(studentId, version);
       }
       return false;

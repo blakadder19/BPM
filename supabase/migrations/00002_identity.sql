@@ -82,23 +82,31 @@ create trigger trg_teacher_profiles_updated_at
 
 
 -- ── Auto-create user + profile on Supabase Auth signup ──────
+-- SET search_path = public is required because GoTrue executes the
+-- INSERT under a restricted role whose default search_path may not
+-- include "public". Without it, the enum types and table names
+-- cannot be resolved, causing every signup to fail.
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
   _academy_id uuid;
-  _role       user_role;
+  _role       public.user_role;
 begin
   _academy_id := coalesce(
     (new.raw_user_meta_data ->> 'academy_id')::uuid,
-    (select id from academies order by created_at limit 1)
+    (select id from public.academies order by created_at limit 1)
   );
+
+  if _academy_id is null then
+    return new;
+  end if;
 
   _role := coalesce(
-    (new.raw_user_meta_data ->> 'role')::user_role,
-    'student'
+    (new.raw_user_meta_data ->> 'role')::public.user_role,
+    'student'::public.user_role
   );
 
-  insert into users (id, academy_id, email, full_name, role)
+  insert into public.users (id, academy_id, email, full_name, role)
   values (
     new.id,
     _academy_id,
@@ -107,16 +115,17 @@ begin
     _role
   );
 
-  if _role = 'student' then
-    insert into student_profiles (id) values (new.id);
-  elsif _role = 'teacher' then
-    insert into teacher_profiles (id) values (new.id);
+  if _role = 'student'::public.user_role then
+    insert into public.student_profiles (id) values (new.id);
+  elsif _role = 'teacher'::public.user_role then
+    insert into public.teacher_profiles (id) values (new.id);
   end if;
 
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer set search_path = public;
 
+drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();

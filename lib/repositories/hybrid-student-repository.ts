@@ -2,10 +2,6 @@
  * Hybrid student repository — merges in-memory mock students with real
  * Supabase students when Supabase is configured.
  *
- * Used in memory mode (DATA_PROVIDER !== "supabase") so that real signed-up
- * users are visible alongside mock data, without requiring full Supabase mode
- * for modules that aren't Supabase-ready yet (bookings, penalties, etc.).
- *
  * Priority:
  *   - getAll(): returns memory students + real Supabase students (deduplicated)
  *   - getById(): memory first, then Supabase
@@ -48,7 +44,8 @@ export const hybridStudentRepo: IStudentRepository = {
       const memIds = new Set(memoryStudents.map((s) => s.id));
       const additional = realStudents.filter((s) => !memIds.has(s.id));
       return [...memoryStudents, ...additional];
-    } catch {
+    } catch (err) {
+      console.warn("[hybridStudentRepo.getAll] Supabase read failed:", err instanceof Error ? err.message : err);
       return memoryStudents;
     }
   },
@@ -62,7 +59,8 @@ export const hybridStudentRepo: IStudentRepository = {
 
     try {
       return await sbRepo.getById(id);
-    } catch {
+    } catch (err) {
+      console.warn("[hybridStudentRepo.getById] Supabase read failed:", err instanceof Error ? err.message : err);
       return null;
     }
   },
@@ -80,7 +78,8 @@ export const hybridStudentRepo: IStudentRepository = {
 
     try {
       return await sbRepo.update(id, patch);
-    } catch {
+    } catch (err) {
+      console.warn("[hybridStudentRepo.update] Supabase write failed:", err instanceof Error ? err.message : err);
       return null;
     }
   },
@@ -94,7 +93,8 @@ export const hybridStudentRepo: IStudentRepository = {
 
     try {
       return await sbRepo.toggleActive(id);
-    } catch {
+    } catch (err) {
+      console.warn("[hybridStudentRepo.toggleActive] Supabase write failed:", err instanceof Error ? err.message : err);
       return null;
     }
   },

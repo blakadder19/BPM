@@ -4,19 +4,14 @@ import { useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { provisionCurrentUser } from "@/lib/actions/auth-provision";
 
 /**
  * Auth callback page — handles Supabase email confirmation, magic links,
  * and OAuth redirects.
  *
- * Client-side so it can read both:
- *  - PKCE authorization codes (query parameter `?code=...`)
- *  - Implicit-flow tokens (URL hash `#access_token=...`)
- *
- * On success:  redirect to the `next` target (default /onboarding).
- * On failure:  redirect to /login?confirmed=1 (email was confirmed by
- *              Supabase before it redirected here, so the user just needs
- *              to sign in manually).
+ * After establishing a session, calls provisionCurrentUser() to ensure
+ * the user has public.users + student_profiles rows (one-time, idempotent).
  */
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
@@ -36,8 +31,10 @@ export default function AuthCallbackPage() {
       document.cookie = "dev_student_id=; path=/; max-age=0";
     }
 
-    function goToApp() {
+    async function goToApp() {
       clearDevCookies();
+      // Provision profile rows before entering the app
+      await provisionCurrentUser().catch(() => {});
       router.push(next);
       router.refresh();
     }
@@ -47,31 +44,22 @@ export default function AuthCallbackPage() {
     }
 
     async function handle() {
-      // 1. PKCE flow — exchange authorization code for session
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error) {
-          goToApp();
+          await goToApp();
           return;
         }
-        // Exchange failed (e.g. code_verifier cookie lost due to
-        // different browser/port). Email IS confirmed — send the
-        // user to login with a success message.
         goToLogin();
         return;
       }
 
-      // 2. Implicit / token-hash flow — the Supabase browser client
-      //    auto-detects tokens in the URL hash on initialisation.
-      //    Check if a session was already established.
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        goToApp();
+        await goToApp();
         return;
       }
 
-      // 3. Wait briefly for onAuthStateChange (hash processing can
-      //    be asynchronous in some Supabase client versions).
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         (event) => {
           if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
@@ -81,7 +69,6 @@ export default function AuthCallbackPage() {
         }
       );
 
-      // 4. Timeout — nothing fired, redirect to login with success.
       setTimeout(() => {
         subscription.unsubscribe();
         goToLogin();

@@ -1,61 +1,52 @@
 # BPM — Latest Checkpoint
 
-**Date:** 2026-03-19
-**Full checkpoint:** [`docs/checkpoints/bpm-checkpoint-2026-03-19-real-auth.md`](./bpm-checkpoint-2026-03-19-real-auth.md)
+**Date:** 2026-03-20
+**Full checkpoint:** [`docs/checkpoints/bpm-checkpoint-2026-03-20-stability.md`](./bpm-checkpoint-2026-03-20-stability.md)
 
 ---
 
 ## Current State
 
-The BPM project has transitioned from a pure in-memory prototype to a hybrid system with real Supabase auth.
+First fully working real-auth configuration. Signup, email confirmation,
+onboarding, and Admin Students all work end-to-end with real Supabase users.
 
-### Infrastructure
-- Real Supabase Auth (email/password, email confirmation)
-- Brevo SMTP for transactional emails (confirmation, configured in Supabase dashboard)
-- Hybrid repository layer: mock data coexists with real Supabase users
-- Repository abstraction: 10 domain interfaces with memory, Supabase, and hybrid implementations
-- `createAdminClient()` properly configured for server-side operations
+### Critical Startup Command
 
-### Auth Flow
-- Signup → email confirmation via Brevo → auth callback (PKCE + implicit) → onboarding → dashboard
-- `emailConfirmed` guard blocks unconfirmed users from all protected routes
-- BFCache guard prevents stale page display on browser Back
-- Dev tools allowlist for real authenticated emails (`DEV_TOOL_ALLOWED_EMAILS`)
+```bash
+NODE_USE_ENV_PROXY=1 npm run dev
+```
 
-### Business Layer (unchanged from prior checkpoint)
-- Terms, products (12), subscriptions, bookings, waitlist, attendance, penalties
-- 4 membership tiers with benefits (birthday, giveaways, free practice)
-- Payment metadata (7 methods, 4 statuses)
-- Code of Conduct versioned acceptance
-- QR/token check-in, attendance state machine
+Node.js on this machine cannot reach Supabase without the proxy env var.
 
-## Latest Milestone
+### What Works
 
-**Real auth integration, Brevo SMTP, onboarding/CoC flow, hybrid repository layer.**
-
-Key additions: real Supabase email/password auth, Brevo SMTP confirmation emails, signup + email confirmation + onboarding flow, hybrid student/CoC repositories bridging mock and real data, emailConfirmed route guard, dev tools allowlist for real users, admin client server-side fix.
-
-## What Works
-
-- Real users can sign up, receive confirmation emails, and complete onboarding
-- Real users appear in Admin Students (hybrid student repo)
-- Dev tools work for real allowlisted email without impersonation
-- CoC acceptance persists (Supabase or memory fallback)
-- All pre-existing mock/admin flows unaffected
+- Fresh email signup → Brevo confirmation → auth callback → onboarding → dashboard
+- `handle_new_user()` trigger creates `public.users` + `student_profiles` on signup
+- Real users appear in Admin > Students (hybrid student repo)
+- Product/subscription assignment (memory store, works for both mock and real users)
+- Dev tools for allowlisted real email without impersonation
+- All mock/demo flows unaffected
 - TypeScript clean, build passes
 
-## What Remains
+### What Remains
 
-- **Migration 00009 not applied** — `coc_acceptances` table missing on remote Supabase; CoC falls back to memory
-- **Subscriptions/bookings/penalties still memory-only** — real users can't have persistent subscriptions assigned
-- **DATA_PROVIDER defaults to "memory"** — intentional, but limits real Supabase persistence
-- **Waitlist promotion doesn't deduct credits**
-- **Birthday free class not auto-applied during booking**
-- **No real payments** (Stripe/Revolut placeholder-ready)
-- **No email notifications** (booking confirmations, cancellations)
+- Products/terms not seeded in Supabase (subscriptions stored in memory only)
+- Bookings, attendance, penalties still memory-only
+- Wallet transactions from mock data only
+- No real payments (Stripe placeholder-ready)
+- No email notifications for bookings
 
-## Next Recommended Step
+### DO NOT CHANGE Without Re-Test
 
-1. **Apply migration 00009 to remote Supabase** (SQL Editor)
-2. **Hybridize subscription repo** so real users can have persistent product assignments
-3. **Reconcile mock types with Supabase schema** for full DB mode readiness
+- `handle_new_user()` trigger SQL (`SET search_path = public` is critical)
+- `lib/auth.ts` — auth resolution must stay lightweight, no provisioning
+- `lib/auth-provisioning.ts` + `lib/actions/auth-provision.ts` — callback-only provisioning
+- `lib/repositories/index.ts` — hybrid repo routing
+- `lib/supabase/admin.ts` — admin client config
+- Startup: `NODE_USE_ENV_PROXY=1 npm run dev`
+
+### Next Recommended Steps
+
+1. Seed products/terms into Supabase so subscriptions can persist
+2. Reconcile mock types with Supabase schema for full DB mode
+3. Custom domain / confirmation link configuration for production

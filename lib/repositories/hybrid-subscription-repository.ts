@@ -2,13 +2,13 @@
  * Hybrid subscription repository — merges in-memory mock subscriptions
  * with real Supabase subscriptions when Supabase is configured.
  *
- * Routing logic:
- *   - getAll() / getByStudent() / getById(): merge memory + Supabase, deduplicate by ID
- *   - create(): for real student UUIDs, try Supabase first (falls back to memory
- *     if FK constraints aren't satisfied yet, e.g. products table not migrated)
- *   - update(): memory first (most subscriptions live here), then Supabase
+ * Current state: products and terms only exist in memory (not yet
+ * migrated to Supabase as seed data), so subscriptions for ALL users
+ * (mock and real) are stored in memory. Supabase reads are merged in
+ * for any that may exist there.
  *
- * Mock student IDs (s-*, dev-*) always go to memory only.
+ * When products/terms are seeded in Supabase, the create() path can
+ * be updated to prefer Supabase for real users.
  */
 
 import { memorySubscriptionRepo } from "./memory/subscription-repository";
@@ -17,10 +17,6 @@ import type {
   CreateSubscriptionData,
   SubscriptionPatch,
 } from "./interfaces/subscription-repository";
-
-function isMockStudentId(id: string): boolean {
-  return /^(s-|dev-)/.test(id);
-}
 
 function hasSupabaseConfig(): boolean {
   return !!(
@@ -51,15 +47,14 @@ export const hybridSubscriptionRepo: ISubscriptionRepository = {
       const memIds = new Set(memorySubs.map((s) => s.id));
       const additional = realSubs.filter((s) => !memIds.has(s.id));
       return [...memorySubs, ...additional];
-    } catch {
+    } catch (err) {
+      console.warn("[hybridSubscriptionRepo.getAll] Supabase read failed:", err instanceof Error ? err.message : err);
       return memorySubs;
     }
   },
 
   async getByStudent(studentId) {
     const memorySubs = await memorySubscriptionRepo.getByStudent(studentId);
-    if (isMockStudentId(studentId)) return memorySubs;
-
     const sbRepo = loadSupabaseRepo();
     if (!sbRepo) return memorySubs;
 
@@ -68,7 +63,8 @@ export const hybridSubscriptionRepo: ISubscriptionRepository = {
       const memIds = new Set(memorySubs.map((s) => s.id));
       const additional = realSubs.filter((s) => !memIds.has(s.id));
       return [...memorySubs, ...additional];
-    } catch {
+    } catch (err) {
+      console.warn("[hybridSubscriptionRepo.getByStudent] Supabase read failed:", err instanceof Error ? err.message : err);
       return memorySubs;
     }
   },
@@ -82,23 +78,17 @@ export const hybridSubscriptionRepo: ISubscriptionRepository = {
 
     try {
       return await sbRepo.getById(id);
-    } catch {
+    } catch (err) {
+      console.warn("[hybridSubscriptionRepo.getById] Supabase read failed:", err instanceof Error ? err.message : err);
       return null;
     }
   },
 
   async create(data: CreateSubscriptionData) {
-    if (!isMockStudentId(data.studentId)) {
-      const sbRepo = loadSupabaseRepo();
-      if (sbRepo) {
-        try {
-          return await sbRepo.create(data);
-        } catch {
-          // FK constraints not satisfied (products/terms not in Supabase yet)
-          // — fall through to memory
-        }
-      }
-    }
+    // Products/terms are not yet seeded in Supabase, so all subscriptions
+    // go to memory. This works for both mock and real student IDs because
+    // the subscription service identifies students by UUID string, not by
+    // where the student row lives.
     return memorySubscriptionRepo.create(data);
   },
 
@@ -111,7 +101,8 @@ export const hybridSubscriptionRepo: ISubscriptionRepository = {
 
     try {
       return await sbRepo.update(id, patch);
-    } catch {
+    } catch (err) {
+      console.warn("[hybridSubscriptionRepo.update] Supabase write failed:", err instanceof Error ? err.message : err);
       return null;
     }
   },

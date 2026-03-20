@@ -6,19 +6,28 @@
 - npm
 - (Optional) [Supabase CLI](https://supabase.com/docs/guides/cli) for local DB mode
 
-## Quick Start (Memory Mode)
+## Quick Start (Hybrid Mode — Current Default)
 
-Memory mode is the default. No database or external services needed.
+The app runs in memory mode by default but connects to a real remote
+Supabase project for authentication and student identity. Mock data
+coexists with real Supabase users via hybrid repositories.
 
 ```bash
 # Install dependencies
 npm install
 
 # Start the dev server
-npm run dev
+# IMPORTANT: NODE_USE_ENV_PROXY=1 is required on machines where Node.js
+# cannot reach external HTTPS endpoints without the system proxy.
+# Without it, all Supabase calls fail with "TypeError: fetch failed".
+NODE_USE_ENV_PROXY=1 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The app runs entirely in-memory with seeded mock data.
+Open [http://localhost:3002](http://localhost:3002).
+
+> **Network note:** If `curl https://fnztncjhvtordyuyljgg.supabase.co` works
+> but `node -e "fetch('https://fnztncjhvtordyuyljgg.supabase.co').then(r=>console.log(r.status))"` fails,
+> you need `NODE_USE_ENV_PROXY=1`.
 
 ### Dev Identity
 
@@ -84,7 +93,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ### 5. Start the app
 
 ```bash
-npm run dev
+NODE_USE_ENV_PROXY=1 npm run dev
 ```
 
 ### Test Accounts (Supabase mode)
@@ -105,20 +114,28 @@ All seeded users have the password `password123`:
 | Student | gary@test.com | No subscription |
 | Student | hannah@test.com | No subscription |
 
-## Supabase Mode (Hosted / Staging / Production)
+## Supabase Mode (Hosted — Current Setup)
+
+The current working configuration uses a hosted Supabase project
+(`fnztncjhvtordyuyljgg`) with `DATA_PROVIDER` left at the default
+(`"memory"`). This gives hybrid behavior: real Supabase auth +
+student identity, with mock data for products/bookings/penalties.
+
+### Initial setup (already done)
+
+1. All migrations applied via `supabase/combined-migration.sql` in the SQL Editor
+2. Trigger fix applied via `supabase/fix-trigger.sql` in the SQL Editor
+3. Brevo SMTP configured in Supabase Dashboard → Authentication → SMTP Settings
+4. `.env.local` configured with project URL, anon key, and service role key
+
+### If starting fresh on a new Supabase project
 
 1. Create a Supabase project at [supabase.com](https://supabase.com)
-2. Run migrations against the hosted DB:
-   ```bash
-   supabase link --project-ref <your-project-ref>
-   supabase db push
-   ```
-3. (Optional) Seed data:
-   ```bash
-   psql <hosted-connection-string> -f supabase/seed.sql
-   ```
-4. Update `.env.local` with the hosted project URL and keys
-5. Set `DATA_PROVIDER=supabase`
+2. Run `supabase/combined-migration.sql` in the SQL Editor
+3. Run `supabase/fix-trigger.sql` in the SQL Editor (critical for signup)
+4. Configure Brevo SMTP in Authentication → SMTP Settings
+5. Update `.env.local` with the new project URL and keys
+6. Seed an academy: `INSERT INTO academies (name, slug) VALUES ('BPM Dublin', 'bpm-dublin');`
 
 ## Switching Between Modes
 
@@ -132,25 +149,26 @@ You can switch freely between memory and supabase modes by changing `DATA_PROVID
 The app uses a **Repository Pattern** to abstract data access:
 
 ```
-Pages/Actions → Service Layer → Repository Factory → Memory or Supabase Implementation
+Pages/Actions → Service Layer → Repository Factory → Memory, Supabase, or Hybrid Implementation
 ```
 
 - Repository interfaces: `lib/repositories/interfaces/`
-- Memory implementations: `lib/repositories/memory/` (wrap existing in-memory stores)
-- Supabase implementations: `lib/repositories/supabase/` (real DB access for identity/commercial modules, stubs for operational modules)
+- Memory implementations: `lib/repositories/memory/`
+- Supabase implementations: `lib/repositories/supabase/`
+- Hybrid implementations: `lib/repositories/hybrid-*.ts` (merge memory + Supabase)
 - Factory: `lib/repositories/index.ts` (selects implementation based on `DATA_PROVIDER`)
 
-### Modules by migration status
+### Current repo routing (DATA_PROVIDER=memory, the default)
 
-| Module | Memory | Supabase |
-|--------|--------|----------|
-| Students | Full | Full |
-| Products | Full | Full |
-| Terms | Full | Full |
-| Subscriptions | Full | Full |
-| Code of Conduct | Full | Full |
-| Bookings | Full | Stub (pending) |
-| Attendance | Full | Stub (pending) |
-| Penalties | Full | Stub (pending) |
-| Credits | Full | Stub (pending) |
-| Settings | Full | Stub (pending) |
+| Module | Repo used | Real user data source |
+|--------|-----------|----------------------|
+| Students | **hybrid** | Supabase `public.users` + `student_profiles` |
+| Subscriptions | **hybrid** | memory (products not in Supabase yet) |
+| Code of Conduct | **hybrid** | Supabase `coc_acceptances` → memory fallback |
+| Products | memory | memory only |
+| Terms | memory | memory only |
+| Bookings | memory | memory only |
+| Attendance | memory | memory only |
+| Penalties | memory | memory only |
+| Credits | memory | memory only |
+| Settings | memory | memory only |
