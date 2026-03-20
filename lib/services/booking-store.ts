@@ -90,6 +90,11 @@ export function getBookingService(): BookingService {
 
     g.__bpm_bookingSvc = new BookingService(bookings, waitlist, buildClassSnapshots());
     g.__bpm_bookingSvcV = STORE_VERSION;
+
+    try {
+      const { resetHydrationFlags } = require("@/lib/supabase/hydrate-operational");
+      resetHydrationFlags();
+    } catch { /* hydration module not available */ }
   }
   return g.__bpm_bookingSvc;
 }

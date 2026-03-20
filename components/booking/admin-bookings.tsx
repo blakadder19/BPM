@@ -81,7 +81,7 @@ export function AdminBookings({
   const [sourceFilter, setSourceFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [locationFilter, setLocationFilter] = useState("");
-  const [upcomingOnly, setUpcomingOnly] = useState(false);
+  const [upcomingOnly, setUpcomingOnly] = useState(true);
   const [waitlistOnly, setWaitlistOnly] = useState(false);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -104,7 +104,7 @@ export function AdminBookings({
   const q = search.toLowerCase();
 
   const filtered = useMemo(() => {
-    return bookings.filter((b) => {
+    const result = bookings.filter((b) => {
       if (
         q &&
         !b.studentName.toLowerCase().includes(q) &&
@@ -127,6 +127,20 @@ export function AdminBookings({
       }
       return true;
     });
+    if (upcomingOnly) {
+      result.sort((a, b) => {
+        const cmp = a.date.localeCompare(b.date);
+        if (cmp !== 0) return cmp;
+        return a.startTime.localeCompare(b.startTime);
+      });
+    } else {
+      result.sort((a, b) => {
+        const cmp = b.date.localeCompare(a.date);
+        if (cmp !== 0) return cmp;
+        return b.bookedAt.localeCompare(a.bookedAt);
+      });
+    }
+    return result;
   }, [
     bookings,
     q,

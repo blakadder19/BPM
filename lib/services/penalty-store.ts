@@ -38,6 +38,11 @@ export function getPenaltyService(): PenaltyService {
     const existing = g.__bpm_penaltySvc?.penalties;
     g.__bpm_penaltySvc = new PenaltyService(existing ?? buildPenalties());
     g.__bpm_penaltySvcV = STORE_VERSION;
+
+    try {
+      const { resetHydrationFlags } = require("@/lib/supabase/hydrate-operational");
+      resetHydrationFlags();
+    } catch { /* hydration module not available */ }
   }
   return g.__bpm_penaltySvc;
 }

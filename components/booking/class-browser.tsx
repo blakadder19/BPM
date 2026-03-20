@@ -23,6 +23,7 @@ import {
   StudentBookDialog,
   type BookDialogClass,
 } from "./student-book-dialog";
+import type { DanceRole } from "@/types/domain";
 import {
   studentRestoreBookingAction,
   checkRestoreEligibilityAction,
@@ -32,9 +33,10 @@ import { CocAcceptanceDialog } from "./coc-acceptance-dialog";
 interface ClassBrowserProps {
   classes: ClassCardData[];
   codeOfConductAccepted?: boolean;
+  studentPreferredRole?: string | null;
 }
 
-export function ClassBrowser({ classes, codeOfConductAccepted = true }: ClassBrowserProps) {
+export function ClassBrowser({ classes, codeOfConductAccepted = true, studentPreferredRole }: ClassBrowserProps) {
   const [search, setSearch] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
   const [levelFilter, setLevelFilter] = useState("");
@@ -213,6 +215,7 @@ export function ClassBrowser({ classes, codeOfConductAccepted = true }: ClassBro
                 ? bookabilityForDialog.reason
                 : undefined
             }
+            defaultDanceRole={studentPreferredRole as DanceRole | null | undefined}
             onClose={() => setBookDialogTarget(null)}
           />
         )

@@ -4,6 +4,8 @@
 
 import { getSubscriptionRepo } from "@/lib/repositories";
 import { getSubscription as mockGetOne } from "@/lib/services/subscription-store";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { saveSubscriptionToDB } from "@/lib/supabase/operational-persistence";
 import type { MockSubscription } from "@/lib/mock-data";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
@@ -49,7 +51,10 @@ export async function createSubscription(data: {
   selectedStyleNames?: string[] | null;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    await getSubscriptionRepo().create(data);
+    const sub = await getSubscriptionRepo().create(data);
+    if (isRealUser(data.studentId)) {
+      await saveSubscriptionToDB(sub);
+    }
     return { success: true };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
@@ -75,7 +80,9 @@ export async function updateSubscription(
   }
 ): Promise<{ success: boolean; error?: string }> {
   const result = await getSubscriptionRepo().update(id, patch);
-  return result
-    ? { success: true }
-    : { success: false, error: "Subscription not found" };
+  if (!result) return { success: false, error: "Subscription not found" };
+  if (isRealUser(result.studentId)) {
+    await saveSubscriptionToDB(result);
+  }
+  return { success: true };
 }

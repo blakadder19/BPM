@@ -8,6 +8,7 @@ import {
   getPenaltyRepo,
 } from "@/lib/repositories";
 import { getWalletTransactions } from "@/lib/services/wallet-service";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { AdminStudents } from "@/components/students/admin-students";
 
 export default async function StudentsPage({
@@ -17,6 +18,8 @@ export default async function StudentsPage({
 }) {
   await requireRole(["admin"]);
   const params = searchParams ? await searchParams : {};
+
+  await ensureOperationalDataHydrated();
 
   const [students, subscriptions, walletTransactions, products, terms] = await Promise.all([
     getStudentRepo().getAll(),

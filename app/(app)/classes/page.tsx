@@ -12,6 +12,7 @@ import {
   getCocRepo,
 } from "@/lib/repositories";
 import { getAccessRulesMap } from "@/config/product-access";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { DANCE_STYLES } from "@/lib/mock-data";
 import { isClassInFuture } from "@/lib/domain/datetime";
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
@@ -22,6 +23,8 @@ import type { ClassCardData } from "@/components/booking/student-class-card";
 
 export default async function ClassesPage() {
   const user = await requireRole(["admin", "teacher", "student"]);
+
+  await ensureOperationalDataHydrated();
 
   if (user.role === "student") {
     const instances = getInstances();
@@ -147,7 +150,7 @@ export default async function ClassesPage() {
       };
     });
 
-    return <ClassBrowser classes={classCards} codeOfConductAccepted={cocAccepted} />;
+    return <ClassBrowser classes={classCards} codeOfConductAccepted={cocAccepted} studentPreferredRole={student?.preferredRole ?? null} />;
   }
 
   const templates = getTemplates().map((t) => ({ ...t }));

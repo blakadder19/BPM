@@ -1,6 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getPenaltyRepo, getStudentRepo, getSettingsRepo } from "@/lib/repositories";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { CLASSES } from "@/lib/mock-data";
 import { AdminPenalties } from "@/components/penalties/admin-penalties";
 import {
@@ -17,11 +18,13 @@ export default async function PenaltiesPage({
   if (!user) redirect("/login");
   const params = searchParams ? await searchParams : {};
 
+  await ensureOperationalDataHydrated();
+
   const svc = getPenaltyRepo().getService();
 
   if (user.role === "student") {
     const mine: StudentPenaltyView[] = svc.penalties
-      .filter((p) => p.studentName === user.fullName && p.resolution !== "attendance_corrected")
+      .filter((p) => p.studentId === user.id && p.resolution !== "attendance_corrected")
       .map((p) => ({
         id: p.id,
         classTitle: p.classTitle,

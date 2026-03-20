@@ -4,9 +4,14 @@ import { revalidatePath } from "next/cache";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
-import { getSubscriptions } from "@/lib/services/subscription-store";
+import { getSubscriptionRepo } from "@/lib/repositories";
+import { updateSubscription } from "@/lib/services/subscription-service";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import type { AttendanceMark, CheckInMethod, ClassType } from "@/types/domain";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { saveAttendanceToDB, saveBookingToDB, savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { requireRole } from "@/lib/auth";
 
 export interface MarkAttendanceResult {
   success: boolean;
@@ -44,28 +49,27 @@ function isNotAttended(status: AttendanceMark): boolean {
  * present/late = consume (no-op if already consumed)
  * absent/excused = restore (give back)
  */
-function adjustEntitlement(
+async function adjustEntitlement(
   bookingSubscriptionId: string | null,
   previousConsumed: boolean,
   newConsumed: boolean,
 ) {
   if (!bookingSubscriptionId || previousConsumed === newConsumed) return;
 
-  const subs = getSubscriptions();
-  const sub = subs.find((s) => s.id === bookingSubscriptionId);
+  const sub = await getSubscriptionRepo().getById(bookingSubscriptionId);
   if (!sub) return;
 
   if (previousConsumed && !newConsumed) {
     if (sub.productType === "membership") {
-      sub.classesUsed = Math.max(0, sub.classesUsed - 1);
+      await updateSubscription(sub.id, { classesUsed: Math.max(0, sub.classesUsed - 1) });
     } else if (sub.remainingCredits !== null) {
-      sub.remainingCredits += 1;
+      await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits + 1 });
     }
   } else if (!previousConsumed && newConsumed) {
     if (sub.productType === "membership") {
-      sub.classesUsed += 1;
+      await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
     } else if (sub.remainingCredits !== null) {
-      sub.remainingCredits = Math.max(0, sub.remainingCredits - 1);
+      await updateSubscription(sub.id, { remainingCredits: Math.max(0, sub.remainingCredits - 1) });
     }
   }
 }
@@ -85,6 +89,9 @@ export async function markStudentAttendance(params: {
   checkInMethod?: CheckInMethod;
   notes?: string;
 }): Promise<MarkAttendanceResult> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin", "teacher"]);
+
   if (!params.bookableClassId || !params.studentId || !params.markedBy) {
     return {
       success: false,
@@ -146,13 +153,11 @@ export async function markStudentAttendance(params: {
     const newConsumed = isAttended(newStatus);
 
     if (previousStatus === null) {
-      // First time marking: credit was consumed at booking time.
-      // If not attended, restore.
       if (!newConsumed) {
-        adjustEntitlement(subId, true, false);
+        await adjustEntitlement(subId, true, false);
       }
     } else {
-      adjustEntitlement(subId, prevConsumed, newConsumed);
+      await adjustEntitlement(subId, prevConsumed, newConsumed);
     }
   }
 
@@ -176,6 +181,9 @@ export async function markStudentAttendance(params: {
     if (existing) {
       if (existing.resolution === "waived") {
         penaltySvc.updateResolution(existing.id, "monetary_pending");
+        if (isRealUser(params.studentId)) {
+          await updatePenaltyInDB(existing.id, { resolution: "monetary_pending" });
+        }
         penaltyCreated = true;
         penaltyDescription = "No-show penalty reopened.";
       } else {
@@ -198,6 +206,9 @@ export async function markStudentAttendance(params: {
       });
       penaltyCreated = penaltyOutcome.penaltyCreated;
       penaltyDescription = penaltyOutcome.description;
+      if (penaltyOutcome.penalty && isRealUser(params.studentId)) {
+        await savePenaltyToDB(penaltyOutcome.penalty);
+      }
     }
   }
 
@@ -213,7 +224,21 @@ export async function markStudentAttendance(params: {
       );
     if (existing) {
       penaltySvc.updateResolution(existing.id, "attendance_corrected");
+      if (isRealUser(params.studentId)) {
+        await updatePenaltyInDB(existing.id, { resolution: "attendance_corrected" });
+      }
       penaltyDescription = "No-show penalty voided (attendance corrected).";
+    }
+  }
+
+  // Write-through to Supabase for real users
+  if (isRealUser(params.studentId)) {
+    const record = attendanceSvc.getRecord(params.bookableClassId, params.studentId);
+    if (record) await saveAttendanceToDB(record);
+    if (params.bookingId) {
+      const bkSvc = getBookingService();
+      const bk = bkSvc.bookings.find((b) => b.id === params.bookingId);
+      if (bk) await saveBookingToDB(bk);
     }
   }
 
@@ -241,6 +266,7 @@ export async function closeAttendanceForPastClasses(): Promise<{
   classesProcessed: number;
   bookingsMarkedMissed: number;
 }> {
+  await ensureOperationalDataHydrated();
   const result = runAttendanceClosure();
 
   if (result.bookingsMarkedMissed > 0) {

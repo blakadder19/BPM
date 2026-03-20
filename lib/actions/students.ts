@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 import {
   createStudent,
   updateStudent,
@@ -15,6 +16,7 @@ function parseRole(raw: string | null): DanceRole | null {
 export async function createStudentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const fullName = (formData.get("fullName") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
   const phone = (formData.get("phone") as string)?.trim() || null;
@@ -46,6 +48,7 @@ export async function createStudentAction(
 export async function updateStudentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const id = formData.get("id") as string;
   const fullName = (formData.get("fullName") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
@@ -82,6 +85,7 @@ export async function updateStudentAction(
 export async function toggleStudentActiveAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const id = formData.get("id") as string;
   if (!id) return { success: false, error: "Missing student ID" };
 

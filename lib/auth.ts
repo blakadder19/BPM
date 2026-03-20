@@ -54,9 +54,9 @@ function hasSupabaseConfig(): boolean {
 /**
  * Lightweight Supabase user resolution — NO provisioning.
  *
- * 1. Check session
+ * 1. Verify the authenticated user via getUser() (server-authoritative)
  * 2. Look up public.users via admin client (bypasses RLS)
- * 3. If no DB row, fall back to session metadata (JWT claims)
+ * 3. If no DB row, fall back to verified user metadata
  *
  * Profile provisioning happens ONLY in the auth callback, not here.
  */
@@ -70,17 +70,16 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
     return null;
   }
 
-  let session;
+  let authUser;
   try {
-    const { data } = await supabase.auth.getSession();
-    session = data.session;
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) return null;
+    authUser = data.user;
   } catch {
     return null;
   }
 
-  if (!session?.user) return null;
-
-  const emailConfirmed = !!session.user.email_confirmed_at;
+  const emailConfirmed = !!authUser.email_confirmed_at;
 
   // Try DB lookup via admin client (bypasses RLS, no session needed)
   try {
@@ -89,7 +88,7 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
     const { data } = await admin
       .from("users")
       .select("*")
-      .eq("id", session.user.id)
+      .eq("id", authUser.id)
       .maybeSingle();
     const dbUser = data as UserRow | null;
     if (dbUser) {
@@ -107,12 +106,12 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
     // DB unreachable — fall through to metadata
   }
 
-  // No DB row — derive identity from session JWT claims / user_metadata
-  const email = session.user.email ?? "";
+  // No DB row — derive identity from verified user metadata
+  const email = authUser.email ?? "";
   const demo = DEMO_ACCOUNTS[email];
-  const meta = session.user.user_metadata ?? {};
+  const meta = authUser.user_metadata ?? {};
   return {
-    id: session.user.id,
+    id: authUser.id,
     email,
     fullName: demo?.fullName ?? meta.full_name ?? (email || "BPM User"),
     role: (meta.role as UserRole) ?? demo?.role ?? "student",

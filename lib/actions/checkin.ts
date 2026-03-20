@@ -7,6 +7,9 @@ import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getCheckInEligibility, isCheckableStatus } from "@/lib/domain/checkin-rules";
 import { isValidTokenFormat } from "@/lib/domain/checkin-token";
 import type { CheckInMethod } from "@/types/domain";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { saveBookingToDB, saveAttendanceToDB } from "@/lib/supabase/operational-persistence";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 
 function revalidateAll() {
   revalidatePath("/bookings");
@@ -28,6 +31,7 @@ interface CheckInResult {
 export async function studentSelfCheckInAction(
   bookingId: string
 ): Promise<CheckInResult> {
+  await ensureOperationalDataHydrated();
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const user = await getAuthUser();
@@ -75,6 +79,13 @@ export async function studentSelfCheckInAction(
     markedBy: booking.studentName,
   });
 
+  if (isRealUser(booking.studentId)) {
+    const checkedIn = svc.bookings.find((b) => b.id === bookingId);
+    if (checkedIn) await saveBookingToDB(checkedIn);
+    const attRecord = attSvc.getRecord(booking.bookableClassId, booking.studentId);
+    if (attRecord) await saveAttendanceToDB(attRecord);
+  }
+
   revalidateAll();
   return { success: true, studentName: booking.studentName, classTitle: cls.title };
 }
@@ -86,6 +97,7 @@ export async function studentSelfCheckInAction(
 export async function validateTokenCheckInAction(
   token: string
 ): Promise<CheckInResult> {
+  await ensureOperationalDataHydrated();
   if (!token || !isValidTokenFormat(token)) {
     return { success: false, error: "Invalid check-in token" };
   }
@@ -133,6 +145,13 @@ export async function validateTokenCheckInAction(
     markedBy: isStaff ? (user?.fullName ?? "Staff") : "QR Scanner",
   });
 
+  if (isRealUser(booking.studentId)) {
+    const checkedIn = svc.bookings.find((b) => b.id === booking.id);
+    if (checkedIn) await saveBookingToDB(checkedIn);
+    const attRecord = attSvc.getRecord(booking.bookableClassId, booking.studentId);
+    if (attRecord) await saveAttendanceToDB(attRecord);
+  }
+
   revalidateAll();
   return { success: true, studentName: booking.studentName, classTitle: cls.title };
 }
@@ -143,6 +162,7 @@ export async function validateTokenCheckInAction(
 export async function checkSelfCheckInEligibility(
   bookingId: string
 ): Promise<{ eligible: boolean; reason?: string }> {
+  await ensureOperationalDataHydrated();
   const user = await getAuthUser();
   if (!user || user.role !== "student") {
     return { eligible: false, reason: "Not authenticated" };

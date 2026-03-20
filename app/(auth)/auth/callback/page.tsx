@@ -33,8 +33,13 @@ export default function AuthCallbackPage() {
 
     async function goToApp() {
       clearDevCookies();
-      // Provision profile rows before entering the app
-      await provisionCurrentUser().catch(() => {});
+      const provResult = await provisionCurrentUser().catch((e) => {
+        console.error("[auth-callback] provisionCurrentUser threw:", e);
+        return { success: false, error: String(e) };
+      });
+      if (!provResult.success) {
+        console.warn("[auth-callback] provisioning failed:", provResult.error);
+      }
       router.push(next);
       router.refresh();
     }

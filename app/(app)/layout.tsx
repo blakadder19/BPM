@@ -5,25 +5,8 @@ import { getStudentRepo } from "@/lib/repositories";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { UserProvider } from "@/components/providers/user-provider";
-import { DevPanel } from "@/components/dev/dev-panel";
-import { BFCacheGuard } from "@/components/layout/bfcache-guard";
-
-/**
- * Single source of truth for the dev-tools email allowlist.
- * True when NODE_ENV is "development" AND the user's email is in
- * the allowlist env var. Accepts both the server-only and NEXT_PUBLIC_
- * variants so it works even when the dev server hasn't been restarted
- * after adding the env var.
- */
-function isDevAllowlisted(email: string): boolean {
-  if (process.env.NODE_ENV !== "development") return false;
-  const raw =
-    process.env.DEV_TOOL_ALLOWED_EMAILS ??
-    process.env.NEXT_PUBLIC_DEV_TOOL_ALLOWED_EMAILS;
-  if (!raw) return false;
-  const allowed = raw.split(",").map((e) => e.trim().toLowerCase());
-  return allowed.includes(email.toLowerCase());
-}
+import { DevPanelGate } from "@/components/dev/dev-panel-gate";
+import { SessionGuard } from "@/components/layout/session-guard";
 
 export default async function AppLayout({
   children,
@@ -37,15 +20,14 @@ export default async function AppLayout({
   }
 
   // Hard-guard: unconfirmed email → send back to confirmation waiting screen.
-  // This covers browser Back, direct URL navigation, and all (app) routes.
   if (!user.emailConfirmed) {
     redirect("/signup?awaiting=1");
   }
 
   const isDev = process.env.NODE_ENV === "development";
-  const allowlisted = isDevAllowlisted(user.email);
 
-  // Dev students list + current impersonation target
+  // Prepare dev data only in development (cheap data prep — actual visibility
+  // is gated client-side by the useDevUnlock hook in Topbar and DevPanelGate).
   let devStudents: { id: string; fullName: string }[] | undefined;
   let devStudentId: string | undefined;
   if (isDev) {
@@ -54,24 +36,14 @@ export default async function AppLayout({
     devStudentId = (await getDevStudentId()) ?? undefined;
   }
 
-  const impersonating = isDev && !!devStudentId;
-
-  // --- Dev-tools visibility ---
-  //
-  // Floating DevPanel (bottom-right):
-  //   visible when EITHER the user is allowlisted OR impersonation is active.
-  const showDevPanel = allowlisted || impersonating;
-
-  // DevPanel target: impersonated student takes priority, otherwise
-  // fall back to the real authenticated user for allowlisted devs.
-  const panelStudentId = devStudentId ?? (allowlisted ? user.id : undefined);
+  const panelStudentId = devStudentId ?? user.id;
   const panelStudentName = devStudentId
     ? devStudents?.find((s) => s.id === devStudentId)?.fullName ?? user.fullName
     : user.fullName;
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <BFCacheGuard />
+      <SessionGuard />
       <Sidebar user={user} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
@@ -87,8 +59,8 @@ export default async function AppLayout({
           </UserProvider>
         </main>
       </div>
-      {showDevPanel && panelStudentId && (
-        <DevPanel studentId={panelStudentId} studentName={panelStudentName} />
+      {isDev && (
+        <DevPanelGate studentId={panelStudentId} studentName={panelStudentName} />
       )}
     </div>
   );

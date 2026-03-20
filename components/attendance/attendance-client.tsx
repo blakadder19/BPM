@@ -102,6 +102,7 @@ interface AttendanceClientProps {
   initialClassFilter?: string;
   initialDateFilter?: string;
   initialStudentSearch?: string;
+  currentUserName?: string;
 }
 
 export function AttendanceClient({
@@ -115,6 +116,7 @@ export function AttendanceClient({
   initialClassFilter,
   initialDateFilter,
   initialStudentSearch,
+  currentUserName,
 }: AttendanceClientProps) {
   const router = useRouter();
   const hasContextFilter = !!(initialClassFilter || initialStudentSearch);
@@ -199,6 +201,7 @@ export function AttendanceClient({
           todaysClasses={todaysClasses}
           bookings={bookings}
           attendanceRecords={attendanceRecords}
+          currentUserName={currentUserName}
         />
       ) : (
         <HistoryView
@@ -207,6 +210,7 @@ export function AttendanceClient({
           initialSearch={initialStudentSearch || initialClassFilter}
           initialClassFilter={initialStudentSearch ? initialClassFilter : ""}
           initialDateFilter={initialStudentSearch ? initialDateFilter : ""}
+          currentUserName={currentUserName}
         />
       )}
 
@@ -215,6 +219,7 @@ export function AttendanceClient({
           students={studentOptions ?? []}
           classes={allClasses}
           onClose={() => setShowAddAttendance(false)}
+          currentUserName={currentUserName}
         />
       )}
     </div>
@@ -310,11 +315,13 @@ function TodayView({
   todaysClasses,
   bookings,
   attendanceRecords,
+  currentUserName,
 }: {
   mockToday: string;
   todaysClasses: BookableClassProp[];
   bookings: BookingProp[];
   attendanceRecords: StoredAttendance[];
+  currentUserName?: string;
 }) {
   if (todaysClasses.length === 0) {
     return (
@@ -339,6 +346,7 @@ function TodayView({
           attendanceRecords={attendanceRecords.filter(
             (a) => a.bookableClassId === bc.id
           )}
+          currentUserName={currentUserName}
         />
       ))}
     </div>
@@ -359,10 +367,12 @@ function ClassAttendanceCard({
   bookableClass: bc,
   bookings: classBookings,
   attendanceRecords,
+  currentUserName,
 }: {
   bookableClass: BookableClassProp;
   bookings: BookingProp[];
   attendanceRecords: StoredAttendance[];
+  currentUserName?: string;
 }) {
   const router = useRouter();
 
@@ -451,7 +461,7 @@ function ClassAttendanceCard({
         danceStyleId: bc.styleId,
         level: bc.level,
         status,
-        markedBy: "Admin User",
+        markedBy: currentUserName ?? "Admin",
       });
 
       if (result.penaltyCreated && result.penaltyDescription) {
@@ -603,11 +613,13 @@ function HistoryView({
   initialSearch,
   initialClassFilter,
   initialDateFilter,
+  currentUserName,
 }: {
   attendanceRecords: StoredAttendance[];
   allClasses: BookableClassProp[];
   initialSearch?: string;
   initialClassFilter?: string;
+  currentUserName?: string;
   initialDateFilter?: string;
 }) {
   const router = useRouter();
@@ -727,6 +739,7 @@ function HistoryView({
               record={a}
               bookableClass={classMap.get(a.bookableClassId)}
               onRefresh={() => router.refresh()}
+              currentUserName={currentUserName}
             />
           ))}
         </AdminTable>
@@ -739,10 +752,12 @@ function HistoryRow({
   record: a,
   bookableClass: bc,
   onRefresh,
+  currentUserName,
 }: {
   record: StoredAttendance;
   bookableClass: BookableClassProp | undefined;
   onRefresh: () => void;
+  currentUserName?: string;
 }) {
   const [currentStatus, setCurrentStatus] = useState(a.status);
   const [isPending, startTransition] = useTransition();
@@ -769,7 +784,7 @@ function HistoryRow({
         danceStyleId: bc?.styleId ?? null,
         level: bc?.level ?? null,
         status: newStatus,
-        markedBy: "Admin User",
+        markedBy: currentUserName ?? "Admin",
       });
 
       if (!result.success) setCurrentStatus(prev);
@@ -814,8 +829,10 @@ function AddAttendanceDialog({
   students,
   classes,
   onClose,
+  currentUserName,
 }: {
   students: StudentOption[];
+  currentUserName?: string;
   classes: BookableClassProp[];
   onClose: () => void;
 }) {
@@ -851,7 +868,7 @@ function AddAttendanceDialog({
         danceStyleId: selectedClass?.styleId ?? null,
         level: selectedClass?.level ?? null,
         status,
-        markedBy: "Admin (dev manual)",
+        markedBy: `${currentUserName ?? "Admin"} (dev manual)`,
         notes: notes.trim() || undefined,
       });
 

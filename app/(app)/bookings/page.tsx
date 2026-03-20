@@ -9,6 +9,7 @@ import {
 import { getInstances } from "@/lib/services/schedule-store";
 import { isClassInFuture } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { DANCE_STYLES } from "@/lib/mock-data";
 import { StudentBookings } from "@/components/booking/student-bookings";
 import { AdminBookings } from "@/components/booking/admin-bookings";
@@ -60,6 +61,8 @@ export default async function BookingsPage({
 }) {
   const user = await getAuthUser();
   if (!user) redirect("/login");
+
+  await ensureOperationalDataHydrated();
 
   const params = searchParams ? await searchParams : {};
   const svc = getBookingRepo().getService();
@@ -138,7 +141,7 @@ export default async function BookingsPage({
   if (user.role === "student") {
     const attSvc = getAttendanceRepo().getService();
     const mine = allBookings
-      .filter((b) => b.studentName === user.fullName)
+      .filter((b) => b.studentId === user.id)
       .map(enrichBooking)
       .map((b) => {
         const attRecord = attSvc.getRecord(b.classId ?? "", b.studentId);
@@ -149,7 +152,7 @@ export default async function BookingsPage({
       });
 
     const myWaitlist = allWaitlist
-      .filter((w) => w.studentName === user.fullName && w.status === "waiting")
+      .filter((w) => w.studentId === user.id && w.status === "waiting")
       .map((w) => {
         const cls = svc.getClass(w.bookableClassId);
         return {

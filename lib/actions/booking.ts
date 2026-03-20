@@ -3,15 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
-import { getSubscriptions, updateSubscription } from "@/lib/services/subscription-store";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getTerms } from "@/lib/services/term-store";
 import { getAccessRulesMap } from "@/config/product-access";
-import { STUDENTS, DANCE_STYLES } from "@/lib/mock-data";
+import { DANCE_STYLES } from "@/lib/mock-data";
 import { computeBookability, type BookabilityContext, type ClassInstanceInfo } from "@/lib/domain/bookability";
-import { hasAcceptedCurrentVersion } from "@/lib/services/coc-store";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
+import { getStudentRepo, getSubscriptionRepo, getCocRepo } from "@/lib/repositories";
+import { updateSubscription } from "@/lib/services/subscription-service";
 import type { DanceRole } from "@/types/domain";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { saveBookingToDB, saveWaitlistToDB } from "@/lib/supabase/operational-persistence";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 
 export interface BookingResult {
   success: boolean;
@@ -30,13 +33,12 @@ export async function createStudentBooking(input: {
   danceRole: DanceRole | null;
 }): Promise<BookingResult> {
   const user = await getAuthUser();
+  await ensureOperationalDataHydrated();
   if (!user || user.role !== "student") {
     return { success: false, error: "Not authenticated as a student." };
   }
 
-  const student = STUDENTS.find(
-    (s) => s.fullName === user.fullName || s.email === user.email
-  );
+  const student = await getStudentRepo().getById(user.id);
   if (!student) {
     return { success: false, error: "Student profile not found." };
   }
@@ -49,7 +51,7 @@ export async function createStudentBooking(input: {
   const svc = getBookingService();
   const instances = getInstances();
   const terms = getTerms();
-  const allSubs = getSubscriptions();
+  const allSubs = await getSubscriptionRepo().getByStudent(student.id);
   const accessRulesMap = getAccessRulesMap();
 
   const rawCls = instances.find((c) => c.id === bookableClassId);
@@ -121,7 +123,11 @@ export async function createStudentBooking(input: {
     totalBooked: allBookingsForClass.length,
   };
 
-  const studentSubs = allSubs.filter((s) => s.studentId === student.id);
+  const cocAccepted = await getCocRepo().hasAcceptedVersion(
+    student.id,
+    CURRENT_CODE_OF_CONDUCT.version
+  );
+
   const ctx: BookabilityContext = {
     classInstance: classInfo,
     studentState: {
@@ -133,11 +139,11 @@ export async function createStudentBooking(input: {
         ? { id: cancelledForClass.id, status: cancelledForClass.status }
         : null,
     },
-    studentSubscriptions: studentSubs,
+    studentSubscriptions: allSubs,
     terms,
     accessRulesMap,
     studentPreferredRole: danceRole ?? student.preferredRole,
-    codeOfConductAccepted: hasAcceptedCurrentVersion(student.id, CURRENT_CODE_OF_CONDUCT.version),
+    codeOfConductAccepted: cocAccepted,
   };
 
   if (!ctx.codeOfConductAccepted) {
@@ -179,7 +185,7 @@ export async function createStudentBooking(input: {
     bookableClassId,
     studentId: student.id,
     studentName: student.fullName,
-    danceRole: danceRole,
+    danceRole: danceRole ?? student.preferredRole,
     source: "subscription",
     subscriptionId: sub.id,
     subscriptionName: sub.productName,
@@ -191,9 +197,20 @@ export async function createStudentBooking(input: {
 
   if (outcome.type === "confirmed") {
     if (sub.productType === "membership" && sub.classesPerTerm !== null) {
-      updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
+      await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
     } else if (sub.remainingCredits !== null) {
-      updateSubscription(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+      await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+    }
+  }
+
+  // Write-through to Supabase for real users
+  if (isRealUser(student.id)) {
+    if (outcome.type === "confirmed") {
+      const booking = svc.bookings.find((b) => b.id === outcome.bookingId);
+      if (booking) await saveBookingToDB(booking);
+    } else if (outcome.type === "waitlisted") {
+      const entry = svc.waitlist.find((w) => w.id === outcome.waitlistId);
+      if (entry) await saveWaitlistToDB(entry);
     }
   }
 

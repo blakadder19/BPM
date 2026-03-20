@@ -16,6 +16,7 @@ import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { computeMemberBenefits } from "@/lib/domain/member-benefits";
 import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
 import {
@@ -29,6 +30,8 @@ import {
 export default async function DashboardPage() {
   const user = await getAuthUser();
   if (!user) redirect("/login");
+
+  await ensureOperationalDataHydrated();
 
   runAttendanceClosure();
 
@@ -52,7 +55,7 @@ export default async function DashboardPage() {
     const upcomingBookings: StudentBookingSummary[] = bookingSvc.bookings
       .filter(
         (b) =>
-          b.studentName === user.fullName &&
+          b.studentId === user.id &&
           (b.status === "confirmed" || b.status === "checked_in")
       )
       .map((b) => {
@@ -76,7 +79,7 @@ export default async function DashboardPage() {
       );
 
     const penalties: StudentPenaltySummary[] = penaltySvc.penalties
-      .filter((p) => p.studentName === user.fullName && p.resolution !== "attendance_corrected")
+      .filter((p) => p.studentId === user.id && p.resolution !== "attendance_corrected")
       .map((p) => ({
         id: p.id,
         classTitle: p.classTitle,
@@ -155,5 +158,5 @@ export default async function DashboardPage() {
     );
   }
 
-  return <AdminDashboard />;
+  return <AdminDashboard todayStr={getTodayStr()} />;
 }

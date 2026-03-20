@@ -36,6 +36,7 @@ interface StudentBookDialogProps {
   autoSelected?: ValidEntitlement;
   isWaitlist: boolean;
   waitlistReason?: string;
+  defaultDanceRole?: DanceRole | null;
   onClose: () => void;
 }
 
@@ -45,6 +46,7 @@ export function StudentBookDialog({
   autoSelected,
   isWaitlist,
   waitlistReason,
+  defaultDanceRole,
   onClose,
 }: StudentBookDialogProps) {
   const router = useRouter();
@@ -52,7 +54,7 @@ export function StudentBookDialog({
   const [selectedSubId, setSelectedSubId] = useState<string>(
     autoSelected?.subscriptionId ?? entitlements[0]?.subscriptionId ?? ""
   );
-  const [danceRole, setDanceRole] = useState<DanceRole | null>(null);
+  const [danceRole, setDanceRole] = useState<DanceRole | null>(defaultDanceRole ?? null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     status: "confirmed" | "waitlisted";
@@ -193,7 +195,7 @@ export function StudentBookDialog({
                 )}
               </div>
 
-              {/* Role Selection */}
+              {/* Role Selection — auto-filled from profile, still overridable */}
               {cls.danceStyleRequiresBalance && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
@@ -215,6 +217,11 @@ export function StudentBookDialog({
                       </button>
                     ))}
                   </div>
+                  {defaultDanceRole && danceRole === defaultDanceRole && (
+                    <p className="text-xs text-gray-400">
+                      Pre-selected from your profile. You can change it for this booking.
+                    </p>
+                  )}
                 </div>
               )}
             </>

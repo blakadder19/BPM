@@ -100,22 +100,24 @@ export function AdminStudents({
     subscriptions.filter((s) => s.status === "active").map((s) => s.studentId)
   );
 
-  const filtered = students.filter((s) => {
-    if (
-      q &&
-      !s.fullName.toLowerCase().includes(q) &&
-      !s.email.toLowerCase().includes(q) &&
-      !(s.phone && s.phone.toLowerCase().includes(q))
-    ) {
-      return false;
-    }
-    if (roleFilter && s.preferredRole !== roleFilter) return false;
-    if (activeFilter === "active" && !s.isActive) return false;
-    if (activeFilter === "inactive" && s.isActive) return false;
-    if (subStatusFilter === "has_active" && !activeSubStudentIds.has(s.id)) return false;
-    if (subStatusFilter === "no_active" && activeSubStudentIds.has(s.id)) return false;
-    return true;
-  });
+  const filtered = students
+    .filter((s) => {
+      if (
+        q &&
+        !s.fullName.toLowerCase().includes(q) &&
+        !s.email.toLowerCase().includes(q) &&
+        !(s.phone && s.phone.toLowerCase().includes(q))
+      ) {
+        return false;
+      }
+      if (roleFilter && s.preferredRole !== roleFilter) return false;
+      if (activeFilter === "active" && !s.isActive) return false;
+      if (activeFilter === "inactive" && s.isActive) return false;
+      if (subStatusFilter === "has_active" && !activeSubStudentIds.has(s.id)) return false;
+      if (subStatusFilter === "no_active" && activeSubStudentIds.has(s.id)) return false;
+      return true;
+    })
+    .sort((a, b) => (b.joinedAt ?? "").localeCompare(a.joinedAt ?? ""));
 
   function deriveSubInfo(studentId: string) {
     const activeSub = subscriptions.find(

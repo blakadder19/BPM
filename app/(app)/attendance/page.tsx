@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth";
 import { getAttendanceRepo, getBookingRepo, getStudentRepo } from "@/lib/repositories";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { BOOKABLE_CLASSES } from "@/lib/mock-data";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
 
@@ -12,8 +13,10 @@ export default async function AttendancePage({
 }: {
   searchParams?: Promise<{ classTitle?: string; date?: string; student?: string }>;
 }) {
-  await requireRole(["admin", "teacher"]);
+  const user = await requireRole(["admin", "teacher"]);
   const params = searchParams ? await searchParams : {};
+
+  await ensureOperationalDataHydrated();
 
   runAttendanceClosure();
 
@@ -67,6 +70,7 @@ export default async function AttendancePage({
       initialClassFilter={params.classTitle ?? ""}
       initialDateFilter={params.date ?? ""}
       initialStudentSearch={params.student ?? ""}
+      currentUserName={user.fullName}
     />
   );
 }

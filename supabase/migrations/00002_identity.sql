@@ -106,17 +106,28 @@ begin
     'student'::public.user_role
   );
 
-  insert into public.users (id, academy_id, email, full_name, role)
+  insert into public.users (id, academy_id, email, full_name, role, phone)
   values (
     new.id,
     _academy_id,
     new.email,
     coalesce(new.raw_user_meta_data ->> 'full_name', 'New User'),
-    _role
+    _role,
+    new.raw_user_meta_data ->> 'phone'
   );
 
   if _role = 'student'::public.user_role then
-    insert into public.student_profiles (id) values (new.id);
+    insert into public.student_profiles (id, preferred_role, date_of_birth)
+    values (
+      new.id,
+      (new.raw_user_meta_data ->> 'preferred_role')::public.dance_role,
+      case
+        when new.raw_user_meta_data ->> 'date_of_birth' is not null
+             and new.raw_user_meta_data ->> 'date_of_birth' <> ''
+        then (new.raw_user_meta_data ->> 'date_of_birth')::date
+        else null
+      end
+    );
   elsif _role = 'teacher'::public.user_role then
     insert into public.teacher_profiles (id) values (new.id);
   end if;

@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
-import { getSubscription, updateSubscription } from "@/lib/services/subscription-store";
+import { getSubscriptionRepo } from "@/lib/repositories";
+import { updateSubscription } from "@/lib/services/subscription-service";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getSettings } from "@/lib/services/settings-store";
 import { isClassStarted } from "@/lib/domain/datetime";
@@ -12,6 +13,9 @@ import {
   penaltiesApplyTo,
   penaltyFeeCents,
 } from "@/lib/domain/cancellation-rules";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { saveBookingToDB, saveWaitlistToDB, savePenaltyToDB } from "@/lib/supabase/operational-persistence";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 
 export async function studentCancelBookingAction(
   bookingId: string
@@ -25,6 +29,7 @@ export async function studentCancelBookingAction(
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const user = await getAuthUser();
+  await ensureOperationalDataHydrated();
   if (!user || user.role !== "student") {
     return { success: false, error: "Not authenticated" };
   }
@@ -61,12 +66,12 @@ export async function studentCancelBookingAction(
   }
 
   if (booking.subscriptionId) {
-    const sub = getSubscription(booking.subscriptionId);
+    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
     if (sub) {
       if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {
-        updateSubscription(sub.id, { classesUsed: sub.classesUsed - 1 });
+        await updateSubscription(sub.id, { classesUsed: sub.classesUsed - 1 });
       } else if (sub.remainingCredits !== null) {
-        updateSubscription(sub.id, { remainingCredits: sub.remainingCredits + 1 });
+        await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits + 1 });
       }
     }
   }
@@ -79,7 +84,7 @@ export async function studentCancelBookingAction(
     if (settings.lateCancelPenaltiesEnabled) {
       const penaltySvc = getPenaltyService();
       const feeCents = penaltyFeeCents("late_cancel");
-      penaltySvc.addPenalty({
+      const penalty = penaltySvc.addPenalty({
         studentId: booking.studentId,
         studentName: booking.studentName,
         bookingId: booking.id,
@@ -93,9 +98,16 @@ export async function studentCancelBookingAction(
         creditDeducted: 0,
         notes: null,
       });
+      if (isRealUser(booking.studentId)) await savePenaltyToDB(penalty);
       penaltyApplied = true;
       penaltyDescription = `Late cancellation penalty of €${(feeCents / 100).toFixed(2)} applied.`;
     }
+  }
+
+  // Write-through to Supabase for real users
+  if (isRealUser(user.id)) {
+    const updatedBooking = svc.bookings.find((b) => b.id === bookingId);
+    if (updatedBooking) await saveBookingToDB(updatedBooking);
   }
 
   revalidatePath("/bookings");
@@ -125,6 +137,7 @@ export async function checkRestoreEligibilityAction(
   if (!bookingId) return { eligible: false, reason: "Missing booking ID" };
 
   const user = await getAuthUser();
+  await ensureOperationalDataHydrated();
   if (!user || user.role !== "student") {
     return { eligible: false, reason: "Not authenticated" };
   }
@@ -165,6 +178,7 @@ export async function studentRestoreBookingAction(
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const user = await getAuthUser();
+  await ensureOperationalDataHydrated();
   if (!user || user.role !== "student") {
     return { success: false, error: "Not authenticated" };
   }
@@ -195,13 +209,24 @@ export async function studentRestoreBookingAction(
   }
 
   if (result.restoredTo === "confirmed" && booking.subscriptionId) {
-    const sub = getSubscription(booking.subscriptionId);
+    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
     if (sub) {
       if (sub.productType === "membership" && sub.classesPerTerm !== null) {
-        updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
+        await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
       } else if (sub.remainingCredits !== null) {
-        updateSubscription(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+        await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits - 1 });
       }
+    }
+  }
+
+  // Write-through to Supabase for real users
+  if (isRealUser(user.id)) {
+    if (result.restoredTo === "confirmed") {
+      const restoredBooking = svc.bookings.find((b) => b.id === bookingId);
+      if (restoredBooking) await saveBookingToDB(restoredBooking);
+    } else if (result.restoredTo === "waitlisted") {
+      const newEntry = svc.waitlist.find((w) => w.studentId === user.id && w.bookableClassId === booking.bookableClassId && w.status === "waiting");
+      if (newEntry) await saveWaitlistToDB(newEntry);
     }
   }
 

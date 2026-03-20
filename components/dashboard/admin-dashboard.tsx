@@ -31,26 +31,29 @@ import {
   PRODUCTS,
 } from "@/lib/mock-data";
 
-const MOCK_TODAY = "2026-03-17";
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // ── Data computation ────────────────────────────────────────
 
-function computeDashboard() {
+function computeDashboard(todayStr: string) {
   const todaysClasses = BOOKABLE_CLASSES.filter(
-    (bc) => bc.date === MOCK_TODAY && bc.classType === "class"
+    (bc) => bc.date === todayStr && bc.classType === "class"
   );
 
   const upcomingClasses = BOOKABLE_CLASSES.filter(
-    (bc) => bc.date >= MOCK_TODAY && bc.classType === "class"
+    (bc) => bc.date >= todayStr && bc.classType === "class"
   ).sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
 
   const upcomingBookings = BOOKINGS.filter(
-    (b) => b.date >= MOCK_TODAY && b.status === "confirmed"
+    (b) => b.date >= todayStr && b.status === "confirmed"
+  );
+
+  const upcomingClassIds = new Set(
+    BOOKABLE_CLASSES.filter((bc) => bc.date >= todayStr).map((bc) => bc.id)
   );
 
   const activeWaitlists = WAITLIST_ENTRIES.filter(
-    (w) => w.status === "waiting"
+    (w) => w.status === "waiting" && upcomingClassIds.has(w.bookableClassId)
   );
 
   const unresolvedPenalties = PENALTIES.filter(
@@ -58,7 +61,7 @@ function computeDashboard() {
   );
 
   const demandClasses = BOOKABLE_CLASSES.filter(
-    (bc) => bc.classType === "class" && bc.maxCapacity && bc.maxCapacity > 0
+    (bc) => bc.date >= todayStr && bc.classType === "class" && bc.maxCapacity && bc.maxCapacity > 0
   )
     .map((bc) => ({
       ...bc,
@@ -84,8 +87,7 @@ function computeDashboard() {
     attendanceTotals.excused;
 
   const byWeekday = [0, 0, 0, 0, 0, 0, 0];
-  for (const bc of BOOKABLE_CLASSES) {
-    if (bc.classType !== "class") continue;
+  for (const bc of upcomingClasses) {
     const dow = new Date(bc.date + "T12:00:00Z").getUTCDay();
     const idx = dow === 0 ? 6 : dow - 1;
     byWeekday[idx] += bc.bookedCount;
@@ -121,14 +123,14 @@ function computeDashboard() {
 
 // ── Page ────────────────────────────────────────────────────
 
-export function AdminDashboard() {
-  const d = useMemo(() => computeDashboard(), []);
+export function AdminDashboard({ todayStr }: { todayStr: string }) {
+  const d = useMemo(() => computeDashboard(todayStr), [todayStr]);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description={`Overview as of ${formatDate(MOCK_TODAY)}`}
+        description={`Overview as of ${formatDate(todayStr)}`}
       />
 
       {/* KPI cards */}

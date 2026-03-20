@@ -36,7 +36,7 @@ export function BookingDetailPanel({
           <Section title="Student">
             <DL label="Name" value={b.studentName} />
             <DL label="Student ID" value={b.studentId ?? "—"} />
-            <DL label="Role" value={b.danceRole ?? "None"} />
+            <DL label="Role" value={b.danceRole ?? "—"} />
           </Section>
 
           <Section title="Class Instance">

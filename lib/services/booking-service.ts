@@ -192,7 +192,7 @@ export class BookingService {
 
     if (decision.waitlisted) {
       const maxPos = this.waitlist
-        .filter((w) => w.bookableClassId === params.bookableClassId)
+        .filter((w) => w.bookableClassId === params.bookableClassId && w.status === "waiting")
         .reduce((max, w) => Math.max(max, w.position), 0);
 
       const entry: StoredWaitlistEntry = {
@@ -418,7 +418,7 @@ export class BookingService {
 
     if (shouldWaitlist) {
       const maxPos = this.waitlist
-        .filter((w) => w.bookableClassId === params.bookableClassId)
+        .filter((w) => w.bookableClassId === params.bookableClassId && w.status === "waiting")
         .reduce((max, w) => Math.max(max, w.position), 0);
 
       const entry: StoredWaitlistEntry = {
@@ -642,7 +642,7 @@ export class BookingService {
 
     if (decision.waitlisted || !decision.allowed) {
       const maxPos = this.waitlist
-        .filter((w) => w.bookableClassId === booking.bookableClassId)
+        .filter((w) => w.bookableClassId === booking.bookableClassId && w.status === "waiting")
         .reduce((max, w) => Math.max(max, w.position), 0);
 
       const entry: StoredWaitlistEntry = {

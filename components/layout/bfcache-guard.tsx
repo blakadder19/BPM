@@ -4,9 +4,14 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 /**
- * Forces a server refresh when a page is restored from the browser's
- * Back-Forward Cache (BFCache). Without this, stale cached pages can
- * appear momentarily before the server-side route guard kicks in.
+ * Prevents stale protected-page content from being visible when the
+ * browser restores a page from BFCache (e.g. after logout + back button).
+ *
+ * On BFCache restore (`pageshow` with `persisted === true`):
+ *  1. Immediately hides the page to prevent the stale flash.
+ *  2. Triggers a server refresh which re-runs route guards.
+ *  3. If unauthenticated, the server redirect to /login fires.
+ *  4. If still authenticated, content re-renders normally.
  */
 export function BFCacheGuard() {
   const router = useRouter();
@@ -14,12 +19,17 @@ export function BFCacheGuard() {
   useEffect(() => {
     function handlePageShow(e: PageTransitionEvent) {
       if (e.persisted) {
+        document.documentElement.style.visibility = "hidden";
         router.refresh();
       }
     }
     window.addEventListener("pageshow", handlePageShow);
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, [router]);
+
+  useEffect(() => {
+    document.documentElement.style.visibility = "visible";
+  });
 
   return null;
 }

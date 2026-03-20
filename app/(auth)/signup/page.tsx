@@ -7,6 +7,7 @@ import { CheckCircle2, Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { provisionCurrentUser } from "@/lib/actions/auth-provision";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -75,6 +76,9 @@ export default function SignupPage() {
 
     // If Supabase returned a session, the user is auto-confirmed
     if (data.session) {
+      await provisionCurrentUser().catch((e) =>
+        console.error("[signup] provisionCurrentUser threw:", e)
+      );
       router.push("/onboarding");
       router.refresh();
       return;

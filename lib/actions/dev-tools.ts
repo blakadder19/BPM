@@ -17,6 +17,9 @@ import {
 } from "@/lib/repositories";
 import { getInstances } from "@/lib/services/schedule-store";
 import type { DanceRole } from "@/types/domain";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { saveBookingToDB, saveWaitlistToDB, deleteWaitlistFromDB, savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 
 function guardDev() {
   if (process.env.NODE_ENV !== "development") {
@@ -36,6 +39,7 @@ function revalidateAll() {
 
 export async function devGetStudentState(studentId: string) {
   guardDev();
+  await ensureOperationalDataHydrated();
 
   const { CURRENT_CODE_OF_CONDUCT } = await import("@/config/code-of-conduct");
   const cocAccepted = await getCocRepo().hasAcceptedVersion(studentId, CURRENT_CODE_OF_CONDUCT.version);
@@ -225,6 +229,7 @@ export async function devAddBooking(
   danceRole: DanceRole | null
 ): Promise<{ success: boolean; error?: string; result?: string }> {
   guardDev();
+  await ensureOperationalDataHydrated();
   const studentName = await resolveStudentName(studentId);
   if (!studentName) return { success: false, error: "Student not found" };
 
@@ -264,6 +269,11 @@ export async function devAddBooking(
     forceConfirm: true,
   });
 
+  if (isRealUser(studentId) && outcome.type === "confirmed") {
+    const booking = svc.bookings.find((b) => b.id === outcome.bookingId);
+    if (booking) await saveBookingToDB(booking);
+  }
+
   revalidateAll();
 
   if (outcome.type === "rejected") {
@@ -276,10 +286,16 @@ export async function devCancelBooking(
   bookingId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
+  await ensureOperationalDataHydrated();
   const svc = getBookingRepo().getService();
+  const booking = svc.bookings.find((b) => b.id === bookingId);
   const result = svc.cancelBooking(bookingId);
-  revalidateAll();
   if (result.type === "error") return { success: false, error: result.reason };
+  if (booking && isRealUser(booking.studentId)) {
+    const updated = svc.bookings.find((b) => b.id === bookingId);
+    if (updated) await saveBookingToDB(updated);
+  }
+  revalidateAll();
   return { success: true };
 }
 
@@ -291,6 +307,7 @@ export async function devJoinWaitlist(
   danceRole: DanceRole | null
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
+  await ensureOperationalDataHydrated();
   const studentName = await resolveStudentName(studentId);
   if (!studentName) return { success: false, error: "Student not found" };
 
@@ -327,6 +344,16 @@ export async function devJoinWaitlist(
     danceRole,
   });
 
+  if (isRealUser(studentId)) {
+    if (outcome.type === "confirmed") {
+      const booking = svc.bookings.find((b) => b.id === outcome.bookingId);
+      if (booking) await saveBookingToDB(booking);
+    } else if (outcome.type === "waitlisted") {
+      const entry = svc.waitlist.find((w) => w.id === outcome.waitlistId);
+      if (entry) await saveWaitlistToDB(entry);
+    }
+  }
+
   revalidateAll();
 
   if (outcome.type === "rejected") return { success: false, error: outcome.reason };
@@ -337,10 +364,13 @@ export async function devLeaveWaitlist(
   waitlistId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
+  await ensureOperationalDataHydrated();
   const svc = getBookingRepo().getService();
+  const entry = svc.waitlist.find((w) => w.id === waitlistId);
   const removed = svc.removeFromWaitlist(waitlistId);
-  revalidateAll();
   if (!removed) return { success: false, error: "Entry not found" };
+  if (entry && isRealUser(entry.studentId)) await deleteWaitlistFromDB(waitlistId);
+  revalidateAll();
   return { success: true };
 }
 
@@ -351,11 +381,12 @@ export async function devAddPenalty(
   reason: "late_cancel" | "no_show"
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
+  await ensureOperationalDataHydrated();
   const studentName = await resolveStudentName(studentId);
   if (!studentName) return { success: false, error: "Student not found" };
 
   const penaltySvc = getPenaltyRepo().getService();
-  penaltySvc.addPenalty({
+  const penalty = penaltySvc.addPenalty({
     studentId,
     studentName,
     bookingId: null,
@@ -369,6 +400,7 @@ export async function devAddPenalty(
     creditDeducted: 0,
     notes: "Created via dev tools",
   });
+  if (isRealUser(studentId)) await savePenaltyToDB(penalty);
 
   revalidateAll();
   return { success: true };
@@ -378,11 +410,15 @@ export async function devWaivePenalty(
   penaltyId: string
 ): Promise<{ success: boolean; error?: string }> {
   guardDev();
+  await ensureOperationalDataHydrated();
   const penaltySvc = getPenaltyRepo().getService();
   const penalty = penaltySvc.penalties.find((p) => p.id === penaltyId);
   if (!penalty) return { success: false, error: "Penalty not found" };
   penalty.resolution = "waived";
   penalty.notes = (penalty.notes ? penalty.notes + " | " : "") + "Waived via dev tools";
+  if (isRealUser(penalty.studentId)) {
+    await updatePenaltyInDB(penaltyId, { resolution: "waived", notes: penalty.notes });
+  }
   revalidateAll();
   return { success: true };
 }

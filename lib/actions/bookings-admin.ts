@@ -5,10 +5,8 @@ import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getSettings } from "@/lib/services/settings-store";
-import {
-  getSubscription as getSubSync,
-  updateSubscription as updateSubStore,
-} from "@/lib/services/subscription-store";
+import { getSubscriptionRepo } from "@/lib/repositories";
+import { updateSubscription as repoUpdateSub } from "@/lib/services/subscription-service";
 import { getTerms } from "@/lib/services/term-store";
 import { findTermForDate, isBeginnerEntryWeek } from "@/lib/domain/term-rules";
 import { isBeginnerEntryClass } from "@/lib/domain/term-rules";
@@ -19,6 +17,10 @@ import {
 } from "@/lib/domain/cancellation-rules";
 import { isAfterClosureWindow } from "@/lib/domain/datetime";
 import type { BookingSource, DanceRole } from "@/types/domain";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { saveBookingToDB, saveWaitlistToDB, deleteWaitlistFromDB, savePenaltyToDB } from "@/lib/supabase/operational-persistence";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { requireRole } from "@/lib/auth";
 
 const VALID_SOURCES = new Set<string>([
   "subscription",
@@ -30,6 +32,9 @@ const VALID_SOURCES = new Set<string>([
 export async function adminCreateBookingAction(
   formData: FormData
 ): Promise<{ success: boolean; outcome?: string; warning?: string; error?: string }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin"]);
+
   const studentId = (formData.get("studentId") as string)?.trim();
   const studentName = (formData.get("studentName") as string)?.trim();
   const bookableClassId = (formData.get("bookableClassId") as string)?.trim();
@@ -60,7 +65,7 @@ export async function adminCreateBookingAction(
 
   // Entitlement validation when source is "subscription"
   if (source === "subscription" && subscriptionId) {
-    const sub = getSubSync(subscriptionId);
+    const sub = await getSubscriptionRepo().getById(subscriptionId);
     if (!sub) {
       return { success: false, error: "Entitlement not found" };
     }
@@ -95,7 +100,7 @@ export async function adminCreateBookingAction(
     const terms = getTerms();
     const classTerm = findTermForDate(terms, cls.date);
     if (classTerm && source === "subscription" && subscriptionId) {
-      const sub = getSubSync(subscriptionId);
+      const sub = await getSubscriptionRepo().getById(subscriptionId);
       // Student is "new" to this entitlement if they have no prior confirmed bookings
       // with the same subscription name during this term
       const existingBookings = svc.bookings.filter(
@@ -130,14 +135,19 @@ export async function adminCreateBookingAction(
 
   // Deduct credit / increment classesUsed on successful booking
   if (source === "subscription" && subscriptionId) {
-    const sub = getSubSync(subscriptionId);
+    const sub = await getSubscriptionRepo().getById(subscriptionId);
     if (sub) {
       if (sub.productType === "membership" && sub.classesPerTerm !== null) {
-        updateSubStore(sub.id, { classesUsed: sub.classesUsed + 1 });
+        await repoUpdateSub(sub.id, { classesUsed: sub.classesUsed + 1 });
       } else if (sub.remainingCredits !== null) {
-        updateSubStore(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+        await repoUpdateSub(sub.id, { remainingCredits: sub.remainingCredits - 1 });
       }
     }
+  }
+
+  if (isRealUser(studentId)) {
+    const newBooking = svc.bookings.find((b) => b.studentId === studentId && b.bookableClassId === bookableClassId && (b.status === "confirmed" || b.status === "checked_in"));
+    if (newBooking) await saveBookingToDB(newBooking);
   }
 
   revalidatePath("/bookings");
@@ -154,6 +164,9 @@ export async function adminCancelBookingAction(
   promotedStudent?: string | null;
   error?: string;
 }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin"]);
+
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const svc = getBookingService();
@@ -177,12 +190,12 @@ export async function adminCancelBookingAction(
   }
 
   if (booking.subscriptionId) {
-    const sub = getSubSync(booking.subscriptionId);
+    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
     if (sub) {
       if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {
-        updateSubStore(sub.id, { classesUsed: sub.classesUsed - 1 });
+        await repoUpdateSub(sub.id, { classesUsed: sub.classesUsed - 1 });
       } else if (sub.remainingCredits !== null) {
-        updateSubStore(sub.id, { remainingCredits: sub.remainingCredits + 1 });
+        await repoUpdateSub(sub.id, { remainingCredits: sub.remainingCredits + 1 });
       }
     }
   }
@@ -192,7 +205,7 @@ export async function adminCancelBookingAction(
     const settings = getSettings();
     if (settings.lateCancelPenaltiesEnabled) {
       const penaltySvc = getPenaltyService();
-      penaltySvc.addPenalty({
+      const penalty = penaltySvc.addPenalty({
         studentId: booking.studentId,
         studentName: booking.studentName,
         bookingId: booking.id,
@@ -206,7 +219,23 @@ export async function adminCancelBookingAction(
         creditDeducted: 0,
         notes: null,
       });
+      if (isRealUser(booking.studentId)) await savePenaltyToDB(penalty);
       penaltyCreated = true;
+    }
+  }
+
+  if (isRealUser(booking.studentId)) {
+    const cancelledBooking = svc.bookings.find((b) => b.id === bookingId);
+    if (cancelledBooking) await saveBookingToDB(cancelledBooking);
+  }
+  if (result.promoted) {
+    const promotedEntry = svc.waitlist.find((w) => w.id === result.promoted?.waitlistId);
+    if (promotedEntry && isRealUser(promotedEntry.studentId)) {
+      await saveWaitlistToDB(promotedEntry);
+      const promotedBooking = svc.bookings.find(
+        (b) => b.studentId === promotedEntry.studentId && b.bookableClassId === booking.bookableClassId && b.source === "waitlist_promotion"
+      );
+      if (promotedBooking) await saveBookingToDB(promotedBooking);
     }
   }
 
@@ -226,6 +255,9 @@ export async function adminCancelBookingAction(
 export async function adminCheckInBookingAction(
   bookingId: string
 ): Promise<{ success: boolean; error?: string }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin", "teacher"]);
+
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const svc = getBookingService();
@@ -257,6 +289,11 @@ export async function adminCheckInBookingAction(
     });
   }
 
+  if (isRealUser(booking.studentId)) {
+    const checkedIn = svc.bookings.find((b) => b.id === bookingId);
+    if (checkedIn) await saveBookingToDB(checkedIn);
+  }
+
   revalidatePath("/bookings");
   revalidatePath("/attendance");
   return { success: true };
@@ -265,6 +302,9 @@ export async function adminCheckInBookingAction(
 export async function adminPromoteWaitlistAction(
   waitlistId: string
 ): Promise<{ success: boolean; error?: string }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin"]);
+
   if (!waitlistId) return { success: false, error: "Missing waitlist ID" };
 
   const svc = getBookingService();
@@ -274,6 +314,13 @@ export async function adminPromoteWaitlistAction(
     return { success: false, error: result.reason };
   }
 
+  if (result.type === "promoted") {
+    const newBooking = svc.bookings.find((b) => b.id === result.bookingId);
+    if (newBooking && isRealUser(newBooking.studentId)) await saveBookingToDB(newBooking);
+    const promotedEntry = svc.waitlist.find((w) => w.id === waitlistId);
+    if (promotedEntry) await saveWaitlistToDB(promotedEntry);
+  }
+
   revalidatePath("/bookings");
   return { success: true };
 }
@@ -281,12 +328,17 @@ export async function adminPromoteWaitlistAction(
 export async function adminRemoveFromWaitlistAction(
   waitlistId: string
 ): Promise<{ success: boolean; error?: string }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin"]);
+
   if (!waitlistId) return { success: false, error: "Missing waitlist ID" };
 
   const svc = getBookingService();
   const removed = svc.removeFromWaitlist(waitlistId);
 
   if (!removed) return { success: false, error: "Entry not found or already promoted" };
+
+  await deleteWaitlistFromDB(waitlistId);
 
   revalidatePath("/bookings");
   return { success: true };
@@ -304,6 +356,8 @@ export async function checkLateCancelStatusAction(
   lateCancelFeeCents?: number;
   error?: string;
 }> {
+  await ensureOperationalDataHydrated();
+
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const svc = getBookingService();
@@ -334,6 +388,9 @@ export async function adminRestoreBookingAction(
   hasLinkedPenalty?: boolean;
   error?: string;
 }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin"]);
+
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
   const svc = getBookingService();
@@ -355,12 +412,12 @@ export async function adminRestoreBookingAction(
   }
 
   if (result.restoredTo === "confirmed" && booking.subscriptionId) {
-    const sub = getSubSync(booking.subscriptionId);
+    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
     if (sub) {
       if (sub.productType === "membership" && sub.classesPerTerm !== null) {
-        updateSubStore(sub.id, { classesUsed: sub.classesUsed + 1 });
+        await repoUpdateSub(sub.id, { classesUsed: sub.classesUsed + 1 });
       } else if (sub.remainingCredits !== null) {
-        updateSubStore(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+        await repoUpdateSub(sub.id, { remainingCredits: sub.remainingCredits - 1 });
       }
     }
   }
@@ -368,6 +425,11 @@ export async function adminRestoreBookingAction(
   const penaltySvc = getPenaltyService();
   const allPenalties = penaltySvc.getAllPenalties();
   const hasLinkedPenalty = allPenalties.some((p) => p.bookingId === bookingId);
+
+  if (isRealUser(booking.studentId)) {
+    const restoredBooking = svc.bookings.find((b) => b.id === bookingId);
+    if (restoredBooking) await saveBookingToDB(restoredBooking);
+  }
 
   revalidatePath("/bookings");
   revalidatePath("/penalties");

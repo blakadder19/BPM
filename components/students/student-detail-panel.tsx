@@ -71,6 +71,13 @@ export function StudentDetailPanel({
         <div className="grid gap-5 px-8 py-5 md:grid-cols-2">
           {/* ── Profile section ── */}
           <Section title="Profile">
+            <DL label="Student ID" value={student.id} />
+            <DL label="Email" value={student.email} />
+            <DL label="Phone" value={student.phone ?? "—"} />
+            <DL
+              label="Preferred Role"
+              value={student.preferredRole ? student.preferredRole.charAt(0).toUpperCase() + student.preferredRole.slice(1) : "—"}
+            />
             <DL label="Joined" value={formatDate(student.joinedAt)} />
             <DL
               label="Date of Birth"
@@ -80,7 +87,7 @@ export function StudentDetailPanel({
             {student.emergencyContactPhone && (
               <DL label="Emergency Phone" value={student.emergencyContactPhone} />
             )}
-            <DL label="Notes" value={student.notes ?? "—"} />
+            {student.notes && <DL label="Notes" value={student.notes} />}
           </Section>
 
           {/* ── Member Benefits (admin view) ── */}

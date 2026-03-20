@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
-import { STUDENTS } from "@/lib/mock-data";
+import { getStudentRepo } from "@/lib/repositories";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { deleteWaitlistFromDB } from "@/lib/supabase/operational-persistence";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 
 export async function studentLeaveWaitlistAction(
   waitlistId: string
@@ -11,13 +14,12 @@ export async function studentLeaveWaitlistAction(
   if (!waitlistId) return { success: false, error: "Missing waitlist ID" };
 
   const user = await getAuthUser();
+  await ensureOperationalDataHydrated();
   if (!user || user.role !== "student") {
     return { success: false, error: "Not authenticated as a student." };
   }
 
-  const student = STUDENTS.find(
-    (s) => s.fullName === user.fullName || s.email === user.email
-  );
+  const student = await getStudentRepo().getById(user.id);
   if (!student) {
     return { success: false, error: "Student profile not found." };
   }
@@ -35,6 +37,10 @@ export async function studentLeaveWaitlistAction(
   const removed = svc.removeFromWaitlist(waitlistId);
   if (!removed) {
     return { success: false, error: "Failed to leave waitlist." };
+  }
+
+  if (isRealUser(user.id)) {
+    await deleteWaitlistFromDB(waitlistId);
   }
 
   revalidatePath("/bookings");

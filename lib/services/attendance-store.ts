@@ -39,6 +39,11 @@ export function getAttendanceService(): AttendanceService {
     const existing = g.__bpm_attendanceSvc?.records;
     g.__bpm_attendanceSvc = new AttendanceService(existing ?? buildRecords());
     g.__bpm_attendanceSvcV = STORE_VERSION;
+
+    try {
+      const { resetHydrationFlags } = require("@/lib/supabase/hydrate-operational");
+      resetHydrationFlags();
+    } catch { /* hydration module not available */ }
   }
   return g.__bpm_attendanceSvc;
 }

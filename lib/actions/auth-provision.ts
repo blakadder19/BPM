@@ -14,11 +14,11 @@ export async function provisionCurrentUser(): Promise<{
 }> {
   try {
     const supabase = await createServerSupabaseClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) {
-      return { success: false, error: "No authenticated session" };
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
+      return { success: false, error: "No authenticated user" };
     }
-    return await ensureSupabaseProfile(session.user);
+    return await ensureSupabaseProfile(user);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[provisionCurrentUser]", msg);

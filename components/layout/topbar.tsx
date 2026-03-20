@@ -5,12 +5,19 @@ import { useTransition } from "react";
 import { Bell } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { switchDevRole, switchDevStudent } from "@/lib/actions/auth";
+import { useDevUnlock } from "@/lib/hooks/use-dev-unlock";
 import type { AuthUser } from "@/lib/auth";
 
 const ROLE_BADGE: Record<string, "default" | "success" | "info"> = {
   admin: "default",
   teacher: "success",
   student: "info",
+};
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  teacher: "Teacher",
+  student: "Student",
 };
 
 interface StudentOption {
@@ -22,16 +29,15 @@ interface TopbarProps {
   user: AuthUser;
   devStudents?: StudentOption[];
   devStudentId?: string | null;
-  showDevControls?: boolean;
 }
 
-export function Topbar({ user, devStudents, devStudentId, showDevControls }: TopbarProps) {
-  const showControls = showDevControls ?? (process.env.NODE_ENV === "development");
+export function Topbar({ user, devStudents, devStudentId }: TopbarProps) {
+  const { unlocked: showControls } = useDevUnlock();
   return (
     <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
       <div className="flex items-center gap-3">
         <Badge variant={ROLE_BADGE[user.role] ?? "default"}>
-          {user.role}
+          {ROLE_LABELS[user.role] ?? user.role}
         </Badge>
         {showControls && (
           <>

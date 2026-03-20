@@ -36,6 +36,9 @@ export async function signOut(): Promise<void> {
     }
   }
 
+  // Clear boot-ID cookie so next login gets a fresh stamp
+  try { cookieStore.delete("bpm-sid"); } catch { /* ignore */ }
+
   // Clear dev cookies if in memory/dev mode
   if (isMemoryMode()) {
     try {

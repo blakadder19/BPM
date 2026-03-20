@@ -5,6 +5,10 @@ import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { BOOKABLE_CLASSES } from "@/lib/mock-data";
 import type { PenaltyReason, PenaltyResolution, ClassType } from "@/types/domain";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { requireRole } from "@/lib/auth";
 
 const VALID_REASONS = new Set<string>(["late_cancel", "no_show"]);
 const VALID_RESOLUTIONS = new Set<string>(["credit_deducted", "waived", "monetary_pending"]);
@@ -13,6 +17,9 @@ export async function updatePenaltyResolution(
   penaltyId: string,
   resolution: PenaltyResolution
 ): Promise<{ success: boolean; error?: string }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin"]);
+
   if (!penaltyId) return { success: false, error: "Missing penalty ID" };
 
   if (!VALID_RESOLUTIONS.has(resolution)) {
@@ -20,9 +27,14 @@ export async function updatePenaltyResolution(
   }
 
   const svc = getPenaltyService();
-  const updated = svc.updateResolution(penaltyId, resolution);
+  const result = svc.updateResolution(penaltyId, resolution);
 
-  if (!updated) return { success: false, error: "Penalty not found" };
+  if (!result) return { success: false, error: "Penalty not found" };
+
+  if (result && isRealUser(result.studentId)) {
+    await updatePenaltyInDB(penaltyId, { resolution });
+  }
+
   revalidatePath("/penalties");
   return { success: true };
 }
@@ -30,15 +42,23 @@ export async function updatePenaltyResolution(
 export async function updatePenaltyNotesAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin"]);
+
   const penaltyId = formData.get("penaltyId") as string;
   const notes = (formData.get("notes") as string)?.trim() || null;
 
   if (!penaltyId) return { success: false, error: "Missing penalty ID" };
 
   const svc = getPenaltyService();
-  const updated = svc.updateNotes(penaltyId, notes);
+  const result = svc.updateNotes(penaltyId, notes);
 
-  if (!updated) return { success: false, error: "Penalty not found" };
+  if (!result) return { success: false, error: "Penalty not found" };
+
+  if (result && isRealUser(result.studentId)) {
+    await updatePenaltyInDB(penaltyId, { notes });
+  }
+
   revalidatePath("/penalties");
   return { success: true };
 }
@@ -46,6 +66,9 @@ export async function updatePenaltyNotesAction(
 export async function createPenaltyAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await ensureOperationalDataHydrated();
+  await requireRole(["admin"]);
+
   const studentId = (formData.get("studentId") as string)?.trim();
   const studentName = (formData.get("studentName") as string)?.trim();
   const bookableClassId = (formData.get("bookableClassId") as string)?.trim();
@@ -72,7 +95,7 @@ export async function createPenaltyAction(
   }
 
   const svc = getPenaltyService();
-  svc.addPenalty({
+  const result = svc.addPenalty({
     studentId,
     studentName,
     bookingId,
@@ -87,6 +110,10 @@ export async function createPenaltyAction(
     notes,
   });
 
+  if (isRealUser(studentId)) {
+    await savePenaltyToDB(result);
+  }
+
   revalidatePath("/penalties");
   return { success: true };
 }
@@ -95,6 +122,7 @@ export async function createPenaltyAction(
 export async function deletePenaltyAction(
   penaltyId: string
 ): Promise<{ success: boolean; error?: string }> {
+  await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, error: "Not available in production" };
   }
@@ -117,6 +145,7 @@ export async function backfillPenaltiesAction(): Promise<{
   skipped: number;
   error?: string;
 }> {
+  await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, created: 0, skipped: 0, error: "Not available in production" };
   }
@@ -180,6 +209,7 @@ export async function clearAllPenaltiesAction(): Promise<{
   cleared: number;
   error?: string;
 }> {
+  await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }
