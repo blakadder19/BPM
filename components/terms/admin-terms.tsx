@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Pencil, Plus, CalendarRange } from "lucide-react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Pencil, Plus, CalendarRange, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminTable, Td } from "@/components/ui/admin-table";
@@ -19,8 +20,11 @@ interface AdminTermsProps {
 }
 
 export function AdminTerms({ terms }: AdminTermsProps) {
+  const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [editTerm, setEditTerm] = useState<MockTerm | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MockTerm | null>(null);
+  const [delPending, startDel] = useTransition();
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -65,14 +69,23 @@ export function AdminTerms({ terms }: AdminTermsProps) {
                     <span className="text-gray-400">—</span>
                   )}
                 </Td>
-                <Td className="w-12">
-                  <button
-                    onClick={() => setEditTerm(t)}
-                    className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                    title="Edit term"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
+                <Td className="w-20">
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setEditTerm(t)}
+                      className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                      title="Edit term"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget(t)}
+                      className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                      title="Delete term"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </Td>
               </tr>
             );
@@ -83,6 +96,35 @@ export function AdminTerms({ terms }: AdminTermsProps) {
       {showAdd && <AddTermDialog onClose={() => setShowAdd(false)} />}
       {editTerm && (
         <EditTermDialog term={editTerm} onClose={() => setEditTerm(null)} />
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold">Delete Term</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Permanently delete <strong>{deleteTarget.name}</strong>? This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={delPending}>Cancel</Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={delPending}
+                onClick={() => {
+                  startDel(async () => {
+                    const { deleteTermAction } = await import("@/lib/actions/terms");
+                    await deleteTermAction(deleteTarget.id);
+                    setDeleteTarget(null);
+                    router.refresh();
+                  });
+                }}
+              >
+                {delPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

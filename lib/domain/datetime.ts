@@ -19,12 +19,16 @@ function getClosureMinutes(): number {
   }
 }
 
+function normalizeTime(t: string): string {
+  return t.length <= 5 ? `${t}:00` : t;
+}
+
 export function classStartDT(date: string, startTime: string): Date {
-  return new Date(`${date}T${startTime}:00`);
+  return new Date(`${date}T${normalizeTime(startTime)}`);
 }
 
 export function classEndDT(date: string, endTime: string): Date {
-  return new Date(`${date}T${endTime}:00`);
+  return new Date(`${date}T${normalizeTime(endTime)}`);
 }
 
 export function getNow(): Date {

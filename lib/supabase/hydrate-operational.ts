@@ -22,6 +22,7 @@ import {
   loadPenaltiesFromDB,
   loadSubscriptionsFromDB,
 } from "./operational-persistence";
+import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 
 const g = globalThis as unknown as {
   __bpm_opHydratedBookings?: boolean;
@@ -73,19 +74,14 @@ export async function hydrateBookings(): Promise<void> {
     loadValidUserIds(),
   ]);
 
-  const existingBookingIds = new Set(svc.bookings.map((b) => b.id));
-  for (const b of dbBookings) {
-    if (!existingBookingIds.has(b.id) && isValidStudentId(b.studentId, validIds)) {
-      svc.bookings.push(b);
-    }
-  }
+  const validBookings = dbBookings.filter((b) => isValidStudentId(b.studentId, validIds));
+  const validWaitlist = dbWaitlist.filter((w) => isValidStudentId(w.studentId, validIds));
 
-  const existingWaitlistIds = new Set(svc.waitlist.map((w) => w.id));
-  for (const w of dbWaitlist) {
-    if (!existingWaitlistIds.has(w.id) && isValidStudentId(w.studentId, validIds)) {
-      svc.waitlist.push(w);
-    }
-  }
+  svc.bookings.length = 0;
+  svc.bookings.push(...validBookings);
+
+  svc.waitlist.length = 0;
+  svc.waitlist.push(...validWaitlist);
 }
 
 export async function hydrateAttendance(): Promise<void> {
@@ -98,12 +94,9 @@ export async function hydrateAttendance(): Promise<void> {
     loadValidUserIds(),
   ]);
 
-  const existingIds = new Set(svc.records.map((r) => r.id));
-  for (const r of dbRecords) {
-    if (!existingIds.has(r.id) && isValidStudentId(r.studentId, validIds)) {
-      svc.records.push(r);
-    }
-  }
+  const valid = dbRecords.filter((r) => isValidStudentId(r.studentId, validIds));
+  svc.records.length = 0;
+  svc.records.push(...valid);
 }
 
 export async function hydratePenalties(): Promise<void> {
@@ -116,12 +109,9 @@ export async function hydratePenalties(): Promise<void> {
     loadValidUserIds(),
   ]);
 
-  const existingIds = new Set(svc.penalties.map((p) => p.id));
-  for (const p of dbPenalties) {
-    if (!existingIds.has(p.id) && isValidStudentId(p.studentId, validIds)) {
-      svc.penalties.push(p);
-    }
-  }
+  const valid = dbPenalties.filter((p) => isValidStudentId(p.studentId, validIds));
+  svc.penalties.length = 0;
+  svc.penalties.push(...valid);
 }
 
 export async function hydrateSubscriptions(): Promise<void> {
@@ -134,12 +124,9 @@ export async function hydrateSubscriptions(): Promise<void> {
     loadValidUserIds(),
   ]);
 
-  const existingIds = new Set(store.map((s) => s.id));
-  for (const s of dbSubs) {
-    if (!existingIds.has(s.id) && isValidStudentId(s.studentId, validIds)) {
-      store.push(s);
-    }
-  }
+  const valid = dbSubs.filter((s) => isValidStudentId(s.studentId, validIds));
+  store.length = 0;
+  store.push(...valid);
 }
 
 /**
@@ -148,6 +135,7 @@ export async function hydrateSubscriptions(): Promise<void> {
  */
 export async function ensureOperationalDataHydrated(): Promise<void> {
   await Promise.all([
+    ensureScheduleBootstrapped(),
     hydrateBookings(),
     hydrateAttendance(),
     hydratePenalties(),

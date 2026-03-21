@@ -18,8 +18,6 @@ import type { IAttendanceRepository } from "./interfaces/attendance-repository";
 import type { IPenaltyRepository } from "./interfaces/penalty-repository";
 import type { ICreditRepository } from "./interfaces/credit-repository";
 
-import { memoryProductRepo } from "./memory/product-repository";
-import { memoryTermRepo } from "./memory/term-repository";
 import { memorySettingsRepo } from "./memory/settings-repository";
 import { memoryBookingRepo } from "./memory/booking-repository";
 import { memoryAttendanceRepo } from "./memory/attendance-repository";
@@ -43,17 +41,21 @@ export function getStudentRepo(): IStudentRepository {
 }
 
 export function getProductRepo(): IProductRepository {
-  return resolveRepo(memoryProductRepo, () => {
+  if (getDataProvider() === "supabase") {
     const { supabaseProductRepo } = require("./supabase/product-repository");
     return supabaseProductRepo;
-  });
+  }
+  const { hybridProductRepo } = require("./hybrid-product-repository");
+  return hybridProductRepo;
 }
 
 export function getTermRepo(): ITermRepository {
-  return resolveRepo(memoryTermRepo, () => {
+  if (getDataProvider() === "supabase") {
     const { supabaseTermRepo } = require("./supabase/term-repository");
     return supabaseTermRepo;
-  });
+  }
+  const { hybridTermRepo } = require("./hybrid-term-repository");
+  return hybridTermRepo;
 }
 
 export function getSubscriptionRepo(): ISubscriptionRepository {

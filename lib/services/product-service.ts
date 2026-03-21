@@ -80,3 +80,16 @@ export async function toggleProductActive(
     ? { success: true }
     : { success: false, error: "Product not found" };
 }
+
+export async function deleteProduct(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const deleted = await getProductRepo().delete(id);
+    return deleted
+      ? { success: true }
+      : { success: false, error: "Product not found" };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}

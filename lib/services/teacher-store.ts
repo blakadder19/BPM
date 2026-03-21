@@ -1,17 +1,24 @@
 /**
  * Mutable in-memory teacher assignment store, seeded from mock data.
  * Assignments now reference teacher IDs from the teacher roster.
- * In production, replace with Supabase-backed service.
+ *
+ * When Supabase is configured, the store starts empty and is hydrated from the
+ * `teacher_default_assignments` table via schedule-bootstrap. Write-through
+ * persistence is handled by the server actions in lib/actions/classes.ts.
  */
 
 import { TEACHER_PAIRS, type MockTeacherPair } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
 let assignments: MockTeacherPair[] | null = null;
 
 function init(): MockTeacherPair[] {
   if (!assignments) {
-    assignments = TEACHER_PAIRS.map((tp) => ({ ...tp }));
+    assignments = hasSupabaseConfig() ? [] : TEACHER_PAIRS.map((tp) => ({ ...tp }));
   }
   return assignments;
 }
@@ -96,4 +103,8 @@ export function clearAllAssignments(): number {
   const count = list.length;
   list.length = 0;
   return count;
+}
+
+export function replaceAssignments(list: MockTeacherPair[]): void {
+  assignments = list;
 }

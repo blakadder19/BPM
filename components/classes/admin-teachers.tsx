@@ -96,6 +96,8 @@ function RosterSection({ roster }: { roster: Teacher[] }) {
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<Teacher | null>(null);
   const [togglePending, startToggle] = useTransition();
+  const [deleteTarget, setDeleteTarget] = useState<Teacher | null>(null);
+  const [delPending, startDel] = useTransition();
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -160,6 +162,9 @@ function RosterSection({ roster }: { roster: Teacher[] }) {
                       <button onClick={() => handleToggleActive(t.id)} disabled={togglePending} className={`rounded p-1.5 hover:bg-gray-100 ${t.isActive ? "text-amber-500 hover:text-amber-600" : "text-green-500 hover:text-green-600"}`} title={t.isActive ? "Deactivate" : "Reactivate"}>
                         <Power className="h-3.5 w-3.5" />
                       </button>
+                      <button onClick={() => setDeleteTarget(t)} className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600" title="Delete teacher">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                       {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" /> : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
                     </div>
                   </Td>
@@ -185,6 +190,35 @@ function RosterSection({ roster }: { roster: Teacher[] }) {
 
       {showAdd && <AddTeacherDialog onClose={() => setShowAdd(false)} />}
       {editTarget && <EditTeacherDialog teacher={editTarget} onClose={() => setEditTarget(null)} />}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold">Delete Teacher</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Permanently delete <strong>{deleteTarget.fullName}</strong>? This only removes the in-memory record and will not survive a server restart regardless.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={delPending}>Cancel</Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={delPending}
+                onClick={() => {
+                  startDel(async () => {
+                    const { deleteTeacherAction } = await import("@/lib/actions/classes");
+                    await deleteTeacherAction(deleteTarget.id);
+                    setDeleteTarget(null);
+                    router.refresh();
+                  });
+                }}
+              >
+                {delPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

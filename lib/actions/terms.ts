@@ -63,3 +63,18 @@ export async function updateTermAction(
   revalidatePath("/terms");
   return { success: true };
 }
+
+export async function deleteTermAction(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!id) return { success: false, error: "Missing term ID" };
+
+  const existing = await getTermRepo().getById(id);
+  if (!existing) return { success: false, error: "Term not found" };
+
+  const deleted = await getTermRepo().delete(id);
+  if (!deleted) return { success: false, error: "Failed to delete term" };
+
+  revalidatePath("/terms");
+  return { success: true };
+}

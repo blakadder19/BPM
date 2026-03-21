@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAcademyId } from "@/lib/supabase/academy";
 import type { MockStudent } from "@/lib/mock-data";
 import type { Database } from "@/types/database";
 import type { DanceRole } from "@/types/domain";
@@ -70,9 +71,49 @@ export const supabaseStudentRepo: IStudentRepository = {
   },
 
   async create(data: CreateStudentData) {
-    // PROVISIONAL: creating a student in Supabase requires auth.admin.createUser
-    // plus inserting into users + student_profiles. Full flow pending.
-    throw new Error("Supabase student creation not yet implemented — use admin invite flow");
+    const supabase = createAdminClient();
+    const academyId = await getAcademyId();
+
+    const tempPassword = `BPM-temp-${crypto.randomUUID().slice(0, 8)}`;
+    const { data: authResult, error: authError } = await supabase.auth.admin.createUser({
+      email: data.email,
+      password: tempPassword,
+      email_confirm: true,
+      user_metadata: {
+        full_name: data.fullName,
+        role: "student",
+        phone: data.phone ?? undefined,
+        preferred_role: data.preferredRole ?? undefined,
+        date_of_birth: data.dateOfBirth ?? undefined,
+      },
+    });
+    if (authError) throw new Error(`Auth user creation failed: ${authError.message}`);
+    const userId = authResult.user.id;
+
+    // The handle_new_user trigger already inserts into public.users and
+    // student_profiles when auth.admin.createUser() fires. Use upsert to
+    // enrich those rows with the full data set without duplicate-key errors.
+    const { error: userError } = await supabase.from("users").upsert({
+      id: userId,
+      academy_id: academyId,
+      email: data.email,
+      full_name: data.fullName,
+      role: "student",
+      phone: data.phone,
+    } as never, { onConflict: "id" });
+    if (userError) throw new Error(`Users row upsert failed: ${userError.message}`);
+
+    const { error: profileError } = await supabase.from("student_profiles").upsert({
+      id: userId,
+      preferred_role: data.preferredRole,
+      notes: data.notes,
+      emergency_contact_name: data.emergencyContactName,
+      emergency_contact_phone: data.emergencyContactPhone,
+      date_of_birth: data.dateOfBirth,
+    } as never, { onConflict: "id" });
+    if (profileError) throw new Error(`Student profile upsert failed: ${profileError.message}`);
+
+    return this.getById(userId) as Promise<MockStudent>;
   },
 
   async update(id, patch: StudentPatch) {
@@ -104,6 +145,49 @@ export const supabaseStudentRepo: IStudentRepository = {
     }
 
     return this.getById(id);
+  },
+
+  async delete(id) {
+    const supabase = createAdminClient();
+
+    // Cascade-delete operational records (TEXT student_id, no FK constraints)
+    const opTables = [
+      "op_penalties",
+      "op_attendance",
+      "op_bookings",
+      "op_waitlist",
+      "op_subscriptions",
+    ];
+    for (const table of opTables) {
+      const { error } = await supabase.from(table).delete().eq("student_id", id);
+      if (error) console.warn(`[student.delete] Failed to clean ${table}:`, error.message);
+    }
+
+    // Cascade-delete normalized FK-constrained children before users row
+    const fkTables = [
+      "penalties",
+      "attendance",
+      "bookings",
+      "waitlist",
+      "student_subscriptions",
+      "wallet_transactions",
+      "payments",
+    ];
+    for (const table of fkTables) {
+      const { error } = await supabase.from(table).delete().eq("student_id", id);
+      if (error) console.warn(`[student.delete] Failed to clean ${table}:`, error.message);
+    }
+
+    const { error: profileErr } = await supabase.from("student_profiles").delete().eq("id", id);
+    if (profileErr) throw new Error(`Profile delete failed: ${profileErr.message}`);
+
+    const { error: userErr } = await supabase.from("users").delete().eq("id", id);
+    if (userErr) throw new Error(`User row delete failed: ${userErr.message}`);
+
+    const { error: authErr } = await supabase.auth.admin.deleteUser(id);
+    if (authErr) throw new Error(`Auth user delete failed: ${authErr.message}`);
+
+    return true;
   },
 
   async toggleActive(id) {

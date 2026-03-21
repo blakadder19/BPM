@@ -7,4 +7,5 @@ export const memoryProductRepo: IProductRepository = {
   create: async (data: CreateProductData) => store.createProduct(data),
   update: async (id, patch: ProductPatch) => store.updateProduct(id, patch),
   toggleActive: async (id) => store.toggleProductActive(id),
+  delete: async (id) => store.deleteProduct(id),
 };

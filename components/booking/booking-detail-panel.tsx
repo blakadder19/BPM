@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, X as XIcon, Check, Users, RotateCcw } from "lucide-react";
+import { ExternalLink, X as XIcon, Check, Users, RotateCcw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate, formatTime } from "@/lib/utils";
@@ -11,6 +11,7 @@ interface BookingDetailPanelProps {
   booking: BookingView;
   colSpan: number;
   onCancel: () => void;
+  onDelete?: () => void;
   onCheckIn: () => void;
   onViewWaitlist: () => void;
   onRestore?: () => void;
@@ -21,6 +22,7 @@ export function BookingDetailPanel({
   booking: b,
   colSpan,
   onCancel,
+  onDelete,
   onCheckIn,
   onViewWaitlist,
   onRestore,
@@ -147,6 +149,12 @@ export function BookingDetailPanel({
                 <Button variant="outline" size="sm" onClick={onRestore}>
                   <RotateCcw className="h-3.5 w-3.5 mr-1" />
                   Restore Booking
+                </Button>
+              )}
+              {onDelete && (
+                <Button variant="ghost" size="sm" onClick={onDelete} className="text-red-500 hover:text-red-700 hover:bg-red-50">
+                  <Trash2 className="h-3.5 w-3.5 mr-1" />
+                  Delete
                 </Button>
               )}
             </div>

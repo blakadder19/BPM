@@ -1,19 +1,26 @@
 /**
- * Mutable in-memory student store, seeded from mock data.
- * In production, replace with Supabase-backed service.
+ * Mutable in-memory student store.
+ * When Supabase is configured, starts empty — real students come from DB.
+ * Mock students are only seeded when no Supabase config is present.
  */
 
 import { STUDENTS, type MockStudent } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 import type { DanceRole } from "@/types/domain";
 
-let students: MockStudent[] | null = null;
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+const g = globalThis as unknown as {
+  __bpm_students?: MockStudent[];
+};
 
 function init(): MockStudent[] {
-  if (!students) {
-    students = STUDENTS.map((s) => ({ ...s }));
+  if (!g.__bpm_students) {
+    g.__bpm_students = hasSupabaseConfig() ? [] : STUDENTS.map((s) => ({ ...s }));
   }
-  return students;
+  return g.__bpm_students;
 }
 
 export function getStudents(): MockStudent[] {
@@ -88,6 +95,14 @@ export function updateStudent(
   if (patch.dateOfBirth !== undefined) student.dateOfBirth = patch.dateOfBirth;
 
   return { ...student };
+}
+
+export function deleteStudent(id: string): boolean {
+  const list = init();
+  const idx = list.findIndex((s) => s.id === id);
+  if (idx === -1) return false;
+  list.splice(idx, 1);
+  return true;
 }
 
 export function toggleStudentActive(id: string): MockStudent | null {

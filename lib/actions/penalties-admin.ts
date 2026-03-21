@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
-import { BOOKABLE_CLASSES } from "@/lib/mock-data";
+import { getInstances } from "@/lib/services/schedule-store";
 import type { PenaltyReason, PenaltyResolution, ClassType } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
@@ -152,7 +152,7 @@ export async function backfillPenaltiesAction(): Promise<{
 
   const attendanceSvc = getAttendanceService();
   const penaltySvc = getPenaltyService();
-  const classMap = new Map(BOOKABLE_CLASSES.map((bc) => [bc.id, bc]));
+  const classMap = new Map(getInstances().map((bc) => [bc.id, bc]));
 
   const absences = attendanceSvc
     .getAllRecords()

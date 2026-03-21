@@ -1,7 +1,6 @@
 /**
- * Singleton AttendanceService instance backed by mock data.
- * Uses globalThis to survive HMR module re-evaluation in Next.js dev.
- * In production, replace with Supabase-backed service.
+ * Singleton AttendanceService instance.
+ * When Supabase is configured, starts empty — hydration fills real data.
  */
 
 import {
@@ -10,9 +9,14 @@ import {
 } from "./attendance-service";
 import { ATTENDANCE } from "@/lib/mock-data";
 
-const STORE_VERSION = 2;
+const STORE_VERSION = 3;
+
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
 
 function buildRecords(): StoredAttendance[] {
+  if (hasSupabaseConfig()) return [];
   return ATTENDANCE.map((a) => ({
     id: a.id,
     bookableClassId: a.bookableClassId,

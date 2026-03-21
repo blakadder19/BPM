@@ -1,16 +1,20 @@
 /**
- * Singleton BookingService instance backed by mock data.
- * Uses STORE_VERSION to force re-init when class shape changes while preserving data.
- * In production, replace with Supabase-backed service.
+ * Singleton BookingService instance.
+ * When Supabase is configured, starts empty — hydration fills real data.
  */
 
 import { BookingService, type ClassSnapshot, type StoredBooking, type StoredWaitlistEntry } from "./booking-service";
 import { BOOKABLE_CLASSES, BOOKINGS, WAITLIST_ENTRIES, DANCE_STYLES } from "@/lib/mock-data";
 import { generateCheckInToken } from "@/lib/domain/checkin-token";
 
-const STORE_VERSION = 5;
+const STORE_VERSION = 6;
+
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
 
 function buildClassSnapshots(): ClassSnapshot[] {
+  if (hasSupabaseConfig()) return [];
   return BOOKABLE_CLASSES.map((bc) => {
     const style = bc.styleName
       ? DANCE_STYLES.find((s) => s.name === bc.styleName)
@@ -34,6 +38,7 @@ function buildClassSnapshots(): ClassSnapshot[] {
 }
 
 function buildBookings(): StoredBooking[] {
+  if (hasSupabaseConfig()) return [];
   return BOOKINGS.map((b) => ({
     id: b.id,
     bookableClassId: b.bookableClassId,
@@ -52,6 +57,7 @@ function buildBookings(): StoredBooking[] {
 }
 
 function buildWaitlist(): StoredWaitlistEntry[] {
+  if (hasSupabaseConfig()) return [];
   return WAITLIST_ENTRIES.map((w) => ({
     id: w.id,
     bookableClassId: w.bookableClassId,

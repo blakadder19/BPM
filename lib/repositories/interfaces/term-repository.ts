@@ -18,4 +18,5 @@ export interface ITermRepository {
   getById(id: string): Promise<MockTerm | null>;
   create(data: CreateTermData): Promise<MockTerm>;
   update(id: string, patch: TermPatch): Promise<MockTerm | null>;
+  delete(id: string): Promise<boolean>;
 }

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useTransition, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { Inbox, Plus, ChevronDown, ChevronUp, Pencil, Power } from "lucide-react";
+import { Inbox, Plus, ChevronDown, ChevronUp, Pencil, Power, Trash2 } from "lucide-react";
 import type { MockClass, MockTeacherPair } from "@/lib/mock-data";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
@@ -77,6 +77,8 @@ export function AdminTemplates({
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<MockClass | null>(null);
   const [togglePending, startToggle] = useTransition();
+  const [deleteTarget, setDeleteTarget] = useState<MockClass | null>(null);
+  const [delPending, startDel] = useTransition();
 
   const styleOptions = useMemo(
     () => allStyles.map((s) => ({ value: s.name, label: s.name })),
@@ -238,6 +240,13 @@ export function AdminTemplates({
                       >
                         <Power className="h-3.5 w-3.5" />
                       </button>
+                      <button
+                        onClick={() => setDeleteTarget(c)}
+                        className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                        title="Delete template"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                       {isExpanded ? (
                         <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
                       ) : (
@@ -270,6 +279,35 @@ export function AdminTemplates({
       )}
       {editTarget && (
         <EditTemplateDialog template={editTarget} allStyles={allStyles} onClose={() => setEditTarget(null)} />
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold">Delete Template</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Permanently delete <strong>{deleteTarget.title}</strong>? This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={delPending}>Cancel</Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={delPending}
+                onClick={() => {
+                  startDel(async () => {
+                    const { deleteTemplateAction } = await import("@/lib/actions/classes");
+                    await deleteTemplateAction(deleteTarget.id);
+                    setDeleteTarget(null);
+                    router.refresh();
+                  });
+                }}
+              >
+                {delPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

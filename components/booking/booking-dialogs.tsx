@@ -22,6 +22,9 @@ import {
   checkLateCancelStatusAction,
   adminPromoteWaitlistAction,
   adminRemoveFromWaitlistAction,
+  computeBookingConsequencesAction,
+  adminDeleteBookingAction,
+  type BookingConsequences,
 } from "@/lib/actions/bookings-admin";
 import type { BookingView } from "@/app/(app)/bookings/page";
 
@@ -122,15 +125,27 @@ export function AddBookingDialog({
     [students]
   );
 
+  const STATUS_BADGE_MAP: Record<string, { label: string; variant: "success" | "default" | "info" | "danger" }> = {
+    open: { label: "Open", variant: "success" },
+    scheduled: { label: "Scheduled", variant: "default" },
+    closed: { label: "Closed", variant: "info" },
+    cancelled: { label: "Cancelled", variant: "danger" },
+  };
+
   const classSearchOptions = useMemo(
     () =>
-      classInstances.map((c) => ({
-        value: c.id,
-        label: `${c.title} — ${formatDate(c.date)} ${formatTime(c.startTime)}`,
-        detail: c.maxCapacity
-          ? `${c.bookedCount}/${c.maxCapacity} booked · ${c.location}`
-          : `${c.location}`,
-      })),
+      classInstances.map((c) => {
+        const capacityStr = c.maxCapacity
+          ? `${c.bookedCount}/${c.maxCapacity} booked`
+          : "Unlimited";
+        const badgeConfig = STATUS_BADGE_MAP[c.status] ?? { label: c.status, variant: "default" as const };
+        return {
+          value: c.id,
+          label: `${c.title} — ${formatDate(c.date)} ${formatTime(c.startTime)}`,
+          detail: `${capacityStr} · ${c.location}`,
+          badge: badgeConfig,
+        };
+      }),
     [classInstances]
   );
 
@@ -191,6 +206,10 @@ export function AddBookingDialog({
       setError("Class instance is required");
       return;
     }
+    if (selectedSource === "subscription" && !selectedSubscription) {
+      setError("A subscription must be selected for source = Subscription. If the student has none, use Drop-in or Admin instead.");
+      return;
+    }
 
     startTransition(async () => {
       const result = await adminCreateBookingAction(fd);
@@ -239,6 +258,13 @@ export function AddBookingDialog({
 
             {selectedClass && (
               <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600 space-y-1">
+                <p className="flex items-center gap-2">
+                  <span className="font-medium">Status:</span>{" "}
+                  <StatusBadge status={selectedClass.status} />
+                  {selectedClass.status === "scheduled" && (
+                    <span className="text-amber-600 font-medium">— Not yet open for student booking</span>
+                  )}
+                </p>
                 <p>
                   <span className="font-medium">Capacity:</span>{" "}
                   {selectedClass.maxCapacity
@@ -294,7 +320,7 @@ export function AddBookingDialog({
 
             {showSubscription && (
               <div>
-                <Label>Subscription / Product</Label>
+                <Label>Subscription / Product *</Label>
                 {studentSubs.length > 0 ? (
                   <SearchableSelect
                     options={subscriptionSearchOptions}
@@ -304,9 +330,12 @@ export function AddBookingDialog({
                     disabled={!selectedStudentId}
                   />
                 ) : selectedStudentId ? (
-                  <p className="text-xs text-gray-400 italic py-1">
-                    No active subscriptions for this student.
-                  </p>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    <p className="font-medium">No eligible active subscription</p>
+                    <p className="mt-1 text-xs">
+                      This student has no active subscription for this class. Switch Source to <strong>Drop-in</strong> or <strong>Admin</strong> to create this booking without a subscription.
+                    </p>
+                  </div>
                 ) : (
                   <p className="text-xs text-gray-400 italic py-1">
                     Select a student first.
@@ -322,14 +351,21 @@ export function AddBookingDialog({
             )}
 
             <div>
-              <Label htmlFor="ab-note">Admin Note (optional)</Label>
+              <Label htmlFor="ab-note">
+                Admin Note {selectedSource === "admin" ? "(recommended)" : "(optional)"}
+              </Label>
               <textarea
                 id="ab-note"
                 name="adminNote"
                 rows={2}
                 className={INPUT_CLASS}
-                placeholder="Internal note…"
+                placeholder={selectedSource === "admin" ? "Reason for admin override…" : "Internal note…"}
               />
+              {selectedSource === "admin" && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Admin bookings bypass subscription requirements. Adding a note helps track the reason.
+                </p>
+              )}
             </div>
 
             {isFull && (
@@ -348,7 +384,10 @@ export function AddBookingDialog({
             <Button variant="ghost" type="button" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button
+              type="submit"
+              disabled={isPending || (showSubscription && !!selectedStudentId && studentSubs.length === 0)}
+            >
               {isPending ? "Creating…" : "Create Booking"}
             </Button>
           </DialogFooter>
@@ -356,6 +395,98 @@ export function AddBookingDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// ── Shared consequence summary ────────────────────────────────
+
+function ConsequenceSummary({ c, mode }: { c: BookingConsequences; mode: "cancel" | "delete" }) {
+  const items: React.ReactNode[] = [];
+
+  if (c.hasStarted) {
+    items.push(
+      <li key="started" className="text-red-700">This class has already started.</li>
+    );
+  }
+
+  if (mode === "cancel" && c.isLate && c.lateCancelPenaltiesEnabled) {
+    items.push(
+      <li key="penalty" className="text-amber-700">
+        A late-cancel penalty of <strong>{formatCents(c.lateCancelFeeCents)}</strong> will be created.
+      </li>
+    );
+  } else if (mode === "cancel" && !c.isLate) {
+    items.push(
+      <li key="no-penalty" className="text-gray-500">Normal cancellation window — no penalty.</li>
+    );
+  }
+
+  if (c.willRefundCredit && c.refundDescription) {
+    items.push(
+      <li key="refund" className="text-blue-700">{c.refundDescription}</li>
+    );
+  } else if (c.hasSubscription && !c.willRefundCredit) {
+    items.push(
+      <li key="no-refund" className="text-gray-500">No credit refund (booking was already cancelled/not active).</li>
+    );
+  } else if (!c.hasSubscription && c.bookingSource !== "subscription") {
+    items.push(
+      <li key="no-sub" className="text-gray-500">
+        Source: {c.bookingSource === "drop_in" ? "Drop-in" : c.bookingSource === "admin" ? "Admin" : c.bookingSource} — no subscription to refund.
+      </li>
+    );
+  }
+
+  if (c.waitlistCount > 0 && mode === "cancel") {
+    items.push(
+      <li key="waitlist" className="text-blue-700">
+        The first of {c.waitlistCount} waitlisted student{c.waitlistCount !== 1 ? "s" : ""} will be promoted.
+      </li>
+    );
+  }
+
+  if (c.hasLinkedAttendance) {
+    if (mode === "delete") {
+      items.push(
+        <li key="att" className="text-red-700">
+          Linked attendance record ({c.attendanceStatus}) will be <strong>deleted</strong>.
+        </li>
+      );
+    } else {
+      items.push(
+        <li key="att" className="text-amber-700">
+          An attendance record ({c.attendanceStatus}) is linked to this booking.
+        </li>
+      );
+    }
+  }
+
+  if (c.hasLinkedPenalty) {
+    if (mode === "delete") {
+      items.push(
+        <li key="pen" className="text-red-700">
+          Linked {c.penaltyReason === "late_cancel" ? "late-cancel" : "no-show"} penalty ({formatCents(c.penaltyAmountCents ?? 0)}) will be <strong>deleted</strong>.
+        </li>
+      );
+    } else {
+      items.push(
+        <li key="pen" className="text-amber-700">
+          A {c.penaltyReason === "late_cancel" ? "late-cancel" : "no-show"} penalty ({formatCents(c.penaltyAmountCents ?? 0)}) is linked to this booking.
+        </li>
+      );
+    }
+  }
+
+  if (c.bookingStatus === "checked_in" && mode === "cancel") {
+    items.push(
+      <li key="checkedin" className="text-amber-700">This student is already checked in.</li>
+    );
+  }
+
+  if (items.length === 0) {
+    items.push(<li key="none" className="text-gray-400 italic">No additional consequences.</li>);
+  }
+
+  return <ul className="space-y-1.5 text-sm list-disc pl-4">{items}</ul>;
 }
 
 // ── Cancel Booking Dialog ─────────────────────────────────────
@@ -370,29 +501,19 @@ export function CancelBookingDialog({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [consequences, setConsequences] = useState<BookingConsequences | null>(null);
   const [result, setResult] = useState<{
     isLate: boolean;
     penaltyCreated: boolean;
     promotedStudent: string | null;
   } | null>(null);
-  const [lateInfo, setLateInfo] = useState<{
-    isLate: boolean;
-    cutoffMinutes: number;
-    minutesUntilStart: number;
-    feeCents: number;
-  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    checkLateCancelStatusAction(booking.id).then((res) => {
+    computeBookingConsequencesAction(booking.id).then((res) => {
       if (cancelled) return;
-      if (res.success) {
-        setLateInfo({
-          isLate: res.isLate!,
-          cutoffMinutes: res.cutoffMinutes!,
-          minutesUntilStart: res.minutesUntilStart!,
-          feeCents: res.lateCancelFeeCents!,
-        });
+      if (res.success && res.consequences) {
+        setConsequences(res.consequences);
       }
     });
     return () => { cancelled = true; };
@@ -423,20 +544,18 @@ export function CancelBookingDialog({
         <DialogBody className="space-y-4">
           <div className="space-y-1 text-sm text-gray-600">
             <p>
-              <span className="font-medium text-gray-900">
-                {booking.studentName}
-              </span>{" "}
+              <span className="font-medium text-gray-900">{booking.studentName}</span>{" "}
               — {booking.classTitle}
             </p>
-            <p>
-              {formatDate(booking.date)} · {formatTime(booking.startTime)}
+            <p>{formatDate(booking.date)} · {formatTime(booking.startTime)}</p>
+            <p className="flex items-center gap-2">
+              <StatusBadge status={booking.status} />
+              {booking.source && <StatusBadge status={booking.source} />}
             </p>
           </div>
 
           {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-              {error}
-            </div>
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
           )}
 
           {result ? (
@@ -455,48 +574,156 @@ export function CancelBookingDialog({
                 </div>
               )}
             </div>
+          ) : consequences ? (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-gray-700">What will happen:</p>
+              <ConsequenceSummary c={consequences} mode="cancel" />
+            </div>
           ) : (
-            <>
-              {lateInfo?.isLate && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  <p className="font-medium">Late Cancellation Warning</p>
-                  <p className="mt-1">
-                    This booking is within the late cancellation window (less
-                    than {lateInfo.cutoffMinutes} minutes before class).
-                    Cancelling now will trigger a late cancellation penalty of{" "}
-                    {formatCents(lateInfo.feeCents)}.
-                  </p>
-                </div>
-              )}
-              {lateInfo && !lateInfo.isLate && (
-                <p className="text-sm text-gray-500">
-                  This is within the normal cancellation window. No penalty will
-                  apply.
-                </p>
-              )}
-            </>
+            <p className="text-sm text-gray-400 animate-pulse">Loading consequences…</p>
           )}
         </DialogBody>
         <DialogFooter>
           {result ? (
-            <Button variant="ghost" onClick={onClose}>
-              Close
-            </Button>
+            <Button variant="ghost" onClick={onClose}>Close</Button>
           ) : (
             <>
-              <Button variant="ghost" onClick={onClose}>
-                Keep Booking
-              </Button>
+              <Button variant="ghost" onClick={onClose}>Keep Booking</Button>
               <Button
                 variant="danger"
                 onClick={handleCancel}
-                disabled={isPending || !lateInfo}
+                disabled={isPending || !consequences}
               >
                 {isPending
                   ? "Cancelling…"
-                  : lateInfo?.isLate
-                    ? "Cancel (Late)"
-                    : "Cancel Booking"}
+                  : consequences?.isLate ? "Cancel (Late)" : "Cancel Booking"}
+              </Button>
+            </>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Delete Booking Dialog ─────────────────────────────────────
+
+export function DeleteBookingDialog({
+  booking,
+  onClose,
+}: {
+  booking: BookingView;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [consequences, setConsequences] = useState<BookingConsequences | null>(null);
+  const [result, setResult] = useState<{
+    deletedAttendance: boolean;
+    deletedPenalty: boolean;
+    refundedCredit: boolean;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    computeBookingConsequencesAction(booking.id).then((res) => {
+      if (cancelled) return;
+      if (res.success && res.consequences) {
+        setConsequences(res.consequences);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [booking.id]);
+
+  function handleDelete() {
+    startTransition(async () => {
+      const res = await adminDeleteBookingAction(booking.id);
+      if (res.success) {
+        setResult({
+          deletedAttendance: res.deletedAttendance ?? false,
+          deletedPenalty: res.deletedPenalty ?? false,
+          refundedCredit: res.refundedCredit ?? false,
+        });
+        router.refresh();
+      } else {
+        setError(res.error ?? "Failed to delete");
+      }
+    });
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Booking</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <p className="font-medium">This is a permanent hard delete.</p>
+            <p className="mt-1">
+              Unlike cancellation, this completely removes the booking and all linked records. This action cannot be undone.
+            </p>
+          </div>
+
+          <div className="space-y-1 text-sm text-gray-600">
+            <p>
+              <span className="font-medium text-gray-900">{booking.studentName}</span>{" "}
+              — {booking.classTitle}
+            </p>
+            <p>{formatDate(booking.date)} · {formatTime(booking.startTime)}</p>
+            <p className="flex items-center gap-2">
+              <StatusBadge status={booking.status} />
+              {booking.source && <StatusBadge status={booking.source} />}
+            </p>
+          </div>
+
+          {error && (
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>
+          )}
+
+          {result ? (
+            <div className="space-y-2">
+              <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
+                Booking permanently deleted.
+              </div>
+              {result.refundedCredit && (
+                <div className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800">
+                  Subscription credit/usage refunded.
+                </div>
+              )}
+              {result.deletedAttendance && (
+                <div className="rounded-lg bg-gray-100 p-3 text-sm text-gray-700">
+                  Linked attendance record removed.
+                </div>
+              )}
+              {result.deletedPenalty && (
+                <div className="rounded-lg bg-gray-100 p-3 text-sm text-gray-700">
+                  Linked penalty removed.
+                </div>
+              )}
+            </div>
+          ) : consequences ? (
+            <div className="space-y-3">
+              <p className="text-sm font-medium text-gray-700">What will be removed:</p>
+              <ConsequenceSummary c={consequences} mode="delete" />
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400 animate-pulse">Loading consequences…</p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          {result ? (
+            <Button variant="ghost" onClick={onClose}>Close</Button>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button
+                variant="danger"
+                onClick={handleDelete}
+                disabled={isPending || !consequences}
+              >
+                {isPending ? "Deleting…" : "Permanently Delete"}
               </Button>
             </>
           )}

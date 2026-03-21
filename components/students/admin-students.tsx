@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ChevronDown, ChevronUp, Pencil, Plus, Users, Power } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Users, Power, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
@@ -18,6 +18,7 @@ import {
   AddStudentDialog,
   EditStudentDialog,
   DeactivateConfirmDialog,
+  DeleteStudentDialog,
   AddSubscriptionDialog,
   EditSubscriptionDialog,
 } from "./student-dialogs";
@@ -90,6 +91,7 @@ export function AdminStudents({
   // Dialog state
   const [editStudent, setEditStudent] = useState<StudentListItem | null>(null);
   const [deactivateStudent, setDeactivateStudent] = useState<StudentListItem | null>(null);
+  const [deleteStudentTarget, setDeleteStudentTarget] = useState<StudentListItem | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [addSubStudentId, setAddSubStudentId] = useState<string | null>(null);
   const [editSub, setEditSub] = useState<MockSubscription | null>(null);
@@ -225,6 +227,16 @@ export function AdminStudents({
                       >
                         <Power className="h-4 w-4" />
                       </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteStudentTarget(s);
+                        }}
+                        className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                        title="Delete student"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </Td>
                 </tr>
@@ -263,6 +275,13 @@ export function AdminStudents({
         <DeactivateConfirmDialog
           student={deactivateStudent}
           onClose={() => setDeactivateStudent(null)}
+        />
+      )}
+
+      {deleteStudentTarget && (
+        <DeleteStudentDialog
+          student={deleteStudentTarget}
+          onClose={() => setDeleteStudentTarget(null)}
         />
       )}
 

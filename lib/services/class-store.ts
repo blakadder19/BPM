@@ -1,19 +1,26 @@
 /**
- * Mutable in-memory class template store, seeded from mock data.
- * In production, replace with Supabase-backed service.
+ * Mutable in-memory class template store.
+ * Uses globalThis to survive HMR module re-evaluation in Next.js dev.
+ * When Supabase is configured, starts empty — bootstrap fills real data.
  */
 
 import { CLASSES, type MockClass } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 import type { ClassType } from "@/types/domain";
 
-let templates: MockClass[] | null = null;
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+const g = globalThis as unknown as {
+  __bpm_classTemplates?: MockClass[];
+};
 
 function init(): MockClass[] {
-  if (!templates) {
-    templates = CLASSES.map((c) => ({ ...c }));
+  if (!g.__bpm_classTemplates) {
+    g.__bpm_classTemplates = hasSupabaseConfig() ? [] : CLASSES.map((c) => ({ ...c }));
   }
-  return templates;
+  return g.__bpm_classTemplates;
 }
 
 export function getTemplates(): MockClass[] {
@@ -99,6 +106,18 @@ export function toggleTemplateActive(id: string): MockClass | null {
   if (!tpl) return null;
   tpl.isActive = !tpl.isActive;
   return { ...tpl };
+}
+
+export function deleteTemplate(id: string): boolean {
+  const list = init();
+  const idx = list.findIndex((t) => t.id === id);
+  if (idx === -1) return false;
+  list.splice(idx, 1);
+  return true;
+}
+
+export function replaceTemplates(newTemplates: MockClass[]): void {
+  g.__bpm_classTemplates = newTemplates;
 }
 
 export function clearAllTemplates(): number {

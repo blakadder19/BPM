@@ -132,8 +132,8 @@ export function AttendanceClient({
           title="Attendance"
           description="Mark students as they arrive. Track class attendance history."
         />
-        {isDev && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {isDev && (
             <Button
               variant="outline"
               size="sm"
@@ -157,12 +157,12 @@ export function AttendanceClient({
               <Trash2 className="mr-1 h-3.5 w-3.5" />
               {clearPending ? "Clearing…" : "Clear All"}
             </Button>
-            <Button onClick={() => setShowAddAttendance(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add Record
-            </Button>
-          </div>
-        )}
+          )}
+          <Button onClick={() => setShowAddAttendance(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Record
+          </Button>
+        </div>
       </div>
 
       {clearMsg && (
@@ -214,7 +214,7 @@ export function AttendanceClient({
         />
       )}
 
-      {isDev && showAddAttendance && (
+      {showAddAttendance && (
         <AddAttendanceDialog
           students={studentOptions ?? []}
           classes={allClasses}
@@ -868,7 +868,7 @@ function AddAttendanceDialog({
         danceStyleId: selectedClass?.styleId ?? null,
         level: selectedClass?.level ?? null,
         status,
-        markedBy: `${currentUserName ?? "Admin"} (dev manual)`,
+        markedBy: `${currentUserName ?? "Admin"} (manual)`,
         notes: notes.trim() || undefined,
       });
 
@@ -885,7 +885,8 @@ function AddAttendanceDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Attendance Record (Dev Only)</DialogTitle>
+          <DialogTitle>Add Attendance Record</DialogTitle>
+          <p className="text-xs text-gray-500">Records attendance directly as a walk-in. This does not create a booking.</p>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">

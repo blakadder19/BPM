@@ -143,6 +143,12 @@ export class AttendanceService {
     };
   }
 
+  deleteByBookingId(bookingId: string): StoredAttendance | null {
+    const idx = this.records.findIndex((r) => r.bookingId === bookingId);
+    if (idx === -1) return null;
+    return this.records.splice(idx, 1)[0];
+  }
+
   getAllRecords(): StoredAttendance[] {
     return [...this.records];
   }

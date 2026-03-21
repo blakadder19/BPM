@@ -1,15 +1,20 @@
 /**
- * Singleton PenaltyService instance backed by mock data.
+ * Singleton PenaltyService instance.
  * Uses globalThis to survive HMR module re-evaluation in Next.js dev.
- * In production, replace with Supabase-backed service.
+ * When Supabase is configured, starts empty — hydration fills it.
  */
 
 import { PenaltyService, type StoredPenalty } from "./penalty-service";
 import { PENALTIES } from "@/lib/mock-data";
 
-const STORE_VERSION = 2;
+const STORE_VERSION = 3;
+
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
 
 function buildPenalties(): StoredPenalty[] {
+  if (hasSupabaseConfig()) return [];
   return PENALTIES.map((p) => ({
     id: p.id,
     studentId: p.studentId,

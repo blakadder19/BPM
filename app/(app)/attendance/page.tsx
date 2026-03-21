@@ -3,7 +3,7 @@ import { getAttendanceRepo, getBookingRepo, getStudentRepo } from "@/lib/reposit
 import { getTodayStr } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { BOOKABLE_CLASSES } from "@/lib/mock-data";
+import { getInstances } from "@/lib/services/schedule-store";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
 
 const TERMINAL_STATUSES = new Set(["cancelled", "late_cancelled", "missed"]);
@@ -25,7 +25,9 @@ export default async function AttendancePage({
   const allRecords = attendanceSvc.getAllRecords();
   const bookingSvc = getBookingRepo().getService();
 
-  const todaysClasses = BOOKABLE_CLASSES.filter(
+  const allInstances = getInstances();
+
+  const todaysClasses = allInstances.filter(
     (bc) => bc.date === today && bc.classType !== "student_practice"
   ).sort((a, b) => a.startTime.localeCompare(b.startTime));
 
@@ -52,11 +54,8 @@ export default async function AttendancePage({
 
   const isDev = process.env.NODE_ENV === "development";
 
-  let studentOptions: { id: string; fullName: string }[] = [];
-  if (isDev) {
-    const allStudents = await getStudentRepo().getAll();
-    studentOptions = allStudents.map((s) => ({ id: s.id, fullName: s.fullName }));
-  }
+  const allStudents = await getStudentRepo().getAll();
+  const studentOptions = allStudents.map((s) => ({ id: s.id, fullName: s.fullName }));
 
   return (
     <AttendanceClient
@@ -64,7 +63,7 @@ export default async function AttendancePage({
       todaysClasses={todaysClasses}
       bookings={bookings}
       attendanceRecords={allRecords}
-      allClasses={BOOKABLE_CLASSES}
+      allClasses={allInstances}
       isDev={isDev}
       studentOptions={studentOptions}
       initialClassFilter={params.classTitle ?? ""}

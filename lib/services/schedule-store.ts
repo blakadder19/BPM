@@ -1,6 +1,7 @@
 /**
- * Mutable in-memory schedule (bookable class instance) store, seeded from mock data.
- * In production, replace with Supabase-backed service.
+ * Mutable in-memory schedule (bookable class instance) store.
+ * Uses globalThis to survive HMR module re-evaluation in Next.js dev.
+ * When Supabase is configured, starts empty — bootstrap fills real data.
  */
 
 import { BOOKABLE_CLASSES, type MockBookableClass } from "@/lib/mock-data";
@@ -8,13 +9,19 @@ import { generateId } from "@/lib/utils";
 import type { ClassType, InstanceStatus } from "@/types/domain";
 import { getTemplates } from "./class-store";
 
-let instances: MockBookableClass[] | null = null;
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+const g = globalThis as unknown as {
+  __bpm_scheduleInstances?: MockBookableClass[];
+};
 
 function init(): MockBookableClass[] {
-  if (!instances) {
-    instances = BOOKABLE_CLASSES.map((bc) => ({ ...bc }));
+  if (!g.__bpm_scheduleInstances) {
+    g.__bpm_scheduleInstances = hasSupabaseConfig() ? [] : BOOKABLE_CLASSES.map((bc) => ({ ...bc }));
   }
-  return instances;
+  return g.__bpm_scheduleInstances;
 }
 
 export function getInstances(): MockBookableClass[] {
@@ -252,6 +259,18 @@ export function generateFromTemplates(
   }
 
   return { created, skipped, overwritten };
+}
+
+export function deleteInstance(id: string): boolean {
+  const list = init();
+  const idx = list.findIndex((i) => i.id === id);
+  if (idx === -1) return false;
+  list.splice(idx, 1);
+  return true;
+}
+
+export function replaceInstances(newInstances: MockBookableClass[]): void {
+  g.__bpm_scheduleInstances = newInstances;
 }
 
 export function clearAllInstances(): number {

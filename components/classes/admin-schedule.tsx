@@ -54,6 +54,7 @@ interface SettingsFlags {
 interface AdminScheduleProps {
   instances: MockBookableClass[];
   templates: MockClass[];
+  allStyles?: { id: string; name: string }[];
   settings: SettingsFlags;
   teacherAssignments: MockTeacherPair[];
   teacherRoster: Teacher[];
@@ -66,6 +67,7 @@ interface AdminScheduleProps {
 export function AdminSchedule({
   instances,
   templates,
+  allStyles,
   settings,
   teacherAssignments,
   teacherRoster,
@@ -92,6 +94,8 @@ export function AdminSchedule({
   const [clearResult, setClearResult] = useState<string | null>(null);
 
   const [rescheduleTarget, setRescheduleTarget] = useState<{ instance: MockBookableClass; newDate: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MockBookableClass | null>(null);
+  const [delPending, startDel] = useTransition();
 
   const resolve = (id: string | null | undefined) => (id ? teacherNameMap[id] ?? id : null);
 
@@ -397,6 +401,13 @@ export function AdminSchedule({
                               <Unlock className="h-3.5 w-3.5" />
                             </button>
                           )}
+                          <button
+                            onClick={() => setDeleteTarget(bc)}
+                            className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                            title="Delete instance"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                           {isExpanded ? (
                             <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
                           ) : (
@@ -426,6 +437,7 @@ export function AdminSchedule({
       {showAdd && (
         <AddInstanceDialog
           templates={templates}
+          allStyles={allStyles}
           onClose={() => { setShowAdd(false); setAddDefaultDate(null); }}
           defaultDate={addDefaultDate ?? undefined}
         />
@@ -464,6 +476,35 @@ export function AdminSchedule({
           }}
           onClose={() => setRescheduleTarget(null)}
         />
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold">Delete Schedule Instance</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Permanently delete <strong>{deleteTarget.title}</strong> ({deleteTarget.date})? This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={delPending}>Cancel</Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={delPending}
+                onClick={() => {
+                  startDel(async () => {
+                    const { deleteInstanceAction } = await import("@/lib/actions/classes");
+                    await deleteInstanceAction(deleteTarget.id);
+                    setDeleteTarget(null);
+                    router.refresh();
+                  });
+                }}
+              >
+                {delPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

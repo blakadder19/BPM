@@ -93,6 +93,17 @@ export async function updateBookingInDB(id: string, patch: Partial<Record<string
   }
 }
 
+export async function deleteBookingFromDB(id: string): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client.from("op_bookings").delete().eq("id", id);
+    if (error) console.warn("[op-persistence] deleteBooking:", error.message);
+  } catch (e) {
+    console.warn("[op-persistence] deleteBooking error:", e instanceof Error ? e.message : e);
+  }
+}
+
 // ── Waitlist ───────────────────────────────────────────────
 
 function rowToWaitlist(r: Record<string, unknown>): StoredWaitlistEntry {
@@ -221,6 +232,17 @@ export async function saveAttendanceToDB(a: StoredAttendance): Promise<void> {
   }
 }
 
+export async function deleteAttendanceFromDB(id: string): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client.from("op_attendance").delete().eq("id", id);
+    if (error) console.warn("[op-persistence] deleteAttendance:", error.message);
+  } catch (e) {
+    console.warn("[op-persistence] deleteAttendance error:", e instanceof Error ? e.message : e);
+  }
+}
+
 // ── Penalties ──────────────────────────────────────────────
 
 function rowToPenalty(r: Record<string, unknown>): StoredPenalty {
@@ -293,6 +315,17 @@ export async function updatePenaltyInDB(id: string, patch: Partial<Record<string
     if (error) console.warn("[op-persistence] updatePenalty:", error.message);
   } catch (e) {
     console.warn("[op-persistence] updatePenalty error:", e instanceof Error ? e.message : e);
+  }
+}
+
+export async function deletePenaltyFromDB(id: string): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client.from("op_penalties").delete().eq("id", id);
+    if (error) console.warn("[op-persistence] deletePenalty:", error.message);
+  } catch (e) {
+    console.warn("[op-persistence] deletePenalty error:", e instanceof Error ? e.message : e);
   }
 }
 

@@ -18,7 +18,8 @@ import { computeMemberBenefits } from "@/lib/domain/member-benefits";
 import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
-import { AdminDashboard } from "@/components/dashboard/admin-dashboard";
+import { AdminDashboard, type AdminDashboardData, type DashboardClassSummary, type DashboardDemandItem } from "@/components/dashboard/admin-dashboard";
+import { getInstances } from "@/lib/services/schedule-store";
 import {
   StudentDashboard,
   type StudentBookingSummary,
@@ -158,5 +159,117 @@ export default async function DashboardPage() {
     );
   }
 
-  return <AdminDashboard todayStr={getTodayStr()} />;
+  const todayStr = getTodayStr();
+
+  const allInstances = getInstances();
+  const bookingSvc = getBookingRepo().getService();
+  const attendanceSvc = getAttendanceRepo().getService();
+  const penaltySvc = getPenaltyRepo().getService();
+
+  const upcomingInstances = allInstances
+    .filter((bc) => bc.date >= todayStr && bc.classType === "class")
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+
+  const todaysClassCount = allInstances.filter(
+    (bc) => bc.date === todayStr && bc.classType === "class"
+  ).length;
+
+  const upcomingBookingCount = bookingSvc.bookings.filter((b) => {
+    if (b.status !== "confirmed") return false;
+    const cls = bookingSvc.getClass(b.bookableClassId);
+    return cls ? cls.date >= todayStr : false;
+  }).length;
+
+  const upcomingClassIds = new Set(
+    allInstances.filter((bc) => bc.date >= todayStr).map((bc) => bc.id)
+  );
+  const activeWaitlistCount = bookingSvc.waitlist.filter(
+    (w) => w.status === "waiting" && upcomingClassIds.has(w.bookableClassId)
+  ).length;
+
+  const unresolvedPenalties = penaltySvc.penalties.filter(
+    (p) => p.resolution === "monetary_pending"
+  );
+
+  const toSummary = (bc: typeof allInstances[number]): DashboardClassSummary => ({
+    id: bc.id,
+    title: bc.title,
+    date: bc.date,
+    startTime: bc.startTime,
+    endTime: bc.endTime,
+    location: bc.location,
+    status: bc.status,
+    maxCapacity: bc.maxCapacity,
+    bookedCount: bc.bookedCount,
+    waitlistCount: bc.waitlistCount,
+    leaderCap: bc.leaderCap,
+    followerCap: bc.followerCap,
+    leaderCount: bc.leaderCount,
+    followerCount: bc.followerCount,
+    styleName: bc.styleName,
+  });
+
+  const demandClasses: DashboardDemandItem[] = upcomingInstances
+    .filter((bc) => bc.maxCapacity && bc.maxCapacity > 0)
+    .map((bc) => ({
+      ...toSummary(bc),
+      fillRate: bc.bookedCount / bc.maxCapacity!,
+    }))
+    .sort((a, b) => b.fillRate - a.fillRate)
+    .slice(0, 5);
+
+  const partnerClasses = upcomingInstances
+    .filter((bc) => bc.leaderCap !== null && bc.followerCap !== null && bc.bookedCount > 0)
+    .map(toSummary);
+
+  const attendanceTotals = {
+    present: attendanceSvc.records.filter((a) => a.status === "present").length,
+    late: attendanceSvc.records.filter((a) => a.status === "late").length,
+    absent: attendanceSvc.records.filter((a) => a.status === "absent").length,
+    excused: attendanceSvc.records.filter((a) => a.status === "excused").length,
+  };
+  const attendanceTotal =
+    attendanceTotals.present + attendanceTotals.late +
+    attendanceTotals.absent + attendanceTotals.excused;
+
+  const byWeekday = [0, 0, 0, 0, 0, 0, 0];
+  for (const bc of upcomingInstances) {
+    const dow = new Date(bc.date + "T12:00:00Z").getUTCDay();
+    const idx = dow === 0 ? 6 : dow - 1;
+    byWeekday[idx] += bc.bookedCount;
+  }
+  const maxWeekday = Math.max(...byWeekday, 1);
+
+  const allSubs = await getSubscriptionRepo().getAll();
+  const activeSubs = allSubs.filter((s) => s.status === "active");
+  const subsByType: Record<string, number> = {};
+  for (const s of activeSubs) {
+    subsByType[s.productType] = (subsByType[s.productType] ?? 0) + 1;
+  }
+  const studentsWithSub = new Set(activeSubs.map((s) => s.studentId)).size;
+
+  const allStudents = await getStudentRepo().getAll();
+  const allProducts = await getProductRepo().getAll();
+
+  const dashboardData: AdminDashboardData = {
+    todayStr,
+    todaysClassCount,
+    upcomingBookingCount,
+    activeWaitlistCount,
+    unresolvedPenaltyCount: unresolvedPenalties.length,
+    unresolvedPenaltyTotal: unresolvedPenalties.reduce((s, p) => s + p.amountCents, 0),
+    upcomingClasses: upcomingInstances.slice(0, 8).map(toSummary),
+    demandClasses,
+    partnerClasses,
+    attendanceTotals,
+    attendanceTotal,
+    byWeekday,
+    maxWeekday,
+    subsByType,
+    studentsWithSub,
+    totalStudents: allStudents.length,
+    totalProducts: allProducts.filter((p) => p.isActive).length,
+  };
+
+  return <AdminDashboard data={dashboardData} />;
 }

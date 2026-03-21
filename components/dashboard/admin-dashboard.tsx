@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -20,117 +19,64 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatShortDate, formatCents, cn } from "@/lib/utils";
-import {
-  BOOKABLE_CLASSES,
-  BOOKINGS,
-  WAITLIST_ENTRIES,
-  ATTENDANCE,
-  PENALTIES,
-  SUBSCRIPTIONS,
-  STUDENTS,
-  PRODUCTS,
-} from "@/lib/mock-data";
+import type { InstanceStatus } from "@/types/domain";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-// ── Data computation ────────────────────────────────────────
+// ── Serializable prop types (computed server-side) ───────────
 
-function computeDashboard(todayStr: string) {
-  const todaysClasses = BOOKABLE_CLASSES.filter(
-    (bc) => bc.date === todayStr && bc.classType === "class"
-  );
+export interface DashboardClassSummary {
+  id: string;
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  status: InstanceStatus;
+  maxCapacity: number | null;
+  bookedCount: number;
+  waitlistCount: number;
+  leaderCap: number | null;
+  followerCap: number | null;
+  leaderCount: number;
+  followerCount: number;
+  styleName: string | null;
+}
 
-  const upcomingClasses = BOOKABLE_CLASSES.filter(
-    (bc) => bc.date >= todayStr && bc.classType === "class"
-  ).sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+export interface DashboardDemandItem extends DashboardClassSummary {
+  fillRate: number;
+}
 
-  const upcomingBookings = BOOKINGS.filter(
-    (b) => b.date >= todayStr && b.status === "confirmed"
-  );
-
-  const upcomingClassIds = new Set(
-    BOOKABLE_CLASSES.filter((bc) => bc.date >= todayStr).map((bc) => bc.id)
-  );
-
-  const activeWaitlists = WAITLIST_ENTRIES.filter(
-    (w) => w.status === "waiting" && upcomingClassIds.has(w.bookableClassId)
-  );
-
-  const unresolvedPenalties = PENALTIES.filter(
-    (p) => p.resolution === "monetary_pending"
-  );
-
-  const demandClasses = BOOKABLE_CLASSES.filter(
-    (bc) => bc.date >= todayStr && bc.classType === "class" && bc.maxCapacity && bc.maxCapacity > 0
-  )
-    .map((bc) => ({
-      ...bc,
-      fillRate: bc.bookedCount / bc.maxCapacity!,
-    }))
-    .sort((a, b) => b.fillRate - a.fillRate)
-    .slice(0, 5);
-
-  const partnerClasses = upcomingClasses.filter(
-    (bc) => bc.leaderCap !== null && bc.followerCap !== null && bc.bookedCount > 0
-  );
-
-  const attendanceTotals = {
-    present: ATTENDANCE.filter((a) => a.status === "present").length,
-    late: ATTENDANCE.filter((a) => a.status === "late").length,
-    absent: ATTENDANCE.filter((a) => a.status === "absent").length,
-    excused: ATTENDANCE.filter((a) => a.status === "excused").length,
-  };
-  const attendanceTotal =
-    attendanceTotals.present +
-    attendanceTotals.late +
-    attendanceTotals.absent +
-    attendanceTotals.excused;
-
-  const byWeekday = [0, 0, 0, 0, 0, 0, 0];
-  for (const bc of upcomingClasses) {
-    const dow = new Date(bc.date + "T12:00:00Z").getUTCDay();
-    const idx = dow === 0 ? 6 : dow - 1;
-    byWeekday[idx] += bc.bookedCount;
-  }
-  const maxWeekday = Math.max(...byWeekday, 1);
-
-  const activeSubs = SUBSCRIPTIONS.filter((s) => s.status === "active");
-  const subsByType = new Map<string, number>();
-  for (const s of activeSubs) {
-    subsByType.set(s.productType, (subsByType.get(s.productType) ?? 0) + 1);
-  }
-  const studentsWithSub = new Set(activeSubs.map((s) => s.studentId)).size;
-
-  return {
-    todaysClassCount: todaysClasses.length,
-    upcomingBookingCount: upcomingBookings.length,
-    activeWaitlistCount: activeWaitlists.length,
-    unresolvedPenaltyCount: unresolvedPenalties.length,
-    unresolvedPenaltyTotal: unresolvedPenalties.reduce((s, p) => s + p.amountCents, 0),
-    upcomingClasses: upcomingClasses.slice(0, 8),
-    demandClasses,
-    partnerClasses,
-    attendanceTotals,
-    attendanceTotal,
-    byWeekday,
-    maxWeekday,
-    subsByType,
-    studentsWithSub,
-    totalStudents: STUDENTS.length,
-    totalProducts: PRODUCTS.filter((p) => p.isActive).length,
-  };
+export interface AdminDashboardData {
+  todayStr: string;
+  todaysClassCount: number;
+  upcomingBookingCount: number;
+  activeWaitlistCount: number;
+  unresolvedPenaltyCount: number;
+  unresolvedPenaltyTotal: number;
+  upcomingClasses: DashboardClassSummary[];
+  demandClasses: DashboardDemandItem[];
+  partnerClasses: DashboardClassSummary[];
+  attendanceTotals: { present: number; late: number; absent: number; excused: number };
+  attendanceTotal: number;
+  byWeekday: number[];
+  maxWeekday: number;
+  subsByType: Record<string, number>;
+  studentsWithSub: number;
+  totalStudents: number;
+  totalProducts: number;
 }
 
 // ── Page ────────────────────────────────────────────────────
 
-export function AdminDashboard({ todayStr }: { todayStr: string }) {
-  const d = useMemo(() => computeDashboard(todayStr), [todayStr]);
+export function AdminDashboard({ data }: { data: AdminDashboardData }) {
+  const d = data;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Dashboard"
-        description={`Overview as of ${formatDate(todayStr)}`}
+        description={`Overview as of ${formatDate(d.todayStr)}`}
       />
 
       {/* KPI cards */}
@@ -248,11 +194,7 @@ function KpiCard({
 
 // ── Upcoming classes ────────────────────────────────────────
 
-function UpcomingClassesCard({
-  classes,
-}: {
-  classes: typeof BOOKABLE_CLASSES;
-}) {
+function UpcomingClassesCard({ classes }: { classes: DashboardClassSummary[] }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -328,11 +270,7 @@ function UpcomingClassesCard({
 
 // ── Highest demand ──────────────────────────────────────────
 
-function HighestDemandCard({
-  classes,
-}: {
-  classes: Array<typeof BOOKABLE_CLASSES[number] & { fillRate: number }>;
-}) {
+function HighestDemandCard({ classes }: { classes: DashboardDemandItem[] }) {
   return (
     <Card>
       <CardHeader>
@@ -395,11 +333,7 @@ function HighestDemandCard({
 
 // ── Leader / follower balance ───────────────────────────────
 
-function RoleBalanceCard({
-  classes,
-}: {
-  classes: typeof BOOKABLE_CLASSES;
-}) {
+function RoleBalanceCard({ classes }: { classes: DashboardClassSummary[] }) {
   return (
     <Card>
       <CardHeader>
@@ -627,7 +561,7 @@ function SubscriptionsCard({
   totalStudents,
   totalProducts,
 }: {
-  subsByType: Map<string, number>;
+  subsByType: Record<string, number>;
   studentsWithSub: number;
   totalStudents: number;
   totalProducts: number;
@@ -638,7 +572,7 @@ function SubscriptionsCard({
     drop_in: { label: "Drop-ins", color: "bg-gray-400" },
     pack: { label: "Packs", color: "bg-emerald-400" },
   };
-  const totalActive = Array.from(subsByType.values()).reduce((s, v) => s + v, 0);
+  const totalActive = Object.values(subsByType).reduce((s, v) => s + v, 0);
 
   return (
     <Card>
@@ -679,7 +613,7 @@ function SubscriptionsCard({
         ) : (
           <div className="space-y-2.5">
             {Object.entries(typeLabels).map(([type, { label, color }]) => {
-              const count = subsByType.get(type) ?? 0;
+              const count = subsByType[type] ?? 0;
               if (count === 0) return null;
               return (
                 <div key={type} className="flex items-center gap-3">
@@ -705,4 +639,3 @@ function SubscriptionsCard({
     </Card>
   );
 }
-

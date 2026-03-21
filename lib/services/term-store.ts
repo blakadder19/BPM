@@ -1,19 +1,25 @@
 /**
- * Mutable in-memory term store, seeded from mock data.
- * In production, replace with Supabase-backed service.
+ * Mutable in-memory term store.
+ * When Supabase is configured, starts empty — hybrid repo reads from DB.
  */
 
 import { TERMS, type MockTerm } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 import type { TermStatus } from "@/types/domain";
 
-let terms: MockTerm[] | null = null;
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+const g = globalThis as unknown as {
+  __bpm_terms?: MockTerm[];
+};
 
 function init(): MockTerm[] {
-  if (!terms) {
-    terms = TERMS.map((t) => ({ ...t }));
+  if (!g.__bpm_terms) {
+    g.__bpm_terms = hasSupabaseConfig() ? [] : TERMS.map((t) => ({ ...t }));
   }
-  return terms;
+  return g.__bpm_terms;
 }
 
 export function getTerms(): MockTerm[] {
@@ -59,4 +65,12 @@ export function updateTerm(
   if (patch.notes !== undefined) term.notes = patch.notes;
 
   return { ...term };
+}
+
+export function deleteTerm(id: string): boolean {
+  const list = init();
+  const idx = list.findIndex((t) => t.id === id);
+  if (idx === -1) return false;
+  list.splice(idx, 1);
+  return true;
 }

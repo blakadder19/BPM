@@ -73,7 +73,10 @@ export interface BookabilityContext {
 export function computeBookability(ctx: BookabilityContext): BookabilityResult {
   const { classInstance: cls, studentState } = ctx;
 
-  // 1. Class status
+  // 1. Class status gate — only open and scheduled instances proceed
+  if (cls.status === "cancelled") {
+    return { status: "not_bookable", reason: "Class is cancelled" };
+  }
   if (cls.status !== "open" && cls.status !== "scheduled") {
     return { status: "not_bookable", reason: "Class is closed" };
   }

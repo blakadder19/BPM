@@ -18,7 +18,7 @@ import {
   STUDENT_PRACTICE_IS_BOOKABLE,
   WAITLIST_OFFER_EXPIRY_HOURS,
 } from "@/config/business-rules";
-import { DANCE_STYLES } from "@/lib/mock-data";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
 
 export interface AppSettings {
   // Penalty rules
@@ -68,7 +68,7 @@ function defaults(): AppSettings {
     socialsExcludedFromPenalties: true,
 
     allowedRoleImbalance: ALLOWED_ROLE_IMBALANCE,
-    roleBalancedStyleNames: DANCE_STYLES.filter((s) => s.requiresRoleBalance).map(
+    roleBalancedStyleNames: getDanceStyles().filter((s) => s.requiresRoleBalance).map(
       (s) => s.name
     ),
 

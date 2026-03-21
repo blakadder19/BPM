@@ -147,10 +147,10 @@ export async function devGetOpenClasses(): Promise<
 // ── Entitlement mutations ────────────────────────────────────
 
 async function resolveStudentName(studentId: string): Promise<string | null> {
-  const mock = STUDENTS.find((s) => s.id === studentId);
-  if (mock) return mock.fullName;
   const repo = await getStudentRepo().getById(studentId);
-  return repo?.fullName ?? null;
+  if (repo) return repo.fullName;
+  const mock = STUDENTS.find((s) => s.id === studentId);
+  return mock?.fullName ?? null;
 }
 
 export async function devAssignProduct(
@@ -429,20 +429,21 @@ export async function devSwitchRole(
   studentId: string
 ): Promise<{ success: boolean; newRole?: string; error?: string }> {
   guardDev();
+  const repo = getStudentRepo();
+  const student = await repo.getById(studentId);
+  if (student) {
+    const newRole = student.preferredRole === "leader" ? "follower" : "leader";
+    await repo.update(studentId, { preferredRole: newRole });
+    revalidateAll();
+    return { success: true, newRole };
+  }
   const mock = STUDENTS.find((s) => s.id === studentId);
   if (mock) {
     mock.preferredRole = mock.preferredRole === "leader" ? "follower" : "leader";
     revalidateAll();
     return { success: true, newRole: mock.preferredRole };
   }
-  // Real user — toggle via repository
-  const repo = getStudentRepo();
-  const student = await repo.getById(studentId);
-  if (!student) return { success: false, error: "Student not found" };
-  const newRole = student.preferredRole === "leader" ? "follower" : "leader";
-  await repo.update(studentId, { preferredRole: newRole });
-  revalidateAll();
-  return { success: true, newRole };
+  return { success: false, error: "Student not found" };
 }
 
 // ── Code of Conduct mutations ───────────────────────────────

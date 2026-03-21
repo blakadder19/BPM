@@ -6,4 +6,5 @@ export const memoryTermRepo: ITermRepository = {
   getById: async (id) => store.getTerm(id) ?? null,
   create: async (data: CreateTermData) => store.createTerm(data),
   update: async (id, patch: TermPatch) => store.updateTerm(id, patch),
+  delete: async (id) => store.deleteTerm(id),
 };

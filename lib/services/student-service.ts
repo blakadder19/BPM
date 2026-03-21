@@ -52,6 +52,19 @@ export async function updateStudent(
     : { success: false, error: "Student not found" };
 }
 
+export async function deleteStudent(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const result = await getStudentRepo().delete(id);
+    return result
+      ? { success: true }
+      : { success: false, error: "Student not found" };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}
+
 export async function toggleStudentActive(
   id: string
 ): Promise<{ success: boolean; error?: string }> {

@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
-import { ChevronDown, ChevronUp, Pencil, Plus, Package, Power } from "lucide-react";
+import { Fragment, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronUp, Pencil, Plus, Package, Power, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
@@ -61,6 +62,7 @@ export function AdminProducts({
   products,
   subscriptions,
 }: AdminProductsProps) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState("");
@@ -71,6 +73,8 @@ export function AdminProducts({
   const [editProduct, setEditProduct] = useState<MockProduct | null>(null);
   const [deactivateProduct, setDeactivateProduct] = useState<MockProduct | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<MockProduct | null>(null);
+  const [delPending, startDel] = useTransition();
 
   const q = search.toLowerCase();
 
@@ -206,6 +210,16 @@ export function AdminProducts({
                       >
                         <Power className="h-4 w-4" />
                       </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(p);
+                        }}
+                        className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                        title="Delete product"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </Td>
                 </tr>
@@ -233,6 +247,35 @@ export function AdminProducts({
           product={deactivateProduct}
           onClose={() => setDeactivateProduct(null)}
         />
+      )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold">Delete Product</h3>
+            <p className="mt-2 text-sm text-gray-600">
+              Permanently delete <strong>{deleteTarget.name}</strong>? This cannot be undone.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={delPending}>Cancel</Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={delPending}
+                onClick={() => {
+                  startDel(async () => {
+                    const { deleteProductAction } = await import("@/lib/actions/products");
+                    await deleteProductAction(deleteTarget.id);
+                    setDeleteTarget(null);
+                    router.refresh();
+                  });
+                }}
+              >
+                {delPending ? "Deleting…" : "Delete"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -689,6 +689,13 @@ export class BookingService {
     );
   }
 
+  deleteBooking(bookingId: string): boolean {
+    const idx = this.bookings.findIndex((b) => b.id === bookingId);
+    if (idx === -1) return false;
+    this.bookings.splice(idx, 1);
+    return true;
+  }
+
   findByCheckInToken(token: string): StoredBooking | undefined {
     return this.bookings.find((b) => b.checkInToken === token);
   }

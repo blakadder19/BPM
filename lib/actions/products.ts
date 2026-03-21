@@ -5,6 +5,7 @@ import {
   createProduct,
   updateProduct,
   toggleProductActive,
+  deleteProduct,
 } from "@/lib/services/product-service";
 import type { CreditsModel, ProductType } from "@/types/domain";
 
@@ -118,5 +119,18 @@ export async function toggleProductActiveAction(
 
   const result = await toggleProductActive(id);
   if (result.success) revalidatePath("/products");
+  return result;
+}
+
+export async function deleteProductAction(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!id) return { success: false, error: "Missing product ID" };
+
+  const result = await deleteProduct(id);
+  if (result.success) {
+    revalidatePath("/products");
+    revalidatePath("/dashboard");
+  }
   return result;
 }

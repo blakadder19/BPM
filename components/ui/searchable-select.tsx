@@ -7,6 +7,7 @@ export interface SearchableOption {
   value: string;
   label: string;
   detail?: string;
+  badge?: { label: string; variant: "default" | "success" | "warning" | "danger" | "info" };
 }
 
 interface SearchableSelectProps {
@@ -178,7 +179,18 @@ export function SearchableSelect({
                 handleSelect(opt.value);
               }}
             >
-              <div className="truncate">{opt.label}</div>
+              <div className="flex items-center gap-2 truncate">
+                <span className="truncate">{opt.label}</span>
+                {opt.badge && (
+                  <span className={`inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium leading-none ${
+                    opt.badge.variant === "success" ? "bg-green-50 text-green-700" :
+                    opt.badge.variant === "warning" ? "bg-amber-50 text-amber-700" :
+                    opt.badge.variant === "danger" ? "bg-red-50 text-red-700" :
+                    opt.badge.variant === "info" ? "bg-blue-50 text-blue-700" :
+                    "bg-gray-100 text-gray-600"
+                  }`}>{opt.badge.label}</span>
+                )}
+              </div>
               {opt.detail && (
                 <div className="truncate text-xs text-gray-400">{opt.detail}</div>
               )}

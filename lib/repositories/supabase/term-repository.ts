@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAcademyId } from "@/lib/supabase/academy";
 import type { MockTerm } from "@/lib/mock-data";
 import type { Database } from "@/types/database";
 import type { TermStatus } from "@/types/domain";
@@ -40,10 +41,11 @@ export const supabaseTermRepo: ITermRepository = {
 
   async create(input: CreateTermData) {
     const supabase = createAdminClient();
+    const academyId = await getAcademyId();
     const { data, error } = await supabase
       .from("terms")
       .insert({
-        academy_id: "00000000-0000-0000-0000-000000000001",
+        academy_id: academyId,
         name: input.name,
         start_date: input.startDate,
         end_date: input.endDate,
@@ -68,5 +70,12 @@ export const supabaseTermRepo: ITermRepository = {
     const { error } = await supabase.from("terms").update(fields as never).eq("id", id);
     if (error) throw new Error(error.message);
     return this.getById(id);
+  },
+
+  async delete(id) {
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("terms").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    return true;
   },
 };

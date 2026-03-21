@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getAcademyId } from "@/lib/supabase/academy";
 import type { MockProduct } from "@/lib/mock-data";
 import type { Database } from "@/types/database";
 import type { CreditsModel, ProductType } from "@/types/domain";
@@ -54,10 +55,11 @@ export const supabaseProductRepo: IProductRepository = {
 
   async create(input: CreateProductData) {
     const supabase = createAdminClient();
+    const academyId = await getAcademyId();
     const { data, error } = await supabase
       .from("products")
       .insert({
-        academy_id: "00000000-0000-0000-0000-000000000001",
+        academy_id: academyId,
         name: input.name,
         description: input.description,
         long_description: input.longDescription ?? null,
@@ -101,6 +103,7 @@ export const supabaseProductRepo: IProductRepository = {
     if (patch.classesPerTerm !== undefined) fields.classes_per_term = patch.classesPerTerm;
     if (patch.autoRenew !== undefined) fields.auto_renew = patch.autoRenew;
     if (patch.benefits !== undefined) fields.benefits = patch.benefits;
+    if (patch.isActive !== undefined) fields.is_active = patch.isActive;
 
     if (Object.keys(fields).length === 0) return this.getById(id);
 
@@ -124,5 +127,12 @@ export const supabaseProductRepo: IProductRepository = {
       .eq("id", id);
     if (error) throw new Error(error.message);
     return this.getById(id);
+  },
+
+  async delete(id) {
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    return true;
   },
 };

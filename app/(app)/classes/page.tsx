@@ -13,7 +13,7 @@ import {
 } from "@/lib/repositories";
 import { getAccessRulesMap } from "@/config/product-access";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { DANCE_STYLES } from "@/lib/mock-data";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { isClassInFuture } from "@/lib/domain/datetime";
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
@@ -26,6 +26,8 @@ export default async function ClassesPage() {
 
   await ensureOperationalDataHydrated();
 
+  const danceStyles = getDanceStyles();
+
   if (user.role === "student") {
     const instances = getInstances();
     const svc = getBookingRepo().getService();
@@ -36,7 +38,7 @@ export default async function ClassesPage() {
     svc.refreshClasses(
       instances.map((bc) => {
         const style = bc.styleName
-          ? DANCE_STYLES.find((s) => s.name === bc.styleName)
+          ? danceStyles.find((s) => s.name === bc.styleName)
           : null;
         return {
           id: bc.id,
@@ -73,7 +75,7 @@ export default async function ClassesPage() {
 
     const classCards: ClassCardData[] = futureInstances.map((rawCls) => {
       const style = rawCls.styleName
-        ? DANCE_STYLES.find((s) => s.name === rawCls.styleName)
+        ? danceStyles.find((s) => s.name === rawCls.styleName)
         : null;
 
       const confirmedForClass = svc.getConfirmedBookingsForClass(rawCls.id);
@@ -155,7 +157,7 @@ export default async function ClassesPage() {
 
   const templates = getTemplates().map((t) => ({ ...t }));
   const teacherAssignments = getAssignments().map((a) => ({ ...a }));
-  const allStyles = DANCE_STYLES.map((s) => ({ id: s.id, name: s.name }));
+  const allStyles = danceStyles.map((s) => ({ id: s.id, name: s.name }));
   const settings = getSettings();
   const nameMap = buildTeacherNameMap();
   const teacherNameMap = Object.fromEntries(nameMap);

@@ -1,12 +1,15 @@
 /**
- * Mutable in-memory subscription store, seeded from mock data.
- * Uses globalThis to survive HMR module re-evaluation in Next.js dev.
- * In production, replace with Supabase-backed service.
+ * Mutable in-memory subscription store.
+ * When Supabase is configured, starts empty — hydration fills real data.
  */
 
 import { SUBSCRIPTIONS, type MockSubscription } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
+
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
 
 const g = globalThis as unknown as {
   __bpm_subs?: MockSubscription[];
@@ -14,7 +17,7 @@ const g = globalThis as unknown as {
 
 function init(): MockSubscription[] {
   if (!g.__bpm_subs) {
-    g.__bpm_subs = SUBSCRIPTIONS.map((s) => ({ ...s }));
+    g.__bpm_subs = hasSupabaseConfig() ? [] : SUBSCRIPTIONS.map((s) => ({ ...s }));
   }
   return g.__bpm_subs;
 }

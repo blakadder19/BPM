@@ -33,6 +33,7 @@ export type ProductPatch = Partial<
     | "durationDays"
     | "styleName"
     | "allowedLevels"
+    | "isActive"
     | "isProvisional"
     | "notes"
     | "validityDescription"
@@ -51,4 +52,5 @@ export interface IProductRepository {
   create(data: CreateProductData): Promise<MockProduct>;
   update(id: string, patch: ProductPatch): Promise<MockProduct | null>;
   toggleActive(id: string): Promise<MockProduct | null>;
+  delete(id: string): Promise<boolean>;
 }

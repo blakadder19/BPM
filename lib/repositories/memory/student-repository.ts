@@ -7,4 +7,5 @@ export const memoryStudentRepo: IStudentRepository = {
   create: async (data: CreateStudentData) => store.createStudent(data),
   update: async (id, patch: StudentPatch) => store.updateStudent(id, patch),
   toggleActive: async (id) => store.toggleStudentActive(id),
+  delete: async (id) => store.deleteStudent(id),
 };

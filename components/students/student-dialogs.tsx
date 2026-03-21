@@ -17,6 +17,7 @@ import {
   createStudentAction,
   updateStudentAction,
   toggleStudentActiveAction,
+  deleteStudentAction,
 } from "@/lib/actions/students";
 import {
   createSubscriptionAction,
@@ -404,6 +405,61 @@ export function DeactivateConfirmDialog({
             disabled={isPending}
           >
             {isPending ? `${actionLabel.slice(0, -1)}ing…` : actionLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Delete Student Confirm Dialog ─────────────────────────────
+
+export function DeleteStudentDialog({
+  student,
+  onClose,
+}: {
+  student: StudentListItem;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function handleConfirm() {
+    const formData = new FormData();
+    formData.set("id", student.id);
+    startTransition(async () => {
+      const result = await deleteStudentAction(formData);
+      if (result.success) {
+        router.refresh();
+        onClose();
+      } else {
+        setError(result.error ?? "Delete failed");
+      }
+    });
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Student</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <p className="text-sm text-gray-600">
+            Are you sure you want to permanently delete{" "}
+            <span className="font-semibold">{student.fullName}</span>? This will
+            remove their account, profile, and auth credentials. This action
+            cannot be undone.
+          </p>
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={handleConfirm} disabled={isPending}>
+            {isPending ? "Deleting…" : "Delete Permanently"}
           </Button>
         </DialogFooter>
       </DialogContent>

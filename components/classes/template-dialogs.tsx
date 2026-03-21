@@ -102,28 +102,40 @@ function TemplateForm({
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Style</label>
-          <select
-            name="styleId"
-            value={styleId}
-            onChange={(e) => setStyleId(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-          >
-            <option value="">— None —</option>
-            {allStyles.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
-            ))}
-          </select>
+          {allStyles.length > 0 ? (
+            <select
+              name="styleId"
+              value={styleId}
+              onChange={(e) => setStyleId(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">— None —</option>
+              {allStyles.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          ) : (
+            <p className="mt-1 text-xs text-amber-600 italic py-2">No dance styles configured yet. Add styles in your database.</p>
+          )}
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Level</label>
-          <input
+          <select
             name="level"
             defaultValue={initial.level ?? ""}
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-          />
+          >
+            <option value="">— None —</option>
+            <option value="Beginner 1">Beginner 1</option>
+            <option value="Beginner 2">Beginner 2</option>
+            <option value="Improver">Improver</option>
+            <option value="Intermediate">Intermediate</option>
+            <option value="Advanced">Advanced</option>
+            <option value="Open">Open</option>
+          </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Day of Week *</label>

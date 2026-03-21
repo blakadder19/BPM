@@ -18,9 +18,38 @@ import {
 import { isAfterClosureWindow } from "@/lib/domain/datetime";
 import type { BookingSource, DanceRole } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
-import { saveBookingToDB, saveWaitlistToDB, deleteWaitlistFromDB, savePenaltyToDB } from "@/lib/supabase/operational-persistence";
+import { saveBookingToDB, saveWaitlistToDB, deleteWaitlistFromDB, savePenaltyToDB, saveAttendanceToDB, deleteBookingFromDB, deleteAttendanceFromDB, deletePenaltyFromDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { requireRole } from "@/lib/auth";
+import { getInstances } from "@/lib/services/schedule-store";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
+
+function syncClassMap() {
+  const svc = getBookingService();
+  const instances = getInstances();
+  svc.refreshClasses(
+    instances.map((bc) => {
+      const style = bc.styleName
+        ? getDanceStyles().find((s) => s.name === bc.styleName)
+        : null;
+      return {
+        id: bc.id,
+        title: bc.title,
+        classType: bc.classType,
+        styleName: bc.styleName,
+        danceStyleRequiresBalance: style?.requiresRoleBalance ?? false,
+        status: bc.status,
+        date: bc.date,
+        startTime: bc.startTime,
+        endTime: bc.endTime,
+        maxCapacity: bc.maxCapacity,
+        leaderCap: bc.leaderCap,
+        followerCap: bc.followerCap,
+        location: bc.location,
+      };
+    })
+  );
+}
 
 const VALID_SOURCES = new Set<string>([
   "subscription",
@@ -33,6 +62,7 @@ export async function adminCreateBookingAction(
   formData: FormData
 ): Promise<{ success: boolean; outcome?: string; warning?: string; error?: string }> {
   await ensureOperationalDataHydrated();
+  syncClassMap();
   await requireRole(["admin"]);
 
   const studentId = (formData.get("studentId") as string)?.trim();
@@ -64,6 +94,9 @@ export async function adminCreateBookingAction(
   const cls = svc.getClass(bookableClassId);
 
   // Entitlement validation when source is "subscription"
+  if (source === "subscription" && !subscriptionId) {
+    return { success: false, error: "A subscription must be selected when booking source is Subscription" };
+  }
   if (source === "subscription" && subscriptionId) {
     const sub = await getSubscriptionRepo().getById(subscriptionId);
     if (!sub) {
@@ -124,6 +157,7 @@ export async function adminCreateBookingAction(
     studentName,
     danceRole: (danceRole as DanceRole) ?? null,
     source: source as BookingSource,
+    subscriptionId,
     subscriptionName,
     adminNote,
     forceConfirm,
@@ -165,6 +199,7 @@ export async function adminCancelBookingAction(
   error?: string;
 }> {
   await ensureOperationalDataHydrated();
+  syncClassMap();
   await requireRole(["admin"]);
 
   if (!bookingId) return { success: false, error: "Missing booking ID" };
@@ -256,6 +291,7 @@ export async function adminCheckInBookingAction(
   bookingId: string
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
+  syncClassMap();
   await requireRole(["admin", "teacher"]);
 
   if (!bookingId) return { success: false, error: "Missing booking ID" };
@@ -287,6 +323,11 @@ export async function adminCheckInBookingAction(
       markedBy: "admin",
       checkInMethod: "manual",
     });
+
+    if (isRealUser(booking.studentId)) {
+      const attRecord = attendanceSvc.getRecord(booking.bookableClassId, booking.studentId);
+      if (attRecord) await saveAttendanceToDB(attRecord);
+    }
   }
 
   if (isRealUser(booking.studentId)) {
@@ -357,6 +398,7 @@ export async function checkLateCancelStatusAction(
   error?: string;
 }> {
   await ensureOperationalDataHydrated();
+  syncClassMap();
 
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
@@ -368,6 +410,10 @@ export async function checkLateCancelStatusAction(
   if (!cls) return { success: false, error: "Class not found" };
 
   const ctx = getCancellationContext(cls.date, cls.startTime);
+
+  if (isNaN(ctx.classStart.getTime())) {
+    return { success: false, error: "Invalid class date/time data" };
+  }
 
   return {
     success: true,
@@ -389,6 +435,7 @@ export async function adminRestoreBookingAction(
   error?: string;
 }> {
   await ensureOperationalDataHydrated();
+  syncClassMap();
   await requireRole(["admin"]);
 
   if (!bookingId) return { success: false, error: "Missing booking ID" };
@@ -440,5 +487,211 @@ export async function adminRestoreBookingAction(
     success: true,
     restoredTo: result.restoredTo,
     hasLinkedPenalty,
+  };
+}
+
+// ── Consequence computation ─────────────────────────────────
+
+export interface BookingConsequences {
+  bookingStatus: string;
+  bookingSource: string;
+  studentName: string;
+  classTitle: string;
+  classDate: string;
+  classStartTime: string;
+  isLate: boolean;
+  hasStarted: boolean;
+  cutoffMinutes: number;
+  minutesUntilStart: number;
+  lateCancelFeeCents: number;
+  lateCancelPenaltiesEnabled: boolean;
+  hasSubscription: boolean;
+  subscriptionName: string | null;
+  subscriptionType: string | null;
+  currentClassesUsed: number | null;
+  classesPerTerm: number | null;
+  currentRemainingCredits: number | null;
+  willRefundCredit: boolean;
+  refundDescription: string | null;
+  hasLinkedAttendance: boolean;
+  attendanceStatus: string | null;
+  hasLinkedPenalty: boolean;
+  penaltyId: string | null;
+  penaltyReason: string | null;
+  penaltyAmountCents: number | null;
+  waitlistCount: number;
+}
+
+export async function computeBookingConsequencesAction(
+  bookingId: string
+): Promise<{ success: boolean; consequences?: BookingConsequences; error?: string }> {
+  await ensureOperationalDataHydrated();
+  syncClassMap();
+
+  if (!bookingId) return { success: false, error: "Missing booking ID" };
+
+  const svc = getBookingService();
+  const booking = svc.bookings.find((b) => b.id === bookingId);
+  if (!booking) return { success: false, error: "Booking not found" };
+
+  const cls = svc.getClass(booking.bookableClassId);
+  if (!cls) return { success: false, error: "Class not found" };
+
+  const ctx = getCancellationContext(cls.date, cls.startTime);
+  const isLate = !isNaN(ctx.classStart.getTime()) && ctx.isLate;
+  const hasStarted = !isNaN(ctx.classStart.getTime()) && ctx.hasStarted;
+
+  const settings = getSettings();
+
+  const isActive = booking.status === "confirmed" || booking.status === "checked_in";
+
+  let hasSubscription = false;
+  let subscriptionName: string | null = null;
+  let subscriptionType: string | null = null;
+  let currentClassesUsed: number | null = null;
+  let classesPerTerm: number | null = null;
+  let currentRemainingCredits: number | null = null;
+  let willRefundCredit = false;
+  let refundDescription: string | null = null;
+
+  if (booking.subscriptionId) {
+    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
+    if (sub) {
+      hasSubscription = true;
+      subscriptionName = sub.productName;
+      subscriptionType = sub.productType;
+
+      if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+        currentClassesUsed = sub.classesUsed;
+        classesPerTerm = sub.classesPerTerm;
+        if (isActive && sub.classesUsed > 0) {
+          willRefundCredit = true;
+          refundDescription = `Usage will go from ${sub.classesUsed}/${sub.classesPerTerm} to ${sub.classesUsed - 1}/${sub.classesPerTerm}`;
+        }
+      } else if (sub.remainingCredits !== null) {
+        currentRemainingCredits = sub.remainingCredits;
+        if (isActive) {
+          willRefundCredit = true;
+          refundDescription = `Credits will go from ${sub.remainingCredits} to ${sub.remainingCredits + 1}`;
+        }
+      }
+    }
+  }
+
+  const attSvc = getAttendanceService();
+  const attRecord = attSvc.getAllRecords().find((r) => r.bookingId === bookingId);
+
+  const penaltySvc = getPenaltyService();
+  const linkedPenalty = penaltySvc.getAllPenalties().find((p) => p.bookingId === bookingId);
+
+  const waitlistEntries = svc.waitlist.filter(
+    (w) => w.bookableClassId === booking.bookableClassId && w.status === "waiting"
+  );
+
+  return {
+    success: true,
+    consequences: {
+      bookingStatus: booking.status,
+      bookingSource: booking.source,
+      studentName: booking.studentName,
+      classTitle: cls.title,
+      classDate: cls.date,
+      classStartTime: cls.startTime,
+      isLate,
+      hasStarted,
+      cutoffMinutes: ctx.cutoffMinutes,
+      minutesUntilStart: !isNaN(ctx.classStart.getTime()) ? ctx.minutesUntilStart : 0,
+      lateCancelFeeCents: penaltyFeeCents("late_cancel"),
+      lateCancelPenaltiesEnabled: settings.lateCancelPenaltiesEnabled ?? false,
+      hasSubscription,
+      subscriptionName,
+      subscriptionType,
+      currentClassesUsed,
+      classesPerTerm,
+      currentRemainingCredits,
+      willRefundCredit,
+      refundDescription,
+      hasLinkedAttendance: !!attRecord,
+      attendanceStatus: attRecord?.status ?? null,
+      hasLinkedPenalty: !!linkedPenalty,
+      penaltyId: linkedPenalty?.id ?? null,
+      penaltyReason: linkedPenalty?.reason ?? null,
+      penaltyAmountCents: linkedPenalty?.amountCents ?? null,
+      waitlistCount: waitlistEntries.length,
+    },
+  };
+}
+
+// ── Delete booking ──────────────────────────────────────────
+
+export async function adminDeleteBookingAction(
+  bookingId: string
+): Promise<{
+  success: boolean;
+  deletedAttendance?: boolean;
+  deletedPenalty?: boolean;
+  refundedCredit?: boolean;
+  error?: string;
+}> {
+  await ensureOperationalDataHydrated();
+  syncClassMap();
+  await requireRole(["admin"]);
+
+  if (!bookingId) return { success: false, error: "Missing booking ID" };
+
+  const svc = getBookingService();
+  const booking = svc.bookings.find((b) => b.id === bookingId);
+  if (!booking) return { success: false, error: "Booking not found" };
+
+  const isActive = booking.status === "confirmed" || booking.status === "checked_in";
+
+  let refundedCredit = false;
+  if (isActive && booking.subscriptionId) {
+    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
+    if (sub) {
+      if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {
+        await repoUpdateSub(sub.id, { classesUsed: sub.classesUsed - 1 });
+        refundedCredit = true;
+      } else if (sub.remainingCredits !== null) {
+        await repoUpdateSub(sub.id, { remainingCredits: sub.remainingCredits + 1 });
+        refundedCredit = true;
+      }
+    }
+  }
+
+  const attSvc = getAttendanceService();
+  const deletedAtt = attSvc.deleteByBookingId(bookingId);
+  if (deletedAtt && isRealUser(booking.studentId)) {
+    await deleteAttendanceFromDB(deletedAtt.id);
+  }
+
+  const penaltySvc = getPenaltyService();
+  const linkedPenalty = penaltySvc.getAllPenalties().find((p) => p.bookingId === bookingId);
+  let deletedPenalty = false;
+  if (linkedPenalty) {
+    penaltySvc.deletePenalty(linkedPenalty.id);
+    if (isRealUser(booking.studentId)) {
+      await deletePenaltyFromDB(linkedPenalty.id);
+    }
+    deletedPenalty = true;
+  }
+
+  svc.deleteBooking(bookingId);
+  if (isRealUser(booking.studentId)) {
+    await deleteBookingFromDB(bookingId);
+  }
+
+  revalidatePath("/bookings");
+  revalidatePath("/attendance");
+  revalidatePath("/penalties");
+  revalidatePath("/dashboard");
+  revalidatePath("/classes");
+  revalidatePath("/students");
+
+  return {
+    success: true,
+    deletedAttendance: !!deletedAtt,
+    deletedPenalty,
+    refundedCredit,
   };
 }

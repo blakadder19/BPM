@@ -36,10 +36,12 @@ const STATUS_OPTIONS = [
 
 export function AddInstanceDialog({
   templates,
+  allStyles,
   onClose,
   defaultDate,
 }: {
   templates: MockClass[];
+  allStyles?: { id: string; name: string }[];
   onClose: () => void;
   defaultDate?: string;
 }) {
@@ -47,8 +49,11 @@ export function AddInstanceDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [manualStyleId, setManualStyleId] = useState("");
+  const [manualLevel, setManualLevel] = useState("");
 
   const tpl = templates.find((t) => t.id === selectedTemplateId);
+  const isManual = !tpl;
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -60,6 +65,13 @@ export function AddInstanceDialog({
       fd.set("styleName", tpl.styleName ?? "");
       fd.set("styleId", tpl.styleId ?? "");
       fd.set("level", tpl.level ?? "");
+    } else {
+      const chosenStyle = allStyles?.find((s) => s.id === manualStyleId);
+      if (chosenStyle) {
+        fd.set("styleName", chosenStyle.name);
+        fd.set("styleId", chosenStyle.id);
+      }
+      if (manualLevel) fd.set("level", manualLevel);
     }
 
     startTransition(async () => {
@@ -108,6 +120,44 @@ export function AddInstanceDialog({
                 </select>
               </div>
             </div>
+
+            {isManual && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Style</label>
+                  {allStyles && allStyles.length > 0 ? (
+                    <select
+                      value={manualStyleId}
+                      onChange={(e) => setManualStyleId(e.target.value)}
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    >
+                      <option value="">— None —</option>
+                      {allStyles.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="mt-1 text-xs text-amber-600 italic py-2">No dance styles configured yet.</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Level</label>
+                  <select
+                    value={manualLevel}
+                    onChange={(e) => setManualLevel(e.target.value)}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  >
+                    <option value="">— None —</option>
+                    <option value="Beginner 1">Beginner 1</option>
+                    <option value="Beginner 2">Beginner 2</option>
+                    <option value="Improver">Improver</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                    <option value="Open">Open</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-4">
               <div>

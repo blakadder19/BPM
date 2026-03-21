@@ -10,7 +10,7 @@ import { getInstances } from "@/lib/services/schedule-store";
 import { isClassInFuture } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { DANCE_STYLES } from "@/lib/mock-data";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { StudentBookings } from "@/components/booking/student-bookings";
 import { AdminBookings } from "@/components/booking/admin-bookings";
 
@@ -68,10 +68,11 @@ export default async function BookingsPage({
   const svc = getBookingRepo().getService();
 
   const instances = getInstances();
+  const danceStyles = getDanceStyles();
   svc.refreshClasses(
     instances.map((bc) => {
       const style = bc.styleName
-        ? DANCE_STYLES.find((s) => s.name === bc.styleName)
+        ? danceStyles.find((s) => s.name === bc.styleName)
         : null;
       return {
         id: bc.id,
@@ -189,7 +190,7 @@ export default async function BookingsPage({
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
     .map((c) => {
       const style = c.styleName
-        ? DANCE_STYLES.find((s) => s.name === c.styleName)
+        ? danceStyles.find((s) => s.name === c.styleName)
         : null;
       const activeForClass = allBookings.filter(
         (b) =>

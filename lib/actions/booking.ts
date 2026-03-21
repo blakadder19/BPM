@@ -6,7 +6,7 @@ import { getBookingService } from "@/lib/services/booking-store";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getTerms } from "@/lib/services/term-store";
 import { getAccessRulesMap } from "@/config/product-access";
-import { DANCE_STYLES } from "@/lib/mock-data";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { computeBookability, type BookabilityContext, type ClassInstanceInfo } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getStudentRepo, getSubscriptionRepo, getCocRepo } from "@/lib/repositories";
@@ -57,14 +57,15 @@ export async function createStudentBooking(input: {
   const rawCls = instances.find((c) => c.id === bookableClassId);
   if (!rawCls) return { success: false, error: "Class not found." };
 
+  const danceStyles = getDanceStyles();
   const style = rawCls.styleName
-    ? DANCE_STYLES.find((s) => s.name === rawCls.styleName)
+    ? danceStyles.find((s) => s.name === rawCls.styleName)
     : null;
 
   svc.refreshClasses(
     instances.map((bc) => {
       const st = bc.styleName
-        ? DANCE_STYLES.find((s) => s.name === bc.styleName)
+        ? danceStyles.find((s) => s.name === bc.styleName)
         : null;
       return {
         id: bc.id,

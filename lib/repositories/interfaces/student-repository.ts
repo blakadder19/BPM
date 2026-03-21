@@ -32,4 +32,5 @@ export interface IStudentRepository {
   create(data: CreateStudentData): Promise<MockStudent>;
   update(id: string, patch: StudentPatch): Promise<MockStudent | null>;
   toggleActive(id: string): Promise<MockStudent | null>;
+  delete(id: string): Promise<boolean>;
 }

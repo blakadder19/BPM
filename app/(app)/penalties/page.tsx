@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getPenaltyRepo, getStudentRepo, getSettingsRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { CLASSES } from "@/lib/mock-data";
+import { getTemplates } from "@/lib/services/class-store";
 import { AdminPenalties } from "@/components/penalties/admin-penalties";
 import {
   StudentPenalties,
@@ -38,12 +38,15 @@ export default async function PenaltiesPage({
     return <StudentPenalties penalties={mine} />;
   }
 
-  const all = svc.getAllPenalties();
+  const allPenalties = svc.getAllPenalties();
   const settings = await getSettingsRepo().get();
 
   const allStudents = await getStudentRepo().getAll();
+  const studentIds = new Set(allStudents.map((s) => s.id));
   const studentOptions = allStudents.map((s) => ({ id: s.id, fullName: s.fullName }));
-  const classOptions = CLASSES
+
+  const all = allPenalties.filter((p) => studentIds.has(p.studentId));
+  const classOptions = getTemplates()
     .filter((c) => c.classType === "class")
     .map((c) => ({ id: c.id, title: c.title }));
 

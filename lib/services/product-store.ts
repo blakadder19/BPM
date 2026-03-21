@@ -1,19 +1,25 @@
 /**
- * Mutable in-memory product store, seeded from mock data.
- * In production, replace with Supabase-backed service.
+ * Mutable in-memory product store.
+ * When Supabase is configured, starts empty — hybrid repo reads from DB.
  */
 
 import { PRODUCTS, type MockProduct } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 import type { CreditsModel, ProductType } from "@/types/domain";
 
-let products: MockProduct[] | null = null;
+function hasSupabaseConfig(): boolean {
+  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+const g = globalThis as unknown as {
+  __bpm_products?: MockProduct[];
+};
 
 function init(): MockProduct[] {
-  if (!products) {
-    products = PRODUCTS.map((p) => ({ ...p }));
+  if (!g.__bpm_products) {
+    g.__bpm_products = hasSupabaseConfig() ? [] : PRODUCTS.map((p) => ({ ...p }));
   }
-  return products;
+  return g.__bpm_products;
 }
 
 export function getProducts(): MockProduct[] {
@@ -133,4 +139,12 @@ export function toggleProductActive(id: string): MockProduct | null {
   if (!product) return null;
   product.isActive = !product.isActive;
   return { ...product };
+}
+
+export function deleteProduct(id: string): boolean {
+  const list = init();
+  const idx = list.findIndex((p) => p.id === id);
+  if (idx === -1) return false;
+  list.splice(idx, 1);
+  return true;
 }
