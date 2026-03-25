@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { effectiveInstanceStatus } from "@/lib/domain/datetime";
+import type { InstanceStatus } from "@/types/domain";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
@@ -125,27 +127,35 @@ export function AddBookingDialog({
     [students]
   );
 
-  const STATUS_BADGE_MAP: Record<string, { label: string; variant: "success" | "default" | "info" | "danger" }> = {
+  const STATUS_BADGE_MAP: Record<string, { label: string; variant: "success" | "default" | "info" | "danger" | "warning" }> = {
     open: { label: "Open", variant: "success" },
     scheduled: { label: "Scheduled", variant: "default" },
     closed: { label: "Closed", variant: "info" },
     cancelled: { label: "Cancelled", variant: "danger" },
+    live: { label: "Live", variant: "warning" },
+    ended: { label: "Ended", variant: "default" },
   };
 
   const classSearchOptions = useMemo(
     () =>
-      classInstances.map((c) => {
-        const capacityStr = c.maxCapacity
-          ? `${c.bookedCount}/${c.maxCapacity} booked`
-          : "Unlimited";
-        const badgeConfig = STATUS_BADGE_MAP[c.status] ?? { label: c.status, variant: "default" as const };
-        return {
-          value: c.id,
-          label: `${c.title} — ${formatDate(c.date)} ${formatTime(c.startTime)}`,
-          detail: `${capacityStr} · ${c.location}`,
-          badge: badgeConfig,
-        };
-      }),
+      classInstances
+        .map((c) => {
+          const effStatus = effectiveInstanceStatus(c.status as InstanceStatus, c.date, c.startTime, c.endTime);
+          return { ...c, effStatus };
+        })
+        .filter((c) => c.effStatus !== "ended" && c.effStatus !== "cancelled" && c.effStatus !== "closed")
+        .map((c) => {
+          const capacityStr = c.maxCapacity
+            ? `${c.bookedCount}/${c.maxCapacity} booked`
+            : "Unlimited";
+          const badgeConfig = STATUS_BADGE_MAP[c.effStatus] ?? { label: c.effStatus, variant: "default" as const };
+          return {
+            value: c.id,
+            label: `${c.title} — ${formatDate(c.date)} ${formatTime(c.startTime)}`,
+            detail: `${capacityStr} · ${c.location}`,
+            badge: badgeConfig,
+          };
+        }),
     [classInstances]
   );
 
@@ -286,9 +296,9 @@ export function AddBookingDialog({
               </div>
             )}
 
-            {selectedClass?.level?.startsWith("Beginner 1") && (
+            {(selectedClass?.level?.startsWith("Beginner 1") || selectedClass?.level?.startsWith("Beginner 2")) && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                <span className="font-medium">Beginner restriction:</span> New students on a fresh entitlement can only start in weeks 1–2 of the term.
+                <span className="font-medium">Term-bound course:</span> Late entry is controlled by the admin late-entry settings.
               </div>
             )}
 

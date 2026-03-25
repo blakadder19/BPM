@@ -7,7 +7,7 @@ import {
   getStudentRepo,
 } from "@/lib/repositories";
 import { getInstances } from "@/lib/services/schedule-store";
-import { isClassInFuture } from "@/lib/domain/datetime";
+import { isClassInFuture, isClassEnded } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -100,6 +100,7 @@ export default async function BookingsPage({
   function enrichBooking(b: (typeof allBookings)[number]): BookingView {
     const cls = svc.getClass(b.bookableClassId);
     const raw = instanceMap.get(b.bookableClassId);
+    const classDeleted = !cls && !raw;
     const activeForClass = allBookings.filter(
       (x) =>
         x.bookableClassId === b.bookableClassId &&
@@ -113,11 +114,11 @@ export default async function BookingsPage({
       id: b.id,
       studentName: b.studentName,
       studentId: b.studentId,
-      classTitle: cls?.title ?? "Unknown",
+      classTitle: classDeleted ? "(Deleted class)" : (cls?.title ?? "Unknown"),
       classId: b.bookableClassId,
-      date: cls?.date ?? "",
-      startTime: cls?.startTime ?? "",
-      endTime: cls?.endTime ?? "",
+      date: cls?.date ?? raw?.date ?? "",
+      startTime: cls?.startTime ?? raw?.startTime ?? "",
+      endTime: cls?.endTime ?? raw?.endTime ?? "",
       danceRole: b.danceRole,
       status: b.status,
       source: b.source ?? null,
@@ -185,7 +186,7 @@ export default async function BookingsPage({
     .filter(
       (c) =>
         (c.status === "open" || c.status === "scheduled") &&
-        isClassInFuture(c.date, c.startTime)
+        !isClassEnded(c.date, c.endTime)
     )
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
     .map((c) => {

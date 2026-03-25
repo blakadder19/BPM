@@ -250,7 +250,7 @@ function AssignmentsSection({
   const [clearResult, setClearResult] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const resolve = (id: string | null) => (id ? teacherNameMap[id] ?? id : null);
+  const resolve = (id: string | null) => (id ? teacherNameMap[id] ?? null : null);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
@@ -403,8 +403,8 @@ function AssignmentsSection({
                           .map((h) => (
                             <div key={h.id} className={`flex items-center gap-4 rounded px-2 py-1 text-sm ${h.id === tp.id ? "bg-indigo-50 font-medium" : ""}`}>
                               <span className="w-40">
-                                {resolve(h.teacher1Id) ?? h.teacher1Id}
-                                {h.teacher2Id ? ` & ${resolve(h.teacher2Id) ?? h.teacher2Id}` : " (solo)"}
+                                {resolve(h.teacher1Id) ?? "No teacher assigned"}
+                                {h.teacher2Id ? ` & ${resolve(h.teacher2Id) ?? "Unknown"}` : " (solo)"}
                               </span>
                               <span className="text-xs text-gray-500">
                                 {formatDate(h.effectiveFrom)} → {h.effectiveUntil ? formatDate(h.effectiveUntil) : "Ongoing"}

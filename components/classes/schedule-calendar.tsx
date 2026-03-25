@@ -13,6 +13,8 @@ import { detectConflicts, buildConflictSet } from "@/lib/domain/conflict-utils";
 import { SelectFilter } from "@/components/ui/select-filter";
 import { Badge } from "@/components/ui/badge";
 import { formatTime } from "@/lib/utils";
+import { effectiveInstanceStatus } from "@/lib/domain/datetime";
+import type { InstanceStatus } from "@/types/domain";
 import { QuickAssignDialog } from "./quick-assign-dialog";
 import { ConflictDetailDialog } from "./conflict-detail-dialog";
 import { BulkAssignDialog } from "./bulk-assign-dialog";
@@ -93,6 +95,40 @@ interface ScheduleCalendarProps {
   forcedViewMode?: "weekly" | "monthly";
 }
 
+function computeInitialOffsets(instances: MockBookableClass[]): { weekOffset: number; monthOffset: number } {
+  const nonCancelled = instances.filter((bc) => bc.status !== "cancelled");
+  if (nonCancelled.length === 0) return { weekOffset: 0, monthOffset: 0 };
+
+  const now = new Date();
+  const todayISO = now.toISOString().slice(0, 10);
+
+  const futureDates = nonCancelled.map((bc) => bc.date).filter((d) => d >= todayISO).sort();
+  const targetDate = futureDates.length > 0
+    ? futureDates[0]
+    : nonCancelled.map((bc) => bc.date).sort().reverse()[0];
+
+  const target = new Date(targetDate + "T12:00:00Z");
+
+  const currentMonday = new Date(now);
+  const jsDay = currentMonday.getUTCDay();
+  currentMonday.setUTCDate(currentMonday.getUTCDate() + (jsDay === 0 ? -6 : 1 - jsDay));
+  currentMonday.setUTCHours(12, 0, 0, 0);
+
+  const targetMonday = new Date(target);
+  const tjs = targetMonday.getUTCDay();
+  targetMonday.setUTCDate(targetMonday.getUTCDate() + (tjs === 0 ? -6 : 1 - tjs));
+  targetMonday.setUTCHours(12, 0, 0, 0);
+
+  const diffMs = targetMonday.getTime() - currentMonday.getTime();
+  const weekOffset = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+
+  const monthOffset =
+    (target.getUTCFullYear() - now.getUTCFullYear()) * 12 +
+    (target.getUTCMonth() - now.getUTCMonth());
+
+  return { weekOffset, monthOffset };
+}
+
 export function ScheduleCalendar({
   instances,
   assignments,
@@ -107,8 +143,10 @@ export function ScheduleCalendar({
   const [internalViewMode, setInternalViewMode] = useState<"weekly" | "monthly">("weekly");
   const viewMode = forcedViewMode ?? internalViewMode;
   const setViewMode = setInternalViewMode;
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [monthOffset, setMonthOffset] = useState(0);
+
+  const initialOffsets = useMemo(() => computeInitialOffsets(instances), [instances]);
+  const [weekOffset, setWeekOffset] = useState(initialOffsets.weekOffset);
+  const [monthOffset, setMonthOffset] = useState(initialOffsets.monthOffset);
 
   const [teacherFilter, setTeacherFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
@@ -586,6 +624,15 @@ function MonthlyGrid({
 
 // ── Calendar Card ───────────────────────────────────────────
 
+const STATUS_DOT: Record<string, { color: string; label: string }> = {
+  open: { color: "bg-green-500", label: "Open" },
+  scheduled: { color: "bg-blue-400", label: "Scheduled" },
+  closed: { color: "bg-gray-400", label: "Closed" },
+  cancelled: { color: "bg-red-400", label: "Cancelled" },
+  live: { color: "bg-amber-500", label: "Live" },
+  ended: { color: "bg-gray-300", label: "Ended" },
+};
+
 function CalendarCard({
   entry,
   hasConflict,
@@ -615,6 +662,9 @@ function CalendarCard({
     : entry.source === "blocked" ? "No teacher assigned"
     : "No regular teacher set";
 
+  const effStatus = effectiveInstanceStatus(entry.status as InstanceStatus, entry.date, entry.startTime, entry.endTime);
+  const statusInfo = STATUS_DOT[effStatus] ?? STATUS_DOT.scheduled;
+
   function handleDragStart(e: React.DragEvent) {
     e.dataTransfer.setData("text/plain", entry.instanceId);
     e.dataTransfer.effectAllowed = "move";
@@ -629,7 +679,7 @@ function CalendarCard({
         className="w-full rounded border border-gray-100 bg-white px-1.5 py-1 text-left shadow-sm transition-colors hover:bg-gray-50 cursor-grab active:cursor-grabbing"
       >
         <div className="flex items-center gap-1">
-          <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`} />
+          <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusInfo.color}`} title={statusInfo.label} />
           <span className="truncate text-[10px] font-medium text-gray-800">{entry.classTitle}</span>
           {hasConflict && <span className="shrink-0 text-[9px] font-bold text-red-500">!</span>}
         </div>
@@ -655,7 +705,11 @@ function CalendarCard({
       className="w-full rounded-md border border-gray-100 bg-white px-3 py-2 text-left shadow-sm transition-colors hover:bg-gray-50 cursor-grab active:cursor-grabbing"
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium leading-tight text-gray-800">{entry.classTitle}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium leading-tight text-gray-800">{entry.classTitle}</p>
+          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${statusInfo.color}`} title={statusInfo.label} />
+          <span className="text-[10px] text-gray-400">{statusInfo.label}</span>
+        </div>
         <div className="flex shrink-0 items-center gap-1">
           {hasConflict && <Badge variant="danger" className="text-[10px]">Conflict</Badge>}
           <span className={`mt-0.5 inline-block h-2 w-2 rounded-full ${dotColor}`} title={sourceLabel} />

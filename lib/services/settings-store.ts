@@ -6,8 +6,11 @@
  * (gitignored). On first access or if the file is missing, defaults are used.
  *
  * In production this would read/write a settings table via Supabase.
+ *
+ * SERVER-ONLY — must never be imported by client components.
  */
 
+import "server-only";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -48,6 +51,13 @@ export interface AppSettings {
   selfCheckInOpensMinutesBefore: number;
   qrCheckInEnabled: boolean;
 
+  // Absence policy
+  refundCreditOnAbsent: boolean;
+
+  // Term-bound policy
+  allowAdminLateEntryIntoTermBound: boolean;
+  adminLateEntryMaxClassNumber: number;
+
   // Provisional notes
   provisionalNotes: string;
 }
@@ -82,6 +92,11 @@ function defaults(): AppSettings {
     selfCheckInEnabled: true,
     selfCheckInOpensMinutesBefore: 15,
     qrCheckInEnabled: true,
+
+    refundCreditOnAbsent: false,
+
+    allowAdminLateEntryIntoTermBound: true,
+    adminLateEntryMaxClassNumber: 2,
 
     provisionalNotes: DEFAULT_PROVISIONAL_NOTES,
   };

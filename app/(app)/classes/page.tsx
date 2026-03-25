@@ -11,10 +11,12 @@ import {
   getStudentRepo,
   getCocRepo,
 } from "@/lib/repositories";
-import { getAccessRulesMap } from "@/config/product-access";
+import { buildDynamicAccessRulesMap } from "@/config/product-access";
+import { getProductRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { isClassInFuture } from "@/lib/domain/datetime";
+import { isTermBoundLevel } from "@/lib/domain/term-rules";
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { AdminTemplates } from "@/components/classes/admin-templates";
@@ -33,7 +35,8 @@ export default async function ClassesPage() {
     const svc = getBookingRepo().getService();
     const terms = await getTermRepo().getAll();
     const allSubs = await getSubscriptionRepo().getAll();
-    const accessRulesMap = getAccessRulesMap();
+    const allProducts = await getProductRepo().getAll();
+    const accessRulesMap = buildDynamicAccessRulesMap(allProducts);
 
     svc.refreshClasses(
       instances.map((bc) => {
@@ -97,6 +100,8 @@ export default async function ClassesPage() {
         currentLeaders: confirmedForClass.filter((b) => b.danceRole === "leader").length,
         currentFollowers: confirmedForClass.filter((b) => b.danceRole === "follower").length,
         totalBooked: confirmedForClass.length,
+        termBound: isTermBoundLevel(rawCls.level),
+        termId: rawCls.termId ?? null,
       };
 
       const activeBooking = studentBookings.find(
@@ -158,6 +163,8 @@ export default async function ClassesPage() {
   const templates = getTemplates().map((t) => ({ ...t }));
   const teacherAssignments = getAssignments().map((a) => ({ ...a }));
   const allStyles = danceStyles.map((s) => ({ id: s.id, name: s.name }));
+  const terms = await getTermRepo().getAll();
+  const allTerms = terms.map((t) => ({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate }));
   const settings = getSettings();
   const nameMap = buildTeacherNameMap();
   const teacherNameMap = Object.fromEntries(nameMap);
@@ -167,6 +174,7 @@ export default async function ClassesPage() {
     <AdminTemplates
       templates={templates}
       allStyles={allStyles}
+      allTerms={allTerms}
       settings={{
         roleBalancedStyleNames: settings.roleBalancedStyleNames ?? [],
         socialsBookable: settings.socialsBookable,

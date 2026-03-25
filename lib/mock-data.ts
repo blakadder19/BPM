@@ -1,7 +1,7 @@
 /**
- * Mock data for admin pages.
- * Mirrors the seed.sql structure for consistency.
- * Replace with Supabase queries when connected.
+ * Seed data aligned with the REAL BPM Academy catalog and timetable.
+ * Source: BPM academy documents (Booking system information.docx, BPM_Master_Handoff_Fresh_Chat.docx).
+ * Replace with Supabase queries when fully connected.
  */
 
 import type {
@@ -41,6 +41,8 @@ export const DANCE_STYLES: MockDanceStyle[] = [
   { id: "ds-6", name: "Reggaeton", description: "Urban Latin dance focusing on isolations, rhythm interpretation, and high-energy solo movement.", requiresRoleBalance: false },
   { id: "ds-7", name: "Ladies Styling", description: "Technique and styling for followers — arm work, body movement, and personal expression in Latin dance.", requiresRoleBalance: false },
   { id: "ds-8", name: "Afro-Cuban", description: "Afro-Cuban folkloric and popular dance rooted in West African and Cuban traditions.", requiresRoleBalance: false },
+  { id: "ds-9", name: "Yoga", description: "Yoga classes for dancers — flexibility, strength, balance, and recovery.", requiresRoleBalance: false },
+  { id: "ds-10", name: "Kids Hip Hop", description: "Fun, high-energy hip-hop dance classes for children.", requiresRoleBalance: false },
 ];
 
 const styleMap = Object.fromEntries(DANCE_STYLES.map((s) => [s.id, s.name]));
@@ -50,7 +52,7 @@ export function styleRequiresRoleBalance(styleName: string | null): boolean {
   return DANCE_STYLES.find((s) => s.name === styleName)?.requiresRoleBalance ?? false;
 }
 
-// ── Terms ────────────────────────────────────────────────────
+// ── Terms (Real BPM 2026 terms — 4-week blocks) ────────────
 
 export interface MockTerm {
   id: string;
@@ -62,11 +64,19 @@ export interface MockTerm {
 }
 
 export const TERMS: MockTerm[] = [
-  { id: "term-1", name: "Spring Term 2026", startDate: "2026-03-09", endDate: "2026-04-05", status: "active", notes: null },
-  { id: "term-2", name: "Summer Term 2026", startDate: "2026-04-06", endDate: "2026-05-03", status: "upcoming", notes: null },
+  { id: "term-1", name: "Term 1", startDate: "2026-03-30", endDate: "2026-04-26", status: "upcoming", notes: null },
+  { id: "term-2", name: "Term 2", startDate: "2026-04-27", endDate: "2026-05-24", status: "upcoming", notes: null },
+  { id: "term-3", name: "Term 3", startDate: "2026-05-25", endDate: "2026-06-21", status: "upcoming", notes: null },
+  { id: "term-4", name: "Term 4", startDate: "2026-06-22", endDate: "2026-07-19", status: "upcoming", notes: null },
+  { id: "term-5", name: "Term 5", startDate: "2026-07-20", endDate: "2026-08-16", status: "upcoming", notes: null },
+  { id: "term-6", name: "Term 6", startDate: "2026-08-17", endDate: "2026-09-13", status: "upcoming", notes: null },
+  { id: "term-7", name: "Term 7", startDate: "2026-09-14", endDate: "2026-10-11", status: "upcoming", notes: null },
+  { id: "term-8", name: "Term 8", startDate: "2026-10-12", endDate: "2026-11-08", status: "upcoming", notes: null },
+  { id: "term-9", name: "Term 9", startDate: "2026-11-09", endDate: "2026-12-06", status: "upcoming", notes: null },
 ];
 
-// ── Class Templates ─────────────────────────────────────────
+// ── Class Templates (Real BPM April timetable) ──────────────
+// Term-bound rule: ONLY Beginner 1 and Beginner 2 classes are term-bound.
 
 export interface MockClass {
   id: string;
@@ -84,28 +94,63 @@ export interface MockClass {
   location: string;
   isActive: boolean;
   notes?: string | null;
-  /** PROVISIONAL: Future lifecycle state. Currently derived from isActive. */
+  termBound?: boolean;
+  termId?: string | null;
   status?: "active" | "inactive" | "archived";
 }
 
 export const CLASSES: MockClass[] = [
-  { id: "c-01", title: "Bachata Beginner 1", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Beginner 1", dayOfWeek: 1, startTime: "19:00", endTime: "20:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true },
-  { id: "c-02", title: "Cuban Beginner 2", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Beginner 2", dayOfWeek: 1, startTime: "19:00", endTime: "20:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio B", isActive: true },
-  { id: "c-03", title: "Bachata Beginner 2", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Beginner 2", dayOfWeek: 1, startTime: "20:00", endTime: "21:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true },
-  { id: "c-04", title: "Cuban Intermediate", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Intermediate", dayOfWeek: 1, startTime: "20:00", endTime: "21:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
-  { id: "c-05", title: "Salsa Line Beginner 1", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Beginner 1", dayOfWeek: 2, startTime: "19:00", endTime: "20:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true },
-  { id: "c-06", title: "Salsa Line Beginner 2", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Beginner 2", dayOfWeek: 2, startTime: "20:00", endTime: "21:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true },
-  { id: "c-07", title: "Reggaeton Open", classType: "class", styleId: "ds-6", styleName: "Reggaeton", level: "Open", dayOfWeek: 2, startTime: "20:00", endTime: "21:00", maxCapacity: 25, leaderCap: null, followerCap: null, location: "Studio B", isActive: true },
-  { id: "c-08", title: "Bachata Tradicional Beg 1", classType: "class", styleId: "ds-2", styleName: "Bachata Tradicional", level: "Beginner 1", dayOfWeek: 3, startTime: "19:00", endTime: "20:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true },
-  { id: "c-09", title: "Bachata Partnerwork Int", classType: "class", styleId: "ds-3", styleName: "Bachata Partnerwork", level: "Intermediate", dayOfWeek: 3, startTime: "20:00", endTime: "21:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio A", isActive: true },
-  { id: "c-10", title: "Cuban Beginner 1", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Beginner 1", dayOfWeek: 4, startTime: "19:00", endTime: "20:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true },
-  { id: "c-11", title: "Ladies Styling Open", classType: "class", styleId: "ds-7", styleName: "Ladies Styling", level: "Open", dayOfWeek: 4, startTime: "20:00", endTime: "21:00", maxCapacity: 20, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
-  { id: "c-12", title: "BPM Friday Social", classType: "social", styleId: null, styleName: null, level: null, dayOfWeek: 5, startTime: "21:00", endTime: "01:00", maxCapacity: null, leaderCap: null, followerCap: null, location: "BPM Studio", isActive: true },
-  { id: "c-13", title: "Student Practice", classType: "student_practice", styleId: null, styleName: null, level: null, dayOfWeek: 6, startTime: "14:00", endTime: "15:00", maxCapacity: null, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
-  { id: "c-14", title: "Afro-Cuban Open", classType: "class", styleId: "ds-8", styleName: "Afro-Cuban", level: "Open", dayOfWeek: 6, startTime: "15:00", endTime: "16:00", maxCapacity: 20, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+  // ── MONDAY (dayOfWeek=1) ──
+  { id: "c-01", title: "Yoga Flow", classType: "class", styleId: "ds-9", styleName: "Yoga", level: "All Levels", dayOfWeek: 1, startTime: "10:00", endTime: "11:00", maxCapacity: 25, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+  { id: "c-02", title: "Yoga Flow", classType: "class", styleId: "ds-9", styleName: "Yoga", level: "All Levels", dayOfWeek: 1, startTime: "11:00", endTime: "12:00", maxCapacity: 25, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+  { id: "c-03", title: "Cuban Improvers", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Improvers", dayOfWeek: 1, startTime: "18:30", endTime: "19:30", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio A", isActive: true },
+  { id: "c-04", title: "Cuban Intermediate", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Intermediate", dayOfWeek: 1, startTime: "18:30", endTime: "19:30", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-05", title: "Salsa Line Improvers", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Improvers", dayOfWeek: 1, startTime: "19:30", endTime: "20:30", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio A", isActive: true },
+  { id: "c-06", title: "Salsa Line Intermediate", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Intermediate", dayOfWeek: 1, startTime: "19:30", endTime: "20:30", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-07", title: "Bachata Improvers", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Improvers", dayOfWeek: 1, startTime: "20:30", endTime: "21:30", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio A", isActive: true },
+  { id: "c-08", title: "Bachata Intermediate", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Intermediate", dayOfWeek: 1, startTime: "20:30", endTime: "21:30", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-09", title: "Monday Social", classType: "social", styleId: null, styleName: null, level: null, dayOfWeek: 1, startTime: "21:30", endTime: "00:00", maxCapacity: null, leaderCap: null, followerCap: null, location: "BPM Studio", isActive: true },
+
+  // ── TUESDAY (dayOfWeek=2) ──
+  { id: "c-10", title: "Yoga Flow", classType: "class", styleId: "ds-9", styleName: "Yoga", level: "All Levels", dayOfWeek: 2, startTime: "10:00", endTime: "11:00", maxCapacity: 25, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+  { id: "c-11", title: "Yoga Flow", classType: "class", styleId: "ds-9", styleName: "Yoga", level: "All Levels", dayOfWeek: 2, startTime: "11:00", endTime: "12:00", maxCapacity: 25, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+
+  // ── WEDNESDAY (dayOfWeek=3) ──
+  { id: "c-12", title: "Kids Hip Hop", classType: "class", styleId: "ds-10", styleName: "Kids Hip Hop", level: null, dayOfWeek: 3, startTime: "13:30", endTime: "14:30", maxCapacity: 15, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+  { id: "c-13", title: "Yoga Strength & Stability", classType: "class", styleId: "ds-9", styleName: "Yoga", level: "Strength & Stability", dayOfWeek: 3, startTime: "17:30", endTime: "18:30", maxCapacity: 25, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+  { id: "c-14", title: "Cuban Beginners 1", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Beginner 1", dayOfWeek: 3, startTime: "18:30", endTime: "19:30", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true, termBound: true, termId: "term-1" },
+  { id: "c-15", title: "Salsa Line Beginners 1", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Beginner 1", dayOfWeek: 3, startTime: "19:30", endTime: "20:30", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true, termBound: true, termId: "term-1" },
+  { id: "c-16", title: "Bachata Beginners 1", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Beginner 1", dayOfWeek: 3, startTime: "20:30", endTime: "21:30", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true, termBound: true, termId: "term-1" },
+  { id: "c-17", title: "Bachata Intermediate", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Intermediate", dayOfWeek: 3, startTime: "20:30", endTime: "21:30", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-18", title: "Wednesday Social", classType: "social", styleId: null, styleName: null, level: null, dayOfWeek: 3, startTime: "21:30", endTime: "00:00", maxCapacity: null, leaderCap: null, followerCap: null, location: "BPM Studio", isActive: true },
+
+  // ── FRIDAY (dayOfWeek=5) ──
+  { id: "c-19", title: "Cuban Improvers", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Improvers", dayOfWeek: 5, startTime: "18:00", endTime: "19:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio A", isActive: true },
+  { id: "c-20", title: "Cuban Intermediate", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Intermediate", dayOfWeek: 5, startTime: "18:00", endTime: "19:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-21", title: "Salsa Line Improvers", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Improvers", dayOfWeek: 5, startTime: "19:00", endTime: "20:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio A", isActive: true },
+  { id: "c-22", title: "Salsa Line Intermediate", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Intermediate", dayOfWeek: 5, startTime: "19:00", endTime: "20:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-23", title: "Bachata Traditional", classType: "class", styleId: "ds-2", styleName: "Bachata Tradicional", level: "Open", dayOfWeek: 5, startTime: "20:00", endTime: "21:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true },
+  { id: "c-24", title: "Bachata Improvers", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Improvers", dayOfWeek: 5, startTime: "21:00", endTime: "22:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio A", isActive: true },
+  { id: "c-25", title: "Bachata Intermediate", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Intermediate", dayOfWeek: 5, startTime: "21:00", endTime: "22:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-26", title: "Friday Social", classType: "social", styleId: null, styleName: null, level: null, dayOfWeek: 5, startTime: "22:00", endTime: "01:00", maxCapacity: null, leaderCap: null, followerCap: null, location: "BPM Studio", isActive: true },
+
+  // ── SATURDAY (dayOfWeek=6) ──
+  { id: "c-27", title: "Salsa Line Beginners 1", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Beginner 1", dayOfWeek: 6, startTime: "13:00", endTime: "14:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true, termBound: true, termId: "term-1" },
+  { id: "c-28", title: "Salsa Line Intermediate", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Intermediate", dayOfWeek: 6, startTime: "13:00", endTime: "14:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-29", title: "Bachata Beginners 1", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Beginner 1", dayOfWeek: 6, startTime: "14:00", endTime: "15:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true, termBound: true, termId: "term-1" },
+  { id: "c-30", title: "Bachata Intermediate", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Intermediate", dayOfWeek: 6, startTime: "14:00", endTime: "15:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-31", title: "Student Practice", classType: "student_practice", styleId: null, styleName: null, level: null, dayOfWeek: 6, startTime: "15:00", endTime: "16:00", maxCapacity: null, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+
+  // ── SUNDAY (dayOfWeek=0) ──
+  { id: "c-32", title: "Cuban Beginners 1", classType: "class", styleId: "ds-4", styleName: "Cuban", level: "Beginner 1", dayOfWeek: 0, startTime: "13:00", endTime: "14:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true, termBound: true, termId: "term-1" },
+  { id: "c-33", title: "Salsa Line Intermediate", classType: "class", styleId: "ds-5", styleName: "Salsa Line", level: "Intermediate", dayOfWeek: 0, startTime: "13:00", endTime: "14:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-34", title: "Bachata Beginners 1", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Beginner 1", dayOfWeek: 0, startTime: "14:00", endTime: "15:00", maxCapacity: 20, leaderCap: 10, followerCap: 10, location: "Studio A", isActive: true, termBound: true, termId: "term-1" },
+  { id: "c-35", title: "Bachata Intermediate", classType: "class", styleId: "ds-1", styleName: "Bachata", level: "Intermediate", dayOfWeek: 0, startTime: "14:00", endTime: "15:00", maxCapacity: 16, leaderCap: 8, followerCap: 8, location: "Studio B", isActive: true },
+  { id: "c-36", title: "Student Practice", classType: "student_practice", styleId: null, styleName: null, level: null, dayOfWeek: 0, startTime: "15:00", endTime: "16:00", maxCapacity: null, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
+  { id: "c-37", title: "Yoga Reset & Recovery", classType: "class", styleId: "ds-9", styleName: "Yoga", level: "Reset & Recovery", dayOfWeek: 0, startTime: "17:00", endTime: "18:00", maxCapacity: 25, leaderCap: null, followerCap: null, location: "Studio A", isActive: true },
 ];
 
-// ── Teacher Pairs ───────────────────────────────────────────
+// ── Teacher Pairs (assignments managed by admin) ────────────
 
 export interface MockTeacherPair {
   id: string;
@@ -118,20 +163,9 @@ export interface MockTeacherPair {
   isActive: boolean;
 }
 
-export const TEACHER_PAIRS: MockTeacherPair[] = [
-  { id: "tp-01", classId: "c-01", classTitle: "Bachata Beginner 1", teacher1Id: "t-01", teacher2Id: "t-02", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-02", classId: "c-02", classTitle: "Cuban Beginner 2", teacher1Id: "t-02", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-03", classId: "c-03", classTitle: "Bachata Beginner 2", teacher1Id: "t-01", teacher2Id: "t-02", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-04", classId: "c-04", classTitle: "Cuban Intermediate", teacher1Id: "t-02", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-05", classId: "c-05", classTitle: "Salsa Line Beginner 1", teacher1Id: "t-01", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-06", classId: "c-06", classTitle: "Salsa Line Beginner 2", teacher1Id: "t-01", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-07", classId: "c-08", classTitle: "Bachata Tradicional Beg 1", teacher1Id: "t-01", teacher2Id: "t-02", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-08", classId: "c-09", classTitle: "Bachata Partnerwork Int", teacher1Id: "t-01", teacher2Id: "t-02", effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-09", classId: "c-10", classTitle: "Cuban Beginner 1", teacher1Id: "t-02", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-  { id: "tp-10", classId: "c-14", classTitle: "Afro-Cuban Open", teacher1Id: "t-02", teacher2Id: null, effectiveFrom: "2025-01-01", effectiveUntil: null, isActive: true },
-];
+export const TEACHER_PAIRS: MockTeacherPair[] = [];
 
-// ── Bookable Classes ────────────────────────────────────────
+// ── Bookable Classes (Term 1 Week 1: Mar 30 – Apr 5) ───────
 
 export interface MockBookableClass {
   id: string;
@@ -156,33 +190,59 @@ export interface MockBookableClass {
   notes?: string | null;
   teacherOverride1Id?: string | null;
   teacherOverride2Id?: string | null;
+  termBound?: boolean;
+  termId?: string | null;
 }
 
 export const BOOKABLE_CLASSES: MockBookableClass[] = [
-  // Past week (closed)
-  { id: "bc-01", classId: "c-01", title: "Bachata Beginner 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-03-09", startTime: "19:00", endTime: "20:00", status: "closed", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 18, leaderCount: 9, followerCount: 9, waitlistCount: 0, location: "Studio A" },
-  { id: "bc-02", classId: "c-05", title: "Salsa Line Beginner 1", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Beginner 1", date: "2026-03-10", startTime: "19:00", endTime: "20:00", status: "closed", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 14, leaderCount: 7, followerCount: 7, waitlistCount: 0, location: "Studio A" },
-  { id: "bc-03", classId: "c-12", title: "BPM Friday Social", classType: "social", styleName: null, styleId: null, level: null, date: "2026-03-13", startTime: "21:00", endTime: "01:00", status: "closed", maxCapacity: null, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "BPM Studio" },
-  // This week
-  { id: "bc-04", classId: "c-01", title: "Bachata Beginner 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-03-16", startTime: "19:00", endTime: "20:00", status: "closed", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 20, leaderCount: 10, followerCount: 10, waitlistCount: 2, location: "Studio A" },
-  { id: "bc-05", classId: "c-02", title: "Cuban Beginner 2", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Beginner 2", date: "2026-03-16", startTime: "19:00", endTime: "20:00", status: "closed", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 12, leaderCount: 6, followerCount: 6, waitlistCount: 0, location: "Studio B" },
-  { id: "bc-06", classId: "c-05", title: "Salsa Line Beginner 1", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Beginner 1", date: "2026-03-17", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 8, leaderCount: 4, followerCount: 4, waitlistCount: 0, location: "Studio A" },
-  { id: "bc-07", classId: "c-07", title: "Reggaeton Open", classType: "class", styleName: "Reggaeton", styleId: "ds-6", level: "Open", date: "2026-03-17", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 11, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
-  { id: "bc-08", classId: "c-08", title: "Bachata Tradicional Beg 1", classType: "class", styleName: "Bachata Tradicional", styleId: "ds-2", level: "Beginner 1", date: "2026-03-18", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 6, leaderCount: 3, followerCount: 3, waitlistCount: 0, location: "Studio A" },
-  { id: "bc-09", classId: "c-10", title: "Cuban Beginner 1", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Beginner 1", date: "2026-03-19", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 10, leaderCount: 5, followerCount: 5, waitlistCount: 0, location: "Studio A" },
-  { id: "bc-10", classId: "c-12", title: "BPM Friday Social", classType: "social", styleName: null, styleId: null, level: null, date: "2026-03-20", startTime: "21:00", endTime: "01:00", status: "scheduled", maxCapacity: null, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "BPM Studio" },
-  { id: "bc-11", classId: "c-13", title: "Student Practice", classType: "student_practice", styleName: null, styleId: null, level: null, date: "2026-03-21", startTime: "14:00", endTime: "15:00", status: "scheduled", maxCapacity: null, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
-  // Next week (open)
-  { id: "bc-12", classId: "c-01", title: "Bachata Beginner 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-03-23", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 4, leaderCount: 2, followerCount: 2, waitlistCount: 0, location: "Studio A" },
-  { id: "bc-13", classId: "c-04", title: "Cuban Intermediate", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Intermediate", date: "2026-03-23", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 2, leaderCount: 1, followerCount: 1, waitlistCount: 0, location: "Studio B" },
-  { id: "bc-14", classId: "c-09", title: "Bachata Partnerwork Int", classType: "class", styleName: "Bachata Partnerwork", styleId: "ds-3", level: "Intermediate", date: "2026-03-25", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
-  // Week 3 Beginner 1 classes (beginner intake closed)
-  { id: "bc-15", classId: "c-01", title: "Bachata Beginner 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-03-30", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 6, leaderCount: 3, followerCount: 3, waitlistCount: 0, location: "Studio A" },
-  { id: "bc-16", classId: "c-10", title: "Cuban Beginner 1", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Beginner 1", date: "2026-04-02", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 8, leaderCount: 4, followerCount: 4, waitlistCount: 0, location: "Studio A" },
-  // Full-capacity class to demonstrate waitlist
-  { id: "bc-17", classId: "c-07", title: "Reggaeton Open", classType: "class", styleName: "Reggaeton", styleId: "ds-6", level: "Open", date: "2026-03-24", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 25, leaderCount: 0, followerCount: 0, waitlistCount: 1, location: "Studio B" },
-  // Week 3 non-beginner class
-  { id: "bc-18", classId: "c-03", title: "Bachata Beginner 2", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 2", date: "2026-03-30", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 4, leaderCount: 2, followerCount: 2, waitlistCount: 0, location: "Studio A" },
+  // ── Monday Mar 30 ──
+  { id: "bc-001", classId: "c-01", title: "Yoga Flow", classType: "class", styleName: "Yoga", styleId: "ds-9", level: "All Levels", date: "2026-03-30", startTime: "10:00", endTime: "11:00", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-002", classId: "c-02", title: "Yoga Flow", classType: "class", styleName: "Yoga", styleId: "ds-9", level: "All Levels", date: "2026-03-30", startTime: "11:00", endTime: "12:00", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-003", classId: "c-03", title: "Cuban Improvers", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Improvers", date: "2026-03-30", startTime: "18:30", endTime: "19:30", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-004", classId: "c-04", title: "Cuban Intermediate", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Intermediate", date: "2026-03-30", startTime: "18:30", endTime: "19:30", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-005", classId: "c-05", title: "Salsa Line Improvers", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Improvers", date: "2026-03-30", startTime: "19:30", endTime: "20:30", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-006", classId: "c-06", title: "Salsa Line Intermediate", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Intermediate", date: "2026-03-30", startTime: "19:30", endTime: "20:30", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-007", classId: "c-07", title: "Bachata Improvers", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Improvers", date: "2026-03-30", startTime: "20:30", endTime: "21:30", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-008", classId: "c-08", title: "Bachata Intermediate", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Intermediate", date: "2026-03-30", startTime: "20:30", endTime: "21:30", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-009", classId: "c-09", title: "Monday Social", classType: "social", styleName: null, styleId: null, level: null, date: "2026-03-30", startTime: "21:30", endTime: "00:00", status: "scheduled", maxCapacity: null, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "BPM Studio" },
+
+  // ── Tuesday Mar 31 ──
+  { id: "bc-010", classId: "c-10", title: "Yoga Flow", classType: "class", styleName: "Yoga", styleId: "ds-9", level: "All Levels", date: "2026-03-31", startTime: "10:00", endTime: "11:00", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-011", classId: "c-11", title: "Yoga Flow", classType: "class", styleName: "Yoga", styleId: "ds-9", level: "All Levels", date: "2026-03-31", startTime: "11:00", endTime: "12:00", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+
+  // ── Wednesday Apr 1 ──
+  { id: "bc-012", classId: "c-12", title: "Kids Hip Hop", classType: "class", styleName: "Kids Hip Hop", styleId: "ds-10", level: null, date: "2026-04-01", startTime: "13:30", endTime: "14:30", status: "open", maxCapacity: 15, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-013", classId: "c-13", title: "Yoga Strength & Stability", classType: "class", styleName: "Yoga", styleId: "ds-9", level: "Strength & Stability", date: "2026-04-01", startTime: "17:30", endTime: "18:30", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-014", classId: "c-14", title: "Cuban Beginners 1", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Beginner 1", date: "2026-04-01", startTime: "18:30", endTime: "19:30", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A", termBound: true, termId: "term-1" },
+  { id: "bc-015", classId: "c-15", title: "Salsa Line Beginners 1", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Beginner 1", date: "2026-04-01", startTime: "19:30", endTime: "20:30", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A", termBound: true, termId: "term-1" },
+  { id: "bc-016", classId: "c-16", title: "Bachata Beginners 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-04-01", startTime: "20:30", endTime: "21:30", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A", termBound: true, termId: "term-1" },
+  { id: "bc-017", classId: "c-17", title: "Bachata Intermediate", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Intermediate", date: "2026-04-01", startTime: "20:30", endTime: "21:30", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-018", classId: "c-18", title: "Wednesday Social", classType: "social", styleName: null, styleId: null, level: null, date: "2026-04-01", startTime: "21:30", endTime: "00:00", status: "scheduled", maxCapacity: null, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "BPM Studio" },
+
+  // ── Friday Apr 3 ──
+  { id: "bc-019", classId: "c-19", title: "Cuban Improvers", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Improvers", date: "2026-04-03", startTime: "18:00", endTime: "19:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-020", classId: "c-20", title: "Cuban Intermediate", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Intermediate", date: "2026-04-03", startTime: "18:00", endTime: "19:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-021", classId: "c-21", title: "Salsa Line Improvers", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Improvers", date: "2026-04-03", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-022", classId: "c-22", title: "Salsa Line Intermediate", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Intermediate", date: "2026-04-03", startTime: "19:00", endTime: "20:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-023", classId: "c-23", title: "Bachata Traditional", classType: "class", styleName: "Bachata Tradicional", styleId: "ds-2", level: "Open", date: "2026-04-03", startTime: "20:00", endTime: "21:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-024", classId: "c-24", title: "Bachata Improvers", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Improvers", date: "2026-04-03", startTime: "21:00", endTime: "22:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-025", classId: "c-25", title: "Bachata Intermediate", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Intermediate", date: "2026-04-03", startTime: "21:00", endTime: "22:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-026", classId: "c-26", title: "Friday Social", classType: "social", styleName: null, styleId: null, level: null, date: "2026-04-03", startTime: "22:00", endTime: "01:00", status: "scheduled", maxCapacity: null, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "BPM Studio" },
+
+  // ── Saturday Apr 4 ──
+  { id: "bc-027", classId: "c-27", title: "Salsa Line Beginners 1", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Beginner 1", date: "2026-04-04", startTime: "13:00", endTime: "14:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A", termBound: true, termId: "term-1" },
+  { id: "bc-028", classId: "c-28", title: "Salsa Line Intermediate", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Intermediate", date: "2026-04-04", startTime: "13:00", endTime: "14:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-029", classId: "c-29", title: "Bachata Beginners 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-04-04", startTime: "14:00", endTime: "15:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A", termBound: true, termId: "term-1" },
+  { id: "bc-030", classId: "c-30", title: "Bachata Intermediate", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Intermediate", date: "2026-04-04", startTime: "14:00", endTime: "15:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-031", classId: "c-31", title: "Student Practice", classType: "student_practice", styleName: null, styleId: null, level: null, date: "2026-04-04", startTime: "15:00", endTime: "16:00", status: "scheduled", maxCapacity: null, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+
+  // ── Sunday Apr 5 ──
+  { id: "bc-032", classId: "c-32", title: "Cuban Beginners 1", classType: "class", styleName: "Cuban", styleId: "ds-4", level: "Beginner 1", date: "2026-04-05", startTime: "13:00", endTime: "14:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A", termBound: true, termId: "term-1" },
+  { id: "bc-033", classId: "c-33", title: "Salsa Line Intermediate", classType: "class", styleName: "Salsa Line", styleId: "ds-5", level: "Intermediate", date: "2026-04-05", startTime: "13:00", endTime: "14:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-034", classId: "c-34", title: "Bachata Beginners 1", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Beginner 1", date: "2026-04-05", startTime: "14:00", endTime: "15:00", status: "open", maxCapacity: 20, leaderCap: 10, followerCap: 10, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A", termBound: true, termId: "term-1" },
+  { id: "bc-035", classId: "c-35", title: "Bachata Intermediate", classType: "class", styleName: "Bachata", styleId: "ds-1", level: "Intermediate", date: "2026-04-05", startTime: "14:00", endTime: "15:00", status: "open", maxCapacity: 16, leaderCap: 8, followerCap: 8, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio B" },
+  { id: "bc-036", classId: "c-36", title: "Student Practice", classType: "student_practice", styleName: null, styleId: null, level: null, date: "2026-04-05", startTime: "15:00", endTime: "16:00", status: "scheduled", maxCapacity: null, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
+  { id: "bc-037", classId: "c-37", title: "Yoga Reset & Recovery", classType: "class", styleName: "Yoga", styleId: "ds-9", level: "Reset & Recovery", date: "2026-04-05", startTime: "17:00", endTime: "18:00", status: "open", maxCapacity: 25, leaderCap: null, followerCap: null, bookedCount: 0, leaderCount: 0, followerCount: 0, waitlistCount: 0, location: "Studio A" },
 ];
 
 // ── Students ────────────────────────────────────────────────
@@ -204,17 +264,17 @@ export interface MockStudent {
 }
 
 export const STUDENTS: MockStudent[] = [
-  { id: "s-01", fullName: "Alice Murphy", email: "alice@test.com", phone: "+353 86 111 0001", preferredRole: "follower", isActive: true, notes: "Experienced dancer, attends regularly.", emergencyContactName: "Tom Murphy", emergencyContactPhone: "+353 86 222 0001", dateOfBirth: "1995-03-12", subscriptionName: "Gold Membership", remainingCredits: null, joinedAt: "2025-09-01" },
-  { id: "s-02", fullName: "Bob O'Brien", email: "bob@test.com", phone: "+353 86 111 0002", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1990-07-22", subscriptionName: "Silver Membership", remainingCredits: null, joinedAt: "2025-10-15" },
-  { id: "s-03", fullName: "Carol Walsh", email: "carol@test.com", phone: "+353 86 111 0003", preferredRole: "follower", isActive: true, notes: "Prefers evening classes.", emergencyContactName: "Mary Walsh", emergencyContactPhone: "+353 86 222 0003", dateOfBirth: null, subscriptionName: "Beginners 1 & 2 Promo Pass", remainingCredits: 12, joinedAt: "2026-01-10" },
-  { id: "s-04", fullName: "Dave Keane", email: "dave@test.com", phone: "+353 86 111 0004", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1988-11-05", subscriptionName: "Bronze Membership", remainingCredits: null, joinedAt: "2026-02-01" },
+  { id: "s-01", fullName: "Alice Murphy", email: "alice@test.com", phone: "+353 86 111 0001", preferredRole: "follower", isActive: true, notes: "Experienced dancer, attends regularly.", emergencyContactName: "Tom Murphy", emergencyContactPhone: "+353 86 222 0001", dateOfBirth: "1995-03-12", subscriptionName: "Gold Standard Membership", remainingCredits: null, joinedAt: "2025-09-01" },
+  { id: "s-02", fullName: "Bob O'Brien", email: "bob@test.com", phone: "+353 86 111 0002", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1990-07-22", subscriptionName: "Silver Bachata Membership", remainingCredits: null, joinedAt: "2025-10-15" },
+  { id: "s-03", fullName: "Carol Walsh", email: "carol@test.com", phone: "+353 86 111 0003", preferredRole: "follower", isActive: true, notes: "Prefers evening classes.", emergencyContactName: "Mary Walsh", emergencyContactPhone: "+353 86 222 0003", dateOfBirth: null, subscriptionName: "Beginners 1 & 2 Promo Pass", remainingCredits: 6, joinedAt: "2026-01-10" },
+  { id: "s-04", fullName: "Dave Keane", email: "dave@test.com", phone: "+353 86 111 0004", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1988-11-05", subscriptionName: "Bronze Standard Membership", remainingCredits: null, joinedAt: "2026-02-01" },
   { id: "s-05", fullName: "Eve Byrne", email: "eve@test.com", phone: null, preferredRole: "follower", isActive: true, notes: "New student, considering a membership.", emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1998-03-20", subscriptionName: null, remainingCredits: null, joinedAt: "2026-03-01" },
-  { id: "s-06", fullName: "Finn Doyle", email: "finn@test.com", phone: "+353 86 111 0006", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: "Sarah Doyle", emergencyContactPhone: "+353 86 222 0006", dateOfBirth: "1992-03-21", subscriptionName: "16 Classes Membership", remainingCredits: null, joinedAt: "2025-06-20" },
-  { id: "s-07", fullName: "Grace Kelly", email: "grace@test.com", phone: "+353 86 111 0007", preferredRole: "follower", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1998-06-15", subscriptionName: "Beginners Latin Combo", remainingCredits: 3, joinedAt: "2025-11-05" },
+  { id: "s-06", fullName: "Finn Doyle", email: "finn@test.com", phone: "+353 86 111 0006", preferredRole: "leader", isActive: true, notes: null, emergencyContactName: "Sarah Doyle", emergencyContactPhone: "+353 86 222 0006", dateOfBirth: "1992-03-21", subscriptionName: "Rainbow Membership", remainingCredits: null, joinedAt: "2025-06-20" },
+  { id: "s-07", fullName: "Grace Kelly", email: "grace@test.com", phone: "+353 86 111 0007", preferredRole: "follower", isActive: true, notes: null, emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: "1998-06-15", subscriptionName: "Latin Combo (Mix and Match)", remainingCredits: 3, joinedAt: "2025-11-05" },
   { id: "s-08", fullName: "Hugo Brennan", email: "hugo@test.com", phone: null, preferredRole: "leader", isActive: true, notes: "Has a single drop-in credit.", emergencyContactName: null, emergencyContactPhone: null, dateOfBirth: null, subscriptionName: "Drop In", remainingCredits: 1, joinedAt: "2026-03-10" },
 ];
 
-// ── Products ────────────────────────────────────────────────
+// ── Products (Real BPM catalog) ─────────────────────────────
 
 export interface MockProduct {
   id: string;
@@ -239,29 +299,52 @@ export interface MockProduct {
   benefits: string[] | null;
 }
 
-const MEMBERSHIP_BENEFITS = ["Birthday week free class", "Member giveaways", "Free weekend Student Practice"];
+const BRONZE_BENEFITS = ["Free entry to 1 community event per month or weekend Latin practice hours", "Member-exclusive giveaways", "Free class of your choice on your birthday week"];
+const SILVER_BENEFITS = [...BRONZE_BENEFITS];
+const GOLD_BENEFITS = ["Earlybird access to studio events", "Priority class booking", "Exclusive quarterly event for Gold members", "Special discounts on merchandise and studio events", ...BRONZE_BENEFITS];
+const RAINBOW_BENEFITS = [...GOLD_BENEFITS, "Free BPM T-shirt"];
 
 export const PRODUCTS: MockProduct[] = [
-  // ── Memberships (term-bound, recurring, classesPerTerm-based) ──
-  { id: "p-mem-4", name: "4 Classes Membership", description: "4 classes per term, all styles, all levels.", longDescription: "Access 4 classes per 4-week term across all dance styles and levels. Ideal for students who attend one class a week. Includes member perks: a free class during your birthday week, eligibility for member giveaways, and free access to weekend Student Practice sessions.", productType: "membership", priceCents: 4500, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 4, autoRenew: true, benefits: MEMBERSHIP_BENEFITS },
-  { id: "p-mem-8", name: "8 Classes Membership", description: "8 classes per term, all styles, all levels.", longDescription: "Access 8 classes per 4-week term across all dance styles and levels. Perfect for students who want to attend twice a week. Includes member perks: a free class during your birthday week, eligibility for member giveaways, and free access to weekend Student Practice sessions.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 8, autoRenew: true, benefits: MEMBERSHIP_BENEFITS },
-  { id: "p-mem-12", name: "12 Classes Membership", description: "12 classes per term, all styles, all levels.", longDescription: "Access 12 classes per 4-week term across all dance styles and levels. Great for dedicated dancers attending three times a week. Includes member perks: a free class during your birthday week, eligibility for member giveaways, and free access to weekend Student Practice sessions.", productType: "membership", priceCents: 8000, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 12, autoRenew: true, benefits: MEMBERSHIP_BENEFITS },
-  { id: "p-mem-16", name: "16 Classes Membership", description: "16 classes per term, all styles, all levels.", longDescription: "Access 16 classes per 4-week term across all dance styles and levels. Our most comprehensive membership for students who want to dance four or more times a week. Includes member perks: a free class during your birthday week, eligibility for member giveaways, and free access to weekend Student Practice sessions.", productType: "membership", priceCents: 9500, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 16, autoRenew: true, benefits: MEMBERSHIP_BENEFITS },
-
-  // ── Passes (term-bound, non-recurring, fixed credits) ──
-  { id: "p-pass-bronze", name: "Bronze Pass", description: "4 credits for one selected style.", longDescription: "A 4-credit class pass valid for one term. Choose one dance style at purchase and use your credits across any level within that style. Ideal for trying a new style or supplementing a membership.", productType: "pass", priceCents: 3000, totalCredits: 4, durationDays: null, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
-  { id: "p-pass-silver", name: "Silver Pass", description: "8 credits for one selected style.", longDescription: "An 8-credit class pass valid for one term. Choose one dance style at purchase and attend up to 8 classes at any level within that style. Great value for regular attendance in a single style.", productType: "pass", priceCents: 5000, totalCredits: 8, durationDays: null, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
-  { id: "p-pass-gold", name: "Gold Pass", description: "12 credits for one selected style.", longDescription: "A 12-credit class pass valid for one term. Choose one dance style at purchase and attend up to 12 classes at any level within that style. Our best pass value for students committed to mastering a single style.", productType: "pass", priceCents: 7000, totalCredits: 12, durationDays: null, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
-
   // ── Drop-in ──
-  { id: "p-dropin", name: "Drop In", description: "Single class entry, any style.", longDescription: "A single-use class entry valid for any style and any level. Pay at reception or have it assigned by an admin. No term commitment required.", productType: "drop_in", priceCents: 1200, totalCredits: 1, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Single use", creditsModel: "single_use", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-dropin", name: "Drop In", description: "One class pass. Pay at reception.", longDescription: "A single-use class entry valid for any style and any level. Pay at reception or have it assigned by an admin. No term commitment required.", productType: "drop_in", priceCents: 1500, totalCredits: 1, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Single use", creditsModel: "single_use", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
 
-  // ── Promo passes (kept, mapped to "pass" type) ──
-  { id: "p-beg12", name: "Beginners 1 & 2 Promo Pass", description: "Beg 1 + Beg 2 for ONE selected style. Valid for the term.", longDescription: "A promotional pass covering Beginner 1 and Beginner 2 levels in one selected dance style. Includes 16 credits valid for 8 weeks. Perfect for new students who want to progress through both beginner levels in a single style.", productType: "pass", priceCents: 2500, totalCredits: 16, durationDays: 56, styleName: "1 selected style", allowedLevels: ["Beginner 1", "Beginner 2"], isActive: true, isProvisional: false, notes: null, validityDescription: "8 weeks fixed", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
-  { id: "p-latin-combo", name: "Beginners Latin Combo", description: "Beg 1 in TWO of three Latin styles. Valid for the term.", longDescription: "A combo pass for Beginner 1 in two of three Latin styles (Bachata, Cuban, Salsa Line). Includes 16 credits valid for 8 weeks. Great for new students who want to explore multiple Latin dance styles from the start.", productType: "pass", priceCents: 3500, totalCredits: 16, durationDays: 56, styleName: "Pick 2 of 3 Latin", allowedLevels: ["Beginner 1"], isActive: true, isProvisional: true, notes: "Exact pool mapping configurable.", validityDescription: "8 weeks fixed", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  // ── Latin Passes (monthly, selected style) ──
+  { id: "p-lat-bronze", name: "Bronze Latin Pass", description: "4 classes per month. One dance style of your choice.", longDescription: "4 classes per month in one dance style of your choice. Pay online or at reception.", productType: "pass", priceCents: 5500, totalCredits: 4, durationDays: 30, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-lat-silver", name: "Silver Latin Pass", description: "8 classes per month. One dance style of your choice.", longDescription: "8 classes per month in one dance style of your choice. Pay online or at reception.", productType: "pass", priceCents: 10500, totalCredits: 8, durationDays: 30, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-lat-gold", name: "Gold Latin Pass", description: "12 classes per month. One dance style of your choice.", longDescription: "12 classes per month in one dance style of your choice. Pay online or at reception.", productType: "pass", priceCents: 15500, totalCredits: 12, durationDays: 30, styleName: "1 selected style", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
 
-  // ── Social pass ──
-  { id: "p-social", name: "Social Pass", description: "Entry to social events. Socials are not part of the class booking flow.", longDescription: "A pass for social dance events. Includes 4 entries over a rolling 30-day period. Socials are separate from the regular class schedule and are not subject to booking rules or penalties.", productType: "pass", priceCents: 2000, totalCredits: 4, durationDays: 30, styleName: "Socials only", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  // ── Yoga Passes (monthly, yoga only) ──
+  { id: "p-yoga-bronze", name: "Bronze Yoga Pass", description: "4 yoga classes per month.", longDescription: "4 yoga classes per month. Pay online or at reception.", productType: "pass", priceCents: 5500, totalCredits: 4, durationDays: 30, styleName: "Yoga", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-yoga-silver", name: "Silver Yoga Pass", description: "8 yoga classes per month.", longDescription: "8 yoga classes per month. Pay online or at reception.", productType: "pass", priceCents: 10500, totalCredits: 8, durationDays: 30, styleName: "Yoga", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-yoga-gold", name: "Gold Yoga Pass", description: "12 yoga classes per month.", longDescription: "12 yoga classes per month. Pay online or at reception.", productType: "pass", priceCents: 15500, totalCredits: 12, durationDays: 30, styleName: "Yoga", allowedLevels: null, isActive: true, isProvisional: true, notes: "Extrapolated from Latin pass pricing — pending academy confirmation.", validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+
+  // ── Promo / Combo Passes ──
+  { id: "p-beg12", name: "Beginners 1 & 2 Promo Pass", description: "8 classes of one dance style. Covers Beginner 1 + 2.", longDescription: "8 classes in one selected dance style covering Beginner 1 and Beginner 2 levels. Pay at reception or online.", productType: "pass", priceCents: 10000, totalCredits: 8, durationDays: 56, styleName: "1 selected style", allowedLevels: ["Beginner 1", "Beginner 2"], isActive: true, isProvisional: false, notes: null, validityDescription: "8 weeks fixed", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+  { id: "p-latin-combo", name: "Latin Combo (Mix and Match)", description: "8 classes. Mix two of our three Beginner 1 courses.", longDescription: "Mix and match two of our three Beginner 1 courses (Bachata, Cuban, Salsa Line). Includes 8 classes. Pay at reception or online.", productType: "pass", priceCents: 9000, totalCredits: 8, durationDays: 56, styleName: "Pick 2 of 3 Latin", allowedLevels: ["Beginner 1"], isActive: true, isProvisional: true, notes: "Exact pool mapping configurable.", validityDescription: "8 weeks fixed", creditsModel: "fixed", termBound: true, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+
+  // ── Social Pass ──
+  { id: "p-social", name: "Social Pass", description: "20 socials per month. Weekday socials + weekend student practice.", longDescription: "Access to standard weekday socials (Mon, Wed, Fri, and weekend student practice). Includes 20 socials per month. Events are not included.", productType: "pass", priceCents: 10000, totalCredits: 20, durationDays: 30, styleName: "Socials only", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Monthly rolling", creditsModel: "fixed", termBound: false, recurring: false, classesPerTerm: null, autoRenew: false, benefits: null },
+
+  // ── Bronze Memberships (4 classes/month) ──
+  { id: "p-mem-bronze-std", name: "Bronze Standard Membership", description: "4 classes per month (excluding Salsa & Bachata classes).", longDescription: "4 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: null, styleName: "Excl. Salsa & Bachata", allowedLevels: null, isActive: true, isProvisional: true, notes: "PROVISIONAL: Exact style exclusion rules pending academy confirmation.", validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 4, autoRenew: true, benefits: BRONZE_BENEFITS },
+  { id: "p-mem-bronze-bach", name: "Bronze Bachata Membership", description: "4 classes per month (Bachata classes only).", longDescription: "4 Bachata classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: null, styleName: "Bachata", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 4, autoRenew: true, benefits: BRONZE_BENEFITS },
+  { id: "p-mem-bronze-salsa", name: "Bronze Salsa Membership", description: "4 classes per month (Salsa classes only).", longDescription: "4 Salsa classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 6500, totalCredits: null, durationDays: null, styleName: "Salsa", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 4, autoRenew: true, benefits: BRONZE_BENEFITS },
+  { id: "p-mem-bronze-yoga", name: "Bronze Yoga Membership", description: "4 classes per month (Yoga classes only).", longDescription: "4 Yoga classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 6000, totalCredits: null, durationDays: null, styleName: "Yoga", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 4, autoRenew: true, benefits: BRONZE_BENEFITS },
+
+  // ── Silver Memberships (8 classes/month) ──
+  { id: "p-mem-silver-std", name: "Silver Standard Membership", description: "8 classes per month (excluding Salsa & Bachata classes).", longDescription: "8 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.", productType: "membership", priceCents: 12000, totalCredits: null, durationDays: null, styleName: "Excl. Salsa & Bachata", allowedLevels: null, isActive: true, isProvisional: true, notes: "PROVISIONAL: Exact style exclusion rules pending academy confirmation.", validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 8, autoRenew: true, benefits: SILVER_BENEFITS },
+  { id: "p-mem-silver-bach", name: "Silver Bachata Membership", description: "8 classes per month (Bachata classes only).", longDescription: "8 Bachata classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 12000, totalCredits: null, durationDays: null, styleName: "Bachata", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 8, autoRenew: true, benefits: SILVER_BENEFITS },
+  { id: "p-mem-silver-salsa", name: "Silver Salsa Membership", description: "8 classes per month (Salsa classes only).", longDescription: "8 Salsa classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 12000, totalCredits: null, durationDays: null, styleName: "Salsa", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 8, autoRenew: true, benefits: SILVER_BENEFITS },
+  { id: "p-mem-silver-yoga", name: "Silver Yoga Membership", description: "8 classes per month (Yoga classes only).", longDescription: "8 Yoga classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 11000, totalCredits: null, durationDays: null, styleName: "Yoga", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 8, autoRenew: true, benefits: SILVER_BENEFITS },
+
+  // ── Gold Memberships (12 classes/month) ──
+  { id: "p-mem-gold-std", name: "Gold Standard Membership", description: "12 classes per month (excluding Salsa & Bachata classes).", longDescription: "12 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.", productType: "membership", priceCents: 17000, totalCredits: null, durationDays: null, styleName: "Excl. Salsa & Bachata", allowedLevels: null, isActive: true, isProvisional: true, notes: "PROVISIONAL: Exact style exclusion rules pending academy confirmation.", validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 12, autoRenew: true, benefits: GOLD_BENEFITS },
+  { id: "p-mem-gold-bach", name: "Gold Bachata Membership", description: "12 classes per month (Bachata classes only).", longDescription: "12 Bachata classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 17000, totalCredits: null, durationDays: null, styleName: "Bachata", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 12, autoRenew: true, benefits: GOLD_BENEFITS },
+  { id: "p-mem-gold-salsa", name: "Gold Salsa Membership", description: "12 classes per month (Salsa classes only).", longDescription: "12 Salsa classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 17000, totalCredits: null, durationDays: null, styleName: "Salsa", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 12, autoRenew: true, benefits: GOLD_BENEFITS },
+  { id: "p-mem-gold-yoga", name: "Gold Yoga Membership", description: "12 classes per month (Yoga classes only).", longDescription: "12 Yoga classes per month. Cash or card with auto-renewal.", productType: "membership", priceCents: 16000, totalCredits: null, durationDays: null, styleName: "Yoga", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 12, autoRenew: true, benefits: GOLD_BENEFITS },
+
+  // ── Rainbow Membership (all-access, 16 classes/month) ──
+  { id: "p-mem-rainbow", name: "Rainbow Membership", description: "16 classes per month, all styles included.", longDescription: "16 classes per month across all styles. Our all-access membership with maximum flexibility. Cash or card with auto-renewal.", productType: "membership", priceCents: 22000, totalCredits: null, durationDays: null, styleName: "All styles", allowedLevels: null, isActive: true, isProvisional: false, notes: null, validityDescription: "Per term", creditsModel: "unlimited", termBound: true, recurring: true, classesPerTerm: 16, autoRenew: true, benefits: RAINBOW_BENEFITS },
 ];
 
 // ── Bookings ────────────────────────────────────────────────
@@ -282,17 +365,11 @@ export interface MockBooking {
 }
 
 export const BOOKINGS: MockBooking[] = [
-  { id: "b-01", bookableClassId: "bc-04", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-01", subscriptionName: "12 Classes Membership", bookedAt: "2026-03-14T10:00:00" },
-  { id: "b-02", bookableClassId: "bc-04", studentId: "s-02", studentName: "Bob O'Brien", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionId: "sub-02", subscriptionName: "8 Classes Membership", bookedAt: "2026-03-14T11:30:00" },
-  { id: "b-03", bookableClassId: "bc-04", studentId: "s-03", studentName: "Carol Walsh", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-03", subscriptionName: "Beginners 1 & 2 Promo Pass", bookedAt: "2026-03-14T14:00:00" },
-  { id: "b-04", bookableClassId: "bc-04", studentId: "s-06", studentName: "Finn Doyle", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionId: "sub-06", subscriptionName: "16 Classes Membership", bookedAt: "2026-03-15T09:00:00" },
-  { id: "b-05", bookableClassId: "bc-04", studentId: "s-04", studentName: "Dave Keane", classTitle: "Bachata Beginner 1", date: "2026-03-16", startTime: "19:00", danceRole: "leader", status: "cancelled", subscriptionId: "sub-04", subscriptionName: "4 Classes Membership", bookedAt: "2026-03-14T16:00:00" },
-  { id: "b-06", bookableClassId: "bc-05", studentId: "s-07", studentName: "Grace Kelly", classTitle: "Cuban Beginner 2", date: "2026-03-16", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-07", subscriptionName: "Beginners Latin Combo", bookedAt: "2026-03-15T08:00:00" },
-  { id: "b-07", bookableClassId: "bc-06", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Salsa Line Beginner 1", date: "2026-03-17", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-01", subscriptionName: "12 Classes Membership", bookedAt: "2026-03-15T12:00:00" },
-  { id: "b-08", bookableClassId: "bc-07", studentId: "s-08", studentName: "Hugo Brennan", classTitle: "Reggaeton Open", date: "2026-03-17", startTime: "20:00", danceRole: null, status: "confirmed", subscriptionId: "sub-08", subscriptionName: "Drop In", bookedAt: "2026-03-16T10:00:00" },
-  { id: "b-09", bookableClassId: "bc-12", studentId: "s-02", studentName: "Bob O'Brien", classTitle: "Bachata Beginner 1", date: "2026-03-23", startTime: "19:00", danceRole: "leader", status: "confirmed", subscriptionId: "sub-02", subscriptionName: "8 Classes Membership", bookedAt: "2026-03-17T07:00:00" },
-  { id: "b-10", bookableClassId: "bc-12", studentId: "s-05", studentName: "Eve Byrne", classTitle: "Bachata Beginner 1", date: "2026-03-23", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: null, subscriptionName: null, bookedAt: "2026-03-17T08:30:00" },
-  { id: "b-11", bookableClassId: "bc-08", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Bachata Tradicional Beg 1", date: "2026-03-18", startTime: "19:00", danceRole: "follower", status: "confirmed", subscriptionId: "sub-01", subscriptionName: "12 Classes Membership", bookedAt: "2026-03-16T14:00:00" },
+  { id: "b-01", bookableClassId: "bc-007", studentId: "s-01", studentName: "Alice Murphy", classTitle: "Bachata Improvers", date: "2026-03-30", startTime: "20:30", danceRole: "follower", status: "confirmed", subscriptionId: "sub-01", subscriptionName: "Gold Standard Membership", bookedAt: "2026-03-25T10:00:00" },
+  { id: "b-02", bookableClassId: "bc-007", studentId: "s-02", studentName: "Bob O'Brien", classTitle: "Bachata Improvers", date: "2026-03-30", startTime: "20:30", danceRole: "leader", status: "confirmed", subscriptionId: "sub-02", subscriptionName: "Silver Bachata Membership", bookedAt: "2026-03-25T11:00:00" },
+  { id: "b-03", bookableClassId: "bc-016", studentId: "s-03", studentName: "Carol Walsh", classTitle: "Bachata Beginners 1", date: "2026-04-01", startTime: "20:30", danceRole: "follower", status: "confirmed", subscriptionId: "sub-03", subscriptionName: "Beginners 1 & 2 Promo Pass", bookedAt: "2026-03-26T14:00:00" },
+  { id: "b-04", bookableClassId: "bc-003", studentId: "s-06", studentName: "Finn Doyle", classTitle: "Cuban Improvers", date: "2026-03-30", startTime: "18:30", danceRole: "leader", status: "confirmed", subscriptionId: "sub-06", subscriptionName: "Rainbow Membership", bookedAt: "2026-03-26T09:00:00" },
+  { id: "b-05", bookableClassId: "bc-001", studentId: "s-08", studentName: "Hugo Brennan", classTitle: "Yoga Flow", date: "2026-03-30", startTime: "10:00", danceRole: null, status: "confirmed", subscriptionId: "sub-08", subscriptionName: "Drop In", bookedAt: "2026-03-27T08:00:00" },
 ];
 
 // ── Waitlist ─────────────────────────────────────────────────
@@ -308,11 +385,7 @@ export interface MockWaitlistEntry {
   joinedAt: string;
 }
 
-export const WAITLIST_ENTRIES: MockWaitlistEntry[] = [
-  { id: "wl-01", bookableClassId: "bc-04", studentId: "s-08", studentName: "Hugo Brennan", danceRole: "leader", status: "waiting", position: 1, joinedAt: "2026-03-15T17:00:00" },
-  { id: "wl-02", bookableClassId: "bc-04", studentId: "s-05", studentName: "Eve Byrne", danceRole: "follower", status: "waiting", position: 2, joinedAt: "2026-03-15T18:30:00" },
-  { id: "wl-03", bookableClassId: "bc-17", studentId: "s-04", studentName: "Dave Keane", danceRole: null, status: "waiting", position: 1, joinedAt: "2026-03-17T12:00:00" },
-];
+export const WAITLIST_ENTRIES: MockWaitlistEntry[] = [];
 
 // ── Attendance ──────────────────────────────────────────────
 
@@ -325,23 +398,13 @@ export interface MockAttendance {
   classTitle: string;
   date: string;
   status: AttendanceMark;
-  /** TODO: "qr" path will be used when QR check-in is added */
   checkInMethod: CheckInMethod;
   markedBy: string;
   markedAt: string;
   notes: string | null;
 }
 
-export const ATTENDANCE: MockAttendance[] = [
-  { id: "a-01", bookableClassId: "bc-01", studentId: "s-01", studentName: "Alice Murphy", bookingId: null, classTitle: "Bachata Beginner 1", date: "2026-03-09", status: "present", checkInMethod: "manual", markedBy: "María García", markedAt: "2026-03-09T20:05:00", notes: null },
-  { id: "a-02", bookableClassId: "bc-01", studentId: "s-02", studentName: "Bob O'Brien", bookingId: null, classTitle: "Bachata Beginner 1", date: "2026-03-09", status: "present", checkInMethod: "manual", markedBy: "María García", markedAt: "2026-03-09T20:05:00", notes: null },
-  { id: "a-03", bookableClassId: "bc-01", studentId: "s-03", studentName: "Carol Walsh", bookingId: null, classTitle: "Bachata Beginner 1", date: "2026-03-09", status: "late", checkInMethod: "manual", markedBy: "María García", markedAt: "2026-03-09T20:05:00", notes: null },
-  { id: "a-04", bookableClassId: "bc-01", studentId: "s-04", studentName: "Dave Keane", bookingId: null, classTitle: "Bachata Beginner 1", date: "2026-03-09", status: "absent", checkInMethod: "manual", markedBy: "María García", markedAt: "2026-03-09T20:05:00", notes: null },
-  { id: "a-05", bookableClassId: "bc-01", studentId: "s-06", studentName: "Finn Doyle", bookingId: null, classTitle: "Bachata Beginner 1", date: "2026-03-09", status: "present", checkInMethod: "manual", markedBy: "María García", markedAt: "2026-03-09T20:05:00", notes: null },
-  { id: "a-06", bookableClassId: "bc-02", studentId: "s-07", studentName: "Grace Kelly", bookingId: null, classTitle: "Salsa Line Beginner 1", date: "2026-03-10", status: "present", checkInMethod: "manual", markedBy: "María García", markedAt: "2026-03-10T20:05:00", notes: null },
-  { id: "a-07", bookableClassId: "bc-02", studentId: "s-01", studentName: "Alice Murphy", bookingId: null, classTitle: "Salsa Line Beginner 1", date: "2026-03-10", status: "present", checkInMethod: "manual", markedBy: "María García", markedAt: "2026-03-10T20:05:00", notes: null },
-  { id: "a-08", bookableClassId: "bc-02", studentId: "s-08", studentName: "Hugo Brennan", bookingId: null, classTitle: "Salsa Line Beginner 1", date: "2026-03-10", status: "absent", checkInMethod: "manual", markedBy: "María García", markedAt: "2026-03-10T20:05:00", notes: null },
-];
+export const ATTENDANCE: MockAttendance[] = [];
 
 // ── Penalties ────────────────────────────────────────────────
 
@@ -362,11 +425,7 @@ export interface MockPenalty {
   notes: string | null;
 }
 
-export const PENALTIES: MockPenalty[] = [
-  { id: "pen-01", studentId: "s-04", studentName: "Dave Keane", bookingId: "b-04", bookableClassId: "bc-01", classTitle: "Bachata Beginner 1", date: "2026-03-09", reason: "no_show", amountCents: 500, resolution: "monetary_pending", subscriptionId: null, creditDeducted: 0, createdAt: "2026-03-09T20:10:00", notes: "Student did not respond to follow-up email." },
-  { id: "pen-02", studentId: "s-08", studentName: "Hugo Brennan", bookingId: "b-08", bookableClassId: "bc-02", classTitle: "Salsa Line Beginner 1", date: "2026-03-10", reason: "no_show", amountCents: 500, resolution: "credit_deducted", subscriptionId: "sub-08", creditDeducted: 1, createdAt: "2026-03-10T20:10:00", notes: null },
-  { id: "pen-03", studentId: "s-04", studentName: "Dave Keane", bookingId: "b-14", bookableClassId: "bc-04", classTitle: "Bachata Beginner 1", date: "2026-03-16", reason: "late_cancel", amountCents: 200, resolution: "monetary_pending", subscriptionId: null, creditDeducted: 0, createdAt: "2026-03-16T15:00:00", notes: null },
-];
+export const PENALTIES: MockPenalty[] = [];
 
 // ── Subscriptions ───────────────────────────────────────────
 
@@ -397,24 +456,14 @@ export interface MockSubscription {
 }
 
 export const SUBSCRIPTIONS: MockSubscription[] = [
-  // Alice — active 12 Classes Membership (card)
-  { id: "sub-01", studentId: "s-01", productId: "p-mem-12", productName: "12 Classes Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "card", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-08T10:00:00", autoRenew: true, classesUsed: 3, classesPerTerm: 12 },
-  // Alice — historical expired 8 Classes Membership from a prior term
-  { id: "sub-01-hist", studentId: "s-01", productId: "p-mem-8", productName: "8 Classes Membership", productType: "membership", status: "expired", totalCredits: null, remainingCredits: null, validFrom: "2026-02-09", validUntil: "2026-03-08", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Previous term membership.", termId: null, paymentMethod: "card", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-02-08T14:00:00", autoRenew: false, classesUsed: 8, classesPerTerm: 8 },
-  // Bob — active 8 Classes Membership (cash)
-  { id: "sub-02", studentId: "s-02", productId: "p-mem-8", productName: "8 Classes Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "cash", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-08T11:30:00", autoRenew: true, classesUsed: 2, classesPerTerm: 8 },
-  // Carol — active Beginners 1&2 Promo (complimentary)
-  { id: "sub-03", studentId: "s-03", productId: "p-beg12", productName: "Beginners 1 & 2 Promo Pass", productType: "pass", status: "active", totalCredits: 16, remainingCredits: 12, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: "ds-1", selectedStyleName: "Bachata", selectedStyleIds: null, selectedStyleNames: null, notes: "Selected Bachata as promo style.", termId: "term-1", paymentMethod: "complimentary", paymentStatus: "complimentary", assignedBy: "Admin", assignedAt: "2026-03-08T14:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null },
-  // Dave — active 4 Classes Membership (bank transfer)
-  { id: "sub-04", studentId: "s-04", productId: "p-mem-4", productName: "4 Classes Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "bank_transfer", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-07T16:00:00", autoRenew: false, classesUsed: 1, classesPerTerm: 4 },
-  // Eve — complimentary drop-in
-  { id: "sub-05", studentId: "s-05", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "active", totalCredits: 1, remainingCredits: 1, validFrom: "2026-03-15", validUntil: null, selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Complimentary trial drop-in.", termId: null, paymentMethod: "complimentary", paymentStatus: "complimentary", assignedBy: "Admin", assignedAt: "2026-03-15T09:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null },
-  // Finn — active 16 Classes Membership (Revolut) — birthday week eligible
-  { id: "sub-06", studentId: "s-06", productId: "p-mem-16", productName: "16 Classes Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "revolut", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-08T09:00:00", autoRenew: true, classesUsed: 4, classesPerTerm: 16 },
-  // Grace — active Latin Combo (manual)
-  { id: "sub-07", studentId: "s-07", productId: "p-latin-combo", productName: "Beginners Latin Combo", productType: "pass", status: "active", totalCredits: 16, remainingCredits: 3, validFrom: "2026-03-09", validUntil: "2026-04-05", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: ["ds-1", "ds-5"], selectedStyleNames: ["Bachata", "Salsa Line"], notes: null, termId: "term-1", paymentMethod: "manual", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-07T08:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null },
-  // Hugo — active drop-in (cash)
-  { id: "sub-08", studentId: "s-08", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "active", totalCredits: 1, remainingCredits: 1, validFrom: "2026-03-10", validUntil: null, selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Single drop-in before Hugo moved.", termId: null, paymentMethod: "cash", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-10T10:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null },
+  { id: "sub-01", studentId: "s-01", productId: "p-mem-gold-std", productName: "Gold Standard Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-30", validUntil: "2026-04-26", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "card", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-25T10:00:00", autoRenew: true, classesUsed: 0, classesPerTerm: 12 },
+  { id: "sub-02", studentId: "s-02", productId: "p-mem-silver-bach", productName: "Silver Bachata Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-30", validUntil: "2026-04-26", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "cash", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-25T11:30:00", autoRenew: true, classesUsed: 0, classesPerTerm: 8 },
+  { id: "sub-03", studentId: "s-03", productId: "p-beg12", productName: "Beginners 1 & 2 Promo Pass", productType: "pass", status: "active", totalCredits: 8, remainingCredits: 6, validFrom: "2026-03-30", validUntil: "2026-05-24", selectedStyleId: "ds-1", selectedStyleName: "Bachata", selectedStyleIds: null, selectedStyleNames: null, notes: "Selected Bachata as promo style.", termId: "term-1", paymentMethod: "card", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-25T14:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null },
+  { id: "sub-04", studentId: "s-04", productId: "p-mem-bronze-std", productName: "Bronze Standard Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-30", validUntil: "2026-04-26", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "bank_transfer", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-24T16:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: 4 },
+  { id: "sub-05", studentId: "s-05", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "active", totalCredits: 1, remainingCredits: 1, validFrom: "2026-03-25", validUntil: null, selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Complimentary trial drop-in.", termId: null, paymentMethod: "complimentary", paymentStatus: "complimentary", assignedBy: "Admin", assignedAt: "2026-03-25T09:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null },
+  { id: "sub-06", studentId: "s-06", productId: "p-mem-rainbow", productName: "Rainbow Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-30", validUntil: "2026-04-26", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "revolut", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-25T09:00:00", autoRenew: true, classesUsed: 0, classesPerTerm: 16 },
+  { id: "sub-07", studentId: "s-07", productId: "p-latin-combo", productName: "Latin Combo (Mix and Match)", productType: "pass", status: "active", totalCredits: 8, remainingCredits: 3, validFrom: "2026-03-30", validUntil: "2026-05-24", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: ["ds-1", "ds-5"], selectedStyleNames: ["Bachata", "Salsa Line"], notes: null, termId: "term-1", paymentMethod: "manual", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-24T08:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null },
+  { id: "sub-08", studentId: "s-08", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "active", totalCredits: 1, remainingCredits: 1, validFrom: "2026-03-25", validUntil: null, selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Single drop-in.", termId: null, paymentMethod: "cash", paymentStatus: "paid", assignedBy: "Admin", assignedAt: "2026-03-25T10:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null },
 ];
 
 // ── Wallet Transactions ─────────────────────────────────────
@@ -431,13 +480,4 @@ export interface MockWalletTx {
   createdAt: string;
 }
 
-export const WALLET_TRANSACTIONS: MockWalletTx[] = [
-  { id: "tx-01", studentId: "s-03", subscriptionId: "sub-03", bookingId: "b-03", txType: "credit_used", credits: -1, balanceAfter: 15, description: "Credit used for Bachata Beginner 1 (Beginners 1 & 2 Promo Pass)", createdAt: "2026-01-14T14:00:00" },
-  { id: "tx-02", studentId: "s-03", subscriptionId: "sub-03", bookingId: null, txType: "credit_used", credits: -1, balanceAfter: 14, description: "Credit used for Bachata Beginner 2 (Beginners 1 & 2 Promo Pass)", createdAt: "2026-01-14T20:15:00" },
-  { id: "tx-03", studentId: "s-03", subscriptionId: "sub-03", bookingId: null, txType: "credit_used", credits: -1, balanceAfter: 13, description: "Credit used for Bachata Beginner 1 (Beginners 1 & 2 Promo Pass)", createdAt: "2026-01-21T19:10:00" },
-  { id: "tx-04", studentId: "s-03", subscriptionId: "sub-03", bookingId: null, txType: "credit_used", credits: -1, balanceAfter: 12, description: "Credit used for Bachata Beginner 2 (Beginners 1 & 2 Promo Pass)", createdAt: "2026-01-21T20:10:00" },
-  { id: "tx-05", studentId: "s-07", subscriptionId: "sub-07", bookingId: null, txType: "credit_used", credits: -1, balanceAfter: 5, description: "Credit used for Bachata Beginner 1 (Beginners Latin Combo)", createdAt: "2026-02-24T19:05:00" },
-  { id: "tx-06", studentId: "s-07", subscriptionId: "sub-07", bookingId: null, txType: "credit_used", credits: -1, balanceAfter: 4, description: "Credit used for Salsa Line Beginner 1 (Beginners Latin Combo)", createdAt: "2026-02-25T19:05:00" },
-  { id: "tx-07", studentId: "s-07", subscriptionId: "sub-07", bookingId: null, txType: "credit_used", credits: -1, balanceAfter: 3, description: "Credit used for Bachata Beginner 1 (Beginners Latin Combo)", createdAt: "2026-03-03T19:05:00" },
-  { id: "tx-08", studentId: "s-08", subscriptionId: "sub-08", bookingId: "b-08", txType: "credit_used", credits: -1, balanceAfter: 0, description: "Credit used for Reggaeton Open (Drop In)", createdAt: "2026-03-17T20:05:00" },
-];
+export const WALLET_TRANSACTIONS: MockWalletTx[] = [];

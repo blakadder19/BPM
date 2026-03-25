@@ -40,14 +40,26 @@ import {
   createInstanceInDB,
   saveInstanceToDB,
   updateInstanceStatusInDB,
-  deleteTemplateFromDB,
   deleteInstanceFromDB,
 } from "@/lib/supabase/schedule-persistence";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
+import { getTermRepo } from "@/lib/repositories";
+import { findTermForDate, isTermBoundLevel } from "@/lib/domain/term-rules";
+import { requireRole } from "@/lib/auth";
 import type { ClassType, InstanceStatus } from "@/types/domain";
+import { isClassEnded } from "@/lib/domain/datetime";
+import { BLOCKED_SENTINEL } from "@/lib/constants/teacher-assignment";
 
 function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function isUUID(id: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
+function dbError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 const VALID_CLASS_TYPES = new Set<string>(["class", "social", "student_practice"]);
@@ -64,6 +76,7 @@ function revalidateClasses() {
 export async function createTemplateAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
 
   const title = (formData.get("title") as string)?.trim();
@@ -79,6 +92,8 @@ export async function createTemplateAction(
   const followerCap = formData.get("followerCap") ? Number(formData.get("followerCap")) : null;
   const location = (formData.get("location") as string)?.trim() || "Studio A";
   const isActive = formData.get("isActive") === "true";
+  const termBound = isTermBoundLevel(level);
+  const termId = termBound ? ((formData.get("termId") as string)?.trim() || null) : null;
   const notes = (formData.get("notes") as string)?.trim() || null;
 
   if (!title) return { success: false, error: "Title is required" };
@@ -87,22 +102,27 @@ export async function createTemplateAction(
   if (!startTime || !endTime) return { success: false, error: "Start and end time required" };
   if (endTime <= startTime) return { success: false, error: "End time must be after start time" };
 
+  // UI uses 1=Mon..7=Sun; DB CHECK constraint uses 0=Sun..6=Sat
+  const dbDayOfWeek = dayOfWeek === 7 ? 0 : dayOfWeek;
+
   const templateData = {
     title,
     classType: classType as ClassType,
-    styleName, styleId, level, dayOfWeek,
+    styleName, styleId, level, dayOfWeek: dbDayOfWeek,
     startTime, endTime, maxCapacity, leaderCap, followerCap,
-    location, isActive, notes,
+    location, isActive, termBound, termId, notes,
   };
 
-  const memTpl = createTemplate(templateData);
-
-  const dbTpl = await createTemplateToDB({
-    ...templateData,
-    classType: templateData.classType as "class" | "social" | "student_practice",
-  });
-  if (dbTpl) {
-    memTpl.id = dbTpl.id;
+  try {
+    const dbTpl = await createTemplateToDB({
+      ...templateData,
+      classType: templateData.classType as "class" | "social" | "student_practice",
+    });
+    const memTpl = createTemplate(templateData);
+    if (dbTpl) memTpl.id = dbTpl.id;
+  } catch (err) {
+    console.error("[createTemplateAction] DB write failed:", err);
+    return { success: false, error: `Failed to save template: ${dbError(err)}` };
   }
 
   revalidateClasses();
@@ -112,6 +132,7 @@ export async function createTemplateAction(
 export async function updateTemplateAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
 
   const id = (formData.get("id") as string)?.trim();
@@ -126,24 +147,40 @@ export async function updateTemplateAction(
   if (classType && !VALID_CLASS_TYPES.has(classType)) return { success: false, error: "Invalid class type" };
   if (startTime && endTime && endTime <= startTime) return { success: false, error: "End time must be after start time" };
 
-  const updated = updateTemplate(id, {
+  const rawDay = Number(formData.get("dayOfWeek"));
+  const dbDay = rawDay === 7 ? 0 : rawDay;
+
+  const patch = {
     title,
     classType: classType as ClassType,
     styleName: (formData.get("styleName") as string)?.trim() || null,
     styleId: (formData.get("styleId") as string)?.trim() || null,
     level: (formData.get("level") as string)?.trim() || null,
-    dayOfWeek: Number(formData.get("dayOfWeek")),
+    dayOfWeek: dbDay,
     startTime, endTime,
     maxCapacity: formData.get("maxCapacity") ? Number(formData.get("maxCapacity")) : null,
     leaderCap: formData.get("leaderCap") ? Number(formData.get("leaderCap")) : null,
     followerCap: formData.get("followerCap") ? Number(formData.get("followerCap")) : null,
     location: (formData.get("location") as string)?.trim() || "Studio A",
     isActive: formData.get("isActive") === "true",
-    notes: (formData.get("notes") as string)?.trim() || null,
-  });
+    termBound: isTermBoundLevel((formData.get("level") as string)?.trim() || null),
+    termId: isTermBoundLevel((formData.get("level") as string)?.trim() || null) ? ((formData.get("termId") as string)?.trim() || null) : null,
+  };
 
-  if (!updated) return { success: false, error: "Template not found" };
-  await saveTemplateToDB(updated);
+  const dbPatch: Record<string, unknown> = { ...patch };
+  if (!patch.termBound) { delete dbPatch.termBound; delete dbPatch.termId; }
+  delete dbPatch.notes;
+
+  try {
+    await saveTemplateToDB(id, dbPatch);
+  } catch (err) {
+    console.error("[updateTemplateAction] DB write failed:", err);
+    return { success: false, error: `Failed to save template: ${dbError(err)}` };
+  }
+
+  const updated = updateTemplate(id, patch);
+  if (!updated) return { success: false, error: "Template not found in memory" };
+
   revalidateClasses();
   return { success: true };
 }
@@ -151,11 +188,21 @@ export async function updateTemplateAction(
 export async function toggleTemplateActiveAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing template ID" };
-  const updated = toggleTemplateActive(id);
-  if (!updated) return { success: false, error: "Template not found" };
-  await saveTemplateToDB(updated);
+
+  const existing = getTemplate(id);
+  if (!existing) return { success: false, error: "Template not found" };
+
+  try {
+    await saveTemplateToDB(id, { isActive: !existing.isActive });
+  } catch (err) {
+    console.error("[toggleTemplateActiveAction] DB write failed:", err);
+    return { success: false, error: `Failed to toggle template: ${dbError(err)}` };
+  }
+
+  toggleTemplateActive(id);
   revalidateClasses();
   return { success: true };
 }
@@ -165,6 +212,7 @@ export async function toggleTemplateActiveAction(
 export async function createInstanceAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
 
   const templateId = (formData.get("templateId") as string)?.trim() || null;
@@ -181,7 +229,34 @@ export async function createInstanceAction(
   if (!startTime || !endTime) return { success: false, error: "Times required" };
   if (!VALID_STATUSES.has(status)) return { success: false, error: "Invalid status" };
 
+  if (isClassEnded(date, endTime)) {
+    return {
+      success: false,
+      error: "This class instance has already ended. Create a future or live class instead, or use attendance/history for corrections.",
+    };
+  }
+
   const tpl = templateId ? getTemplate(templateId) : null;
+
+  const instanceLevel = (formData.get("level") as string)?.trim() || tpl?.level || null;
+  const resolvedTermBound = isTermBoundLevel(instanceLevel);
+  let resolvedTermId = (formData.get("termId") as string)?.trim() || tpl?.termId || null;
+  if (resolvedTermBound) {
+    const allTerms = await getTermRepo().getAll();
+    if (resolvedTermId) {
+      const linkedTerm = allTerms.find((t) => t.id === resolvedTermId);
+      if (linkedTerm && (date < linkedTerm.startDate || date > linkedTerm.endDate)) {
+        return { success: false, error: "This class date falls outside the selected term. Choose a date within the term period." };
+      }
+    } else {
+      const matchedTerm = findTermForDate(allTerms, date);
+      if (matchedTerm) {
+        resolvedTermId = matchedTerm.id;
+      } else {
+        return { success: false, error: "This is a Beginner course (term-bound) but no defined term covers the selected date. Please check the date or create the matching term first." };
+      }
+    }
+  }
 
   const instanceData = {
     classId: templateId,
@@ -197,16 +272,19 @@ export async function createInstanceAction(
     location: (formData.get("location") as string)?.trim() || tpl?.location || "Studio A",
     status: status as InstanceStatus,
     notes: (formData.get("notes") as string)?.trim() || null,
+    termBound: resolvedTermBound,
+    termId: resolvedTermId,
   };
 
-  const memInst = createInstance(instanceData);
-
-  const dbInst = await createInstanceInDB({
-    ...instanceData,
-    classType: instanceData.classType as "class" | "social" | "student_practice",
-  });
-  if (dbInst) {
-    memInst.id = dbInst.id;
+  try {
+    const dbInst = await createInstanceInDB({
+      ...instanceData,
+      classType: instanceData.classType as "class" | "social" | "student_practice",
+    });
+    const memInst = createInstance(instanceData);
+    if (dbInst) memInst.id = dbInst.id;
+  } catch (err) {
+    return { success: false, error: `Failed to save instance: ${dbError(err)}` };
   }
 
   revalidateClasses();
@@ -216,6 +294,7 @@ export async function createInstanceAction(
 export async function updateInstanceAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
 
   const id = (formData.get("id") as string)?.trim();
@@ -237,9 +316,32 @@ export async function updateInstanceAction(
     if (v !== null) patch[f] = v ? Number(v) : null;
   }
 
-  const updated = updateInstance(id, patch as Parameters<typeof updateInstance>[1]);
-  if (!updated) return { success: false, error: "Instance not found" };
-  await saveInstanceToDB(updated);
+  const existing = getInstance(id);
+  if (!existing) return { success: false, error: "Instance not found" };
+
+  if (existing.termBound) {
+    const finalDate = (patch.date as string) ?? existing.date;
+    const allTerms = await getTermRepo().getAll();
+    if (existing.termId) {
+      const linkedTerm = allTerms.find((t) => t.id === existing.termId);
+      if (linkedTerm && (finalDate < linkedTerm.startDate || finalDate > linkedTerm.endDate)) {
+        return { success: false, error: "This class date falls outside the selected term. Choose a date within the term period." };
+      }
+    } else {
+      const matchedTerm = findTermForDate(allTerms, finalDate);
+      if (!matchedTerm) {
+        return { success: false, error: "This is a Beginner course (term-bound) but no defined term covers the selected date. Please check the date or create the matching term first." };
+      }
+    }
+  }
+
+  try {
+    await saveInstanceToDB(id, patch);
+  } catch (err) {
+    return { success: false, error: `Failed to save instance: ${dbError(err)}` };
+  }
+
+  updateInstance(id, patch as Parameters<typeof updateInstance>[1]);
   revalidateClasses();
   return { success: true };
 }
@@ -248,30 +350,52 @@ export async function updateInstanceStatusAction(
   id: string,
   status: InstanceStatus
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing instance ID" };
   if (!VALID_STATUSES.has(status)) return { success: false, error: "Invalid status" };
-  const updated = updateInstanceStatus(id, status);
-  if (!updated) return { success: false, error: "Instance not found" };
-  await updateInstanceStatusInDB(id, status);
+
+  const existing = getInstance(id);
+  if (!existing) return { success: false, error: "Instance not found" };
+
+  try {
+    await updateInstanceStatusInDB(id, status);
+  } catch (err) {
+    return { success: false, error: `Failed to update status: ${dbError(err)}` };
+  }
+
+  updateInstanceStatus(id, status);
   revalidateClasses();
   return { success: true };
 }
 
-/** Set or clear teacher override on a specific schedule instance. */
 export async function setInstanceTeacherOverrideAction(
   instanceId: string,
   teacher1Id: string | null,
   teacher2Id: string | null
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!instanceId) return { success: false, error: "Missing instance ID" };
-  const updated = updateInstance(instanceId, {
+
+  const existing = getInstance(instanceId);
+  if (!existing) return { success: false, error: "Instance not found" };
+
+  const dbPatch: Record<string, unknown> = {
+    teacherOverride1Id: teacher1Id,
+    teacherOverride2Id: teacher2Id,
+  };
+
+  try {
+    await saveInstanceToDB(instanceId, dbPatch);
+  } catch (err) {
+    return { success: false, error: `Failed to save teacher override: ${dbError(err)}` };
+  }
+
+  updateInstance(instanceId, {
     teacherOverride1Id: teacher1Id,
     teacherOverride2Id: teacher2Id,
   });
-  if (!updated) return { success: false, error: "Instance not found" };
-  await saveInstanceToDB(updated);
   revalidateClasses();
   return { success: true };
 }
@@ -281,6 +405,7 @@ export async function previewGenerateScheduleAction(
   endDate: string,
   opts?: { includeInactive?: boolean; overwrite?: boolean }
 ): Promise<{ success: boolean; toCreate: number; toSkip: number; toOverwrite: number; error?: string }> {
+  await requireRole(["admin"]);
   if (!startDate || !endDate) return { success: false, toCreate: 0, toSkip: 0, toOverwrite: 0, error: "Date range required" };
   if (endDate < startDate) return { success: false, toCreate: 0, toSkip: 0, toOverwrite: 0, error: "End date must be after start date" };
 
@@ -293,66 +418,158 @@ export async function generateScheduleAction(
   endDate: string,
   opts?: { includeInactive?: boolean; overwrite?: boolean }
 ): Promise<{ success: boolean; created: number; skipped: number; overwritten?: number; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!startDate || !endDate) return { success: false, created: 0, skipped: 0, error: "Date range required" };
   if (endDate < startDate) return { success: false, created: 0, skipped: 0, error: "End date must be after start date" };
 
+  const allTerms = await getTermRepo().getAll();
+  const termRanges = allTerms.map((t) => ({ id: t.id, startDate: t.startDate, endDate: t.endDate }));
   const beforeIds = new Set(getInstances().map((i) => i.id));
-  const result = generateFromTemplates(startDate, endDate, opts);
+  const result = generateFromTemplates(startDate, endDate, opts, termRanges);
 
   const newInstances = getInstances().filter((i) => !beforeIds.has(i.id));
+  let dbErrors = 0;
   for (const inst of newInstances) {
-    const dbInst = await createInstanceInDB({
-      classId: inst.classId,
-      title: inst.title,
-      classType: inst.classType as "class" | "social" | "student_practice",
-      styleName: inst.styleName,
-      styleId: inst.styleId,
-      level: inst.level,
-      date: inst.date,
-      startTime: inst.startTime,
-      endTime: inst.endTime,
-      maxCapacity: inst.maxCapacity,
-      leaderCap: inst.leaderCap,
-      followerCap: inst.followerCap,
-      status: inst.status,
-      location: inst.location,
-    });
-    if (dbInst) {
-      inst.id = dbInst.id;
+    try {
+      const dbInst = await createInstanceInDB({
+        classId: inst.classId,
+        title: inst.title,
+        classType: inst.classType as "class" | "social" | "student_practice",
+        styleName: inst.styleName,
+        styleId: inst.styleId,
+        level: inst.level,
+        date: inst.date,
+        startTime: inst.startTime,
+        endTime: inst.endTime,
+        maxCapacity: inst.maxCapacity,
+        leaderCap: inst.leaderCap,
+        followerCap: inst.followerCap,
+        status: inst.status,
+        location: inst.location,
+        termBound: inst.termBound,
+        termId: inst.termId,
+      });
+      if (dbInst) inst.id = dbInst.id;
+    } catch (err) {
+      console.error("[generateScheduleAction] Failed to persist instance:", dbError(err));
+      dbErrors++;
     }
   }
 
   revalidateClasses();
+  if (dbErrors > 0) {
+    return {
+      success: false,
+      ...result,
+      error: `Generated ${result.created} instances but ${dbErrors} failed to persist to DB. Those will be lost on restart.`,
+    };
+  }
   return { success: true, ...result };
+}
+
+// ── Linked-instance query (for delete-template modal) ──────
+
+export interface LinkedInstance {
+  id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+  location: string;
+  isPast: boolean;
+}
+
+export async function getLinkedInstancesAction(
+  templateId: string
+): Promise<{ upcoming: LinkedInstance[]; past: LinkedInstance[] }> {
+  await requireRole(["admin"]);
+  await ensureScheduleBootstrapped();
+  const today = new Date().toISOString().slice(0, 10);
+  const all = getInstances()
+    .filter((i) => i.classId === templateId)
+    .map((i) => ({
+      id: i.id,
+      date: i.date,
+      startTime: i.startTime,
+      endTime: i.endTime,
+      status: i.status,
+      location: i.location ?? "",
+      isPast: i.date < today,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  return {
+    upcoming: all.filter((i) => !i.isPast),
+    past: all.filter((i) => i.isPast),
+  };
 }
 
 // ── Delete actions ──────────────────────────────────────────
 
 export async function deleteTemplateAction(id: string): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing template ID" };
 
   const tpl = getTemplate(id);
   if (!tpl) return { success: false, error: "Template not found" };
 
-  await deleteTemplateFromDB(id);
-  deleteTemplate(id);
+  // Block deletion while any linked instances exist
+  const linked = getInstances().filter((i) => i.classId === id);
+  if (linked.length > 0) {
+    const today = new Date().toISOString().slice(0, 10);
+    const up = linked.filter((i) => i.date >= today).length;
+    const past = linked.filter((i) => i.date < today).length;
+    const parts: string[] = [];
+    if (up > 0) parts.push(`${up} upcoming`);
+    if (past > 0) parts.push(`${past} past`);
+    return {
+      success: false,
+      error: `Cannot delete "${tpl.title}" — it still has ${parts.join(" and ")} linked schedule instance${linked.length > 1 ? "s" : ""}. Remove or unlink them first from inside the delete dialog.`,
+    };
+  }
 
+  if (hasSupabaseConfig() && isUUID(id)) {
+    const { createAdminClient } = require("@/lib/supabase/admin");
+    const supabase = createAdminClient();
+
+    // Safety: unlink any stale DB-only references that memory might not know about
+    await supabase.from("bookable_classes").update({ class_id: null } as never).eq("class_id", id);
+
+    // Clean up cascade-safe dependencies explicitly for robustness
+    await supabase.from("teacher_default_assignments").delete().eq("class_id", id);
+    await supabase.from("teacher_pairs").delete().eq("class_id", id);
+
+    const { error: deleteErr } = await supabase.from("classes").delete().eq("id", id);
+    if (deleteErr) {
+      console.error("[deleteTemplateAction] DB delete failed:", deleteErr.message);
+      return { success: false, error: `Failed to delete template: ${deleteErr.message}` };
+    }
+    console.info(`[deleteTemplateAction] template "${tpl.title}" deleted from DB`);
+  } else if (hasSupabaseConfig() && !isUUID(id)) {
+    console.warn(`[deleteTemplateAction] Template "${tpl.title}" has non-UUID id — skipping DB delete.`);
+  }
+
+  deleteTemplate(id);
   revalidateClasses();
   return { success: true };
 }
 
 export async function deleteInstanceAction(id: string): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing instance ID" };
 
   const inst = getInstance(id);
   if (!inst) return { success: false, error: "Instance not found" };
 
-  await deleteInstanceFromDB(id);
-  deleteInstance(id);
+  try {
+    await deleteInstanceFromDB(id);
+  } catch (err) {
+    return { success: false, error: `Failed to delete instance: ${dbError(err)}` };
+  }
 
+  deleteInstance(id);
   revalidateClasses();
   revalidatePath("/attendance");
   return { success: true };
@@ -360,34 +577,37 @@ export async function deleteInstanceAction(id: string): Promise<{ success: boole
 
 // ── Teacher roster actions ──────────────────────────────────
 
+async function getTeacherRepo() {
+  const { supabaseTeacherRosterRepo } = require("@/lib/repositories/supabase/teacher-roster-repository");
+  return supabaseTeacherRosterRepo;
+}
+
 export async function createTeacherAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const fullName = (formData.get("fullName") as string)?.trim();
   if (!fullName) return { success: false, error: "Name is required" };
 
-  const teacher = createTeacher({
+  const data = {
     fullName,
     email: (formData.get("email") as string)?.trim() || null,
     phone: (formData.get("phone") as string)?.trim() || null,
     notes: (formData.get("notes") as string)?.trim() || null,
     isActive: formData.get("isActive") !== "false",
-  });
+  };
 
   if (hasSupabaseConfig()) {
     try {
-      const { supabaseTeacherRosterRepo } = require("@/lib/repositories/supabase/teacher-roster-repository");
-      const dbTeacher = await supabaseTeacherRosterRepo.create({
-        fullName: teacher.fullName,
-        email: teacher.email,
-        phone: teacher.phone,
-        notes: teacher.notes,
-        isActive: teacher.isActive,
-      });
+      const repo = await getTeacherRepo();
+      const dbTeacher = await repo.create(data);
+      const teacher = createTeacher(data);
       teacher.id = dbTeacher.id;
     } catch (err) {
-      console.warn("[createTeacherAction] Supabase write failed:", err instanceof Error ? err.message : err);
+      return { success: false, error: `Failed to save teacher: ${dbError(err)}` };
     }
+  } else {
+    createTeacher(data);
   }
 
   revalidateClasses();
@@ -397,6 +617,7 @@ export async function createTeacherAction(
 export async function updateTeacherAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const id = (formData.get("id") as string)?.trim();
   if (!id) return { success: false, error: "Missing teacher ID" };
 
@@ -411,18 +632,17 @@ export async function updateTeacherAction(
     isActive: formData.get("isActive") !== "false",
   };
 
-  const result = updateTeacher(id, patch);
-
-  if (!result) return { success: false, error: "Teacher not found" };
-
-  if (hasSupabaseConfig() && result) {
+  if (hasSupabaseConfig()) {
     try {
-      const { supabaseTeacherRosterRepo } = require("@/lib/repositories/supabase/teacher-roster-repository");
-      await supabaseTeacherRosterRepo.update(id, patch);
+      const repo = await getTeacherRepo();
+      await repo.update(id, patch);
     } catch (err) {
-      console.warn("[updateTeacherAction] Supabase write failed:", err instanceof Error ? err.message : err);
+      return { success: false, error: `Failed to update teacher: ${dbError(err)}` };
     }
   }
+
+  const result = updateTeacher(id, patch);
+  if (!result) return { success: false, error: "Teacher not found" };
 
   revalidateClasses();
   return { success: true };
@@ -431,19 +651,22 @@ export async function updateTeacherAction(
 export async function toggleTeacherActiveAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   if (!id) return { success: false, error: "Missing teacher ID" };
-  const updated = toggleTeacherActive(id);
-  if (!updated) return { success: false, error: "Teacher not found" };
 
-  if (hasSupabaseConfig() && updated) {
+  const existing = require("@/lib/services/teacher-roster-store").getTeacher(id);
+  if (!existing) return { success: false, error: "Teacher not found" };
+
+  if (hasSupabaseConfig()) {
     try {
-      const { supabaseTeacherRosterRepo } = require("@/lib/repositories/supabase/teacher-roster-repository");
-      await supabaseTeacherRosterRepo.update(id, { isActive: updated.isActive });
+      const repo = await getTeacherRepo();
+      await repo.update(id, { isActive: !existing.isActive });
     } catch (err) {
-      console.warn("[toggleTeacherActiveAction] Supabase write failed:", err instanceof Error ? err.message : err);
+      return { success: false, error: `Failed to toggle teacher: ${dbError(err)}` };
     }
   }
 
+  toggleTeacherActive(id);
   revalidateClasses();
   return { success: true };
 }
@@ -451,28 +674,38 @@ export async function toggleTeacherActiveAction(
 export async function deleteTeacherAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   if (!id) return { success: false, error: "Missing teacher ID" };
-  const deleted = deleteTeacher(id);
-  if (!deleted) return { success: false, error: "Teacher not found" };
+
+  const existing = require("@/lib/services/teacher-roster-store").getTeacher(id);
+  if (!existing) return { success: false, error: "Teacher not found" };
 
   if (hasSupabaseConfig()) {
     try {
-      const { supabaseTeacherRosterRepo } = require("@/lib/repositories/supabase/teacher-roster-repository");
-      await supabaseTeacherRosterRepo.delete(id);
+      const repo = await getTeacherRepo();
+      await repo.delete(id);
     } catch (err) {
-      console.warn("[deleteTeacherAction] Supabase write failed:", err instanceof Error ? err.message : err);
+      return { success: false, error: `Failed to delete teacher: ${dbError(err)}` };
     }
   }
 
+  deleteTeacher(id);
   revalidateClasses();
+  revalidatePath("/classes/teachers");
   return { success: true };
 }
 
 // ── Teacher assignment actions ──────────────────────────────
 
+async function getAssignmentRepo() {
+  const { supabaseTeacherAssignmentRepo } = require("@/lib/repositories/supabase/teacher-assignment-repository");
+  return supabaseTeacherAssignmentRepo;
+}
+
 export async function createAssignmentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const classId = (formData.get("classId") as string)?.trim();
   const classTitle = (formData.get("classTitle") as string)?.trim();
   const teacher1Id = (formData.get("teacher1Id") as string)?.trim();
@@ -488,24 +721,19 @@ export async function createAssignmentAction(
     return { success: false, error: "Until date must be after from date" };
   }
 
-  const assignment = createAssignment({ classId, classTitle, teacher1Id, teacher2Id, effectiveFrom, effectiveUntil, isActive });
+  const data = { classId, classTitle, teacher1Id, teacher2Id, effectiveFrom, effectiveUntil, isActive };
 
   if (hasSupabaseConfig()) {
     try {
-      const { supabaseTeacherAssignmentRepo } = require("@/lib/repositories/supabase/teacher-assignment-repository");
-      const dbAssignment = await supabaseTeacherAssignmentRepo.create({
-        classId: assignment.classId,
-        classTitle: assignment.classTitle,
-        teacher1Id: assignment.teacher1Id,
-        teacher2Id: assignment.teacher2Id,
-        effectiveFrom: assignment.effectiveFrom,
-        effectiveUntil: assignment.effectiveUntil,
-        isActive: assignment.isActive,
-      });
+      const repo = await getAssignmentRepo();
+      const dbAssignment = await repo.create(data);
+      const assignment = createAssignment(data);
       assignment.id = dbAssignment.id;
     } catch (err) {
-      console.warn("[createAssignmentAction] Supabase write failed:", err instanceof Error ? err.message : err);
+      return { success: false, error: `Failed to save assignment: ${dbError(err)}` };
     }
+  } else {
+    createAssignment(data);
   }
 
   revalidateClasses();
@@ -515,6 +743,7 @@ export async function createAssignmentAction(
 export async function updateAssignmentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const id = (formData.get("id") as string)?.trim();
   if (!id) return { success: false, error: "Missing assignment ID" };
 
@@ -535,18 +764,17 @@ export async function updateAssignmentAction(
     isActive: formData.get("isActive") === "true",
   };
 
-  const result = updateAssignment(id, patch);
-
-  if (!result) return { success: false, error: "Assignment not found" };
-
-  if (hasSupabaseConfig() && result) {
+  if (hasSupabaseConfig()) {
     try {
-      const { supabaseTeacherAssignmentRepo } = require("@/lib/repositories/supabase/teacher-assignment-repository");
-      await supabaseTeacherAssignmentRepo.update(id, patch);
+      const repo = await getAssignmentRepo();
+      await repo.update(id, patch);
     } catch (err) {
-      console.warn("[updateAssignmentAction] Supabase write failed:", err instanceof Error ? err.message : err);
+      return { success: false, error: `Failed to update assignment: ${dbError(err)}` };
     }
   }
+
+  const result = updateAssignment(id, patch);
+  if (!result) return { success: false, error: "Assignment not found" };
 
   revalidateClasses();
   return { success: true };
@@ -555,19 +783,22 @@ export async function updateAssignmentAction(
 export async function toggleAssignmentActiveAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   if (!id) return { success: false, error: "Missing assignment ID" };
-  const result = toggleAssignmentActive(id);
-  if (!result) return { success: false, error: "Assignment not found" };
 
-  if (hasSupabaseConfig() && result) {
+  const existing = require("@/lib/services/teacher-store").getAssignment(id);
+  if (!existing) return { success: false, error: "Assignment not found" };
+
+  if (hasSupabaseConfig()) {
     try {
-      const { supabaseTeacherAssignmentRepo } = require("@/lib/repositories/supabase/teacher-assignment-repository");
-      await supabaseTeacherAssignmentRepo.update(id, { isActive: result.isActive });
+      const repo = await getAssignmentRepo();
+      await repo.update(id, { isActive: !existing.isActive });
     } catch (err) {
-      console.warn("[toggleAssignmentActiveAction] Supabase write failed:", err instanceof Error ? err.message : err);
+      return { success: false, error: `Failed to toggle assignment: ${dbError(err)}` };
     }
   }
 
+  toggleAssignmentActive(id);
   revalidateClasses();
   return { success: true };
 }
@@ -575,27 +806,29 @@ export async function toggleAssignmentActiveAction(
 export async function deleteAssignmentAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   if (!id) return { success: false, error: "Missing assignment ID" };
-  const deleted = deleteAssignment(id);
-  if (!deleted) return { success: false, error: "Assignment not found" };
+
+  const existing = require("@/lib/services/teacher-store").getAssignment(id);
+  if (!existing) return { success: false, error: "Assignment not found" };
 
   if (hasSupabaseConfig()) {
     try {
-      const { supabaseTeacherAssignmentRepo } = require("@/lib/repositories/supabase/teacher-assignment-repository");
-      await supabaseTeacherAssignmentRepo.delete(id);
+      const repo = await getAssignmentRepo();
+      await repo.delete(id);
     } catch (err) {
-      console.warn("[deleteAssignmentAction] Supabase write failed:", err instanceof Error ? err.message : err);
+      return { success: false, error: `Failed to delete assignment: ${dbError(err)}` };
     }
   }
 
+  deleteAssignment(id);
   revalidateClasses();
   return { success: true };
 }
 
 /**
  * Create or update the active default assignment for a class.
- * If an active assignment already exists, it is updated in place.
- * Otherwise a new one is created with effectiveFrom = today.
+ * DB-first: writes to Supabase before updating memory.
  */
 export async function saveDefaultAssignmentAction(
   classId: string,
@@ -603,88 +836,121 @@ export async function saveDefaultAssignmentAction(
   teacher1Id: string,
   teacher2Id: string | null
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   if (!classId || !classTitle) return { success: false, error: "Class info required" };
   if (!teacher1Id) return { success: false, error: "Teacher 1 is required" };
 
   const existing = getActiveAssignmentForClass(classId);
+
   if (existing) {
+    if (hasSupabaseConfig()) {
+      try {
+        const repo = await getAssignmentRepo();
+        await repo.update(existing.id, { teacher1Id, teacher2Id });
+      } catch (err) {
+        return { success: false, error: `Failed to update assignment: ${dbError(err)}` };
+      }
+    }
     updateAssignment(existing.id, { teacher1Id, teacher2Id });
   } else {
     const today = new Date().toISOString().slice(0, 10);
-    createAssignment({
-      classId,
-      classTitle,
-      teacher1Id,
-      teacher2Id,
-      effectiveFrom: today,
-      effectiveUntil: null,
-      isActive: true,
-    });
+    const data = { classId, classTitle, teacher1Id, teacher2Id, effectiveFrom: today, effectiveUntil: null, isActive: true };
+
+    if (hasSupabaseConfig()) {
+      try {
+        const repo = await getAssignmentRepo();
+        const dbAssignment = await repo.create(data);
+        const assignment = createAssignment(data);
+        assignment.id = dbAssignment.id;
+      } catch (err) {
+        return { success: false, error: `Failed to save assignment: ${dbError(err)}` };
+      }
+    } else {
+      createAssignment(data);
+    }
   }
 
   revalidateClasses();
   return { success: true };
 }
 
-import { BLOCKED_SENTINEL } from "@/lib/constants/teacher-assignment";
-
 /**
  * Bulk set teacher overrides on specific instances.
- * Pass teacher IDs to assign, or null/null to remove instance-level overrides (fall back to default).
+ * DB-first for each instance.
  */
 export async function bulkSetTeacherOverrideAction(
   instanceIds: string[],
   teacher1Id: string | null,
   teacher2Id: string | null
 ): Promise<{ success: boolean; updated: number; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!instanceIds || instanceIds.length === 0) {
     return { success: false, updated: 0, error: "No instances selected" };
   }
+
   let updated = 0;
+  const errors: string[] = [];
+
   for (const id of instanceIds) {
-    const result = updateInstance(id, {
-      teacherOverride1Id: teacher1Id,
-      teacherOverride2Id: teacher2Id,
-    });
-    if (result) {
-      await saveInstanceToDB(result);
+    const existing = getInstance(id);
+    if (!existing) continue;
+
+    try {
+      await saveInstanceToDB(id, { teacherOverride1Id: teacher1Id, teacherOverride2Id: teacher2Id });
+      updateInstance(id, { teacherOverride1Id: teacher1Id, teacherOverride2Id: teacher2Id });
       updated++;
+    } catch (err) {
+      errors.push(`${id}: ${dbError(err)}`);
     }
   }
+
   revalidateClasses();
+  if (errors.length > 0) {
+    return { success: false, updated, error: `${errors.length} instance(s) failed to persist` };
+  }
   return { success: true, updated };
 }
 
 /**
- * Bulk block instances — marks them as intentionally unassigned for their date,
- * even if a default assignment exists. Uses the BLOCKED sentinel.
+ * Bulk block instances — marks them as intentionally unassigned.
+ * DB-first for each instance.
  */
 export async function bulkBlockInstancesAction(
   instanceIds: string[]
 ): Promise<{ success: boolean; updated: number; error?: string }> {
+  await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!instanceIds || instanceIds.length === 0) {
     return { success: false, updated: 0, error: "No instances selected" };
   }
+
   let updated = 0;
+  const errors: string[] = [];
+
   for (const id of instanceIds) {
-    const result = updateInstance(id, {
-      teacherOverride1Id: BLOCKED_SENTINEL,
-      teacherOverride2Id: null,
-    });
-    if (result) {
-      await saveInstanceToDB(result);
+    const existing = getInstance(id);
+    if (!existing) continue;
+
+    try {
+      await saveInstanceToDB(id, { teacherOverride1Id: BLOCKED_SENTINEL, teacherOverride2Id: null });
+      updateInstance(id, { teacherOverride1Id: BLOCKED_SENTINEL, teacherOverride2Id: null });
       updated++;
+    } catch (err) {
+      errors.push(`${id}: ${dbError(err)}`);
     }
   }
+
   revalidateClasses();
+  if (errors.length > 0) {
+    return { success: false, updated, error: `${errors.length} instance(s) failed to persist` };
+  }
   return { success: true, updated };
 }
 
 /**
  * Bulk update default assignments for a set of class IDs.
- * action: "assign" creates/updates defaults, "clear" deactivates them.
+ * DB-first for each assignment.
  */
 export async function bulkDefaultAssignmentAction(
   classEntries: { classId: string; classTitle: string }[],
@@ -692,6 +958,7 @@ export async function bulkDefaultAssignmentAction(
   teacher1Id?: string | null,
   teacher2Id?: string | null
 ): Promise<{ success: boolean; updated: number; error?: string }> {
+  await requireRole(["admin"]);
   if (!classEntries || classEntries.length === 0) {
     return { success: false, updated: 0, error: "No classes provided" };
   }
@@ -702,38 +969,58 @@ export async function bulkDefaultAssignmentAction(
   }
 
   let updated = 0;
+  const errors: string[] = [];
 
   if (action === "assign") {
     if (!teacher1Id) return { success: false, updated: 0, error: "Teacher 1 is required" };
     const today = new Date().toISOString().slice(0, 10);
+
     for (const [classId, classTitle] of uniqueClasses) {
       const existing = getActiveAssignmentForClass(classId);
-      if (existing) {
-        updateAssignment(existing.id, { teacher1Id, teacher2Id: teacher2Id ?? null });
-      } else {
-        createAssignment({
-          classId,
-          classTitle,
-          teacher1Id,
-          teacher2Id: teacher2Id ?? null,
-          effectiveFrom: today,
-          effectiveUntil: null,
-          isActive: true,
-        });
+      try {
+        if (existing) {
+          if (hasSupabaseConfig()) {
+            const repo = await getAssignmentRepo();
+            await repo.update(existing.id, { teacher1Id, teacher2Id: teacher2Id ?? null });
+          }
+          updateAssignment(existing.id, { teacher1Id, teacher2Id: teacher2Id ?? null });
+        } else {
+          const data = { classId, classTitle, teacher1Id, teacher2Id: teacher2Id ?? null, effectiveFrom: today, effectiveUntil: null, isActive: true };
+          if (hasSupabaseConfig()) {
+            const repo = await getAssignmentRepo();
+            const dbAssignment = await repo.create(data);
+            const assignment = createAssignment(data);
+            assignment.id = dbAssignment.id;
+          } else {
+            createAssignment(data);
+          }
+        }
+        updated++;
+      } catch (err) {
+        errors.push(`${classId}: ${dbError(err)}`);
       }
-      updated++;
     }
   } else {
     for (const [classId] of uniqueClasses) {
       const existing = getActiveAssignmentForClass(classId);
-      if (existing) {
+      if (!existing) continue;
+      try {
+        if (hasSupabaseConfig()) {
+          const repo = await getAssignmentRepo();
+          await repo.update(existing.id, { isActive: false });
+        }
         updateAssignment(existing.id, { isActive: false });
         updated++;
+      } catch (err) {
+        errors.push(`${classId}: ${dbError(err)}`);
       }
     }
   }
 
   revalidateClasses();
+  if (errors.length > 0) {
+    return { success: false, updated, error: `${errors.length} assignment(s) failed to persist` };
+  }
   return { success: true, updated };
 }
 
@@ -742,6 +1029,7 @@ export async function bulkDefaultAssignmentAction(
 export async function clearScheduleAction(): Promise<{
   success: boolean; cleared: number; error?: string;
 }> {
+  await requireRole(["admin"]);
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }
@@ -753,6 +1041,7 @@ export async function clearScheduleAction(): Promise<{
 export async function clearTemplatesAction(): Promise<{
   success: boolean; cleared: number; error?: string;
 }> {
+  await requireRole(["admin"]);
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }
@@ -764,6 +1053,7 @@ export async function clearTemplatesAction(): Promise<{
 export async function clearAssignmentsAction(): Promise<{
   success: boolean; cleared: number; error?: string;
 }> {
+  await requireRole(["admin"]);
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }

@@ -320,13 +320,24 @@ export function AdminBookings({
                 <Td className="font-medium text-gray-900">
                   {b.studentName}
                 </Td>
-                <Td>{b.classTitle}</Td>
                 <Td>
-                  {formatDate(b.date)}
-                  <br />
-                  <span className="text-xs text-gray-400">
-                    {formatTime(b.startTime)}
-                  </span>
+                  {b.classTitle}
+                  {b.classTitle === "(Deleted class)" && (
+                    <span className="ml-1.5 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">Removed</span>
+                  )}
+                </Td>
+                <Td>
+                  {b.date ? (
+                    <>
+                      {formatDate(b.date)}
+                      <br />
+                      <span className="text-xs text-gray-400">
+                        {b.startTime ? formatTime(b.startTime) : "—"}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </Td>
                 <Td>{b.styleName ?? "—"}</Td>
                 <Td>

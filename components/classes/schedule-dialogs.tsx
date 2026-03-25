@@ -37,11 +37,13 @@ const STATUS_OPTIONS = [
 export function AddInstanceDialog({
   templates,
   allStyles,
+  allTerms,
   onClose,
   defaultDate,
 }: {
   templates: MockClass[];
   allStyles?: { id: string; name: string }[];
+  allTerms?: { id: string; name: string; startDate: string; endDate: string }[];
   onClose: () => void;
   defaultDate?: string;
 }) {
@@ -51,9 +53,12 @@ export function AddInstanceDialog({
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [manualStyleId, setManualStyleId] = useState("");
   const [manualLevel, setManualLevel] = useState("");
+  const [selectedTermId, setSelectedTermId] = useState("");
 
   const tpl = templates.find((t) => t.id === selectedTemplateId);
   const isManual = !tpl;
+  const isTermBound = tpl?.termBound ?? false;
+  const effectiveTermId = selectedTermId || tpl?.termId || "";
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -65,6 +70,10 @@ export function AddInstanceDialog({
       fd.set("styleName", tpl.styleName ?? "");
       fd.set("styleId", tpl.styleId ?? "");
       fd.set("level", tpl.level ?? "");
+      if (isTermBound) {
+        fd.set("termBound", "true");
+        if (effectiveTermId) fd.set("termId", effectiveTermId);
+      }
     } else {
       const chosenStyle = allStyles?.find((s) => s.id === manualStyleId);
       if (chosenStyle) {
@@ -105,6 +114,23 @@ export function AddInstanceDialog({
                 ))}
               </select>
             </div>
+
+            {isTermBound && allTerms && allTerms.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Linked Term</label>
+                <select
+                  value={effectiveTermId}
+                  onChange={(e) => setSelectedTermId(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="">— Auto-resolve from date —</option>
+                  {allTerms.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name} ({t.startDate} to {t.endDate})</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">Term-bound class. If left blank, the term is resolved from the class date.</p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -253,8 +279,8 @@ export function EditInstanceDialog({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Date</label>
-                <input name="date" type="date" defaultValue={instance.date} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <label className="block text-sm font-medium text-gray-700">Title *</label>
+                <input name="title" defaultValue={instance.title} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Status</label>
@@ -264,7 +290,11 @@ export function EditInstanceDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Date</label>
+                <input name="date" type="date" defaultValue={instance.date} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Start</label>
                 <input name="startTime" type="time" defaultValue={instance.startTime} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
@@ -299,6 +329,10 @@ export function EditInstanceDialog({
               <label className="block text-sm font-medium text-gray-700">Notes</label>
               <textarea name="notes" rows={2} defaultValue={instance.notes ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
             </div>
+
+            {instance.classId && (
+              <p className="text-xs text-gray-400">Source template and class type are inherited from the template and cannot be changed here.</p>
+            )}
 
             <div className="flex justify-end gap-3 pt-2">
               <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -581,6 +615,7 @@ export function InstanceDetailPanel({
   resolvedTeacher2,
   isOverride,
   defaultTeacherSummary,
+  allTerms,
 }: {
   instance: MockBookableClass;
   settings: SettingsFlags;
@@ -588,6 +623,7 @@ export function InstanceDetailPanel({
   resolvedTeacher2: string | null;
   isOverride: boolean;
   defaultTeacherSummary: string;
+  allTerms?: { id: string; name: string; startDate: string; endDate: string }[];
 }) {
   const roleBalanced = bc.styleName != null && (settings.roleBalancedStyleNames ?? []).includes(bc.styleName);
 
@@ -601,6 +637,8 @@ export function InstanceDetailPanel({
   const teacherDisplay = resolvedTeacher1
     ? `${resolvedTeacher1}${resolvedTeacher2 ? ` & ${resolvedTeacher2}` : " (solo)"}`
     : "Unassigned";
+
+  const linkedTerm = bc.termId && allTerms ? allTerms.find((t) => t.id === bc.termId) : null;
 
   return (
     <tr>
@@ -618,6 +656,19 @@ export function InstanceDetailPanel({
               <Detail label="Time" value={`${formatTime(bc.startTime)} – ${formatTime(bc.endTime)}`} />
               <Detail label="Location" value={bc.location} />
               <Detail label="Status"><StatusBadge status={bc.status} /></Detail>
+              <Detail label="Term-bound">
+                {bc.termBound ? (
+                  <span className="flex items-center gap-1.5">
+                    <Badge variant="info">Term-bound</Badge>
+                    {linkedTerm ? linkedTerm.name : <span className="text-gray-400">No term linked</span>}
+                  </span>
+                ) : (
+                  <span className="text-gray-400">No</span>
+                )}
+              </Detail>
+              {linkedTerm && (
+                <Detail label="Term Period" value={`${formatDate(linkedTerm.startDate)} – ${formatDate(linkedTerm.endDate)}`} />
+              )}
             </dl>
           </div>
 

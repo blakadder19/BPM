@@ -42,6 +42,9 @@ export async function ensureScheduleBootstrapped(): Promise<void> {
 
 async function doBootstrap(): Promise<void> {
   try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    console.info(`[schedule-bootstrap] Connecting to Supabase at ${url?.slice(0, 40)}...`);
+
     const { supabaseDanceStyleRepo } = require("@/lib/repositories/supabase/dance-style-repository");
     const { supabaseScheduleRepo } = require("@/lib/repositories/supabase/schedule-repository");
 
@@ -52,6 +55,34 @@ async function doBootstrap(): Promise<void> {
     ]);
 
     globalThis.__bpm_danceStyles = styles;
+
+    // The Supabase DB may not yet have term_bound / term_id columns.
+    // Merge these fields from the in-memory seed data by matching on title
+    // so the bookability engine can enforce term restrictions correctly.
+    const { CLASSES: SEED_CLASSES } = require("@/lib/mock-data");
+    const seedByTitle = new Map<string, MockClass>(
+      (SEED_CLASSES as MockClass[]).map((c: MockClass) => [c.title, c])
+    );
+
+    for (const tmpl of templates) {
+      if (tmpl.termBound === undefined) {
+        const seed = seedByTitle.get(tmpl.title);
+        if (seed) tmpl.termBound = seed.termBound ?? false;
+      }
+    }
+
+    const tmplById = new Map(templates.map((t) => [t.id, t]));
+    for (const inst of instances) {
+      if (inst.termBound === undefined) {
+        const tmpl = inst.classId ? tmplById.get(inst.classId) : null;
+        if (tmpl) {
+          inst.termBound = tmpl.termBound;
+        } else {
+          const seed = seedByTitle.get(inst.title);
+          if (seed) inst.termBound = seed.termBound ?? false;
+        }
+      }
+    }
 
     const classStore = require("./class-store");
     classStore.replaceTemplates(templates);
@@ -70,9 +101,13 @@ async function doBootstrap(): Promise<void> {
       console.warn("[schedule-bootstrap] Failed to load teachers from DB:", err instanceof Error ? err.message : err);
     }
 
+    console.info(
+      `[schedule-bootstrap] Loaded from Supabase: ${templates.length} templates, ${instances.length} instances`
+    );
+
     globalThis.__bpm_scheduleBootstrapped = true;
   } catch (err) {
-    console.warn(
+    console.error(
       "[schedule-bootstrap] Failed to load from Supabase, falling back to mock data:",
       err instanceof Error ? err.message : err
     );

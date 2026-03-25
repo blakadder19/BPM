@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/utils";
@@ -9,17 +11,20 @@ import type { MockProduct, MockSubscription } from "@/lib/mock-data";
 interface ProductDetailPanelProps {
   product: MockProduct;
   subscriptions: MockSubscription[];
+  studentNameMap: Record<string, string>;
   colSpan: number;
 }
 
 export function ProductDetailPanel({
   product,
   subscriptions,
+  studentNameMap,
   colSpan,
 }: ProductDetailPanelProps) {
   const rule = getAccessRule(product.id);
   const linkedSubs = subscriptions.filter((s) => s.productId === product.id);
   const activeSubs = linkedSubs.filter((s) => s.status === "active");
+  const [showAllSubs, setShowAllSubs] = useState(false);
 
   return (
     <tr>
@@ -112,27 +117,32 @@ export function ProductDetailPanel({
             />
             {activeSubs.length > 0 && (
               <div className="mt-2 space-y-1">
-                <p className="text-xs font-medium text-gray-500">
-                  Active subscribers:
-                </p>
-                {activeSubs.slice(0, 5).map((s) => (
-                  <div
-                    key={s.id}
-                    className="flex items-center gap-2 text-sm text-gray-600"
-                  >
-                    <span className="truncate">{s.studentId}</span>
-                    <StatusBadge status={s.status} />
-                    {s.remainingCredits !== null && (
-                      <span className="text-xs text-gray-400">
-                        {s.remainingCredits} credits left
-                      </span>
-                    )}
+                <button
+                  onClick={() => setShowAllSubs((v) => !v)}
+                  className="flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-700"
+                >
+                  Active subscribers ({activeSubs.length})
+                  {showAllSubs ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                </button>
+                {showAllSubs && (
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded border border-gray-100 bg-white p-2">
+                    {activeSubs.map((s) => (
+                      <div
+                        key={s.id}
+                        className="flex items-center gap-2 text-sm text-gray-600"
+                      >
+                        <span className="truncate font-medium">
+                          {studentNameMap[s.studentId] ?? s.studentId}
+                        </span>
+                        <StatusBadge status={s.status} />
+                        {s.remainingCredits !== null && (
+                          <span className="text-xs text-gray-400">
+                            {s.remainingCredits} credits left
+                          </span>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-                {activeSubs.length > 5 && (
-                  <p className="text-xs text-gray-400">
-                    …and {activeSubs.length - 5} more
-                  </p>
                 )}
               </div>
             )}

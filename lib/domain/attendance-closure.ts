@@ -9,6 +9,7 @@
 import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getInstances } from "@/lib/services/schedule-store";
+import { getSettings } from "@/lib/services/settings-store";
 import { isAfterClosureWindow } from "@/lib/domain/datetime";
 
 export function runAttendanceClosure(): {
@@ -18,12 +19,13 @@ export function runAttendanceClosure(): {
   const bookingSvc = getBookingService();
   const instances = getInstances();
   const attendanceSvc = getAttendanceService();
+  const { attendanceClosureMinutes } = getSettings();
 
   let classesProcessed = 0;
   let bookingsMarkedMissed = 0;
 
   for (const cls of instances) {
-    if (!isAfterClosureWindow(cls.date, cls.startTime)) continue;
+    if (!isAfterClosureWindow(cls.date, cls.startTime, attendanceClosureMinutes)) continue;
 
     const unchecked = bookingSvc.getUncheckedBookingsForClass(cls.id);
     if (unchecked.length === 0) continue;

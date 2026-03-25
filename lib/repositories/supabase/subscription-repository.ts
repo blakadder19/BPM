@@ -19,7 +19,7 @@ function toMockSubscription(row: SubRow): MockSubscription {
     validFrom: row.valid_from,
     validUntil: row.valid_until,
     selectedStyleId: row.dance_style_id,
-    selectedStyleName: null,
+    selectedStyleName: row.selected_style_names?.[0] ?? null,
     selectedStyleIds: null,
     selectedStyleNames: row.selected_style_names,
     notes: row.notes,

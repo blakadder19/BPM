@@ -42,8 +42,9 @@ export async function studentCancelBookingAction(
     return { success: false, error: "Not your booking" };
   }
 
-  if (booking.status !== "confirmed") {
-    return { success: false, error: "Only confirmed bookings can be cancelled" };
+  const terminalStatuses = new Set(["cancelled", "late_cancelled", "missed"]);
+  if (terminalStatuses.has(booking.status)) {
+    return { success: false, error: "This booking has already been cancelled or resolved" };
   }
 
   const cls = svc.getClass(booking.bookableClassId);

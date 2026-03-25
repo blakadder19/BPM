@@ -18,6 +18,8 @@ export interface MarkAttendanceResult {
   status: AttendanceMark;
   penaltyCreated: boolean;
   penaltyDescription: string | null;
+  bookingStatusChange: string | null;
+  creditRestored: boolean;
   error: string | null;
 }
 
@@ -98,6 +100,8 @@ export async function markStudentAttendance(params: {
       status: params.status,
       penaltyCreated: false,
       penaltyDescription: null,
+      bookingStatusChange: null,
+      creditRestored: false,
       error: "Missing required fields: bookableClassId, studentId, and markedBy are required.",
     };
   }
@@ -125,6 +129,8 @@ export async function markStudentAttendance(params: {
       status: params.status,
       penaltyCreated: false,
       penaltyDescription: null,
+      bookingStatusChange: null,
+      creditRestored: false,
       error: outcome.reason,
     };
   }
@@ -133,31 +139,71 @@ export async function markStudentAttendance(params: {
   const newStatus = params.status;
 
   // ── Booking status synchronization ──
-  // present/late → checked_in; absent/excused → revert to confirmed
+  // present/late → checked_in
+  // absent → missed (NOT cancelled)
+  // excused → booking stays as-is (no status change)
   if (params.bookingId) {
     if (isAttended(newStatus)) {
-      bookingSvc.checkInBooking(params.bookingId);
-    } else if (isNotAttended(newStatus)) {
-      bookingSvc.revertCheckIn(params.bookingId);
+      const booking = bookingSvc.bookings.find((b) => b.id === params.bookingId);
+      if (booking) {
+        if (booking.status === "missed") {
+          bookingSvc.restoreFromMissed(params.bookingId);
+        } else {
+          bookingSvc.checkInBooking(params.bookingId);
+        }
+      }
+    } else if (newStatus === "absent") {
+      bookingSvc.markMissedFromAttendance(params.bookingId);
     }
+    // excused: intentionally no booking status change
   }
 
   // ── Credit/class restoration logic ──
-  // Booking already consumed at booking time. Absent/excused = restore.
-  // If changing from absent→present, re-consume.
+  // Credits are consumed at booking time.
+  // Excused: ALWAYS refund the credit (business rule).
+  // Absent: refund depends on the refundCreditOnAbsent setting.
+  // Present/Late: consume if not already consumed (reversal from absent/excused).
+  let bookingStatusChange: string | null = null;
+  let creditRestored = false;
+
   if (params.bookingId) {
     const booking = bookingSvc.bookings.find((b) => b.id === params.bookingId);
     const subId = booking?.subscriptionId ?? null;
 
-    const prevConsumed = previousStatus ? isAttended(previousStatus) || previousStatus === null : true;
+    if (booking) {
+      bookingStatusChange = booking.status;
+    }
+
+    const { getSettings } = await import("@/lib/services/settings-store");
+    const settings = getSettings();
     const newConsumed = isAttended(newStatus);
 
+    // Determine whether the credit was effectively consumed before this change
+    let prevConsumed: boolean;
     if (previousStatus === null) {
-      if (!newConsumed) {
-        await adjustEntitlement(subId, true, false);
-      }
+      prevConsumed = true; // first-time marking, credit consumed at booking time
+    } else if (previousStatus === "excused") {
+      prevConsumed = false; // excused always refunds
+    } else if (previousStatus === "absent") {
+      prevConsumed = !settings.refundCreditOnAbsent; // absent refund depends on setting
     } else {
-      await adjustEntitlement(subId, prevConsumed, newConsumed);
+      prevConsumed = true; // present/late = consumed
+    }
+
+    // Excused always refunds
+    if (newStatus === "excused" && subId && prevConsumed) {
+      await adjustEntitlement(subId, true, false);
+      creditRestored = true;
+    }
+
+    // Absent: refund only if setting is ON
+    if (newStatus === "absent" && subId && prevConsumed && settings.refundCreditOnAbsent) {
+      await adjustEntitlement(subId, true, false);
+    }
+
+    // Reversal to present/late: re-consume credit if it was previously refunded
+    if (previousStatus !== null && !prevConsumed && newConsumed && subId) {
+      await adjustEntitlement(subId, false, true);
     }
   }
 
@@ -252,6 +298,8 @@ export async function markStudentAttendance(params: {
     status: params.status,
     penaltyCreated,
     penaltyDescription,
+    bookingStatusChange,
+    creditRestored,
     error: null,
   };
 }
@@ -266,6 +314,7 @@ export async function closeAttendanceForPastClasses(): Promise<{
   classesProcessed: number;
   bookingsMarkedMissed: number;
 }> {
+  await requireRole(["admin", "teacher"]);
   await ensureOperationalDataHydrated();
   const result = runAttendanceClosure();
 
@@ -284,6 +333,7 @@ export async function clearAllAttendanceAction(): Promise<{
   cleared: number;
   error?: string;
 }> {
+  await requireRole(["admin"]);
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }

@@ -14,6 +14,9 @@ export interface CreateTemplateData {
   leaderCap: number | null;
   followerCap: number | null;
   location: string;
+  isActive?: boolean;
+  termBound?: boolean;
+  termId?: string | null;
 }
 
 export interface TemplatePatch extends Partial<CreateTemplateData> {
@@ -35,9 +38,14 @@ export interface CreateInstanceData {
   followerCap: number | null;
   status: InstanceStatus;
   location: string;
+  termBound?: boolean;
+  termId?: string | null;
 }
 
-export interface InstancePatch extends Partial<CreateInstanceData> {}
+export interface InstancePatch extends Partial<CreateInstanceData> {
+  teacherOverride1Id?: string | null;
+  teacherOverride2Id?: string | null;
+}
 
 export interface IScheduleRepository {
   getTemplates(): Promise<MockClass[]>;

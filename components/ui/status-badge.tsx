@@ -7,6 +7,8 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   scheduled:        { label: "Scheduled",      variant: "default" },
   closed:           { label: "Closed",         variant: "info" },
   cancelled:        { label: "Cancelled",      variant: "danger" },
+  live:             { label: "Live",           variant: "warning" },
+  ended:            { label: "Ended",          variant: "default" },
   confirmed:        { label: "Confirmed",      variant: "success" },
   checked_in:       { label: "Checked In",     variant: "success" },
   waiting:          { label: "Waiting",        variant: "warning" },

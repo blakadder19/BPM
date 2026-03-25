@@ -162,7 +162,12 @@ describe("Social Product — Isolation", () => {
 // ── Student Practice — Member Benefit Access ────────────────
 
 describe("Student Practice — Member Benefit Access", () => {
-  const membershipIds = ["p-mem-4", "p-mem-8", "p-mem-12", "p-mem-16"];
+  const membershipIds = [
+    "p-mem-bronze-std", "p-mem-bronze-bach", "p-mem-bronze-salsa", "p-mem-bronze-yoga",
+    "p-mem-silver-std", "p-mem-silver-bach", "p-mem-silver-salsa", "p-mem-silver-yoga",
+    "p-mem-gold-std", "p-mem-gold-bach", "p-mem-gold-salsa", "p-mem-gold-yoga",
+    "p-mem-rainbow",
+  ];
 
   it("membership products grant access to student_practice", () => {
     for (const id of membershipIds) {

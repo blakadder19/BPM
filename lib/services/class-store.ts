@@ -46,6 +46,8 @@ export function createTemplate(data: {
   location: string;
   isActive: boolean;
   notes: string | null;
+  termBound?: boolean;
+  termId?: string | null;
 }): MockClass {
   const list = init();
   const tpl: MockClass = {
@@ -64,6 +66,8 @@ export function createTemplate(data: {
     location: data.location,
     isActive: data.isActive,
     notes: data.notes,
+    termBound: data.termBound ?? false,
+    termId: data.termId ?? null,
   };
   list.push(tpl);
   return tpl;
@@ -86,6 +90,8 @@ type TemplatePatch = Partial<
     | "location"
     | "isActive"
     | "notes"
+    | "termBound"
+    | "termId"
   >
 >;
 

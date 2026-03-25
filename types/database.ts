@@ -114,6 +114,8 @@ export interface Database {
           follower_cap: number | null;
           location: string | null;
           is_active: boolean;
+          term_bound: boolean | null;
+          term_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -165,6 +167,10 @@ export interface Database {
           status: "scheduled" | "open" | "closed" | "cancelled";
           location: string | null;
           notes: string | null;
+          teacher_override_1_id: string | null;
+          teacher_override_2_id: string | null;
+          term_bound: boolean | null;
+          term_id: string | null;
           created_at: string;
           updated_at: string;
         };

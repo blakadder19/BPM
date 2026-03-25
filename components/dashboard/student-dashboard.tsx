@@ -221,21 +221,7 @@ export function StudentDashboard({
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {e.productType === "membership" && e.classesPerTerm !== null && (
-                      <span className="text-sm font-medium text-gray-700">
-                        Used {e.classesUsed} / {e.classesPerTerm} · {e.classesPerTerm - e.classesUsed} left
-                      </span>
-                    )}
-                    {e.productType !== "membership" && e.remainingCredits !== null && e.totalCredits !== null && (
-                      <span className="text-sm font-medium text-gray-700">
-                        Used {e.totalCredits - e.remainingCredits} / {e.totalCredits} · {e.remainingCredits} left
-                      </span>
-                    )}
-                    {e.productType !== "membership" && e.remainingCredits !== null && e.totalCredits === null && (
-                      <span className="text-sm font-medium text-gray-700">
-                        {e.remainingCredits} credit{e.remainingCredits !== 1 ? "s" : ""} left
-                      </span>
-                    )}
+                    <EntitlementBalance e={e} />
                     {e.autoRenew && (
                       <span title="Auto-renew">
                         <RefreshCw className="h-3.5 w-3.5 text-green-500" />
@@ -406,6 +392,32 @@ export function StudentDashboard({
       )}
     </div>
   );
+}
+
+function EntitlementBalance({ e }: { e: StudentEntitlementSummary }) {
+  if (e.classesPerTerm !== null) {
+    const left = Math.max(0, e.classesPerTerm - e.classesUsed);
+    return (
+      <span className="text-sm font-medium text-gray-700">
+        Used {e.classesUsed} / {e.classesPerTerm} · {left} left
+      </span>
+    );
+  }
+  if (e.remainingCredits !== null && e.totalCredits !== null) {
+    return (
+      <span className="text-sm font-medium text-gray-700">
+        Used {e.totalCredits - e.remainingCredits} / {e.totalCredits} · {e.remainingCredits} left
+      </span>
+    );
+  }
+  if (e.remainingCredits !== null) {
+    return (
+      <span className="text-sm font-medium text-gray-700">
+        {e.remainingCredits} credit{e.remainingCredits !== 1 ? "s" : ""} left
+      </span>
+    );
+  }
+  return null;
 }
 
 function CocBanner() {

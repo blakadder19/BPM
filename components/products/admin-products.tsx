@@ -56,11 +56,13 @@ const rulesByProduct = new Map(
 interface AdminProductsProps {
   products: MockProduct[];
   subscriptions: MockSubscription[];
+  studentNameMap: Record<string, string>;
 }
 
 export function AdminProducts({
   products,
   subscriptions,
+  studentNameMap,
 }: AdminProductsProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -227,6 +229,7 @@ export function AdminProducts({
                   <ProductDetailPanel
                     product={p}
                     subscriptions={subscriptions}
+                    studentNameMap={studentNameMap}
                     colSpan={TABLE_HEADERS.length}
                   />
                 )}

@@ -90,12 +90,69 @@ export function deleteTeacher(id: string): boolean {
   const idx = list.findIndex((t) => t.id === id);
   if (idx === -1) return false;
   list.splice(idx, 1);
+
+  cleanUpTeacherReferences(id);
+
   return true;
+}
+
+/**
+ * Remove all future default assignments and schedule instance overrides
+ * that reference the given teacher ID. Called on teacher deletion.
+ */
+function cleanUpTeacherReferences(teacherId: string): void {
+  try {
+    const { getAssignments } = require("@/lib/services/teacher-store");
+    const assignments = getAssignments();
+    const today = new Date().toISOString().slice(0, 10);
+
+    for (const a of assignments) {
+      const isFuture = !a.effectiveUntil || a.effectiveUntil >= today;
+      if (!isFuture) continue;
+
+      if (a.teacher1Id === teacherId && a.teacher2Id === teacherId) {
+        a.isActive = false;
+        a.teacher1Id = "";
+        a.teacher2Id = null;
+      } else if (a.teacher1Id === teacherId) {
+        if (a.teacher2Id) {
+          a.teacher1Id = a.teacher2Id;
+          a.teacher2Id = null;
+        } else {
+          a.isActive = false;
+          a.teacher1Id = "";
+        }
+      } else if (a.teacher2Id === teacherId) {
+        a.teacher2Id = null;
+      }
+    }
+  } catch { /* teacher-store not loaded yet */ }
+
+  try {
+    const { getInstances } = require("@/lib/services/schedule-store");
+    const instances = getInstances();
+    const today = new Date().toISOString().slice(0, 10);
+
+    for (const inst of instances) {
+      if (inst.date < today) continue;
+      if (inst.teacherOverride1Id === teacherId) {
+        inst.teacherOverride1Id = null;
+        inst.teacherOverride2Id = null;
+      } else if (inst.teacherOverride2Id === teacherId) {
+        inst.teacherOverride2Id = null;
+      }
+    }
+  } catch { /* schedule-store not loaded yet */ }
 }
 
 /** Build a name lookup map: teacherId -> fullName */
 export function buildTeacherNameMap(): Map<string, string> {
   return new Map(init().map((t) => [t.id, t.fullName]));
+}
+
+/** Returns the set of teacher IDs that are currently inactive. */
+export function getInactiveTeacherIds(): Set<string> {
+  return new Set(init().filter((t) => !t.isActive).map((t) => t.id));
 }
 
 export function replaceTeachers(list: Teacher[]): void {

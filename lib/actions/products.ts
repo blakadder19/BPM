@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 import {
   createProduct,
   updateProduct,
@@ -23,14 +24,22 @@ function parseLevels(raw: string | null): string[] | null {
   return raw.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+function eurosToCents(raw: string | null): number {
+  if (!raw || raw.trim() === "") return 0;
+  const euros = parseFloat(raw);
+  if (isNaN(euros)) return NaN;
+  return Math.round(euros * 100);
+}
+
 export async function createProductAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const name = (formData.get("name") as string)?.trim();
   const description = (formData.get("description") as string)?.trim() || "";
   const longDescription = (formData.get("longDescription") as string)?.trim() || null;
   const productType = formData.get("productType") as string;
-  const priceCents = Number(formData.get("priceCents"));
+  const priceCents = eurosToCents(formData.get("priceEuros") as string);
   const totalCredits = parseOptionalInt(formData.get("totalCredits") as string);
   const durationDays = parseOptionalInt(formData.get("durationDays") as string);
   const styleName = (formData.get("styleName") as string)?.trim() || null;
@@ -39,6 +48,9 @@ export async function createProductAction(
   const notes = (formData.get("notes") as string)?.trim() || null;
   const validityDescription = (formData.get("validityDescription") as string)?.trim() || null;
   const creditsModel = formData.get("creditsModel") as string;
+  const termBound = formData.get("termBound") === "on" || formData.get("termBound") === "true";
+  const recurring = formData.get("recurring") === "on" || formData.get("recurring") === "true";
+  const classesPerTerm = parseOptionalInt(formData.get("classesPerTerm") as string);
 
   if (!name) return { success: false, error: "Name is required" };
   if (!VALID_TYPES.has(productType)) return { success: false, error: "Invalid product type" };
@@ -59,6 +71,9 @@ export async function createProductAction(
     notes,
     validityDescription,
     creditsModel: creditsModel as CreditsModel,
+    termBound,
+    recurring,
+    classesPerTerm,
   });
 
   if (result.success) revalidatePath("/products");
@@ -68,12 +83,13 @@ export async function createProductAction(
 export async function updateProductAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const id = formData.get("id") as string;
   const name = (formData.get("name") as string)?.trim();
   const description = (formData.get("description") as string)?.trim() || "";
   const longDescription = (formData.get("longDescription") as string)?.trim() || null;
   const productType = formData.get("productType") as string;
-  const priceCents = Number(formData.get("priceCents"));
+  const priceCents = eurosToCents(formData.get("priceEuros") as string);
   const totalCredits = parseOptionalInt(formData.get("totalCredits") as string);
   const durationDays = parseOptionalInt(formData.get("durationDays") as string);
   const styleName = (formData.get("styleName") as string)?.trim() || null;
@@ -83,6 +99,9 @@ export async function updateProductAction(
   const notes = (formData.get("notes") as string)?.trim() || null;
   const validityDescription = (formData.get("validityDescription") as string)?.trim() || null;
   const creditsModel = formData.get("creditsModel") as string;
+  const termBound = formData.get("termBound") === "on" || formData.get("termBound") === "true";
+  const recurring = formData.get("recurring") === "on" || formData.get("recurring") === "true";
+  const classesPerTerm = parseOptionalInt(formData.get("classesPerTerm") as string);
 
   if (!id) return { success: false, error: "Missing product ID" };
   if (!name) return { success: false, error: "Name is required" };
@@ -105,6 +124,9 @@ export async function updateProductAction(
     notes,
     validityDescription,
     creditsModel: creditsModel as CreditsModel,
+    termBound,
+    recurring,
+    classesPerTerm,
   });
 
   if (result.success) revalidatePath("/products");
@@ -114,6 +136,7 @@ export async function updateProductAction(
 export async function toggleProductActiveAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const id = formData.get("id") as string;
   if (!id) return { success: false, error: "Missing product ID" };
 
@@ -125,6 +148,7 @@ export async function toggleProductActiveAction(
 export async function deleteProductAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   if (!id) return { success: false, error: "Missing product ID" };
 
   const result = await deleteProduct(id);

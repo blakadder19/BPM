@@ -5,9 +5,11 @@ import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getTerms } from "@/lib/services/term-store";
-import { getAccessRulesMap } from "@/config/product-access";
+import { buildDynamicAccessRulesMap } from "@/config/product-access";
+import { getProductRepo } from "@/lib/repositories";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { computeBookability, type BookabilityContext, type ClassInstanceInfo } from "@/lib/domain/bookability";
+import { isTermBoundLevel } from "@/lib/domain/term-rules";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getStudentRepo, getSubscriptionRepo, getCocRepo } from "@/lib/repositories";
 import { updateSubscription } from "@/lib/services/subscription-service";
@@ -52,7 +54,8 @@ export async function createStudentBooking(input: {
   const instances = getInstances();
   const terms = getTerms();
   const allSubs = await getSubscriptionRepo().getByStudent(student.id);
-  const accessRulesMap = getAccessRulesMap();
+  const allProducts = await getProductRepo().getAll();
+  const accessRulesMap = buildDynamicAccessRulesMap(allProducts);
 
   const rawCls = instances.find((c) => c.id === bookableClassId);
   if (!rawCls) return { success: false, error: "Class not found." };
@@ -122,6 +125,8 @@ export async function createStudentBooking(input: {
     currentLeaders: allBookingsForClass.filter((b) => b.danceRole === "leader").length,
     currentFollowers: allBookingsForClass.filter((b) => b.danceRole === "follower").length,
     totalBooked: allBookingsForClass.length,
+    termBound: isTermBoundLevel(rawCls.level),
+    termId: rawCls.termId ?? null,
   };
 
   const cocAccepted = await getCocRepo().hasAcceptedVersion(

@@ -2,14 +2,14 @@
  * Product access rules — determines which classes each product grants access to.
  *
  * Style access modes:
- *   "all"             — any style (memberships, drop-in)
- *   "fixed"           — hard-coded list of style IDs (yoga products)
- *   "selected_style"  — student picks ONE style at purchase time (Beginners 1&2)
+ *   "all"             — any style (rainbow membership, drop-in)
+ *   "fixed"           — hard-coded list of style IDs (yoga, bachata, salsa products)
+ *   "selected_style"  — student picks ONE style at purchase time (Latin passes, Beg 1&2)
  *   "course_group"    — student picks N from a pool (Latin Combo)
  *   "social_only"     — socials only (excluded from class booking flow)
  *
- * PROVISIONAL rules are clearly marked. The exact mapping for Bronze/Silver/Gold
- * tiers and Yoga products is pending academy confirmation.
+ * PROVISIONAL rules are clearly marked. The exact mapping for Standard memberships
+ * (which exclude "Salsa & Bachata") is pending academy confirmation.
  */
 
 import type { ClassType } from "@/types/domain";
@@ -34,78 +34,16 @@ export interface ProductAccessRule {
   provisionalNote: string | null;
 }
 
-// ── Configurable pool for Latin Combo ───────────────────────
+// ── Style ID groups ─────────────────────────────────────────
 
-/**
- * PROVISIONAL — the three "beginner Latin partner" styles.
- * Students pick 2 of these when purchasing the Beginners Latin Combo.
- */
-export const LATIN_COMBO_POOL_STYLE_IDS = ["ds-1", "ds-4", "ds-5"]; // Bachata, Cuban, Salsa Line
+const BACHATA_STYLE_IDS = ["ds-1", "ds-2", "ds-3"];
+const SALSA_STYLE_IDS = ["ds-4", "ds-5"];
+const YOGA_STYLE_IDS = ["ds-9"];
+export const LATIN_COMBO_POOL_STYLE_IDS = ["ds-1", "ds-4", "ds-5"];
 
 // ── Product access rules ────────────────────────────────────
 
 export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
-  // ── Memberships (term-bound, classesPerTerm-based) ─────
-  // Members get access to regular classes + free weekend Student Practice
-  {
-    productId: "p-mem-4",
-    allowedClassTypes: ["class", "student_practice"],
-    styleAccess: { type: "all" },
-    allowedLevels: null,
-    isProvisional: false,
-    provisionalNote: null,
-  },
-  {
-    productId: "p-mem-8",
-    allowedClassTypes: ["class", "student_practice"],
-    styleAccess: { type: "all" },
-    allowedLevels: null,
-    isProvisional: false,
-    provisionalNote: null,
-  },
-  {
-    productId: "p-mem-12",
-    allowedClassTypes: ["class", "student_practice"],
-    styleAccess: { type: "all" },
-    allowedLevels: null,
-    isProvisional: false,
-    provisionalNote: null,
-  },
-  {
-    productId: "p-mem-16",
-    allowedClassTypes: ["class", "student_practice"],
-    styleAccess: { type: "all" },
-    allowedLevels: null,
-    isProvisional: false,
-    provisionalNote: null,
-  },
-
-  // ── Passes (term-bound, credit-based, selected style) ──
-  {
-    productId: "p-pass-bronze",
-    allowedClassTypes: ["class"],
-    styleAccess: { type: "selected_style" },
-    allowedLevels: null,
-    isProvisional: false,
-    provisionalNote: null,
-  },
-  {
-    productId: "p-pass-silver",
-    allowedClassTypes: ["class"],
-    styleAccess: { type: "selected_style" },
-    allowedLevels: null,
-    isProvisional: false,
-    provisionalNote: null,
-  },
-  {
-    productId: "p-pass-gold",
-    allowedClassTypes: ["class"],
-    styleAccess: { type: "selected_style" },
-    allowedLevels: null,
-    isProvisional: false,
-    provisionalNote: null,
-  },
-
   // ── Drop-in ─────────────────────────────────────────────
   {
     productId: "p-dropin",
@@ -114,6 +52,58 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
     allowedLevels: null,
     isProvisional: false,
     provisionalNote: null,
+  },
+
+  // ── Latin Passes (selected style) ───────────────────────
+  {
+    productId: "p-lat-bronze",
+    allowedClassTypes: ["class"],
+    styleAccess: { type: "selected_style" },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-lat-silver",
+    allowedClassTypes: ["class"],
+    styleAccess: { type: "selected_style" },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-lat-gold",
+    allowedClassTypes: ["class"],
+    styleAccess: { type: "selected_style" },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+
+  // ── Yoga Passes (yoga only) ─────────────────────────────
+  {
+    productId: "p-yoga-bronze",
+    allowedClassTypes: ["class"],
+    styleAccess: { type: "fixed", styleIds: YOGA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-yoga-silver",
+    allowedClassTypes: ["class"],
+    styleAccess: { type: "fixed", styleIds: YOGA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-yoga-gold",
+    allowedClassTypes: ["class"],
+    styleAccess: { type: "fixed", styleIds: YOGA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: true,
+    provisionalNote: "Gold Yoga Pass extrapolated from pricing pattern — pending confirmation",
   },
 
   // ── Promo passes ────────────────────────────────────────
@@ -138,7 +128,7 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
     provisionalNote: "Pick 2 of 3 Latin styles; exact pool configurable",
   },
 
-  // ── Social ──────────────────────────────────────────────
+  // ── Social Pass ─────────────────────────────────────────
   {
     productId: "p-social",
     allowedClassTypes: ["social"],
@@ -146,6 +136,118 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
     allowedLevels: null,
     isProvisional: false,
     provisionalNote: "Socials are not part of the class booking flow",
+  },
+
+  // ── Bronze Memberships (4 classes/term) ─────────────────
+  {
+    productId: "p-mem-bronze-std",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "all" },
+    allowedLevels: null,
+    isProvisional: true,
+    provisionalNote: "Standard membership excludes Salsa & Bachata — exact enforcement TBD",
+  },
+  {
+    productId: "p-mem-bronze-bach",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: BACHATA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-mem-bronze-salsa",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: SALSA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-mem-bronze-yoga",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: YOGA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+
+  // ── Silver Memberships (8 classes/term) ─────────────────
+  {
+    productId: "p-mem-silver-std",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "all" },
+    allowedLevels: null,
+    isProvisional: true,
+    provisionalNote: "Standard membership excludes Salsa & Bachata — exact enforcement TBD",
+  },
+  {
+    productId: "p-mem-silver-bach",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: BACHATA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-mem-silver-salsa",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: SALSA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-mem-silver-yoga",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: YOGA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+
+  // ── Gold Memberships (12 classes/term) ──────────────────
+  {
+    productId: "p-mem-gold-std",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "all" },
+    allowedLevels: null,
+    isProvisional: true,
+    provisionalNote: "Standard membership excludes Salsa & Bachata — exact enforcement TBD",
+  },
+  {
+    productId: "p-mem-gold-bach",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: BACHATA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-mem-gold-salsa",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: SALSA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-mem-gold-yoga",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: YOGA_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+
+  // ── Rainbow Membership (all-access, 16 classes/term) ────
+  {
+    productId: "p-mem-rainbow",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "all" },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
   },
 ];
 
@@ -161,6 +263,54 @@ export function getAccessRule(productId: string): ProductAccessRule | undefined 
 
 export function getAccessRulesMap(): Map<string, ProductAccessRule> {
   return rulesByProductId;
+}
+
+/**
+ * Builds an access-rules map that works with REAL product IDs (e.g. Supabase UUIDs),
+ * not just the hardcoded seed IDs in PRODUCT_ACCESS_RULES.
+ *
+ * Strategy:
+ * 1. Start with the hardcoded rules (covers seed products).
+ * 2. For each real product NOT already in the map, match by name to a seed product's rule.
+ * 3. If no name match, infer a default rule from the product's type and properties.
+ */
+export function buildDynamicAccessRulesMap(
+  products: { id: string; name: string; productType: string; allowedLevels: string[] | null }[]
+): Map<string, ProductAccessRule> {
+  const map = new Map(rulesByProductId);
+
+  const seedNameToRule = new Map<string, ProductAccessRule>();
+  try {
+    const { PRODUCTS } = require("@/lib/mock-data");
+    for (const sp of PRODUCTS as { id: string; name: string }[]) {
+      const rule = rulesByProductId.get(sp.id);
+      if (rule) seedNameToRule.set(sp.name, rule);
+    }
+  } catch {
+    // seed data unavailable — rely on inference below
+  }
+
+  for (const p of products) {
+    if (map.has(p.id)) continue;
+
+    const matched = seedNameToRule.get(p.name);
+    if (matched) {
+      map.set(p.id, { ...matched, productId: p.id });
+      continue;
+    }
+
+    const inferred: ProductAccessRule = {
+      productId: p.id,
+      allowedClassTypes: p.productType === "membership" ? ["class", "student_practice"] : ["class"],
+      styleAccess: { type: "all" },
+      allowedLevels: p.allowedLevels,
+      isProvisional: true,
+      provisionalNote: `Auto-inferred rule for "${p.name}"`,
+    };
+    map.set(p.id, inferred);
+  }
+
+  return map;
 }
 
 /**

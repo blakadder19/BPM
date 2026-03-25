@@ -1,5 +1,6 @@
 "use server";
 
+import { requireRole } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import type { PenaltyResolution } from "@/types/domain";
@@ -15,14 +16,18 @@ export interface CancellationResult {
   error?: string;
 }
 
+/**
+ * Admin-only cancellation action. Student cancellation uses
+ * studentCancelBookingAction in booking-student.ts instead.
+ */
 export async function cancelStudentBooking(
   bookingId: string
 ): Promise<CancellationResult> {
+  await requireRole(["admin"]);
+
   if (!bookingId || typeof bookingId !== "string") {
     return { success: false, error: "Booking ID is required." };
   }
-
-  await new Promise((r) => setTimeout(r, 200));
 
   const bookingService = getBookingService();
   const cancelledAt = new Date();

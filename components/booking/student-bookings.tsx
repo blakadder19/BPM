@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarPlus, Inbox, XCircle, RotateCcw, QrCode, LogIn } from "lucide-react";
+import { CalendarPlus, Inbox, XCircle, RotateCcw, QrCode } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -21,7 +21,6 @@ import { checkLateCancelStatusAction } from "@/lib/actions/bookings-admin";
 import { studentCancelBookingAction } from "@/lib/actions/booking-student";
 import { studentRestoreBookingAction, checkRestoreEligibilityAction } from "@/lib/actions/booking-student";
 import { studentLeaveWaitlistAction } from "@/lib/actions/waitlist-student";
-import { studentSelfCheckInAction } from "@/lib/actions/checkin";
 import { CheckInQrDialog } from "./checkin-qr";
 import type { BookingView, StudentWaitlistView } from "@/app/(app)/bookings/page";
 
@@ -32,8 +31,11 @@ export function StudentBookings({
   bookings: BookingView[];
   waitlistEntries?: StudentWaitlistView[];
 }) {
-  const isFuture = (date: string, startTime: string) =>
-    new Date() < new Date(`${date}T${startTime}:00`);
+  const isFuture = (date: string, startTime: string) => {
+    if (!date || !startTime) return false;
+    const t = startTime.length <= 5 ? `${startTime}:00` : startTime;
+    return new Date() < new Date(`${date}T${t}`);
+  };
 
   const cancelledStatuses = new Set(["cancelled", "late_cancelled"]);
   const terminalStatuses = new Set(["cancelled", "late_cancelled", "missed"]);
@@ -72,7 +74,6 @@ export function StudentBookings({
   const [cancelTarget, setCancelTarget] = useState<BookingView | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<BookingView | null>(null);
   const [qrTarget, setQrTarget] = useState<BookingView | null>(null);
-  const [checkInTarget, setCheckInTarget] = useState<BookingView | null>(null);
 
   return (
     <div className="space-y-6">
@@ -113,10 +114,8 @@ export function StudentBookings({
                 <BookingCard
                   key={b.id}
                   booking={b}
-                  showCancel={b.status === "confirmed"}
+                  showCancel
                   onCancel={() => setCancelTarget(b)}
-                  showCheckIn={b.status === "confirmed"}
-                  onCheckIn={() => setCheckInTarget(b)}
                   showQr={b.status === "confirmed" && !!b.checkInToken}
                   onShowQr={() => setQrTarget(b)}
                 />
@@ -185,18 +184,12 @@ export function StudentBookings({
         <CheckInQrDialog
           token={qrTarget.checkInToken}
           classTitle={qrTarget.classTitle}
-          date={formatDate(qrTarget.date)}
-          startTime={formatTime(qrTarget.startTime)}
+          date={qrTarget.date ? formatDate(qrTarget.date) : "—"}
+          startTime={qrTarget.startTime ? formatTime(qrTarget.startTime) : "—"}
           onClose={() => setQrTarget(null)}
         />
       )}
 
-      {checkInTarget && (
-        <StudentCheckInDialog
-          booking={checkInTarget}
-          onClose={() => setCheckInTarget(null)}
-        />
-      )}
     </div>
   );
 }
@@ -207,8 +200,6 @@ function BookingCard({
   onCancel,
   showRestore,
   onRestore,
-  showCheckIn,
-  onCheckIn,
   showQr,
   onShowQr,
 }: {
@@ -217,8 +208,6 @@ function BookingCard({
   onCancel?: () => void;
   showRestore?: boolean;
   onRestore?: () => void;
-  showCheckIn?: boolean;
-  onCheckIn?: () => void;
   showQr?: boolean;
   onShowQr?: () => void;
 }) {
@@ -227,8 +216,8 @@ function BookingCard({
       <div>
         <h3 className="font-medium text-gray-900">{b.classTitle}</h3>
         <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-          <span>{formatDate(b.date)}</span>
-          <span>{formatTime(b.startTime)}</span>
+          {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
+          {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
           {b.location && <span>{b.location}</span>}
           {b.danceRole && <StatusBadge status={b.danceRole} />}
         </div>
@@ -239,12 +228,6 @@ function BookingCard({
           <Button variant="outline" size="sm" onClick={onShowQr}>
             <QrCode className="h-4 w-4 mr-1" />
             QR
-          </Button>
-        )}
-        {showCheckIn && onCheckIn && (
-          <Button variant="outline" size="sm" onClick={onCheckIn} className="text-emerald-700 border-emerald-200 hover:bg-emerald-50">
-            <LogIn className="h-4 w-4 mr-1" />
-            Check In
           </Button>
         )}
         {showCancel && onCancel && (
@@ -366,9 +349,11 @@ function StudentCancelDialog({
         <DialogBody className="space-y-4">
           <div className="space-y-1 text-sm text-gray-600">
             <p className="font-medium text-gray-900">{booking.classTitle}</p>
-            <p>
-              {formatDate(booking.date)} · {formatTime(booking.startTime)}
-            </p>
+            {booking.date ? (
+              <p>{formatDate(booking.date)}{booking.startTime ? ` · ${formatTime(booking.startTime)}` : ""}</p>
+            ) : (
+              <p className="text-gray-400">Date unavailable</p>
+            )}
             {booking.location && <p>{booking.location}</p>}
           </div>
 
@@ -496,9 +481,11 @@ function StudentRestoreDialog({
         <DialogBody className="space-y-4">
           <div className="space-y-1 text-sm text-gray-600">
             <p className="font-medium text-gray-900">{booking.classTitle}</p>
-            <p>
-              {formatDate(booking.date)} · {formatTime(booking.startTime)}
-            </p>
+            {booking.date ? (
+              <p>{formatDate(booking.date)}{booking.startTime ? ` · ${formatTime(booking.startTime)}` : ""}</p>
+            ) : (
+              <p className="text-gray-400">Date unavailable</p>
+            )}
             {booking.location && <p>{booking.location}</p>}
             <div className="mt-1">
               <StatusBadge status={booking.status} />
@@ -561,82 +548,3 @@ function StudentRestoreDialog({
   );
 }
 
-function StudentCheckInDialog({
-  booking,
-  onClose,
-}: {
-  booking: BookingView;
-  onClose: () => void;
-}) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [result, setResult] = useState<{ success: boolean; error?: string } | null>(null);
-
-  function handleCheckIn() {
-    startTransition(async () => {
-      const res = await studentSelfCheckInAction(booking.id);
-      setResult(res);
-      if (res.success) {
-        router.refresh();
-      }
-    });
-  }
-
-  return (
-    <Dialog open onClose={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Self Check-In</DialogTitle>
-        </DialogHeader>
-        <DialogBody className="space-y-4">
-          {result ? (
-            result.success ? (
-              <div className="flex flex-col items-center gap-2 py-4">
-                <div className="rounded-full bg-emerald-100 p-3">
-                  <LogIn className="h-6 w-6 text-emerald-600" />
-                </div>
-                <p className="text-lg font-semibold text-gray-900">Checked In</p>
-                <p className="text-sm text-gray-500">
-                  You are checked in for {booking.classTitle}.
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-                {result.error}
-              </div>
-            )
-          ) : (
-            <>
-              <p className="text-sm text-gray-600">
-                Check in for <span className="font-medium text-gray-900">{booking.classTitle}</span>
-                <br />
-                {formatDate(booking.date)} at {formatTime(booking.startTime)}
-              </p>
-              <p className="text-xs text-gray-400">
-                Self check-in is available starting 15 minutes before class and
-                until the attendance closure window. You can also show your QR
-                code to staff.
-              </p>
-            </>
-          )}
-        </DialogBody>
-        <DialogFooter>
-          {result ? (
-            <Button onClick={onClose}>
-              {result.success ? "Done" : "Close"}
-            </Button>
-          ) : (
-            <>
-              <Button variant="ghost" onClick={onClose}>
-                Cancel
-              </Button>
-              <Button onClick={handleCheckIn} disabled={isPending}>
-                {isPending ? "Checking in…" : "Confirm Check-In"}
-              </Button>
-            </>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

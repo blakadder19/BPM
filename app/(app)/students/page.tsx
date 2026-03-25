@@ -6,8 +6,10 @@ import {
   getTermRepo,
   getBookingRepo,
   getPenaltyRepo,
+  getAttendanceRepo,
 } from "@/lib/repositories";
 import { getWalletTransactions } from "@/lib/services/wallet-service";
+import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { AdminStudents } from "@/components/students/admin-students";
 
@@ -31,8 +33,10 @@ export default async function StudentsPage({
 
   const bookingSvc = getBookingRepo().getService();
   const penaltySvc = getPenaltyRepo().getService();
+  const attendanceSvc = getAttendanceRepo().getService();
   const bookings = bookingSvc.getAllBookings().map((b) => {
     const cls = bookingSvc.getClass(b.bookableClassId);
+    const attRecord = attendanceSvc.getRecord(b.bookableClassId, b.studentId);
     return {
       id: b.id,
       bookableClassId: b.bookableClassId,
@@ -42,7 +46,7 @@ export default async function StudentsPage({
       date: cls?.date ?? "",
       startTime: cls?.startTime ?? "",
       danceRole: b.danceRole,
-      status: b.status,
+      status: resolveStudentVisibleStatus(b.status, attRecord?.status) as typeof b.status,
       source: b.source,
       subscriptionId: b.subscriptionId,
       subscriptionName: b.subscriptionName,

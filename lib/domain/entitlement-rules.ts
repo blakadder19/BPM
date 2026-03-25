@@ -7,7 +7,6 @@ import type { ClassType, ProductType } from "@/types/domain";
 import type { ProductAccessRule, StyleAccess } from "@/config/product-access";
 import type { MockSubscription } from "@/lib/mock-data";
 import type { TermLike } from "./term-rules";
-import { findTermForDate, isDateInTerm } from "./term-rules";
 
 export interface ClassContext {
   classType: ClassType;
@@ -39,7 +38,9 @@ function styleMatches(
       return false;
     case "selected_style":
       if (!classStyleName) return false;
-      return sub.selectedStyleName === classStyleName;
+      if (sub.selectedStyleName === classStyleName) return true;
+      if (sub.selectedStyleNames && sub.selectedStyleNames.includes(classStyleName)) return true;
+      return false;
     case "course_group":
       if (!classStyleName) return false;
       if (sub.selectedStyleNames && sub.selectedStyleNames.length > 0) {
@@ -92,14 +93,11 @@ export function isEntitlementValidForClass(
   if (!styleMatches(accessRule.styleAccess, cls.styleName, sub)) return false;
   if (!levelMatches(accessRule.allowedLevels, cls.level)) return false;
 
-  if (sub.termId) {
-    const term = terms.find((t) => t.startDate <= cls.date && cls.date <= t.endDate);
-    if (!term) return false;
-    const subTerm = terms.find(
-      (t) => t.startDate <= sub.validFrom && sub.validFrom <= t.endDate
-    );
-    if (!subTerm || subTerm.startDate !== term.startDate) return false;
-  }
+  // PROVISIONAL: Subscription-to-term matching is disabled for now.
+  // The class-level term gate (bookability step 6) already handles lifecycle
+  // restrictions for term-bound classes. Product-specific term restrictions
+  // (e.g., "this subscription only covers Spring Term") will be re-enabled
+  // in a future phase once the academy's product model is finalised.
 
   return true;
 }

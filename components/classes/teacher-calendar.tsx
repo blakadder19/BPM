@@ -37,7 +37,7 @@ export function resolveEntries(
   teacherNameMap: Record<string, string>
 ): ResolvedEntry[] {
   const resolve = (id: string | null | undefined) =>
-    id && id !== BLOCKED_SENTINEL ? (teacherNameMap[id] ?? id) : null;
+    id && id !== BLOCKED_SENTINEL ? (teacherNameMap[id] ?? null) : null;
 
   return instances
     .filter((bc) => bc.status !== "cancelled")

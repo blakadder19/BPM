@@ -13,7 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { dayName, formatTime } from "@/lib/utils";
+import { dayName, formatTime, formatDate } from "@/lib/utils";
+import { isTermBoundLevel } from "@/lib/domain/term-rules";
 
 const CLASS_TYPES = [
   { value: "class", label: "Class" },
@@ -45,21 +46,33 @@ interface SettingsFlags {
 
 // ── Shared form ─────────────────────────────────────────────
 
+interface TermOption {
+  id: string;
+  name: string;
+  startDate?: string;
+  endDate?: string;
+}
+
 function TemplateForm({
   initial,
   allStyles,
+  allTerms,
   onSubmit,
   isPending,
   error,
 }: {
   initial: Partial<MockClass>;
   allStyles: StyleOption[];
+  allTerms?: TermOption[];
   onSubmit: (fd: FormData) => void;
   isPending: boolean;
   error: string | null;
 }) {
   const [classType, setClassType] = useState(initial.classType ?? "class");
   const [styleId, setStyleId] = useState(initial.styleId ?? "");
+  const [isTermBound, setIsTermBound] = useState(
+    initial.termBound === true || (initial.termBound === undefined && isTermBoundLevel(initial.level ?? null))
+  );
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -126,6 +139,7 @@ function TemplateForm({
           <select
             name="level"
             defaultValue={initial.level ?? ""}
+            onChange={(e) => setIsTermBound(isTermBoundLevel(e.target.value || null))}
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           >
             <option value="">— None —</option>
@@ -141,7 +155,7 @@ function TemplateForm({
           <label className="block text-sm font-medium text-gray-700">Day of Week *</label>
           <select
             name="dayOfWeek"
-            defaultValue={initial.dayOfWeek ?? 1}
+            defaultValue={initial.dayOfWeek === 0 ? 7 : (initial.dayOfWeek ?? 1)}
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           >
             {DAYS.map((d) => (
@@ -187,21 +201,46 @@ function TemplateForm({
         <textarea name="notes" rows={2} defaultValue={initial.notes ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
       </div>
 
-      <div className="flex items-center gap-2">
-        <input type="hidden" name="isActive" value={initial.isActive !== false ? "true" : "false"} />
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            defaultChecked={initial.isActive !== false}
-            onChange={(e) => {
-              const hidden = e.target.form?.querySelector('input[name="isActive"][type="hidden"]') as HTMLInputElement | null;
-              if (hidden) hidden.value = e.target.checked ? "true" : "false";
-            }}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600"
-          />
-          Active
-        </label>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <input type="hidden" name="isActive" value={initial.isActive !== false ? "true" : "false"} />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              defaultChecked={initial.isActive !== false}
+              onChange={(e) => {
+                const hidden = e.target.form?.querySelector('input[name="isActive"][type="hidden"]') as HTMLInputElement | null;
+                if (hidden) hidden.value = e.target.checked ? "true" : "false";
+              }}
+              className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+            />
+            Active
+          </label>
+        </div>
+        <input type="hidden" name="termBound" value={isTermBound ? "true" : "false"} />
+        {isTermBound && (
+          <span className="flex items-center gap-1.5 text-xs text-amber-700">
+            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+            Term-bound (Beginner course)
+          </span>
+        )}
       </div>
+
+      {isTermBound && allTerms && allTerms.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Linked Term *</label>
+          <select
+            name="termId"
+            defaultValue={initial.termId ?? ""}
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">— Select a term —</option>
+            {allTerms.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="flex justify-end gap-3 pt-2">
         <Button type="submit" disabled={isPending}>{isPending ? "Saving…" : "Save"}</Button>
@@ -214,9 +253,11 @@ function TemplateForm({
 
 export function AddTemplateDialog({
   allStyles,
+  allTerms,
   onClose,
 }: {
   allStyles: StyleOption[];
+  allTerms?: TermOption[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -237,7 +278,7 @@ export function AddTemplateDialog({
       <DialogContent>
         <DialogHeader><DialogTitle>Add Template</DialogTitle></DialogHeader>
         <DialogBody>
-          <TemplateForm initial={{}} allStyles={allStyles} onSubmit={handleSubmit} isPending={isPending} error={error} />
+          <TemplateForm initial={{}} allStyles={allStyles} allTerms={allTerms} onSubmit={handleSubmit} isPending={isPending} error={error} />
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -249,10 +290,12 @@ export function AddTemplateDialog({
 export function EditTemplateDialog({
   template,
   allStyles,
+  allTerms,
   onClose,
 }: {
   template: MockClass;
   allStyles: StyleOption[];
+  allTerms?: TermOption[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -273,7 +316,7 @@ export function EditTemplateDialog({
       <DialogContent>
         <DialogHeader><DialogTitle>Edit Template</DialogTitle></DialogHeader>
         <DialogBody>
-          <TemplateForm initial={template} allStyles={allStyles} onSubmit={handleSubmit} isPending={isPending} error={error} />
+          <TemplateForm initial={template} allStyles={allStyles} allTerms={allTerms} onSubmit={handleSubmit} isPending={isPending} error={error} />
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -286,12 +329,15 @@ export function TemplateDetailPanel({
   template: c,
   settings,
   assignments,
+  allTerms,
 }: {
   template: MockClass;
   settings: SettingsFlags;
   assignments: { teacher1Name: string; teacher2Name: string | null; effectiveFrom: string }[];
+  allTerms?: TermOption[];
 }) {
   const roleBalanced = c.styleName != null && (settings.roleBalancedStyleNames ?? []).includes(c.styleName);
+  const linkedTerm = c.termId && allTerms ? allTerms.find((t) => t.id === c.termId) : null;
 
   const bookabilityWarning =
     c.classType === "social" && !settings.socialsBookable
@@ -315,6 +361,28 @@ export function TemplateDetailPanel({
               <Detail label="Time" value={`${formatTime(c.startTime)} – ${formatTime(c.endTime)}`} />
               <Detail label="Location" value={c.location} />
               <Detail label="Active" value={c.isActive ? "Yes" : "No"} />
+              <Detail label="Term-bound">
+                {c.termBound ? (
+                  <span className="flex items-center gap-1.5">
+                    <Badge variant="warning">Term-bound</Badge>
+                    {linkedTerm ? linkedTerm.name : (
+                      c.termId
+                        ? <span className="text-amber-600">⚠ Linked term not found</span>
+                        : <span className="text-gray-400">No term linked</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-gray-400">No (open class)</span>
+                )}
+              </Detail>
+              {c.termBound && linkedTerm && linkedTerm.startDate && linkedTerm.endDate && (
+                <Detail label="Term Period" value={`${formatDate(linkedTerm.startDate)} – ${formatDate(linkedTerm.endDate)}`} />
+              )}
+              {c.termBound && c.termId && !linkedTerm && (
+                <Detail label="Term Period">
+                  <span className="text-amber-600 text-xs">Term ID {c.termId.slice(0, 8)}… could not be resolved</span>
+                </Detail>
+              )}
             </dl>
           </div>
 

@@ -11,7 +11,7 @@ import {
   getAttendanceRepo,
 } from "@/lib/repositories";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
-import { getTodayStr, isClassInFuture } from "@/lib/domain/datetime";
+import { getTodayStr, isClassInFuture, effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { computeMemberBenefits } from "@/lib/domain/member-benefits";
@@ -198,7 +198,7 @@ export default async function DashboardPage() {
     startTime: bc.startTime,
     endTime: bc.endTime,
     location: bc.location,
-    status: bc.status,
+    status: effectiveInstanceStatus(bc.status, bc.date, bc.startTime, bc.endTime),
     maxCapacity: bc.maxCapacity,
     bookedCount: bc.bookedCount,
     waitlistCount: bc.waitlistCount,

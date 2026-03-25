@@ -1,6 +1,10 @@
 /**
  * Shared datetime utilities for the BPM booking system.
  *
+ * IMPORTANT: This module is imported by client components ("use client").
+ * It must remain pure — no imports from server-only modules (settings-store, etc.).
+ * Any configurable values (like closure minutes) must be passed as parameters.
+ *
  * All class times are in local Dublin time. We parse "YYYY-MM-DD" + "HH:MM"
  * without a Z suffix so JS interprets them as local time. This is correct
  * for a server running in the academy's timezone.
@@ -9,15 +13,7 @@
  * explicit Europe/Dublin handling here.
  */
 
-import { getSettings } from "@/lib/services/settings-store";
-
-function getClosureMinutes(): number {
-  try {
-    return getSettings().attendanceClosureMinutes;
-  } catch {
-    return 60;
-  }
-}
+const DEFAULT_CLOSURE_MINUTES = 60;
 
 function normalizeTime(t: string): string {
   return t.length <= 5 ? `${t}:00` : t;
@@ -54,9 +50,10 @@ export function isClassInFuture(date: string, startTime: string): boolean {
 /**
  * Whether the attendance/check-in closure window has passed.
  * After this point, unchecked confirmed bookings should be marked as missed.
+ * @param closureMinutes — pass from settings; defaults to 60 if omitted.
  */
-export function isAfterClosureWindow(date: string, startTime: string): boolean {
-  const mins = getClosureMinutes();
+export function isAfterClosureWindow(date: string, startTime: string, closureMinutes?: number): boolean {
+  const mins = closureMinutes ?? DEFAULT_CLOSURE_MINUTES;
   const closure = classStartDT(date, startTime);
   closure.setMinutes(closure.getMinutes() + mins);
   return getNow() > closure;
@@ -64,11 +61,12 @@ export function isAfterClosureWindow(date: string, startTime: string): boolean {
 
 /**
  * Whether check-in is still allowed (from class start until closure window).
+ * @param closureMinutes — pass from settings; defaults to 60 if omitted.
  */
-export function isCheckInOpen(date: string, startTime: string): boolean {
+export function isCheckInOpen(date: string, startTime: string, closureMinutes?: number): boolean {
   const now = getNow();
   const start = classStartDT(date, startTime);
-  const mins = getClosureMinutes();
+  const mins = closureMinutes ?? DEFAULT_CLOSURE_MINUTES;
   const closure = new Date(start.getTime() + mins * 60_000);
   return now >= start && now <= closure;
 }
@@ -79,4 +77,39 @@ export function isCheckInOpen(date: string, startTime: string): boolean {
 export function minutesUntilStart(date: string, startTime: string): number {
   const ms = classStartDT(date, startTime).getTime() - getNow().getTime();
   return Math.round(ms / 60_000);
+}
+
+/**
+ * Whether the class end time has passed.
+ */
+export function isClassEnded(date: string, endTime: string): boolean {
+  return getNow() > classEndDT(date, endTime);
+}
+
+/**
+ * Whether the class is currently in session (started but not ended).
+ */
+export function isClassLive(date: string, startTime: string, endTime: string): boolean {
+  const now = getNow();
+  return now >= classStartDT(date, startTime) && now <= classEndDT(date, endTime);
+}
+
+/**
+ * Derive the effective lifecycle status from the stored status + current time.
+ *
+ * - cancelled always stays cancelled (manual override)
+ * - if class end time has passed → ended
+ * - if class is currently in session → live
+ * - otherwise → stored status (scheduled, open, closed)
+ */
+export function effectiveInstanceStatus(
+  storedStatus: import("@/types/domain").InstanceStatus,
+  date: string,
+  startTime: string,
+  endTime: string,
+): import("@/types/domain").EffectiveInstanceStatus {
+  if (storedStatus === "cancelled") return "cancelled";
+  if (isClassEnded(date, endTime)) return "ended";
+  if (isClassLive(date, startTime, endTime)) return "live";
+  return storedStatus;
 }

@@ -48,6 +48,8 @@ export function createInstance(data: {
   location: string;
   status: InstanceStatus;
   notes: string | null;
+  termBound?: boolean;
+  termId?: string | null;
 }): MockBookableClass {
   const list = init();
   const inst: MockBookableClass = {
@@ -71,6 +73,8 @@ export function createInstance(data: {
     followerCount: 0,
     waitlistCount: 0,
     notes: data.notes,
+    termBound: data.termBound ?? false,
+    termId: data.termId ?? null,
   };
   list.push(inst);
   return inst;
@@ -168,7 +172,8 @@ export function previewGeneration(
 export function generateFromTemplates(
   startDate: string,
   endDate: string,
-  opts?: GenerateOptions
+  opts?: GenerateOptions,
+  terms?: { id: string; startDate: string; endDate: string }[]
 ): { created: number; skipped: number; overwritten: number } {
   const list = init();
   const tpls = opts?.includeInactive
@@ -196,6 +201,24 @@ export function generateFromTemplates(
     for (const tpl of tpls) {
       if (tpl.dayOfWeek !== isoDay) continue;
 
+      // Rule 1: term-bound templates — skip dates outside the linked term range
+      if (tpl.termBound && terms) {
+        if (tpl.termId) {
+          const linkedTerm = terms.find((t) => t.id === tpl.termId);
+          if (linkedTerm && (dateStr < linkedTerm.startDate || dateStr > linkedTerm.endDate)) {
+            skipped++;
+            continue;
+          }
+        } else {
+          // No explicit termId — skip if date is outside ALL terms
+          const anyMatch = terms.some((t) => t.startDate <= dateStr && dateStr <= t.endDate);
+          if (!anyMatch) {
+            skipped++;
+            continue;
+          }
+        }
+      }
+
       const key = `${tpl.id}|${dateStr}|${tpl.startTime}`;
       const existingIdx = existingByKey.get(key);
 
@@ -222,6 +245,8 @@ export function generateFromTemplates(
             followerCount: 0,
             waitlistCount: 0,
             notes: null,
+            termBound: tpl.termBound ?? false,
+            termId: tpl.termId ?? null,
           };
           overwritten++;
         } else {
@@ -251,6 +276,8 @@ export function generateFromTemplates(
         followerCount: 0,
         waitlistCount: 0,
         notes: null,
+        termBound: tpl.termBound ?? false,
+        termId: tpl.termId ?? null,
       };
       list.push(newInst);
       existingByKey.set(key, list.length - 1);

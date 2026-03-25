@@ -44,9 +44,10 @@ export function isBookableClassType(classType: ClassType): boolean {
  */
 export function canBook(
   bc: BookableClassCapacity,
-  role: DanceRole | null
+  role: DanceRole | null,
+  opts?: { skipStatusCheck?: boolean }
 ): BookingDecision {
-  if (bc.status !== "open") {
+  if (!opts?.skipStatusCheck && bc.status !== "open") {
     return { allowed: false, waitlisted: false, reason: "Class is not open for booking" };
   }
 

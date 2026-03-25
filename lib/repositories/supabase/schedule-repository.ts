@@ -31,6 +31,8 @@ function toMockClass(row: ClassRow, styleName: string | null): MockClass {
     followerCap: row.follower_cap,
     location: row.location ?? "TBD",
     isActive: row.is_active,
+    termBound: row.term_bound ?? false,
+    termId: row.term_id ?? null,
   };
 }
 
@@ -55,6 +57,10 @@ function toMockBookableClass(row: BookableRow, styleName: string | null): MockBo
     followerCount: 0,
     waitlistCount: 0,
     location: row.location ?? "TBD",
+    termBound: row.term_bound ?? false,
+    termId: row.term_id ?? null,
+    teacherOverride1Id: row.teacher_override_1_id ?? null,
+    teacherOverride2Id: row.teacher_override_2_id ?? null,
   };
 }
 
@@ -95,22 +101,27 @@ export const supabaseScheduleRepo: IScheduleRepository = {
   async createTemplate(input: CreateTemplateData) {
     const supabase = createAdminClient();
     const academyId = await getAcademyId();
+    const row: Record<string, unknown> = {
+      academy_id: academyId,
+      dance_style_id: input.styleId,
+      title: input.title,
+      class_type: input.classType,
+      level: input.level,
+      day_of_week: input.dayOfWeek,
+      start_time: input.startTime,
+      end_time: input.endTime,
+      max_capacity: input.maxCapacity,
+      leader_cap: input.leaderCap,
+      follower_cap: input.followerCap,
+      location: input.location,
+    };
+    if (input.isActive !== undefined) row.is_active = input.isActive;
+    if (input.termBound !== undefined) row.term_bound = input.termBound;
+    if (input.termId !== undefined) row.term_id = input.termId || null;
+
     const { data, error } = await supabase
       .from("classes")
-      .insert({
-        academy_id: academyId,
-        dance_style_id: input.styleId,
-        title: input.title,
-        class_type: input.classType,
-        level: input.level,
-        day_of_week: input.dayOfWeek,
-        start_time: input.startTime,
-        end_time: input.endTime,
-        max_capacity: input.maxCapacity,
-        leader_cap: input.leaderCap,
-        follower_cap: input.followerCap,
-        location: input.location,
-      } as never)
+      .insert(row as never)
       .select()
       .single();
     if (error) throw new Error(error.message);
@@ -132,6 +143,8 @@ export const supabaseScheduleRepo: IScheduleRepository = {
     if (patch.followerCap !== undefined) fields.follower_cap = patch.followerCap;
     if (patch.location !== undefined) fields.location = patch.location;
     if (patch.isActive !== undefined) fields.is_active = patch.isActive;
+    if (patch.termBound !== undefined) fields.term_bound = patch.termBound;
+    if (patch.termId !== undefined) fields.term_id = patch.termId || null;
 
     if (Object.keys(fields).length === 0) return this.getTemplate(id);
 
@@ -166,24 +179,28 @@ export const supabaseScheduleRepo: IScheduleRepository = {
   async createInstance(input: CreateInstanceData) {
     const supabase = createAdminClient();
     const academyId = await getAcademyId();
+    const row: Record<string, unknown> = {
+      academy_id: academyId,
+      class_id: input.classId,
+      dance_style_id: input.styleId,
+      title: input.title,
+      class_type: input.classType,
+      level: input.level,
+      date: input.date,
+      start_time: input.startTime,
+      end_time: input.endTime,
+      max_capacity: input.maxCapacity,
+      leader_cap: input.leaderCap,
+      follower_cap: input.followerCap,
+      status: input.status,
+      location: input.location,
+    };
+    if (input.termBound !== undefined) row.term_bound = input.termBound;
+    if (input.termId !== undefined) row.term_id = input.termId || null;
+
     const { data, error } = await supabase
       .from("bookable_classes")
-      .insert({
-        academy_id: academyId,
-        class_id: input.classId,
-        dance_style_id: input.styleId,
-        title: input.title,
-        class_type: input.classType,
-        level: input.level,
-        date: input.date,
-        start_time: input.startTime,
-        end_time: input.endTime,
-        max_capacity: input.maxCapacity,
-        leader_cap: input.leaderCap,
-        follower_cap: input.followerCap,
-        status: input.status,
-        location: input.location,
-      } as never)
+      .insert(row as never)
       .select()
       .single();
     if (error) throw new Error(error.message);
@@ -205,6 +222,10 @@ export const supabaseScheduleRepo: IScheduleRepository = {
     if (patch.followerCap !== undefined) fields.follower_cap = patch.followerCap;
     if (patch.status !== undefined) fields.status = patch.status;
     if (patch.location !== undefined) fields.location = patch.location;
+    if (patch.termBound !== undefined) fields.term_bound = patch.termBound;
+    if (patch.termId !== undefined) fields.term_id = patch.termId || null;
+    if (patch.teacherOverride1Id !== undefined) fields.teacher_override_1_id = patch.teacherOverride1Id;
+    if (patch.teacherOverride2Id !== undefined) fields.teacher_override_2_id = patch.teacherOverride2Id;
 
     if (Object.keys(fields).length === 0) return this.getInstance(id);
 

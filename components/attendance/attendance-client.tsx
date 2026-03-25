@@ -84,6 +84,14 @@ const HISTORY_STATUS_OPTIONS = [
   { value: "excused", label: "Excused" },
 ];
 
+function isAbsenceStatus(s: AttendanceMark | undefined): s is "absent" | "excused" {
+  return s === "absent" || s === "excused";
+}
+
+function isPresenceStatus(s: AttendanceMark): s is "present" | "late" {
+  return s === "present" || s === "late";
+}
+
 // ── Main client component ────────────────────────────────────
 
 export interface StudentOption {
@@ -400,7 +408,7 @@ function ClassAttendanceCard({
           studentName: a.studentName,
           bookingId: a.bookingId,
           danceRole: null,
-          isWalkIn: true,
+          isWalkIn: !a.bookingId,
         });
       }
     }
@@ -410,7 +418,17 @@ function ClassAttendanceCard({
   const [optimisticOverrides, setOptimisticOverrides] = useState<Map<string, AttendanceMark>>(new Map());
   const [pending, startTransition] = useTransition();
   const [penaltyAlerts, setPenaltyAlerts] = useState<Map<string, string>>(new Map());
+  const [creditAlerts, setCreditAlerts] = useState<Map<string, boolean>>(new Map());
   const cardMounted = useRef(false);
+
+  const [reversalConfirm, setReversalConfirm] = useState<{
+    studentId: string;
+    studentName: string;
+    bookingId: string | null;
+    previousStatus: AttendanceMark;
+    newStatus: AttendanceMark;
+  } | null>(null);
+  // Excused always refunds — no prompt needed
 
   useEffect(() => {
     if (!cardMounted.current) {
@@ -441,11 +459,11 @@ function ClassAttendanceCard({
     return { total, present, late, absent, excused, unmarked: Math.max(0, total - present - late - absent - excused) };
   }, [studentRows, effectiveMarks]);
 
-  const handleMark = (
+  const doMark = (
     studentId: string,
     studentName: string,
     bookingId: string | null,
-    status: AttendanceMark
+    status: AttendanceMark,
   ) => {
     setOptimisticOverrides((prev) => new Map(prev).set(studentId, status));
 
@@ -476,8 +494,34 @@ function ClassAttendanceCard({
         });
       }
 
+      if (result.creditRestored) {
+        setCreditAlerts((prev) => new Map(prev).set(studentId, true));
+      } else {
+        setCreditAlerts((prev) => {
+          const next = new Map(prev);
+          next.delete(studentId);
+          return next;
+        });
+      }
+
       router.refresh();
     });
+  };
+
+  const handleMark = (
+    studentId: string,
+    studentName: string,
+    bookingId: string | null,
+    status: AttendanceMark
+  ) => {
+    const currentMark = effectiveMarks.get(studentId);
+
+    if (isAbsenceStatus(currentMark) && isPresenceStatus(status)) {
+      setReversalConfirm({ studentId, studentName, bookingId, previousStatus: currentMark, newStatus: status });
+      return;
+    }
+
+    doMark(studentId, studentName, bookingId, status);
   };
 
   return (
@@ -519,6 +563,7 @@ function ClassAttendanceCard({
           {studentRows.map((row) => {
             const currentMark = effectiveMarks.get(row.studentId);
             const alert = penaltyAlerts.get(row.studentId);
+            const creditAlert = creditAlerts.get(row.studentId);
 
             return (
               <li key={`${row.studentId}-${row.bookingId ?? "walkin"}`} className="px-5 py-3">
@@ -538,6 +583,9 @@ function ClassAttendanceCard({
                         <span className="text-xs text-gray-400">
                           Marked: <StatusBadge status={currentMark} />
                         </span>
+                      )}
+                      {currentMark === "excused" && creditAlert && (
+                        <span className="text-[10px] font-medium text-blue-600">Credit restored</span>
                       )}
                     </div>
                   </div>
@@ -575,11 +623,33 @@ function ClassAttendanceCard({
                     {alert}
                   </div>
                 )}
+                {currentMark === "excused" && creditAlert && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-1.5 text-xs text-blue-700">
+                    <ShieldOff className="h-3.5 w-3.5 flex-shrink-0" />
+                    Credit restored — no penalty applied.
+                  </div>
+                )}
               </li>
             );
           })}
         </ul>
       )}
+
+      {reversalConfirm && (
+        <AttendanceReversalDialog
+          studentName={reversalConfirm.studentName}
+          previousStatus={reversalConfirm.previousStatus}
+          newStatus={reversalConfirm.newStatus}
+          isPending={pending}
+          onConfirm={() => {
+            const { studentId, studentName, bookingId, newStatus: ns } = reversalConfirm;
+            setReversalConfirm(null);
+            doMark(studentId, studentName, bookingId, ns);
+          }}
+          onCancel={() => setReversalConfirm(null)}
+        />
+      )}
+
     </div>
   );
 }
@@ -761,14 +831,15 @@ function HistoryRow({
 }) {
   const [currentStatus, setCurrentStatus] = useState(a.status);
   const [isPending, startTransition] = useTransition();
-
-  // Sync local state when server-delivered record status changes
+  const [reversalConfirm, setReversalConfirm] = useState<{
+    previousStatus: AttendanceMark;
+    newStatus: AttendanceMark;
+  } | null>(null);
   useEffect(() => {
     setCurrentStatus(a.status);
   }, [a.status]);
 
-  function handleStatusChange(newStatus: AttendanceMark) {
-    if (newStatus === currentStatus) return;
+  function doStatusChange(newStatus: AttendanceMark) {
     const prev = currentStatus;
     setCurrentStatus(newStatus);
 
@@ -792,38 +863,133 @@ function HistoryRow({
     });
   }
 
+  function handleStatusChange(newStatus: AttendanceMark) {
+    if (newStatus === currentStatus) return;
+
+    if (isAbsenceStatus(currentStatus) && isPresenceStatus(newStatus)) {
+      setReversalConfirm({ previousStatus: currentStatus, newStatus });
+      return;
+    }
+
+    doStatusChange(newStatus);
+  }
+
   return (
-    <tr className={isPending ? "opacity-60" : undefined}>
-      <Td className="font-medium text-gray-900">{a.studentName}</Td>
-      <Td>{a.classTitle}</Td>
-      <Td>{formatDate(a.date)}</Td>
-      <Td>
-        <select
-          value={currentStatus}
-          onChange={(e) => handleStatusChange(e.target.value as AttendanceMark)}
-          disabled={isPending}
-          className={cn(
-            "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-100",
-            currentStatus === "present" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-            currentStatus === "late" && "border-amber-200 bg-amber-50 text-amber-700",
-            currentStatus === "absent" && "border-red-200 bg-red-50 text-red-700",
-            currentStatus === "excused" && "border-blue-200 bg-blue-50 text-blue-700"
-          )}
-        >
-          <option value="present">Present</option>
-          <option value="late">Late</option>
-          <option value="absent">Absent</option>
-          <option value="excused">Excused</option>
-        </select>
-      </Td>
-      <Td className="capitalize">{a.checkInMethod}</Td>
-      <Td>{a.markedBy}</Td>
-      <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
-    </tr>
+    <>
+      <tr className={isPending ? "opacity-60" : undefined}>
+        <Td className="font-medium text-gray-900">{a.studentName}</Td>
+        <Td>{a.classTitle}</Td>
+        <Td>{formatDate(a.date)}</Td>
+        <Td>
+          <select
+            value={currentStatus}
+            onChange={(e) => handleStatusChange(e.target.value as AttendanceMark)}
+            disabled={isPending}
+            className={cn(
+              "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-100",
+              currentStatus === "present" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+              currentStatus === "late" && "border-amber-200 bg-amber-50 text-amber-700",
+              currentStatus === "absent" && "border-red-200 bg-red-50 text-red-700",
+              currentStatus === "excused" && "border-blue-200 bg-blue-50 text-blue-700"
+            )}
+          >
+            <option value="present">Present</option>
+            <option value="late">Late</option>
+            <option value="absent">Absent</option>
+            <option value="excused">Excused</option>
+          </select>
+        </Td>
+        <Td className="capitalize">{a.checkInMethod}</Td>
+        <Td>{a.markedBy}</Td>
+        <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
+      </tr>
+
+      {reversalConfirm && (
+        <tr><td colSpan={7} className="p-0">
+          <AttendanceReversalDialog
+            studentName={a.studentName}
+            previousStatus={reversalConfirm.previousStatus}
+            newStatus={reversalConfirm.newStatus}
+            isPending={isPending}
+            onConfirm={() => {
+              const ns = reversalConfirm.newStatus;
+              setReversalConfirm(null);
+              doStatusChange(ns);
+            }}
+            onCancel={() => setReversalConfirm(null)}
+          />
+        </td></tr>
+      )}
+
+    </>
   );
 }
 
-// ── Dev-only Add Attendance Dialog ──────────────────────────
+// ── Attendance Reversal Confirmation Dialog ─────────────────
+
+function AttendanceReversalDialog({
+  studentName,
+  previousStatus,
+  newStatus,
+  onConfirm,
+  onCancel,
+  isPending,
+}: {
+  studentName: string;
+  previousStatus: AttendanceMark;
+  newStatus: AttendanceMark;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  return (
+    <Dialog open onClose={onCancel}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Confirm Attendance Change</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <p className="text-sm text-gray-700">
+            You are changing <strong>{studentName}</strong>'s attendance
+            from <StatusBadge status={previousStatus} /> to <StatusBadge status={newStatus} />.
+          </p>
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+            <p className="text-sm font-medium text-amber-800 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4" /> Please review the following effects:
+            </p>
+            <ul className="list-disc pl-5 text-sm text-amber-700 space-y-1">
+              {previousStatus === "absent" && (
+                <>
+                  <li>The booking will be restored from <strong>Missed</strong> to <strong>Checked In</strong>.</li>
+                  <li>If a no-show penalty was created, it will be voided.</li>
+                  <li>If the credit was refunded (per absence policy), it will be consumed again.</li>
+                </>
+              )}
+              {previousStatus === "excused" && (
+                <>
+                  <li>The booking will be marked as <strong>Checked In</strong>.</li>
+                  <li>The credit refunded for this excused absence will be consumed again.</li>
+                </>
+              )}
+              <li>The student's attendance record will be updated to <strong>{newStatus}</strong>.</li>
+            </ul>
+          </div>
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={onConfirm} disabled={isPending}>
+            {isPending ? "Updating…" : "Confirm Change"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Add Attendance Dialog ───────────────────────────────────
 
 function AddAttendanceDialog({
   students,
@@ -845,8 +1011,14 @@ function AddAttendanceDialog({
   const [status, setStatus] = useState<AttendanceMark>("present");
   const [notes, setNotes] = useState("");
 
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const eligibleClasses = useMemo(
+    () => classes.filter((c) => c.date <= today).sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime)),
+    [classes, today]
+  );
+
   const selectedStudent = students.find((s) => s.id === studentId);
-  const selectedClass = classes.find((c) => c.id === bookableClassId);
+  const selectedClass = eligibleClasses.find((c) => c.id === bookableClassId);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -907,19 +1079,22 @@ function AddAttendanceDialog({
             </div>
 
             <div>
-              <Label>Class *</Label>
+              <Label>Class * <span className="text-xs font-normal text-gray-400">(today and past only)</span></Label>
               <select
                 value={bookableClassId}
                 onChange={(e) => setBookableClassId(e.target.value)}
                 className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="">Select class…</option>
-                {classes.map((c) => (
+                {eligibleClasses.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.title} — {c.date} {c.startTime}
                   </option>
                 ))}
               </select>
+              {eligibleClasses.length === 0 && (
+                <p className="mt-1 text-xs text-gray-400">No eligible classes (today or past) found.</p>
+              )}
             </div>
 
             <div>
@@ -950,6 +1125,11 @@ function AddAttendanceDialog({
             {status === "absent" && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 Marking as Absent will trigger no-show penalty logic (if enabled in Settings).
+              </p>
+            )}
+            {status === "excused" && (
+              <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                Marking as Excused will restore the student's credit. No penalty will be applied.
               </p>
             )}
 

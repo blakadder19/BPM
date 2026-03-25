@@ -8,6 +8,8 @@
 import type { TermStatus } from "@/types/domain";
 
 export interface TermLike {
+  id?: string;
+  name?: string;
   startDate: string;
   endDate: string;
   status: TermStatus;
@@ -28,7 +30,7 @@ export function getCurrentTerm<T extends TermLike>(
 ): T | null {
   return (
     terms.find(
-      (t) => t.startDate <= today && today <= t.endDate && t.status === "active"
+      (t) => t.startDate <= today && today <= t.endDate && deriveTermStatus(t, today) === "active"
     ) ?? null
   );
 }
@@ -79,20 +81,45 @@ export function getTermWeekNumber(
 }
 
 /**
- * Beginner students can only start in weeks 1–2 of a term.
+ * Returns true when a class level should be term-bound by BPM rule.
+ * Only Beginner 1 and Beginner 2 courses are term-bound.
  */
-export function isBeginnerEntryWeek(
-  date: string,
-  term: { startDate: string }
-): boolean {
-  const week = getTermWeekNumber(date, term);
-  return week <= 2;
+export function isTermBoundLevel(level: string | null): boolean {
+  if (!level) return false;
+  const l = level.trim();
+  return l.startsWith("Beginner 1") || l.startsWith("Beginner 2");
 }
 
 /**
- * A class is a beginner-entry class if its level starts with "Beginner 1".
+ * Whether this level is a beginner course (Beginner 1 or Beginner 2).
+ * Returns a positive number for beginner levels, 0 otherwise.
+ * Both Beginner 1 and Beginner 2 share the same late-entry policy
+ * controlled by the `adminLateEntryMaxClassNumber` setting.
+ */
+export function beginnerMaxEntryWeek(level: string | null): number {
+  if (!level) return 0;
+  if (level.startsWith("Beginner 1") || level.startsWith("Beginner 2")) return 1;
+  return 0;
+}
+
+/**
+ * Whether the class date falls within the allowed entry window
+ * for new students in a beginner-level term-bound course.
+ */
+export function isBeginnerEntryWeek(
+  level: string | null,
+  date: string,
+  term: { startDate: string }
+): boolean {
+  const maxWeek = beginnerMaxEntryWeek(level);
+  if (maxWeek === 0) return true;
+  const week = getTermWeekNumber(date, term);
+  return week <= maxWeek;
+}
+
+/**
+ * Whether a level is a beginner-entry class (Beginner 1 or Beginner 2).
  */
 export function isBeginnerEntryClass(level: string | null): boolean {
-  if (!level) return false;
-  return level.startsWith("Beginner 1");
+  return beginnerMaxEntryWeek(level) > 0;
 }

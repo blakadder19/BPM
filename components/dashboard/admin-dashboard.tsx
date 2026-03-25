@@ -19,7 +19,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatShortDate, formatCents, cn } from "@/lib/utils";
-import type { InstanceStatus } from "@/types/domain";
+import type { EffectiveInstanceStatus } from "@/types/domain";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -32,7 +32,7 @@ export interface DashboardClassSummary {
   startTime: string;
   endTime: string;
   location: string;
-  status: InstanceStatus;
+  status: EffectiveInstanceStatus;
   maxCapacity: number | null;
   bookedCount: number;
   waitlistCount: number;

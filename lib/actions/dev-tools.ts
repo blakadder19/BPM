@@ -164,7 +164,9 @@ export async function devAssignProduct(
   if (!product) return { success: false, error: "Product not found" };
 
   const terms = await getTermRepo().getAll();
-  const activeTerm = terms.find((t) => t.status === "active");
+  const { deriveTermStatus } = await import("@/lib/domain/term-rules");
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const activeTerm = terms.find((t) => deriveTermStatus(t, todayStr) === "active");
 
   const result = await createSubscription({
     studentId,

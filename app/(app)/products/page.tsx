@@ -1,19 +1,26 @@
 import { requireRole } from "@/lib/auth";
-import { getProductRepo, getSubscriptionRepo } from "@/lib/repositories";
+import { getProductRepo, getSubscriptionRepo, getStudentRepo } from "@/lib/repositories";
 import { AdminProducts } from "@/components/products/admin-products";
 
 export default async function ProductsPage() {
   await requireRole(["admin"]);
 
-  const [products, subscriptions] = await Promise.all([
+  const [products, subscriptions, students] = await Promise.all([
     getProductRepo().getAll(),
     getSubscriptionRepo().getAll(),
+    getStudentRepo().getAll(),
   ]);
+
+  const studentNameMap: Record<string, string> = {};
+  for (const s of students) {
+    studentNameMap[s.id] = s.fullName;
+  }
 
   return (
     <AdminProducts
       products={products}
       subscriptions={subscriptions}
+      studentNameMap={studentNameMap}
     />
   );
 }

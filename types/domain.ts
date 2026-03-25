@@ -77,6 +77,7 @@ export interface DanceStyle {
 
 export type ClassType = "class" | "social" | "student_practice";
 export type InstanceStatus = "scheduled" | "open" | "closed" | "cancelled";
+export type EffectiveInstanceStatus = InstanceStatus | "live" | "ended";
 
 export interface Class {
   id: string;

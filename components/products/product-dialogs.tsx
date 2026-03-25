@@ -85,13 +85,14 @@ function ProductFormFields({
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="pf-priceCents">Price (cents) *</Label>
+          <Label htmlFor="pf-priceEuros">Price (€) *</Label>
           <Input
-            id="pf-priceCents"
-            name="priceCents"
+            id="pf-priceEuros"
+            name="priceEuros"
             type="number"
             min={0}
-            defaultValue={defaults?.priceCents ?? 0}
+            step="0.01"
+            defaultValue={defaults ? (defaults.priceCents / 100).toFixed(2) : "0.00"}
             required
           />
         </div>
@@ -169,7 +170,44 @@ function ProductFormFields({
           placeholder="Admin-only notes"
         />
       </div>
-      <div className="flex items-center gap-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="pf-classesPerTerm">Classes per Term</Label>
+          <Input
+            id="pf-classesPerTerm"
+            name="classesPerTerm"
+            type="number"
+            min={1}
+            defaultValue={defaults?.classesPerTerm ?? ""}
+            placeholder="Unlimited"
+          />
+        </div>
+      </div>
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <input
+            id="pf-termBound"
+            name="termBound"
+            type="checkbox"
+            defaultChecked={defaults?.termBound ?? false}
+            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          <Label htmlFor="pf-termBound" className="!mb-0">
+            Term-bound
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            id="pf-recurring"
+            name="recurring"
+            type="checkbox"
+            defaultChecked={defaults?.recurring ?? false}
+            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          />
+          <Label htmlFor="pf-recurring" className="!mb-0">
+            Recurring (auto-renew eligible)
+          </Label>
+        </div>
         <div className="flex items-center gap-2">
           <input
             id="pf-isProvisional"

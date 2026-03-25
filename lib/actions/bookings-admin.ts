@@ -5,22 +5,20 @@ import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getSettings } from "@/lib/services/settings-store";
-import { getSubscriptionRepo } from "@/lib/repositories";
+import { getSubscriptionRepo, getTermRepo } from "@/lib/repositories";
 import { updateSubscription as repoUpdateSub } from "@/lib/services/subscription-service";
-import { getTerms } from "@/lib/services/term-store";
-import { findTermForDate, isBeginnerEntryWeek } from "@/lib/domain/term-rules";
-import { isBeginnerEntryClass } from "@/lib/domain/term-rules";
+import { findTermForDate, getTermWeekNumber, isDateInTerm, isTermBoundLevel } from "@/lib/domain/term-rules";
 import {
   getCancellationContext,
   penaltiesApplyTo,
   penaltyFeeCents,
 } from "@/lib/domain/cancellation-rules";
-import { isAfterClosureWindow } from "@/lib/domain/datetime";
+import { isAfterClosureWindow, isClassEnded } from "@/lib/domain/datetime";
 import type { BookingSource, DanceRole } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveWaitlistToDB, deleteWaitlistFromDB, savePenaltyToDB, saveAttendanceToDB, deleteBookingFromDB, deleteAttendanceFromDB, deletePenaltyFromDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { requireRole } from "@/lib/auth";
+import { requireRole, requireAuth } from "@/lib/auth";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 
@@ -103,12 +101,14 @@ export async function adminCreateBookingAction(
       return { success: false, error: "Entitlement not found" };
     }
 
-    // Term validation: check the class date falls within the entitlement's term
+    // Term validation: check the class date falls within the entitlement's own term
     if (sub.termId && cls) {
-      const terms = getTerms();
-      const classTerm = findTermForDate(terms, cls.date);
-      if (!classTerm || classTerm.id !== sub.termId) {
-        return { success: false, error: "Entitlement is not valid for this class date's term" };
+      const subTerm = await getTermRepo().getById(sub.termId);
+      if (subTerm && !isDateInTerm(cls.date, subTerm)) {
+        return {
+          success: false,
+          error: `Entitlement is not valid for this class date — the assigned term "${subTerm.name}" runs ${subTerm.startDate} to ${subTerm.endDate}.`,
+        };
       }
     }
 
@@ -122,30 +122,44 @@ export async function adminCreateBookingAction(
     }
   }
 
-  // Beginner restriction (E3 — integrated here per plan)
-  // ClassSnapshot doesn't carry level, so we look it up from the schedule store
+  // Time gate — admin can book during live window but not after class ends
   const { getInstances } = await import("@/lib/services/schedule-store");
   const allInstances = getInstances();
   const rawInstance = allInstances.find((i) => i.id === bookableClassId);
-  const classLevel = rawInstance?.level ?? null;
 
-  if (cls && isBeginnerEntryClass(classLevel)) {
-    const terms = getTerms();
-    const classTerm = findTermForDate(terms, cls.date);
-    if (classTerm && source === "subscription" && subscriptionId) {
-      const sub = await getSubscriptionRepo().getById(subscriptionId);
-      // Student is "new" to this entitlement if they have no prior confirmed bookings
-      // with the same subscription name during this term
-      const existingBookings = svc.bookings.filter(
-        (b) =>
-          b.studentId === studentId &&
-          b.subscriptionName === (sub?.productName ?? subscriptionName) &&
-          (b.status === "confirmed" || b.status === "checked_in")
-      );
-      if (existingBookings.length === 0 && !isBeginnerEntryWeek(cls.date, classTerm)) {
+  if (rawInstance && isClassEnded(rawInstance.date, rawInstance.endTime)) {
+    return { success: false, error: "Class has ended — use attendance correction instead of new booking" };
+  }
+
+  // Term-bound class restriction — late-entry policy
+  // Derive from level, not from persisted flag, to avoid stale data on non-beginner classes
+  const classLevel = rawInstance?.level ?? null;
+  const isTermBound = isTermBoundLevel(classLevel);
+
+  if (isTermBound && cls) {
+    const linkedTermId = rawInstance?.termId;
+    let classTerm = linkedTermId
+      ? await getTermRepo().getById(linkedTermId)
+      : null;
+    if (!classTerm) {
+      const allTerms = await getTermRepo().getAll();
+      classTerm = findTermForDate(allTerms, cls.date);
+    }
+    if (classTerm) {
+      const settings = getSettings();
+      const weekNumber = getTermWeekNumber(cls.date, classTerm);
+
+      if (!settings.allowAdminLateEntryIntoTermBound && weekNumber > 1) {
         return {
           success: false,
-          error: "New beginner students can only start in weeks 1–2 of the term.",
+          error: "Admin late entry into term-bound courses is disabled in settings.",
+        };
+      }
+
+      if (weekNumber > settings.adminLateEntryMaxClassNumber) {
+        return {
+          success: false,
+          error: `This course is in week ${weekNumber} of the term. Admin late entry is only allowed up to week ${settings.adminLateEntryMaxClassNumber}.`,
         };
       }
     }
@@ -213,11 +227,11 @@ export async function adminCancelBookingAction(
 
   const ctx = getCancellationContext(cls.date, cls.startTime);
 
-  if (ctx.hasStarted) {
-    return { success: false, error: "Cannot cancel — class has already started" };
+  if (isClassEnded(cls.date, cls.endTime)) {
+    return { success: false, error: "Cannot cancel — class has ended" };
   }
 
-  const isLate = ctx.isLate;
+  const isLate = ctx.isLate || ctx.hasStarted;
 
   const result = svc.cancelBookingAsAdmin(bookingId, isLate);
   if (result.type === "error") {
@@ -301,7 +315,7 @@ export async function adminCheckInBookingAction(
   if (!booking) return { success: false, error: "Booking not found" };
 
   const cls = svc.getClass(booking.bookableClassId);
-  if (cls && isAfterClosureWindow(cls.date, cls.startTime)) {
+  if (cls && isAfterClosureWindow(cls.date, cls.startTime, getSettings().attendanceClosureMinutes)) {
     return { success: false, error: "Check-in window has closed (60 min after class start)" };
   }
 
@@ -397,6 +411,7 @@ export async function checkLateCancelStatusAction(
   lateCancelFeeCents?: number;
   error?: string;
 }> {
+  await requireAuth();
   await ensureOperationalDataHydrated();
   syncClassMap();
 
@@ -445,11 +460,8 @@ export async function adminRestoreBookingAction(
   if (!booking) return { success: false, error: "Booking not found" };
 
   const cls = svc.getClass(booking.bookableClassId);
-  if (cls) {
-    const ctx = getCancellationContext(cls.date, cls.startTime);
-    if (ctx.hasStarted) {
-      return { success: false, error: "Cannot restore — class has already started" };
-    }
+  if (cls && isClassEnded(cls.date, cls.endTime)) {
+    return { success: false, error: "Cannot restore — class has ended" };
   }
 
   const result = svc.restoreBooking(bookingId);
@@ -525,6 +537,7 @@ export interface BookingConsequences {
 export async function computeBookingConsequencesAction(
   bookingId: string
 ): Promise<{ success: boolean; consequences?: BookingConsequences; error?: string }> {
+  await requireRole(["admin"]);
   await ensureOperationalDataHydrated();
   syncClassMap();
 

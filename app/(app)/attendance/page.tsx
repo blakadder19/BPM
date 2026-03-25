@@ -6,7 +6,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { getInstances } from "@/lib/services/schedule-store";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
 
-const TERMINAL_STATUSES = new Set(["cancelled", "late_cancelled", "missed"]);
+const TERMINAL_STATUSES = new Set(["cancelled", "late_cancelled"]);
 
 export default async function AttendancePage({
   searchParams,

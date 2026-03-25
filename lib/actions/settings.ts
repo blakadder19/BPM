@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 import {
   getSettings,
   updateSettings,
@@ -13,6 +14,7 @@ const VALID_STYLE_NAMES = new Set(DANCE_STYLES.map((s) => s.name));
 export async function saveSettings(
   formData: FormData
 ): Promise<{ success: boolean; settings: AppSettings; error?: string }> {
+  await requireRole(["admin"]);
   // --- Numbers ---
   const numericFields = {
     lateCancelFeeCents: Number(formData.get("lateCancelFeeCents")),
@@ -32,6 +34,13 @@ export async function saveSettings(
     }
   }
 
+  // --- Attendance numeric fields ---
+  const attendanceNumeric = {
+    attendanceClosureMinutes: Number(formData.get("attendanceClosureMinutes")) || 60,
+    selfCheckInOpensMinutesBefore: Number(formData.get("selfCheckInOpensMinutesBefore")) || 15,
+    adminLateEntryMaxClassNumber: Number(formData.get("adminLateEntryMaxClassNumber")) || 2,
+  };
+
   // --- Booleans (checkbox: present = "on" = true, absent = false) ---
   const booleanFields = {
     lateCancelPenaltiesEnabled: formData.get("lateCancelPenaltiesEnabled") === "on",
@@ -41,6 +50,10 @@ export async function saveSettings(
     socialsBookable: formData.get("socialsBookable") === "on",
     weeklyEventsBookable: formData.get("weeklyEventsBookable") === "on",
     studentPracticeBookable: formData.get("studentPracticeBookable") === "on",
+    selfCheckInEnabled: formData.get("selfCheckInEnabled") === "on",
+    qrCheckInEnabled: formData.get("qrCheckInEnabled") === "on",
+    refundCreditOnAbsent: formData.get("refundCreditOnAbsent") === "on",
+    allowAdminLateEntryIntoTermBound: formData.get("allowAdminLateEntryIntoTermBound") === "on",
   };
 
   // --- Role balanced style names (multi-checkbox) ---
@@ -52,6 +65,7 @@ export async function saveSettings(
 
   const patch: Partial<AppSettings> = {
     ...numericFields,
+    ...attendanceNumeric,
     ...booleanFields,
     roleBalancedStyleNames,
     provisionalNotes,

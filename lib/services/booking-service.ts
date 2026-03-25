@@ -408,7 +408,7 @@ export class BookingService {
 
     const now = new Date().toISOString();
     const capacity = this.getCapacity(params.bookableClassId)!;
-    const decision = canBook(capacity, params.danceRole);
+    const decision = canBook(capacity, params.danceRole, { skipStatusCheck: true });
 
     if (!decision.allowed && !params.forceConfirm) {
       return { type: "rejected", reason: decision.reason };
@@ -677,6 +677,34 @@ export class BookingService {
     }
     booking.status = "missed";
     return { type: "missed" };
+  }
+
+  /**
+   * Set booking to "missed" from any active state (confirmed or checked_in).
+   * Used by attendance absent marking.
+   */
+  markMissedFromAttendance(bookingId: string): { type: "missed" } | { type: "error"; reason: string } {
+    const booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking) return { type: "error", reason: "Booking not found." };
+    if (booking.status !== "confirmed" && booking.status !== "checked_in") {
+      return { type: "error", reason: "Booking is not in an active state." };
+    }
+    booking.status = "missed";
+    return { type: "missed" };
+  }
+
+  /**
+   * Restore a missed booking to checked_in (used when attendance changes
+   * from absent/excused back to present/late).
+   */
+  restoreFromMissed(bookingId: string): { type: "restored" } | { type: "error"; reason: string } {
+    const booking = this.bookings.find((b) => b.id === bookingId);
+    if (!booking) return { type: "error", reason: "Booking not found." };
+    if (booking.status !== "missed" && booking.status !== "confirmed") {
+      return { type: "error", reason: "Booking is not in a restorable state." };
+    }
+    booking.status = "checked_in";
+    return { type: "restored" };
   }
 
   /**

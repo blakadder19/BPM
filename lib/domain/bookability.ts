@@ -10,14 +10,14 @@ import type { ClassType, DanceRole, InstanceStatus, ProductType } from "@/types/
 import type { ProductAccessRule } from "@/config/product-access";
 import type { MockSubscription } from "@/lib/mock-data";
 import type { TermLike } from "./term-rules";
-import { findTermForDate, isBeginnerEntryWeek } from "./term-rules";
-import { isBeginnerEntryClass } from "./term-rules";
+import { findTermForDate, deriveTermStatus } from "./term-rules";
 import {
   getValidEntitlements,
   type ClassContext,
   type ValidEntitlement,
 } from "./entitlement-rules";
 import { canBook, type BookableClassCapacity } from "./booking-rules";
+import { isClassStarted, getTodayStr } from "./datetime";
 
 // ── Result types ────────────────────────────────────────────
 
@@ -50,6 +50,8 @@ export interface ClassInstanceInfo {
   currentLeaders: number;
   currentFollowers: number;
   totalBooked: number;
+  termBound?: boolean;
+  termId?: string | null;
 }
 
 export interface StudentBookingState {
@@ -79,6 +81,11 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
   }
   if (cls.status !== "open" && cls.status !== "scheduled") {
     return { status: "not_bookable", reason: "Class is closed" };
+  }
+
+  // 1b. Time gate — students cannot book once the class has started
+  if (isClassStarted(cls.date, cls.startTime)) {
+    return { status: "not_bookable", reason: "Class has already started" };
   }
 
   // 2. Class type bookability
@@ -116,16 +123,42 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
     };
   }
 
-  // 6. Term validity
-  const classTerm = findTermForDate(ctx.terms, cls.date);
-  if (!classTerm || (classTerm.status !== "active" && classTerm.status !== "upcoming")) {
-    return { status: "blocked", reason: "Not in an active term" };
-  }
+  // 6. Term restriction — only applies to term-bound classes.
+  //    Uses explicit termId when available, falls back to date inference.
+  //    If no term is found at all, the class is blocked (invalid data).
+  let classTerm: TermLike | null = null;
+  if (cls.termBound) {
+    if (cls.termId) {
+      classTerm = ctx.terms.find((t) => t.id === cls.termId) ?? null;
+    }
+    if (!classTerm) {
+      classTerm = findTermForDate(ctx.terms, cls.date);
+    }
+    if (!classTerm) {
+      return {
+        status: "not_bookable",
+        reason: "This class is not scheduled within any active term period.",
+      };
+    }
 
-  // 7. Beginner restriction
-  if (isBeginnerEntryClass(cls.level)) {
-    if (!isBeginnerEntryWeek(cls.date, classTerm)) {
-      return { status: "blocked", reason: "Beginner intake closed (weeks 3–4)" };
+    const effectiveTermStatus = deriveTermStatus(classTerm, getTodayStr());
+
+    if (effectiveTermStatus === "upcoming") {
+      // Term hasn't started yet — student can book normally.
+    } else if (effectiveTermStatus === "active") {
+      // 7. Term has started — block student self-booking.
+      return {
+        status: "blocked",
+        reason: "This course has already started. Please speak to reception if you'd like to check whether late entry is still possible.",
+      };
+    } else {
+      // past / ended
+      return {
+        status: "blocked",
+        reason: classTerm.name
+          ? `The ${classTerm.name} term has ended. Check back for the next term.`
+          : "This course term has ended. Check back for the next term.",
+      };
     }
   }
 

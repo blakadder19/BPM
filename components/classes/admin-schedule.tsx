@@ -19,6 +19,7 @@ import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime } from "@/lib/utils";
+import { effectiveInstanceStatus } from "@/lib/domain/datetime";
 import {
   AddInstanceDialog,
   EditInstanceDialog,
@@ -55,10 +56,12 @@ interface AdminScheduleProps {
   instances: MockBookableClass[];
   templates: MockClass[];
   allStyles?: { id: string; name: string }[];
+  allTerms?: { id: string; name: string; startDate: string; endDate: string }[];
   settings: SettingsFlags;
   teacherAssignments: MockTeacherPair[];
   teacherRoster: Teacher[];
   teacherNameMap: Record<string, string>;
+  inactiveTeacherIds?: string[];
   pairPresets: PairPreset[];
   isDev?: boolean;
   initialSearch?: string;
@@ -68,14 +71,17 @@ export function AdminSchedule({
   instances,
   templates,
   allStyles,
+  allTerms,
   settings,
   teacherAssignments,
   teacherRoster,
   teacherNameMap,
+  inactiveTeacherIds,
   pairPresets,
   isDev,
   initialSearch,
 }: AdminScheduleProps) {
+  const inactiveSet = useMemo(() => new Set(inactiveTeacherIds ?? []), [inactiveTeacherIds]);
   const router = useRouter();
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [search, setSearch] = useState(initialSearch ?? "");
@@ -97,7 +103,15 @@ export function AdminSchedule({
   const [deleteTarget, setDeleteTarget] = useState<MockBookableClass | null>(null);
   const [delPending, startDel] = useTransition();
 
-  const resolve = (id: string | null | undefined) => (id ? teacherNameMap[id] ?? id : null);
+  const resolve = (id: string | null | undefined) => (id ? teacherNameMap[id] ?? null : null);
+
+  function resolveWithInactive(id: string | null | undefined): string | null {
+    if (!id) return null;
+    const name = teacherNameMap[id];
+    if (!name) return null;
+    if (inactiveSet.has(id)) return `${name} (Inactive)`;
+    return name;
+  }
 
   function resolveTeachers(bc: MockBookableClass) {
     const hasOverride = !!bc.teacherOverride1Id;
@@ -105,14 +119,14 @@ export function AdminSchedule({
       const defaultAssignment = bc.classId
         ? teacherAssignments.find((a) => a.classId === bc.classId && a.isActive)
         : null;
-      const defT1 = resolve(defaultAssignment?.teacher1Id);
-      const defT2 = resolve(defaultAssignment?.teacher2Id);
+      const defT1 = resolveWithInactive(defaultAssignment?.teacher1Id);
+      const defT2 = resolveWithInactive(defaultAssignment?.teacher2Id);
       const defaultSummary = defT1
         ? `${defT1}${defT2 ? ` & ${defT2}` : " (solo)"}`
         : "Unassigned";
       return {
-        teacher1Name: resolve(bc.teacherOverride1Id),
-        teacher2Name: resolve(bc.teacherOverride2Id),
+        teacher1Name: resolveWithInactive(bc.teacherOverride1Id),
+        teacher2Name: resolveWithInactive(bc.teacherOverride2Id),
         isOverride: true,
         defaultSummary,
       };
@@ -122,8 +136,8 @@ export function AdminSchedule({
       ? teacherAssignments.find((a) => a.classId === bc.classId && a.isActive)
       : null;
     return {
-      teacher1Name: resolve(defaultAssignment?.teacher1Id) ?? null,
-      teacher2Name: resolve(defaultAssignment?.teacher2Id) ?? null,
+      teacher1Name: resolveWithInactive(defaultAssignment?.teacher1Id) ?? null,
+      teacher2Name: resolveWithInactive(defaultAssignment?.teacher2Id) ?? null,
       isOverride: false,
       defaultSummary: "",
     };
@@ -307,10 +321,11 @@ export function AdminSchedule({
                 const isExpanded = expandedId === bc.id;
                 const isRoleBalanced = bc.styleName != null && roleBalancedSet.has(bc.styleName);
                 const { teacher1Name, teacher2Name, isOverride, defaultSummary } = resolveTeachers(bc);
+                const effStatus = effectiveInstanceStatus(bc.status, bc.date, bc.startTime, bc.endTime);
 
                 const teacherCell = teacher1Name
                   ? `${teacher1Name}${teacher2Name ? ` & ${teacher2Name}` : ""}`
-                  : "—";
+                  : "No teacher assigned";
 
                 return (
                   <Fragment key={bc.id}>
@@ -342,7 +357,7 @@ export function AdminSchedule({
                           {isOverride && <Badge variant="info">Date-specific</Badge>}
                         </div>
                       </Td>
-                      <Td><StatusBadge status={bc.status} /></Td>
+                      <Td><StatusBadge status={effStatus} /></Td>
                       <Td><CapacityCell bc={bc} /></Td>
                       <Td>{bc.location}</Td>
                       <Td>
@@ -361,7 +376,7 @@ export function AdminSchedule({
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
-                          {bc.status !== "cancelled" && (
+                          {effStatus !== "cancelled" && effStatus !== "ended" && (
                             <button
                               onClick={() => handleStatusChange(bc.id, "cancelled")}
                               disabled={statusPending}
@@ -371,7 +386,7 @@ export function AdminSchedule({
                               <XCircle className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {bc.status === "scheduled" && (
+                          {effStatus === "scheduled" && (
                             <button
                               onClick={() => handleStatusChange(bc.id, "open")}
                               disabled={statusPending}
@@ -381,7 +396,7 @@ export function AdminSchedule({
                               <Unlock className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {bc.status === "open" && (
+                          {effStatus === "open" && (
                             <button
                               onClick={() => handleStatusChange(bc.id, "closed")}
                               disabled={statusPending}
@@ -391,7 +406,7 @@ export function AdminSchedule({
                               <Lock className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {(bc.status === "closed" || bc.status === "cancelled") && (
+                          {(effStatus === "closed" || effStatus === "cancelled") && (
                             <button
                               onClick={() => handleStatusChange(bc.id, "open")}
                               disabled={statusPending}
@@ -424,6 +439,7 @@ export function AdminSchedule({
                         resolvedTeacher2={teacher2Name}
                         isOverride={isOverride}
                         defaultTeacherSummary={defaultSummary}
+                        allTerms={allTerms}
                       />
                     )}
                   </Fragment>
@@ -438,6 +454,7 @@ export function AdminSchedule({
         <AddInstanceDialog
           templates={templates}
           allStyles={allStyles}
+          allTerms={allTerms}
           onClose={() => { setShowAdd(false); setAddDefaultDate(null); }}
           defaultDate={addDefaultDate ?? undefined}
         />

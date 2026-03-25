@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { requireRole } from "@/lib/auth";
 import {
   createSubscription,
   updateSubscription,
@@ -42,6 +43,7 @@ function parseCredits(raw: string | null): number | null {
 export async function createSubscriptionAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const studentId = formData.get("studentId") as string;
   const productId = (formData.get("productId") as string)?.trim();
   const termId = (formData.get("termId") as string)?.trim() || null;
@@ -117,6 +119,7 @@ export async function createSubscriptionAction(
 export async function updateSubscriptionAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   const id = formData.get("id") as string;
   const statusRaw = formData.get("status") as string;
   const notes = (formData.get("notes") as string)?.trim() || null;

@@ -122,6 +122,7 @@ export async function createPenaltyAction(
 export async function deletePenaltyAction(
   penaltyId: string
 ): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
   await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, error: "Not available in production" };
@@ -145,6 +146,7 @@ export async function backfillPenaltiesAction(): Promise<{
   skipped: number;
   error?: string;
 }> {
+  await requireRole(["admin"]);
   await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, created: 0, skipped: 0, error: "Not available in production" };
@@ -209,6 +211,7 @@ export async function clearAllPenaltiesAction(): Promise<{
   cleared: number;
   error?: string;
 }> {
+  await requireRole(["admin"]);
   await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };

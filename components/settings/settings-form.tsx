@@ -278,10 +278,58 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
                 checked={s.qrCheckInEnabled}
                 onChange={(v) => setBool("qrCheckInEnabled", v)}
               />
+
+              <div className="border-t border-gray-200 pt-4 mt-2 space-y-2">
+                <p className="text-sm font-medium text-gray-700">Absence Policy</p>
+                <CheckboxField
+                  name="refundCreditOnAbsent"
+                  label="Refund class/credit when a student is marked absent"
+                  checked={s.refundCreditOnAbsent}
+                  onChange={(v) => setBool("refundCreditOnAbsent", v)}
+                />
+                <p className="text-xs text-gray-400">
+                  When enabled, marking a student absent will refund their class credit.
+                  Excused absences always refund regardless of this setting.
+                </p>
+              </div>
             </CardContent>
           </Card>
 
-          {/* ── 6. Provisional / Pending Decisions ───────────── */}
+          {/* ── 6. Term-bound Policy ─────────────── */}
+          <Card>
+            <CardHeader><CardTitle>Term-bound Policy</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-gray-500">
+                These settings control late entry into term-bound classes (e.g. Beginners courses that run as a closed block).
+              </p>
+              <CheckboxField
+                name="allowAdminLateEntryIntoTermBound"
+                label="Allow admin/reception to add students late into a term-bound course"
+                checked={s.allowAdminLateEntryIntoTermBound}
+                onChange={(v) => setBool("allowAdminLateEntryIntoTermBound", v)}
+              />
+              <div>
+                <Label htmlFor="adminLateEntryMaxClassNumber" className="text-sm">
+                  Latest class number admin can add a student (e.g. 2 = up to week 2)
+                </Label>
+                <Input
+                  id="adminLateEntryMaxClassNumber"
+                  name="adminLateEntryMaxClassNumber"
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={s.adminLateEntryMaxClassNumber}
+                  onChange={(e) => setNum("adminLateEntryMaxClassNumber", e.target.value)}
+                  className="mt-1 w-32"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Students can never self-book once a term-bound course has started. This controls how late admin/reception may still add them.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── 7. Provisional / Pending Decisions ───────────── */}
           <Card className="lg:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2">
