@@ -151,13 +151,17 @@ export function AdminProducts({
                   </Td>
                   <Td>{formatCents(p.priceCents)}</Td>
                   <Td>
-                    {p.productType === "membership" && p.classesPerTerm
-                      ? `${p.classesPerTerm}/term`
-                      : p.creditsModel === "single_use"
-                        ? "1 (single)"
-                        : p.totalCredits
-                          ? `${p.totalCredits} credits`
-                          : "∞"}
+                    {p.productType === "membership"
+                      ? p.classesPerTerm
+                        ? `${p.classesPerTerm} classes/term`
+                        : "Not set"
+                      : p.productType === "drop_in"
+                        ? "1 class"
+                        : p.productType === "pass" && p.totalCredits
+                          ? `${p.totalCredits} classes`
+                          : p.totalCredits
+                            ? `${p.totalCredits} credits`
+                            : "—"}
                   </Td>
                   <Td>
                     {p.termBound ? (
@@ -281,9 +285,13 @@ function DeleteProductDialog({
 
   const linkedSubs = subscriptions.filter((s) => s.productId === product.id);
   const activeSubs = linkedSubs.filter((s) => s.status === "active");
+  const historicalSubs = linkedSubs.filter((s) => s.status !== "active");
   const hasActiveSubs = activeSubs.length > 0;
+  const hasHistoricalSubs = historicalSubs.length > 0;
+  const blocked = hasActiveSubs || hasHistoricalSubs;
 
   function handleConfirm() {
+    if (blocked) return;
     startTransition(async () => {
       const { deleteProductAction } = await import("@/lib/actions/products");
       const result = await deleteProductAction(product.id);
@@ -291,11 +299,11 @@ function DeleteProductDialog({
         onClose();
         router.refresh();
       } else {
-        const msg = result.error ?? "Delete failed";
+        const msg = result.error ?? "";
         if (msg.includes("violates foreign key") || msg.includes("referenced") || msg.includes("constraint")) {
-          setError(`Cannot delete "${product.name}" because it has linked subscriptions. Deactivate the product instead, or remove all linked subscriptions first.`);
+          setError(`Cannot delete "${product.name}" because it still has linked student records. Remove all student subscriptions for this product first.`);
         } else {
-          setError(msg);
+          setError(msg || "Failed to delete product. Try deactivating it instead.");
         }
       }
     });
@@ -308,38 +316,66 @@ function DeleteProductDialog({
           <DialogTitle>Delete Product</DialogTitle>
         </DialogHeader>
         <DialogBody className="space-y-3">
-          <p className="text-sm text-gray-600">
-            Permanently delete <strong>{product.name}</strong>? This cannot be undone.
-          </p>
-          {hasActiveSubs && (
+          {hasActiveSubs ? (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
                 <div>
-                  <p className="font-medium">{activeSubs.length} active subscription{activeSubs.length !== 1 ? "s" : ""} linked to this product:</p>
+                  <p className="font-medium">
+                    Cannot delete &ldquo;{product.name}&rdquo; because it has {activeSubs.length} active student subscription{activeSubs.length !== 1 ? "s" : ""}:
+                  </p>
                   <ul className="mt-1 list-inside list-disc text-xs text-red-700">
                     {activeSubs.slice(0, 5).map((s) => (
                       <li key={s.id}>{studentNameMap[s.studentId] ?? s.studentId}</li>
                     ))}
-                    {activeSubs.length > 5 && <li>…and {activeSubs.length - 5} more</li>}
+                    {activeSubs.length > 5 && <li>&hellip;and {activeSubs.length - 5} more</li>}
                   </ul>
-                  <p className="mt-1 text-xs text-red-600">Deletion may fail if subscriptions reference this product. Consider deactivating instead.</p>
+                  <p className="mt-2 text-xs text-red-700 font-medium">
+                    Cancel or remove those student subscriptions first, then try again.
+                  </p>
                 </div>
               </div>
             </div>
-          )}
-          {!hasActiveSubs && linkedSubs.length > 0 && (
+          ) : hasHistoricalSubs ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-              <p>{linkedSubs.length} past/inactive subscription{linkedSubs.length !== 1 ? "s" : ""} linked to this product. Deletion may fail if database constraints exist.</p>
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">
+                    Cannot delete &ldquo;{product.name}&rdquo; because {historicalSubs.length} historical student record{historicalSubs.length !== 1 ? "s are" : " is"} still linked:
+                  </p>
+                  <ul className="mt-1 list-inside list-disc text-xs text-amber-700">
+                    {historicalSubs.slice(0, 5).map((s) => (
+                      <li key={s.id}>{studentNameMap[s.studentId] ?? s.studentId} ({s.status})</li>
+                    ))}
+                    {historicalSubs.length > 5 && <li>&hellip;and {historicalSubs.length - 5} more</li>}
+                  </ul>
+                  <p className="mt-2 text-xs text-amber-700 font-medium">
+                    Remove these historical records from each student&apos;s profile first (Admin &gt; Students &gt; Product History), then try again.
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600">
+              Permanently delete <strong>{product.name}</strong>? This cannot be undone.
+            </p>
+          )}
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
             </div>
           )}
-          {error && <p className="text-sm text-red-600">{error}</p>}
         </DialogBody>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
-          <Button variant="danger" onClick={handleConfirm} disabled={isPending}>
-            {isPending ? "Deleting…" : "Delete Permanently"}
+          <Button variant="outline" onClick={onClose} disabled={isPending}>
+            {blocked ? "Close" : "Cancel"}
           </Button>
+          {!blocked && (
+            <Button variant="danger" onClick={handleConfirm} disabled={isPending}>
+              {isPending ? "Deleting…" : "Delete Permanently"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

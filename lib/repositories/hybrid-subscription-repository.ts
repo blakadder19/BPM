@@ -92,4 +92,16 @@ export const hybridSubscriptionRepo: ISubscriptionRepository = {
     }
     return memorySubscriptionRepo.update(id, patch);
   },
+
+  async delete(id: string) {
+    const sbRepo = loadSupabaseRepo();
+    if (sbRepo) {
+      try {
+        return await sbRepo.delete(id);
+      } catch (err) {
+        console.warn("[hybridSubscriptionRepo.delete] Supabase delete failed:", err instanceof Error ? err.message : err);
+      }
+    }
+    return memorySubscriptionRepo.delete(id);
+  },
 };

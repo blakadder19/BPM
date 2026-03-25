@@ -146,4 +146,14 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
     if (error) throw new Error(error.message);
     return this.getById(id);
   },
+
+  async delete(id: string) {
+    const supabase = createAdminClient();
+    const { error } = await supabase
+      .from("student_subscriptions")
+      .delete()
+      .eq("id", id);
+    if (error) throw new Error(error.message);
+    return true;
+  },
 };

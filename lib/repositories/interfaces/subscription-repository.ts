@@ -53,4 +53,5 @@ export interface ISubscriptionRepository {
   getById(id: string): Promise<MockSubscription | null>;
   create(data: CreateSubscriptionData): Promise<MockSubscription>;
   update(id: string, patch: SubscriptionPatch): Promise<MockSubscription | null>;
+  delete(id: string): Promise<boolean>;
 }

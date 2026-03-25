@@ -1,8 +1,12 @@
 "use client";
 
-import { Pencil, Plus, Star } from "lucide-react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Pencil, Plus, Star, Trash2, AlertTriangle } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/utils";
 import { getAccessRule, describeAccess } from "@/config/product-access";
 import { deriveDisplayStatus } from "@/lib/domain/subscription-display-status";
@@ -51,6 +55,8 @@ export function StudentDetailPanel({
   onEditSub,
   colSpan,
 }: StudentDetailPanelProps) {
+  const [removeTarget, setRemoveTarget] = useState<MockSubscription | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<MockSubscription | null>(null);
   const termsById = new Map(terms.map((t) => [t.id, t]));
   const subs = subscriptions.filter((s) => s.studentId === student.id);
   const activeSubs = subs.filter((s) => s.status === "active");
@@ -148,7 +154,7 @@ export function StudentDetailPanel({
                   </p>
                 )}
                 {activeSubs.map((sub) => (
-                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} onEdit={onEditSub} />
+                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} />
                 ))}
                 {inactiveSubs.length > 0 && (
                   <>
@@ -156,7 +162,7 @@ export function StudentDetailPanel({
                       Product History ({inactiveSubs.length})
                     </p>
                     {inactiveSubs.map((sub) => (
-                      <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} onEdit={onEditSub} />
+                      <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} />
                     ))}
                   </>
                 )}
@@ -174,13 +180,15 @@ export function StudentDetailPanel({
                     <div key={s.id} className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 truncate">{s.productName}</span>
                       <span className="font-medium text-gray-900">
-                        {s.productType === "membership" && s.classesPerTerm !== null
-                          ? `Used ${s.classesUsed} / ${s.classesPerTerm} · ${s.classesPerTerm - s.classesUsed} left`
-                          : s.remainingCredits === null
-                            ? "∞"
-                            : s.totalCredits !== null
-                              ? `Used ${s.totalCredits - s.remainingCredits} / ${s.totalCredits} · ${s.remainingCredits} left`
-                              : `${s.remainingCredits} credit${s.remainingCredits !== 1 ? "s" : ""} left`}
+                        {s.productType === "membership"
+                          ? s.classesPerTerm !== null
+                            ? `Used ${s.classesUsed} / ${s.classesPerTerm} · ${s.classesPerTerm - s.classesUsed} left`
+                            : `${s.classesUsed} classes used`
+                          : s.totalCredits !== null && s.remainingCredits !== null
+                            ? `Used ${s.totalCredits - s.remainingCredits} / ${s.totalCredits} · ${s.remainingCredits} left`
+                            : s.remainingCredits !== null
+                              ? `${s.remainingCredits} credit${s.remainingCredits !== 1 ? "s" : ""} left`
+                              : "—"}
                       </span>
                     </div>
                   ))}
@@ -256,6 +264,20 @@ export function StudentDetailPanel({
             </Section>
           )}
         </div>
+        {removeTarget && (
+          <RemoveSubscriptionDialog
+            sub={removeTarget}
+            studentName={student.fullName}
+            onClose={() => setRemoveTarget(null)}
+          />
+        )}
+        {deleteTarget && (
+          <DeleteSubscriptionDialog
+            sub={deleteTarget}
+            studentName={student.fullName}
+            onClose={() => setDeleteTarget(null)}
+          />
+        )}
       </td>
     </tr>
   );
@@ -318,11 +340,15 @@ function SubCard({
   allStudentSubs,
   termsById,
   onEdit,
+  onRemove,
+  onDelete,
 }: {
   sub: MockSubscription;
   allStudentSubs: MockSubscription[];
   termsById: Map<string, MockTerm>;
   onEdit: (sub: MockSubscription) => void;
+  onRemove: (sub: MockSubscription) => void;
+  onDelete: (sub: MockSubscription) => void;
 }) {
   const rule = getAccessRule(sub.productId);
   const term = sub.termId ? termsById.get(sub.termId) : null;
@@ -341,17 +367,21 @@ function SubCard({
         {sub.productName}
       </span>
       <StatusBadge status={displayStatus} />
-      {sub.productType === "membership" && sub.classesPerTerm !== null ? (
+      {sub.productType === "membership" ? (
         <span className="text-gray-500">
-          Used {sub.classesUsed} / {sub.classesPerTerm} · {sub.classesPerTerm - sub.classesUsed} left
+          {sub.classesPerTerm !== null
+            ? `Used ${sub.classesUsed} / ${sub.classesPerTerm} · ${sub.classesPerTerm - sub.classesUsed} left`
+            : `${sub.classesUsed} classes used`}
         </span>
+      ) : sub.productType === "drop_in" ? (
+        <span className="text-gray-500">1 class</span>
       ) : (
         <span className="text-gray-500">
-          {sub.remainingCredits === null
-            ? "∞"
-            : sub.totalCredits !== null
-              ? `Used ${sub.totalCredits - sub.remainingCredits} / ${sub.totalCredits} · ${sub.remainingCredits} left`
-              : `${sub.remainingCredits} credit${sub.remainingCredits !== 1 ? "s" : ""} left`}
+          {sub.totalCredits !== null && sub.remainingCredits !== null
+            ? `Used ${sub.totalCredits - sub.remainingCredits} / ${sub.totalCredits} · ${sub.remainingCredits} left`
+            : sub.remainingCredits !== null
+              ? `${sub.remainingCredits} credit${sub.remainingCredits !== 1 ? "s" : ""} left`
+              : "—"}
         </span>
       )}
       {term ? (
@@ -392,13 +422,169 @@ function SubCard({
       {sub.notes && (
         <span className="w-full text-xs text-gray-400 italic">{sub.notes}</span>
       )}
-      <button
-        onClick={() => onEdit(sub)}
-        className="ml-auto rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-        title="Edit subscription"
-      >
-        <Pencil className="h-3.5 w-3.5" />
-      </button>
+      <div className="ml-auto flex items-center gap-1">
+        <button
+          onClick={() => onEdit(sub)}
+          className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          title="Edit subscription"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        {isActive ? (
+          <button
+            onClick={() => onRemove(sub)}
+            className="rounded-lg p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+            title="Cancel this product assignment"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <button
+            onClick={() => onDelete(sub)}
+            className="rounded-lg p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
+            title="Permanently remove this historical record"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function RemoveSubscriptionDialog({
+  sub,
+  studentName,
+  onClose,
+}: {
+  sub: MockSubscription;
+  studentName: string;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const hasUsage = sub.classesUsed > 0
+    || (sub.totalCredits !== null && sub.remainingCredits !== null && sub.remainingCredits < sub.totalCredits);
+
+  function handleConfirm() {
+    startTransition(async () => {
+      const { removeStudentSubscriptionAction } = await import("@/lib/actions/students");
+      const result = await removeStudentSubscriptionAction(sub.id);
+      if (result.success) {
+        onClose();
+        router.refresh();
+      } else {
+        setError(result.error ?? "Failed to remove subscription.");
+      }
+    });
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Remove Product from Student</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          <p className="text-sm text-gray-700">
+            Remove <strong>{sub.productName}</strong> from <strong>{studentName}</strong>?
+          </p>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+            <p className="text-sm font-medium text-amber-800 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4" /> This will end the subscription
+            </p>
+            <ul className="list-disc pl-5 text-sm text-amber-700 space-y-1">
+              <li>The subscription will be marked as <strong>Cancelled</strong>.</li>
+              <li>Auto-renew will be turned off.</li>
+              <li>The student will no longer be able to use this product for bookings.</li>
+              {hasUsage && (
+                <li>This student has already used classes on this product. Usage history will be preserved.</li>
+              )}
+            </ul>
+          </div>
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
+          <Button variant="danger" onClick={handleConfirm} disabled={isPending}>
+            {isPending ? "Removing…" : "Remove Product"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteSubscriptionDialog({
+  sub,
+  studentName,
+  onClose,
+}: {
+  sub: MockSubscription;
+  studentName: string;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const hasUsage = sub.classesUsed > 0
+    || (sub.totalCredits !== null && sub.remainingCredits !== null && sub.remainingCredits < sub.totalCredits);
+
+  function handleConfirm() {
+    startTransition(async () => {
+      const { deleteStudentSubscriptionAction } = await import("@/lib/actions/students");
+      const result = await deleteStudentSubscriptionAction(sub.id);
+      if (result.success) {
+        onClose();
+        router.refresh();
+      } else {
+        setError(result.error ?? "Failed to delete record.");
+      }
+    });
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Permanently Delete Record</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          <p className="text-sm text-gray-700">
+            Permanently remove the <strong>{sub.productName}</strong> record from <strong>{studentName}</strong>?
+          </p>
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-2">
+            <p className="text-sm font-medium text-red-800 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4" /> This action cannot be undone
+            </p>
+            <ul className="list-disc pl-5 text-sm text-red-700 space-y-1">
+              <li>This historical record will be permanently deleted.</li>
+              <li>The link between this student and this product will be fully removed.</li>
+              {hasUsage && (
+                <li>This record shows {sub.classesUsed} class{sub.classesUsed !== 1 ? "es" : ""} used. Usage history will be lost.</li>
+              )}
+            </ul>
+          </div>
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
+          <Button variant="danger" onClick={handleConfirm} disabled={isPending}>
+            {isPending ? "Deleting…" : "Delete Permanently"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

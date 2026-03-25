@@ -86,3 +86,16 @@ export async function updateSubscription(
   }
   return { success: true };
 }
+
+export async function deleteSubscription(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const deleted = await getSubscriptionRepo().delete(id);
+    return deleted
+      ? { success: true }
+      : { success: false, error: "Subscription not found" };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
+  }
+}

@@ -39,23 +39,31 @@ export function ProductDetailPanel({
               </p>
             )}
             <DL label="Price" value={formatCents(product.priceCents)} />
-            {product.productType === "membership" && product.classesPerTerm ? (
-              <DL label="Classes / Term" value={`${product.classesPerTerm}`} />
-            ) : (
+            {product.productType === "membership" && (
+              <>
+                <DL
+                  label="Allowance"
+                  value={product.classesPerTerm
+                    ? `${product.classesPerTerm} classes per term`
+                    : "Not set — update classes per term"}
+                />
+                <DL label="Recurring" value={product.recurring ? "Yes (auto-renew eligible)" : "No"} />
+              </>
+            )}
+            {product.productType === "pass" && (
               <DL
-                label="Credits Model"
-                value={
-                  product.creditsModel === "unlimited"
-                    ? "Unlimited"
-                    : product.creditsModel === "single_use"
-                      ? "Single use"
-                      : `Fixed — ${product.totalCredits ?? "?"} credits`
-                }
+                label="Total Classes"
+                value={product.totalCredits ? `${product.totalCredits}` : "—"}
               />
+            )}
+            {product.productType === "drop_in" && (
+              <DL label="Allowance" value="1 class (single use)" />
             )}
             <DL label="Validity" value={product.validityDescription ?? "—"} />
             <DL label="Term-bound" value={product.termBound ? "Yes" : "No"} />
-            {product.recurring && <DL label="Recurring" value="Yes (auto-renew eligible)" />}
+            {product.productType !== "membership" && product.recurring && (
+              <DL label="Recurring" value="Yes" />
+            )}
             {product.benefits && product.benefits.length > 0 && (
               <DL label="Benefits" value={product.benefits.join(", ")} />
             )}
@@ -135,11 +143,15 @@ export function ProductDetailPanel({
                           {studentNameMap[s.studentId] ?? s.studentId}
                         </span>
                         <StatusBadge status={s.status} />
-                        {s.remainingCredits !== null && (
+                        {s.productType === "membership" && s.classesPerTerm !== null ? (
                           <span className="text-xs text-gray-400">
-                            {s.remainingCredits} credits left
+                            {s.classesPerTerm - s.classesUsed} of {s.classesPerTerm} left
                           </span>
-                        )}
+                        ) : s.remainingCredits !== null ? (
+                          <span className="text-xs text-gray-400">
+                            {s.remainingCredits} left
+                          </span>
+                        ) : null}
                       </div>
                     ))}
                   </div>

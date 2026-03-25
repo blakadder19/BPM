@@ -122,3 +122,11 @@ export function updateSubscription(
 
   return { ...sub };
 }
+
+export function deleteSubscription(id: string): boolean {
+  const list = init();
+  const idx = list.findIndex((s) => s.id === id);
+  if (idx === -1) return false;
+  list.splice(idx, 1);
+  return true;
+}

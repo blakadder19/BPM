@@ -8,4 +8,5 @@ export const memorySubscriptionRepo: ISubscriptionRepository = {
   getById: async (id) => store.getSubscription(id) ?? null,
   create: async (data: CreateSubscriptionData) => store.createSubscription(data),
   update: async (id, patch: SubscriptionPatch) => store.updateSubscription(id, patch),
+  delete: async (id) => store.deleteSubscription(id),
 };

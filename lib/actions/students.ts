@@ -118,6 +118,59 @@ export async function deleteStudentAction(
   return result;
 }
 
+export async function removeStudentSubscriptionAction(
+  subscriptionId: string
+): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
+  if (!subscriptionId) return { success: false, error: "Missing subscription ID" };
+
+  const { updateSubscription } = await import("@/lib/services/subscription-service");
+  const { getSubscriptionRepo } = await import("@/lib/repositories");
+
+  const sub = await getSubscriptionRepo().getById(subscriptionId);
+  if (!sub) return { success: false, error: "Subscription not found" };
+
+  const result = await updateSubscription(subscriptionId, {
+    status: "cancelled",
+    autoRenew: false,
+  });
+
+  if (result.success) {
+    revalidatePath("/students");
+    revalidatePath("/products");
+    revalidatePath("/dashboard");
+  }
+  return result;
+}
+
+export async function deleteStudentSubscriptionAction(
+  subscriptionId: string
+): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
+  if (!subscriptionId) return { success: false, error: "Missing subscription ID" };
+
+  const { getSubscriptionRepo } = await import("@/lib/repositories");
+  const sub = await getSubscriptionRepo().getById(subscriptionId);
+  if (!sub) return { success: false, error: "Subscription record not found" };
+
+  if (sub.status === "active") {
+    return {
+      success: false,
+      error: "Cannot permanently delete an active subscription. Cancel it first.",
+    };
+  }
+
+  const { deleteSubscription } = await import("@/lib/services/subscription-service");
+  const result = await deleteSubscription(subscriptionId);
+
+  if (result.success) {
+    revalidatePath("/students");
+    revalidatePath("/products");
+    revalidatePath("/dashboard");
+  }
+  return result;
+}
+
 function purgeStudentFromMemory(studentId: string) {
   try {
     const { getBookingService } = require("@/lib/services/booking-store");
