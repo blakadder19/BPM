@@ -71,6 +71,12 @@ export default async function StudentsPage({
     notes: p.notes ?? null,
   }));
 
+  const attendanceRecords = attendanceSvc.getAllRecords().map((a) => ({
+    bookableClassId: a.bookableClassId,
+    studentId: a.studentId,
+    status: a.status,
+  }));
+
   return (
     <AdminStudents
       students={students}
@@ -80,6 +86,7 @@ export default async function StudentsPage({
       walletTransactions={walletTransactions}
       bookings={bookings}
       penalties={penalties}
+      attendanceRecords={attendanceRecords}
       initialSearch={params.search ?? ""}
     />
   );

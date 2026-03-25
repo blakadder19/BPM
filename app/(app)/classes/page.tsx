@@ -16,7 +16,7 @@ import { getProductRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { isClassInFuture } from "@/lib/domain/datetime";
-import { isTermBoundLevel } from "@/lib/domain/term-rules";
+
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { AdminTemplates } from "@/components/classes/admin-templates";
@@ -100,7 +100,7 @@ export default async function ClassesPage() {
         currentLeaders: confirmedForClass.filter((b) => b.danceRole === "leader").length,
         currentFollowers: confirmedForClass.filter((b) => b.danceRole === "follower").length,
         totalBooked: confirmedForClass.length,
-        termBound: isTermBoundLevel(rawCls.level),
+        termBound: rawCls.termBound ?? false,
         termId: rawCls.termId ?? null,
       };
 

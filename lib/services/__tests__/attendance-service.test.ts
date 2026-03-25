@@ -17,6 +17,8 @@ function makeRecord(overrides: Partial<StoredAttendance> & { id: string }): Stor
     markedBy: "Teacher",
     markedAt: "2026-03-17T19:05:00",
     notes: null,
+    source: "booking",
+    subscriptionId: null,
     ...overrides,
   };
 }

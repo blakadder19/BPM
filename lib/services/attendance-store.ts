@@ -30,6 +30,8 @@ function buildRecords(): StoredAttendance[] {
     markedBy: a.markedBy,
     markedAt: a.markedAt,
     notes: a.notes,
+    source: a.bookingId ? "booking" as const : "walk_in" as const,
+    subscriptionId: null,
   }));
 }
 

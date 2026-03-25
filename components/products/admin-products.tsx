@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Pencil, Plus, Package, Power, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Package, Power, Trash2, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
@@ -11,6 +11,7 @@ import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { formatCents } from "@/lib/utils";
 import { PRODUCT_ACCESS_RULES, describeAccess } from "@/config/product-access";
 import { ProductDetailPanel } from "./product-detail-panel";
@@ -76,7 +77,6 @@ export function AdminProducts({
   const [deactivateProduct, setDeactivateProduct] = useState<MockProduct | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MockProduct | null>(null);
-  const [delPending, startDel] = useTransition();
 
   const q = search.toLowerCase();
 
@@ -253,33 +253,95 @@ export function AdminProducts({
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold">Delete Product</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Permanently delete <strong>{deleteTarget.name}</strong>? This cannot be undone.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={delPending}>Cancel</Button>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={delPending}
-                onClick={() => {
-                  startDel(async () => {
-                    const { deleteProductAction } = await import("@/lib/actions/products");
-                    await deleteProductAction(deleteTarget.id);
-                    setDeleteTarget(null);
-                    router.refresh();
-                  });
-                }}
-              >
-                {delPending ? "Deleting…" : "Delete"}
-              </Button>
-            </div>
-          </div>
-        </div>
+        <DeleteProductDialog
+          product={deleteTarget}
+          subscriptions={subscriptions}
+          studentNameMap={studentNameMap}
+          onClose={() => setDeleteTarget(null)}
+        />
       )}
     </div>
+  );
+}
+
+function DeleteProductDialog({
+  product,
+  subscriptions,
+  studentNameMap,
+  onClose,
+}: {
+  product: MockProduct;
+  subscriptions: MockSubscription[];
+  studentNameMap: Record<string, string>;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const linkedSubs = subscriptions.filter((s) => s.productId === product.id);
+  const activeSubs = linkedSubs.filter((s) => s.status === "active");
+  const hasActiveSubs = activeSubs.length > 0;
+
+  function handleConfirm() {
+    startTransition(async () => {
+      const { deleteProductAction } = await import("@/lib/actions/products");
+      const result = await deleteProductAction(product.id);
+      if (result.success) {
+        onClose();
+        router.refresh();
+      } else {
+        const msg = result.error ?? "Delete failed";
+        if (msg.includes("violates foreign key") || msg.includes("referenced") || msg.includes("constraint")) {
+          setError(`Cannot delete "${product.name}" because it has linked subscriptions. Deactivate the product instead, or remove all linked subscriptions first.`);
+        } else {
+          setError(msg);
+        }
+      }
+    });
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Product</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          <p className="text-sm text-gray-600">
+            Permanently delete <strong>{product.name}</strong>? This cannot be undone.
+          </p>
+          {hasActiveSubs && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                <div>
+                  <p className="font-medium">{activeSubs.length} active subscription{activeSubs.length !== 1 ? "s" : ""} linked to this product:</p>
+                  <ul className="mt-1 list-inside list-disc text-xs text-red-700">
+                    {activeSubs.slice(0, 5).map((s) => (
+                      <li key={s.id}>{studentNameMap[s.studentId] ?? s.studentId}</li>
+                    ))}
+                    {activeSubs.length > 5 && <li>…and {activeSubs.length - 5} more</li>}
+                  </ul>
+                  <p className="mt-1 text-xs text-red-600">Deletion may fail if subscriptions reference this product. Consider deactivating instead.</p>
+                </div>
+              </div>
+            </div>
+          )}
+          {!hasActiveSubs && linkedSubs.length > 0 && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <p>{linkedSubs.length} past/inactive subscription{linkedSubs.length !== 1 ? "s" : ""} linked to this product. Deletion may fail if database constraints exist.</p>
+            </div>
+          )}
+          {error && <p className="text-sm text-red-600">{error}</p>}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
+          <Button variant="danger" onClick={handleConfirm} disabled={isPending}>
+            {isPending ? "Deleting…" : "Delete Permanently"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -95,6 +95,8 @@ type InstancePatch = Partial<
     | "notes"
     | "teacherOverride1Id"
     | "teacherOverride2Id"
+    | "termBound"
+    | "termId"
   >
 >;
 

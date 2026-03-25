@@ -354,11 +354,19 @@ export function EditStudentDialog({
 
 // ── Deactivate / Reactivate Confirm Dialog ───────────────────
 
+export interface StudentImpact {
+  activeSubscriptions: number;
+  futureBookings: number;
+  pendingPenalties: number;
+}
+
 export function DeactivateConfirmDialog({
   student,
+  impact,
   onClose,
 }: {
   student: StudentListItem;
+  impact?: StudentImpact;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -366,6 +374,7 @@ export function DeactivateConfirmDialog({
   const [error, setError] = useState<string | null>(null);
   const isActive = student.isActive;
   const actionLabel = isActive ? "Deactivate" : "Reactivate";
+  const hasImpact = impact && isActive && (impact.activeSubscriptions > 0 || impact.futureBookings > 0 || impact.pendingPenalties > 0);
 
   function handleConfirm() {
     const formData = new FormData();
@@ -387,12 +396,23 @@ export function DeactivateConfirmDialog({
         <DialogHeader>
           <DialogTitle>{actionLabel} Student</DialogTitle>
         </DialogHeader>
-        <DialogBody>
+        <DialogBody className="space-y-3">
           <p className="text-sm text-gray-600">
             {isActive
               ? `Are you sure you want to deactivate ${student.fullName}? They will no longer appear in active filters, but their data will be preserved.`
               : `Reactivate ${student.fullName}? They will appear in the active students list again.`}
           </p>
+          {hasImpact && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <p className="font-medium">This student currently has:</p>
+              <ul className="mt-1 list-inside list-disc text-xs text-amber-700">
+                {impact.activeSubscriptions > 0 && <li>{impact.activeSubscriptions} active subscription{impact.activeSubscriptions !== 1 ? "s" : ""}</li>}
+                {impact.futureBookings > 0 && <li>{impact.futureBookings} upcoming booking{impact.futureBookings !== 1 ? "s" : ""}</li>}
+                {impact.pendingPenalties > 0 && <li>{impact.pendingPenalties} pending penalt{impact.pendingPenalties !== 1 ? "ies" : "y"}</li>}
+              </ul>
+              <p className="mt-1 text-xs text-amber-600">Their data will be preserved but they will be hidden from active filters.</p>
+            </div>
+          )}
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </DialogBody>
         <DialogFooter>
@@ -416,14 +436,17 @@ export function DeactivateConfirmDialog({
 
 export function DeleteStudentDialog({
   student,
+  impact,
   onClose,
 }: {
   student: StudentListItem;
+  impact?: StudentImpact;
   onClose: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const hasImpact = impact && (impact.activeSubscriptions > 0 || impact.futureBookings > 0 || impact.pendingPenalties > 0);
 
   function handleConfirm() {
     const formData = new FormData();
@@ -445,13 +468,24 @@ export function DeleteStudentDialog({
         <DialogHeader>
           <DialogTitle>Delete Student</DialogTitle>
         </DialogHeader>
-        <DialogBody>
+        <DialogBody className="space-y-3">
           <p className="text-sm text-gray-600">
             Are you sure you want to permanently delete{" "}
             <span className="font-semibold">{student.fullName}</span>? This will
-            remove their account, profile, and auth credentials. This action
+            remove their account, profile, bookings, attendance, and subscriptions. This action
             cannot be undone.
           </p>
+          {hasImpact && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+              <p className="font-medium">The following data will be permanently removed:</p>
+              <ul className="mt-1 list-inside list-disc text-xs text-red-700">
+                {impact.activeSubscriptions > 0 && <li>{impact.activeSubscriptions} active subscription{impact.activeSubscriptions !== 1 ? "s" : ""}</li>}
+                {impact.futureBookings > 0 && <li>{impact.futureBookings} upcoming booking{impact.futureBookings !== 1 ? "s" : ""}</li>}
+                {impact.pendingPenalties > 0 && <li>{impact.pendingPenalties} pending penalt{impact.pendingPenalties !== 1 ? "ies" : "y"}</li>}
+              </ul>
+              <p className="mt-1 text-xs text-red-600">Consider deactivating instead if you want to preserve their history.</p>
+            </div>
+          )}
           {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
         </DialogBody>
         <DialogFooter>
@@ -592,15 +626,14 @@ export function AddSubscriptionDialog({
 
             {selectedProduct?.termBound && (
               <div className="space-y-1.5">
-                <Label htmlFor="as-term">Term *</Label>
+                <Label htmlFor="as-term">Term</Label>
                 <select
                   id="as-term"
                   value={selectedTermId}
                   onChange={(e) => setSelectedTermId(e.target.value)}
                   className={SELECT_CLASS}
-                  required
                 >
-                  <option value="">Select term…</option>
+                  <option value="">— No term —</option>
                   {eligibleTerms.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} ({t.startDate} → {t.endDate})

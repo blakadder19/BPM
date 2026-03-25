@@ -12,6 +12,8 @@ import type { AttendanceMark, CheckInMethod } from "@/types/domain";
 
 // ── Store types ─────────────────────────────────────────────
 
+export type AttendanceSource = "booking" | "subscription" | "drop_in" | "walk_in" | "admin";
+
 export interface StoredAttendance {
   id: string;
   bookableClassId: string;
@@ -26,13 +28,15 @@ export interface StoredAttendance {
   markedBy: string;
   markedAt: string;
   notes: string | null;
+  source: AttendanceSource;
+  subscriptionId: string | null;
 }
 
 // ── Outcome ─────────────────────────────────────────────────
 
 export type MarkOutcome =
   | { type: "created"; record: StoredAttendance }
-  | { type: "updated"; record: StoredAttendance; previousStatus: AttendanceMark }
+  | { type: "updated"; record: StoredAttendance; previousStatus: AttendanceMark; previousSource: AttendanceSource }
   | { type: "error"; reason: string };
 
 export interface ClassAttendanceSummary {
@@ -64,6 +68,8 @@ export class AttendanceService {
     markedBy: string;
     notes?: string | null;
     checkInMethod?: CheckInMethod;
+    source?: AttendanceSource;
+    subscriptionId?: string | null;
   }): MarkOutcome {
     const existing = this.records.find(
       (r) =>
@@ -76,12 +82,15 @@ export class AttendanceService {
 
     if (existing) {
       const previousStatus = existing.status;
+      const previousSource = existing.source;
       existing.status = params.status;
       existing.markedBy = params.markedBy;
       existing.markedAt = now;
       existing.checkInMethod = method;
       if (params.notes !== undefined) existing.notes = params.notes ?? null;
-      return { type: "updated", record: existing, previousStatus };
+      if (params.source !== undefined) existing.source = params.source;
+      if (params.subscriptionId !== undefined) existing.subscriptionId = params.subscriptionId;
+      return { type: "updated", record: existing, previousStatus, previousSource };
     }
 
     const record: StoredAttendance = {
@@ -97,6 +106,8 @@ export class AttendanceService {
       markedBy: params.markedBy,
       markedAt: now,
       notes: params.notes ?? null,
+      source: params.source ?? (params.bookingId ? "booking" : "walk_in"),
+      subscriptionId: params.subscriptionId ?? null,
     };
     this.records.push(record);
     return { type: "created", record };
@@ -149,11 +160,24 @@ export class AttendanceService {
     return this.records.splice(idx, 1)[0];
   }
 
+  deleteById(id: string): StoredAttendance | null {
+    const idx = this.records.findIndex((r) => r.id === id);
+    if (idx === -1) return null;
+    return this.records.splice(idx, 1)[0];
+  }
+
   getAllRecords(): StoredAttendance[] {
     return [...this.records];
   }
 
-  /** Dev-only: remove all records from the store. */
+  /** Dev-only: remove manual (non-booking-linked) records from the store. */
+  clearManualRecords(): number {
+    const before = this.records.length;
+    this.records = this.records.filter((r) => !!r.bookingId);
+    return before - this.records.length;
+  }
+
+  /** Dev-only: remove ALL records from the store. */
   clearAll(): number {
     const count = this.records.length;
     this.records.length = 0;

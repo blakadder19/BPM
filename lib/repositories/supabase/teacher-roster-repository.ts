@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAcademyId } from "@/lib/supabase/academy";
-import type { Teacher } from "@/lib/services/teacher-roster-store";
+import type { Teacher, TeacherCategory } from "@/lib/services/teacher-roster-store";
 
 interface TeacherRow {
   id: string;
@@ -9,6 +9,7 @@ interface TeacherRow {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  category: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -21,6 +22,7 @@ function toTeacher(row: TeacherRow): Teacher {
     email: row.email,
     phone: row.phone,
     notes: row.notes,
+    category: (row.category as TeacherCategory) ?? null,
     isActive: row.is_active,
   };
 }
@@ -41,6 +43,7 @@ export const supabaseTeacherRosterRepo = {
     email: string | null;
     phone: string | null;
     notes: string | null;
+    category?: TeacherCategory;
     isActive: boolean;
   }): Promise<Teacher> {
     const supabase = createAdminClient();
@@ -53,6 +56,7 @@ export const supabaseTeacherRosterRepo = {
         email: data.email,
         phone: data.phone,
         notes: data.notes,
+        category: data.category ?? null,
         is_active: data.isActive,
       } as never)
       .select()
@@ -66,6 +70,7 @@ export const supabaseTeacherRosterRepo = {
     email: string | null;
     phone: string | null;
     notes: string | null;
+    category: TeacherCategory;
     isActive: boolean;
   }>): Promise<Teacher | null> {
     const supabase = createAdminClient();
@@ -74,6 +79,7 @@ export const supabaseTeacherRosterRepo = {
     if (patch.email !== undefined) fields.email = patch.email;
     if (patch.phone !== undefined) fields.phone = patch.phone;
     if (patch.notes !== undefined) fields.notes = patch.notes;
+    if (patch.category !== undefined) fields.category = patch.category;
     if (patch.isActive !== undefined) fields.is_active = patch.isActive;
     if (Object.keys(fields).length === 0) return null;
     const { data: row, error } = await supabase

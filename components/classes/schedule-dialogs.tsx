@@ -55,10 +55,13 @@ export function AddInstanceDialog({
   const [manualLevel, setManualLevel] = useState("");
   const [selectedTermId, setSelectedTermId] = useState("");
 
+  const [enforceTermRules, setEnforceTermRules] = useState(false);
+
   const tpl = templates.find((t) => t.id === selectedTemplateId);
   const isManual = !tpl;
-  const isTermBound = tpl?.termBound ?? false;
+
   const effectiveTermId = selectedTermId || tpl?.termId || "";
+  const effectiveEnforce = tpl ? (tpl.termBound ?? false) : enforceTermRules;
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -70,10 +73,8 @@ export function AddInstanceDialog({
       fd.set("styleName", tpl.styleName ?? "");
       fd.set("styleId", tpl.styleId ?? "");
       fd.set("level", tpl.level ?? "");
-      if (isTermBound) {
-        fd.set("termBound", "true");
-        if (effectiveTermId) fd.set("termId", effectiveTermId);
-      }
+      if (effectiveTermId) fd.set("termId", effectiveTermId);
+      fd.set("termBound", effectiveEnforce ? "true" : "false");
     } else {
       const chosenStyle = allStyles?.find((s) => s.id === manualStyleId);
       if (chosenStyle) {
@@ -81,6 +82,8 @@ export function AddInstanceDialog({
         fd.set("styleId", chosenStyle.id);
       }
       if (manualLevel) fd.set("level", manualLevel);
+      if (selectedTermId) fd.set("termId", selectedTermId);
+      fd.set("termBound", selectedTermId && enforceTermRules ? "true" : "false");
     }
 
     startTransition(async () => {
@@ -115,21 +118,46 @@ export function AddInstanceDialog({
               </select>
             </div>
 
-            {isTermBound && allTerms && allTerms.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Linked Term</label>
-                <select
-                  value={effectiveTermId}
-                  onChange={(e) => setSelectedTermId(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                >
-                  <option value="">— Auto-resolve from date —</option>
-                  {allTerms.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.startDate} to {t.endDate})</option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-gray-500">Term-bound class. If left blank, the term is resolved from the class date.</p>
-              </div>
+            {allTerms && allTerms.length > 0 && (
+              <fieldset className="space-y-3 rounded-lg border border-gray-200 p-3">
+                <legend className="px-1 text-xs font-semibold text-gray-500">Term Settings</legend>
+                {tpl && tpl.termId ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Badge variant="default">From template</Badge>
+                    {allTerms.find((t) => t.id === tpl.termId)?.name ?? tpl.termId}
+                    {tpl.termBound && <Badge variant="warning">Enforced</Badge>}
+                  </div>
+                ) : null}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    {tpl?.termId ? "Override Term" : "Linked Term"}
+                  </label>
+                  <select
+                    value={effectiveTermId}
+                    onChange={(e) => {
+                      setSelectedTermId(e.target.value);
+                      if (!e.target.value && isManual) setEnforceTermRules(false);
+                    }}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  >
+                    <option value="">— No term —</option>
+                    {allTerms.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.startDate} to {t.endDate})</option>
+                    ))}
+                  </select>
+                </div>
+                {isManual && effectiveTermId && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={enforceTermRules}
+                      onChange={(e) => setEnforceTermRules(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                    />
+                    Enforce term late-entry rules
+                  </label>
+                )}
+              </fieldset>
             )}
 
             <div className="grid grid-cols-2 gap-4">
@@ -248,19 +276,25 @@ export function AddInstanceDialog({
 
 export function EditInstanceDialog({
   instance,
+  allTerms,
   onClose,
 }: {
   instance: MockBookableClass;
+  allTerms?: { id: string; name: string; startDate: string; endDate: string }[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [selectedTermId, setSelectedTermId] = useState(instance.termId ?? "");
+  const [enforceTermRules, setEnforceTermRules] = useState(instance.termBound ?? false);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     fd.set("id", instance.id);
+    fd.set("termId", selectedTermId);
+    fd.set("termBound", selectedTermId && enforceTermRules ? "true" : "false");
     startTransition(async () => {
       const { updateInstanceAction } = await import("@/lib/actions/classes");
       const result = await updateInstanceAction(fd);
@@ -289,6 +323,39 @@ export function EditInstanceDialog({
                 </select>
               </div>
             </div>
+
+            {allTerms && allTerms.length > 0 && (
+              <fieldset className="space-y-3 rounded-lg border border-gray-200 p-3">
+                <legend className="px-1 text-xs font-semibold text-gray-500">Term Settings</legend>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Linked Term</label>
+                  <select
+                    value={selectedTermId}
+                    onChange={(e) => {
+                      setSelectedTermId(e.target.value);
+                      if (!e.target.value) setEnforceTermRules(false);
+                    }}
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  >
+                    <option value="">— No term —</option>
+                    {allTerms.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.startDate} to {t.endDate})</option>
+                    ))}
+                  </select>
+                </div>
+                {selectedTermId && (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={enforceTermRules}
+                      onChange={(e) => setEnforceTermRules(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                    />
+                    Enforce term late-entry rules
+                  </label>
+                )}
+              </fieldset>
+            )}
 
             <div className="grid grid-cols-3 gap-4">
               <div>
@@ -639,6 +706,16 @@ export function InstanceDetailPanel({
     : "Unassigned";
 
   const linkedTerm = bc.termId && allTerms ? allTerms.find((t) => t.id === bc.termId) : null;
+  const today = new Date().toISOString().slice(0, 10);
+  const isFutureTerm = !!(linkedTerm && today < linkedTerm.startDate);
+
+  let weekNumber: number | null = null;
+  if (linkedTerm && !isFutureTerm) {
+    const classDate = new Date(bc.date + "T00:00:00");
+    const termStart = new Date(linkedTerm.startDate + "T00:00:00");
+    const diffMs = classDate.getTime() - termStart.getTime();
+    if (diffMs >= 0) weekNumber = Math.min(Math.floor(diffMs / (7 * 86_400_000)) + 1, 4);
+  }
 
   return (
     <tr>
@@ -656,18 +733,25 @@ export function InstanceDetailPanel({
               <Detail label="Time" value={`${formatTime(bc.startTime)} – ${formatTime(bc.endTime)}`} />
               <Detail label="Location" value={bc.location} />
               <Detail label="Status"><StatusBadge status={bc.status} /></Detail>
-              <Detail label="Term-bound">
-                {bc.termBound ? (
+              <Detail label="Term">
+                {linkedTerm ? (
                   <span className="flex items-center gap-1.5">
-                    <Badge variant="info">Term-bound</Badge>
-                    {linkedTerm ? linkedTerm.name : <span className="text-gray-400">No term linked</span>}
+                    {bc.termBound ? <Badge variant="warning">Term-enforced</Badge> : <Badge variant="default">Term-linked</Badge>}
+                    {linkedTerm.name}
+                    {isFutureTerm && <Badge variant="info">Future term</Badge>}
+                    {weekNumber && <Badge variant="info">Week {weekNumber}</Badge>}
                   </span>
+                ) : bc.termId ? (
+                  <span className="text-amber-600">⚠ Linked term not found</span>
                 ) : (
-                  <span className="text-gray-400">No</span>
+                  <span className="text-gray-400">No term linked</span>
                 )}
               </Detail>
               {linkedTerm && (
                 <Detail label="Term Period" value={`${formatDate(linkedTerm.startDate)} – ${formatDate(linkedTerm.endDate)}`} />
+              )}
+              {linkedTerm && (
+                <Detail label="Enforcement" value={bc.termBound ? "ON — late-entry rules apply" : "OFF — informational only"} />
               )}
             </dl>
           </div>

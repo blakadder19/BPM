@@ -81,8 +81,10 @@ export function getTermWeekNumber(
 }
 
 /**
- * Returns true when a class level should be term-bound by BPM rule.
- * Only Beginner 1 and Beginner 2 courses are term-bound.
+ * Returns true when a class level suggests term enforcement by default.
+ * Beginner 1 and Beginner 2 courses default to enforced, but any class
+ * can be term-linked/enforced via admin controls.  Used as a UI default
+ * suggestion — NOT as an enforcement gate.
  */
 export function isTermBoundLevel(level: string | null): boolean {
   if (!level) return false;

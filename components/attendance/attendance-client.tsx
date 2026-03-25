@@ -52,6 +52,17 @@ export interface BookableClassProp {
   startTime: string;
   endTime: string;
   location: string;
+  status?: string;
+}
+
+export interface SubscriptionOption {
+  id: string;
+  studentId: string;
+  productName: string;
+  productType: string;
+  remainingCredits: number | null;
+  classesUsed: number;
+  classesPerTerm: number | null;
 }
 
 export interface BookingProp {
@@ -107,6 +118,7 @@ interface AttendanceClientProps {
   allClasses: BookableClassProp[];
   isDev?: boolean;
   studentOptions?: StudentOption[];
+  activeSubscriptions?: SubscriptionOption[];
   initialClassFilter?: string;
   initialDateFilter?: string;
   initialStudentSearch?: string;
@@ -121,6 +133,7 @@ export function AttendanceClient({
   allClasses,
   isDev,
   studentOptions,
+  activeSubscriptions,
   initialClassFilter,
   initialDateFilter,
   initialStudentSearch,
@@ -130,8 +143,6 @@ export function AttendanceClient({
   const hasContextFilter = !!(initialClassFilter || initialStudentSearch);
   const [activeTab, setActiveTab] = useState<"today" | "history">(hasContextFilter ? "history" : "today");
   const [showAddAttendance, setShowAddAttendance] = useState(false);
-  const [clearPending, startClear] = useTransition();
-  const [clearMsg, setClearMsg] = useState<string | null>(null);
 
   return (
     <div className="space-y-6">
@@ -141,50 +152,12 @@ export function AttendanceClient({
           description="Mark students as they arrive. Track class attendance history."
         />
         <div className="flex items-center gap-2">
-          {isDev && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setClearMsg(null);
-                startClear(async () => {
-                  const { clearAllAttendanceAction } = await import(
-                    "@/lib/actions/attendance"
-                  );
-                  const res = await clearAllAttendanceAction();
-                  setClearMsg(
-                    res.success
-                      ? `Cleared ${res.cleared} attendance records`
-                      : res.error ?? "Failed"
-                  );
-                  router.refresh();
-                });
-              }}
-              disabled={clearPending}
-            >
-              <Trash2 className="mr-1 h-3.5 w-3.5" />
-              {clearPending ? "Clearing…" : "Clear All"}
-            </Button>
-          )}
           <Button onClick={() => setShowAddAttendance(true)}>
             <Plus className="mr-1.5 h-4 w-4" />
             Add Record
           </Button>
         </div>
       </div>
-
-      {clearMsg && (
-        <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm text-blue-800">
-          <Trash2 className="h-4 w-4 flex-shrink-0" />
-          <span>{clearMsg}</span>
-          <button
-            onClick={() => setClearMsg(null)}
-            className="ml-auto text-blue-400 hover:text-blue-600"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      )}
 
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex gap-6">
@@ -226,6 +199,7 @@ export function AttendanceClient({
         <AddAttendanceDialog
           students={studentOptions ?? []}
           classes={allClasses}
+          subscriptions={activeSubscriptions ?? []}
           onClose={() => setShowAddAttendance(false)}
           currentUserName={currentUserName}
         />
@@ -368,7 +342,7 @@ interface StudentRow {
   studentName: string;
   bookingId: string | null;
   danceRole: string | null;
-  isWalkIn: boolean;
+  source: string;
 }
 
 function ClassAttendanceCard({
@@ -383,6 +357,12 @@ function ClassAttendanceCard({
   currentUserName?: string;
 }) {
   const router = useRouter();
+
+  const attendanceByStudent = useMemo(() => {
+    const map = new Map<string, StoredAttendance>();
+    for (const a of attendanceRecords) map.set(a.studentId, a);
+    return map;
+  }, [attendanceRecords]);
 
   const serverMarks = useMemo(() => {
     const map = new Map<string, AttendanceMark>();
@@ -399,7 +379,7 @@ function ClassAttendanceCard({
       studentName: b.studentName,
       bookingId: b.id,
       danceRole: b.danceRole,
-      isWalkIn: false,
+      source: "booking",
     }));
     for (const a of attendanceRecords) {
       if (!bookedIds.has(a.studentId)) {
@@ -408,7 +388,7 @@ function ClassAttendanceCard({
           studentName: a.studentName,
           bookingId: a.bookingId,
           danceRole: null,
-          isWalkIn: !a.bookingId,
+          source: a.source ?? "walk_in",
         });
       }
     }
@@ -425,10 +405,12 @@ function ClassAttendanceCard({
     studentId: string;
     studentName: string;
     bookingId: string | null;
-    previousStatus: AttendanceMark;
+    previousStatus: AttendanceMark | undefined;
     newStatus: AttendanceMark;
   } | null>(null);
-  // Excused always refunds — no prompt needed
+
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!cardMounted.current) {
@@ -521,7 +503,28 @@ function ClassAttendanceCard({
       return;
     }
 
+    if (status === "excused" && currentMark !== "excused") {
+      setReversalConfirm({ studentId, studentName, bookingId, previousStatus: currentMark, newStatus: status });
+      return;
+    }
+
     doMark(studentId, studentName, bookingId, status);
+  };
+
+  const handleDeleteManual = (studentId: string) => {
+    setDeleteError(null);
+    const record = attendanceByStudent.get(studentId);
+    if (!record) return;
+    startTransition(async () => {
+      const { deleteAttendanceRecordAction } = await import("@/lib/actions/attendance");
+      const result = await deleteAttendanceRecordAction(record.id);
+      if (!result.success) {
+        setDeleteError(result.error ?? "Failed to delete record.");
+        return;
+      }
+      setDeleteConfirm(null);
+      router.refresh();
+    });
   };
 
   return (
@@ -532,6 +535,11 @@ function ClassAttendanceCard({
             <div className="flex items-center gap-2">
               <h3 className="text-base font-semibold text-gray-900">{bc.title}</h3>
               {bc.styleName && <StatusBadge status={bc.classType} />}
+              {bc.status === "scheduled" && (
+                <span className="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                  Scheduled
+                </span>
+              )}
             </div>
             <div className="mt-1 flex items-center gap-4 text-sm text-gray-500">
               <span className="flex items-center gap-1">
@@ -571,10 +579,8 @@ function ClassAttendanceCard({
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">
                       {row.studentName}
-                      {row.isWalkIn && (
-                        <span className="ml-2 inline-flex items-center rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
-                          Walk-in
-                        </span>
+                      {row.source !== "booking" && (
+                        <SourceBadge source={row.source} />
                       )}
                     </p>
                     <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -584,8 +590,11 @@ function ClassAttendanceCard({
                           Marked: <StatusBadge status={currentMark} />
                         </span>
                       )}
-                      {currentMark === "excused" && creditAlert && (
+                      {creditAlert && currentMark === "excused" && (
                         <span className="text-[10px] font-medium text-blue-600">Credit restored</span>
+                      )}
+                      {creditAlert && currentMark === "absent" && (
+                        <span className="text-[10px] font-medium text-amber-600">Credit refunded (absent policy)</span>
                       )}
                     </div>
                   </div>
@@ -614,6 +623,16 @@ function ClassAttendanceCard({
                         </button>
                       );
                     })}
+                    {!row.bookingId && currentMark && (
+                      <button
+                        onClick={() => setDeleteConfirm(row.studentId)}
+                        disabled={pending}
+                        title="Delete this manual attendance record"
+                        className="ml-1 rounded-lg p-1.5 text-gray-400 ring-1 ring-inset ring-gray-200 hover:bg-red-50 hover:text-red-600 hover:ring-red-200 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -627,6 +646,18 @@ function ClassAttendanceCard({
                   <div className="mt-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-1.5 text-xs text-blue-700">
                     <ShieldOff className="h-3.5 w-3.5 flex-shrink-0" />
                     Credit restored — no penalty applied.
+                  </div>
+                )}
+                {currentMark === "absent" && creditAlert && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
+                    <ShieldOff className="h-3.5 w-3.5 flex-shrink-0" />
+                    Credit refunded — refund-on-absent setting is enabled.
+                  </div>
+                )}
+                {deleteError && deleteConfirm === row.studentId && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded-md bg-red-50 px-3 py-1.5 text-xs text-red-700">
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                    {deleteError}
                   </div>
                 )}
               </li>
@@ -647,6 +678,16 @@ function ClassAttendanceCard({
             doMark(studentId, studentName, bookingId, ns);
           }}
           onCancel={() => setReversalConfirm(null)}
+        />
+      )}
+
+      {deleteConfirm && attendanceByStudent.get(deleteConfirm) && (
+        <DeleteAttendanceDialog
+          record={attendanceByStudent.get(deleteConfirm)!}
+          isPending={pending}
+          error={deleteError}
+          onConfirm={() => handleDeleteManual(deleteConfirm)}
+          onCancel={() => { setDeleteConfirm(null); setDeleteError(null); }}
         />
       )}
 
@@ -671,6 +712,22 @@ function SummaryPill({
   return (
     <span className={cn("rounded-full px-2 py-0.5 font-medium", colors[variant])}>
       {count} {label}
+    </span>
+  );
+}
+
+const SOURCE_BADGE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
+  subscription: { bg: "bg-violet-50", text: "text-violet-600", label: "Subscription" },
+  drop_in: { bg: "bg-teal-50", text: "text-teal-600", label: "Drop-in" },
+  walk_in: { bg: "bg-indigo-50", text: "text-indigo-600", label: "Walk-in" },
+  admin: { bg: "bg-gray-100", text: "text-gray-600", label: "Admin" },
+};
+
+function SourceBadge({ source }: { source: string }) {
+  const style = SOURCE_BADGE_STYLES[source] ?? SOURCE_BADGE_STYLES.walk_in;
+  return (
+    <span className={cn("ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium", style.bg, style.text)}>
+      {style.label}
     </span>
   );
 }
@@ -800,7 +857,7 @@ function HistoryView({
         />
       ) : (
         <AdminTable
-          headers={["Student", "Class", "Date", "Status", "Method", "Marked By", "Marked At"]}
+          headers={["Student", "Class", "Date", "Status", "Source", "Method", "Marked By", "Marked At", ""]}
           count={filtered.length}
         >
           {filtered.map((a) => (
@@ -835,9 +892,13 @@ function HistoryRow({
     previousStatus: AttendanceMark;
     newStatus: AttendanceMark;
   } | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   useEffect(() => {
     setCurrentStatus(a.status);
   }, [a.status]);
+
+  const isDeletable = !a.bookingId;
 
   function doStatusChange(newStatus: AttendanceMark) {
     const prev = currentStatus;
@@ -871,7 +932,26 @@ function HistoryRow({
       return;
     }
 
+    if (newStatus === "excused" && currentStatus !== "excused") {
+      setReversalConfirm({ previousStatus: currentStatus, newStatus });
+      return;
+    }
+
     doStatusChange(newStatus);
+  }
+
+  function handleDelete() {
+    setDeleteError(null);
+    startTransition(async () => {
+      const { deleteAttendanceRecordAction } = await import("@/lib/actions/attendance");
+      const result = await deleteAttendanceRecordAction(a.id);
+      if (!result.success) {
+        setDeleteError(result.error ?? "Failed to delete record.");
+        return;
+      }
+      setShowDeleteConfirm(false);
+      onRefresh();
+    });
   }
 
   return (
@@ -899,13 +979,26 @@ function HistoryRow({
             <option value="excused">Excused</option>
           </select>
         </Td>
+        <Td><SourceBadge source={a.source ?? "walk_in"} /></Td>
         <Td className="capitalize">{a.checkInMethod}</Td>
         <Td>{a.markedBy}</Td>
         <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
+        <Td>
+          {isDeletable && (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              disabled={isPending}
+              title="Delete this manual attendance record"
+              className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </Td>
       </tr>
 
       {reversalConfirm && (
-        <tr><td colSpan={7} className="p-0">
+        <tr><td colSpan={9} className="p-0">
           <AttendanceReversalDialog
             studentName={a.studentName}
             previousStatus={reversalConfirm.previousStatus}
@@ -917,6 +1010,18 @@ function HistoryRow({
               doStatusChange(ns);
             }}
             onCancel={() => setReversalConfirm(null)}
+          />
+        </td></tr>
+      )}
+
+      {showDeleteConfirm && (
+        <tr><td colSpan={9} className="p-0">
+          <DeleteAttendanceDialog
+            record={a}
+            isPending={isPending}
+            error={deleteError}
+            onConfirm={handleDelete}
+            onCancel={() => { setShowDeleteConfirm(false); setDeleteError(null); }}
           />
         </td></tr>
       )}
@@ -936,43 +1041,59 @@ function AttendanceReversalDialog({
   isPending,
 }: {
   studentName: string;
-  previousStatus: AttendanceMark;
+  previousStatus: AttendanceMark | undefined;
   newStatus: AttendanceMark;
   onConfirm: () => void;
   onCancel: () => void;
   isPending: boolean;
 }) {
+  const isExcusing = newStatus === "excused";
+  const borderColor = isExcusing ? "border-blue-200" : "border-amber-200";
+  const bgColor = isExcusing ? "bg-blue-50" : "bg-amber-50";
+  const headerColor = isExcusing ? "text-blue-800" : "text-amber-800";
+  const textColor = isExcusing ? "text-blue-700" : "text-amber-700";
+
   return (
     <Dialog open onClose={onCancel}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Confirm Attendance Change</DialogTitle>
+          <DialogTitle>{isExcusing ? "Confirm Excused Absence" : "Confirm Attendance Change"}</DialogTitle>
         </DialogHeader>
         <DialogBody className="space-y-4">
           <p className="text-sm text-gray-700">
-            You are changing <strong>{studentName}</strong>'s attendance
-            from <StatusBadge status={previousStatus} /> to <StatusBadge status={newStatus} />.
+            You are {previousStatus ? "changing" : "marking"} <strong>{studentName}</strong>&rsquo;s attendance
+            {previousStatus ? <> from <StatusBadge status={previousStatus} /></> : null} to <StatusBadge status={newStatus} />.
           </p>
 
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-            <p className="text-sm font-medium text-amber-800 flex items-center gap-1.5">
+          <div className={cn("rounded-lg border p-3 space-y-2", borderColor, bgColor)}>
+            <p className={cn("text-sm font-medium flex items-center gap-1.5", headerColor)}>
               <AlertTriangle className="h-4 w-4" /> Please review the following effects:
             </p>
-            <ul className="list-disc pl-5 text-sm text-amber-700 space-y-1">
-              {previousStatus === "absent" && (
+            <ul className={cn("list-disc pl-5 text-sm space-y-1", textColor)}>
+              {previousStatus === "absent" && isPresenceStatus(newStatus) && (
                 <>
                   <li>The booking will be restored from <strong>Missed</strong> to <strong>Checked In</strong>.</li>
                   <li>If a no-show penalty was created, it will be voided.</li>
-                  <li>If the credit was refunded (per absence policy), it will be consumed again.</li>
+                  <li>If the credit was refunded (per absence policy), it will be <strong>consumed again</strong>.</li>
                 </>
               )}
-              {previousStatus === "excused" && (
+              {previousStatus === "excused" && isPresenceStatus(newStatus) && (
                 <>
                   <li>The booking will be marked as <strong>Checked In</strong>.</li>
-                  <li>The credit refunded for this excused absence will be consumed again.</li>
+                  <li>The credit refunded for this excused absence will be <strong>consumed again</strong>.</li>
                 </>
               )}
-              <li>The student's attendance record will be updated to <strong>{newStatus}</strong>.</li>
+              {isExcusing && (
+                <>
+                  <li><strong>If a subscription credit was consumed, it will be restored.</strong></li>
+                  <li>No penalty will be applied.</li>
+                  {previousStatus === "absent" && <li>Any existing no-show penalty for this class will be voided.</li>}
+                </>
+              )}
+              {newStatus === "absent" && (
+                <li>Absent will trigger no-show penalty logic. Credit refund depends on the <em>Refund on Absent</em> setting.</li>
+              )}
+              <li>The attendance record will be updated to <strong>{newStatus}</strong>.</li>
             </ul>
           </div>
         </DialogBody>
@@ -981,7 +1102,67 @@ function AttendanceReversalDialog({
             Cancel
           </Button>
           <Button type="button" onClick={onConfirm} disabled={isPending}>
-            {isPending ? "Updating…" : "Confirm Change"}
+            {isPending ? "Updating…" : isExcusing ? "Confirm — Excuse & Restore Credit" : "Confirm Change"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Delete Attendance Confirmation Dialog ────────────────────
+
+function DeleteAttendanceDialog({
+  record,
+  isPending,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  record: StoredAttendance;
+  isPending: boolean;
+  error?: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const hasSubscription = record.source === "subscription" && !!record.subscriptionId;
+  const wasConsumed = record.status === "present" || record.status === "late";
+
+  return (
+    <Dialog open onClose={onCancel}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete Attendance Record</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-4">
+          <p className="text-sm text-gray-700">
+            Delete the attendance record for <strong>{record.studentName}</strong> in <strong>{record.classTitle}</strong> ({formatDate(record.date)})?
+          </p>
+
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-2">
+            <p className="text-sm font-medium text-red-800 flex items-center gap-1.5">
+              <AlertTriangle className="h-4 w-4" /> This action cannot be undone.
+            </p>
+            <ul className="list-disc pl-5 text-sm text-red-700 space-y-1">
+              <li>The attendance record will be permanently removed.</li>
+              {hasSubscription && wasConsumed && (
+                <li>The credit consumed from the subscription will be <strong>restored</strong>.</li>
+              )}
+              {hasSubscription && !wasConsumed && (
+                <li>No credit adjustment needed (credit was not consumed for this status).</li>
+              )}
+            </ul>
+          </div>
+          {error && (
+            <p className="rounded-lg border border-red-300 bg-red-100 p-2 text-sm text-red-800">{error}</p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button type="button" onClick={onConfirm} disabled={isPending} className="bg-red-600 hover:bg-red-700">
+            {isPending ? "Deleting…" : "Delete Record"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -991,16 +1172,27 @@ function AttendanceReversalDialog({
 
 // ── Add Attendance Dialog ───────────────────────────────────
 
+type AttendanceSource = "subscription" | "drop_in" | "walk_in" | "admin";
+
+const SOURCE_OPTIONS: { value: AttendanceSource; label: string; hint: string }[] = [
+  { value: "subscription", label: "Subscription", hint: "Consume a credit from an active subscription" },
+  { value: "drop_in", label: "Drop-in", hint: "No credit consumed — pay at reception" },
+  { value: "walk_in", label: "Walk-in", hint: "Attendance-only record, no booking created" },
+  { value: "admin", label: "Admin / Manual", hint: "Admin override, no credit consumed" },
+];
+
 function AddAttendanceDialog({
   students,
   classes,
+  subscriptions,
   onClose,
   currentUserName,
 }: {
   students: StudentOption[];
-  currentUserName?: string;
   classes: BookableClassProp[];
+  subscriptions: SubscriptionOption[];
   onClose: () => void;
+  currentUserName?: string;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -1008,6 +1200,8 @@ function AddAttendanceDialog({
 
   const [studentId, setStudentId] = useState("");
   const [bookableClassId, setBookableClassId] = useState("");
+  const [source, setSource] = useState<AttendanceSource>("walk_in");
+  const [subscriptionId, setSubscriptionId] = useState("");
   const [status, setStatus] = useState<AttendanceMark>("present");
   const [notes, setNotes] = useState("");
 
@@ -1017,8 +1211,14 @@ function AddAttendanceDialog({
     [classes, today]
   );
 
+  const studentSubs = useMemo(
+    () => subscriptions.filter((s) => s.studentId === studentId),
+    [subscriptions, studentId]
+  );
+
   const selectedStudent = students.find((s) => s.id === studentId);
   const selectedClass = eligibleClasses.find((c) => c.id === bookableClassId);
+  const selectedSub = studentSubs.find((s) => s.id === subscriptionId);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1027,13 +1227,17 @@ function AddAttendanceDialog({
       setError("Student and class are required.");
       return;
     }
+    if (source === "subscription" && !subscriptionId) {
+      setError("Please select a subscription to consume from.");
+      return;
+    }
 
     startTransition(async () => {
       const result = await markStudentAttendance({
         bookableClassId,
         studentId,
         studentName: selectedStudent?.fullName ?? "",
-        bookingId: "",
+        bookingId: null,
         classTitle: selectedClass?.title ?? "",
         date: selectedClass?.date ?? "",
         classType: (selectedClass?.classType ?? "class") as ClassType,
@@ -1042,6 +1246,8 @@ function AddAttendanceDialog({
         status,
         markedBy: `${currentUserName ?? "Admin"} (manual)`,
         notes: notes.trim() || undefined,
+        attendanceSource: source,
+        directSubscriptionId: source === "subscription" ? subscriptionId : null,
       });
 
       if (result.success) {
@@ -1053,57 +1259,69 @@ function AddAttendanceDialog({
     });
   }
 
+  const inputCls = "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+
   return (
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add Attendance Record</DialogTitle>
-          <p className="text-xs text-gray-500">Records attendance directly as a walk-in. This does not create a booking.</p>
+          <p className="text-xs text-gray-500">Record a walk-in, drop-in, or subscription attendance directly.</p>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">
             <div>
               <Label>Student *</Label>
-              <select
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              >
+              <select value={studentId} onChange={(e) => { setStudentId(e.target.value); setSubscriptionId(""); }} className={inputCls}>
                 <option value="">Select student…</option>
-                {students.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.fullName}
-                  </option>
-                ))}
+                {students.map((s) => <option key={s.id} value={s.id}>{s.fullName}</option>)}
               </select>
             </div>
 
             <div>
               <Label>Class * <span className="text-xs font-normal text-gray-400">(today and past only)</span></Label>
-              <select
-                value={bookableClassId}
-                onChange={(e) => setBookableClassId(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              >
+              <select value={bookableClassId} onChange={(e) => setBookableClassId(e.target.value)} className={inputCls}>
                 <option value="">Select class…</option>
-                {eligibleClasses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.title} — {c.date} {c.startTime}
-                  </option>
-                ))}
+                {eligibleClasses.map((c) => <option key={c.id} value={c.id}>{c.title} — {c.date} {c.startTime}</option>)}
               </select>
-              {eligibleClasses.length === 0 && (
-                <p className="mt-1 text-xs text-gray-400">No eligible classes (today or past) found.</p>
-              )}
+              {eligibleClasses.length === 0 && <p className="mt-1 text-xs text-gray-400">No eligible classes (today or past) found.</p>}
             </div>
 
             <div>
+              <Label>Source *</Label>
+              <select value={source} onChange={(e) => { setSource(e.target.value as AttendanceSource); setSubscriptionId(""); }} className={inputCls}>
+                {SOURCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">{SOURCE_OPTIONS.find((o) => o.value === source)?.hint}</p>
+            </div>
+
+            {source === "subscription" && studentId && (
+              <div>
+                <Label>Subscription *</Label>
+                {studentSubs.length === 0 ? (
+                  <p className="mt-1 text-xs text-amber-600">No active subscriptions for this student.</p>
+                ) : (
+                  <select value={subscriptionId} onChange={(e) => setSubscriptionId(e.target.value)} className={inputCls}>
+                    <option value="">Select subscription…</option>
+                    {studentSubs.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.productName}
+                        {s.remainingCredits !== null ? ` (${s.remainingCredits} credits left)` : s.classesPerTerm !== null ? ` (${s.classesPerTerm - s.classesUsed} classes left)` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {selectedSub && (
+                  <p className="mt-1 text-xs text-indigo-600">
+                    1 credit will be consumed from {selectedSub.productName}.
+                  </p>
+                )}
+              </div>
+            )}
+
+            <div>
               <Label>Status *</Label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as AttendanceMark)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-              >
+              <select value={status} onChange={(e) => setStatus(e.target.value as AttendanceMark)} className={inputCls}>
                 <option value="present">Present</option>
                 <option value="late">Late</option>
                 <option value="absent">Absent</option>
@@ -1112,36 +1330,40 @@ function AddAttendanceDialog({
             </div>
 
             <div>
-              <Label>Notes (optional)</Label>
+              <Label>{status === "excused" ? "Excuse Reason (optional)" : "Notes (optional)"}</Label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="Any dev testing notes…"
+                className={inputCls}
+                placeholder={status === "excused" ? "Reason for excused absence…" : "Optional notes…"}
               />
             </div>
 
             {status === "absent" && (
               <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
                 Marking as Absent will trigger no-show penalty logic (if enabled in Settings).
+                {source === "subscription" && " The credit consumed from the subscription will NOT be refunded (unless the refund-on-absent setting is enabled)."}
               </p>
             )}
             {status === "excused" && (
-              <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                Marking as Excused will restore the student's credit. No penalty will be applied.
-              </p>
+              <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800 space-y-1">
+                <p className="font-semibold flex items-center gap-1.5">
+                  <ShieldOff className="h-3.5 w-3.5" /> Credit will be restored
+                </p>
+                <p>No penalty will be applied.</p>
+                {source === "subscription" && selectedSub && (
+                  <p>The credit consumed from <strong>{selectedSub.productName}</strong> will be given back.</p>
+                )}
+                <p className="text-blue-600">By saving, you confirm this absence is excused.</p>
+              </div>
             )}
 
             {error && <p className="text-sm text-red-600">{error}</p>}
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving…" : "Create Record"}
-            </Button>
+            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
+            <Button type="submit" disabled={isPending}>{isPending ? "Saving…" : "Create Record"}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

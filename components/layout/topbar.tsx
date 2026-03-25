@@ -53,6 +53,7 @@ export function Topbar({ user, devStudents, devStudentId }: TopbarProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* PROVISIONAL: Future enhancement — admin notifications (e.g. "Some templates need term review") */}
         <button
           disabled
           title="Notifications — coming soon"

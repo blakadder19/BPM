@@ -6,7 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { getAccessRule, describeAccess } from "@/config/product-access";
 import { deriveDisplayStatus } from "@/lib/domain/subscription-display-status";
+import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
+import type { AttendanceMark } from "@/types/domain";
 import type { StudentListItem } from "@/types/domain";
 import type {
   MockSubscription,
@@ -16,6 +18,12 @@ import type {
   MockPenalty,
 } from "@/lib/mock-data";
 
+interface AttendanceRecord {
+  bookableClassId: string;
+  studentId: string;
+  status: AttendanceMark;
+}
+
 interface StudentDetailPanelProps {
   student: StudentListItem;
   subscriptions: MockSubscription[];
@@ -23,6 +31,7 @@ interface StudentDetailPanelProps {
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
+  attendanceRecords?: AttendanceRecord[];
   benefits?: MemberBenefitsSummary | null;
   onAddSub: () => void;
   onEditSub: (sub: MockSubscription) => void;
@@ -36,6 +45,7 @@ export function StudentDetailPanel({
   walletTransactions,
   bookings,
   penalties,
+  attendanceRecords,
   benefits,
   onAddSub,
   onEditSub,
@@ -207,13 +217,19 @@ export function StudentDetailPanel({
               <p className="text-sm text-gray-400">No bookings.</p>
             ) : (
               <div className="space-y-1.5">
-                {recentBookings.map((b) => (
-                  <div key={b.id} className="flex items-center gap-2 text-sm">
-                    <span className="text-gray-500 whitespace-nowrap">{formatDate(b.date)}</span>
-                    <span className="flex-1 truncate text-gray-800">{b.classTitle}</span>
-                    <StatusBadge status={b.status} />
-                  </div>
-                ))}
+                {recentBookings.map((b) => {
+                  const attRecord = attendanceRecords?.find(
+                    (a) => a.bookableClassId === b.bookableClassId && a.studentId === b.studentId
+                  );
+                  const displayStatus = resolveStudentVisibleStatus(b.status, attRecord?.status ?? null);
+                  return (
+                    <div key={b.id} className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-500 whitespace-nowrap">{formatDate(b.date)}</span>
+                      <span className="flex-1 truncate text-gray-800">{b.classTitle}</span>
+                      <StatusBadge status={displayStatus} />
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Section>

@@ -22,6 +22,7 @@ import {
   AddSubscriptionDialog,
   EditSubscriptionDialog,
 } from "./student-dialogs";
+import type { StudentImpact } from "./student-dialogs";
 import type { StudentListItem } from "@/types/domain";
 import type {
   MockSubscription,
@@ -60,6 +61,12 @@ const TABLE_HEADERS = [
   "",
 ];
 
+interface AttendanceSlice {
+  bookableClassId: string;
+  studentId: string;
+  status: "present" | "absent" | "late" | "excused";
+}
+
 interface AdminStudentsProps {
   students: StudentListItem[];
   subscriptions: MockSubscription[];
@@ -68,6 +75,7 @@ interface AdminStudentsProps {
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
+  attendanceRecords?: AttendanceSlice[];
   initialSearch?: string;
 }
 
@@ -79,6 +87,7 @@ export function AdminStudents({
   walletTransactions,
   bookings,
   penalties,
+  attendanceRecords,
   initialSearch,
 }: AdminStudentsProps) {
   const [search, setSearch] = useState(initialSearch ?? "");
@@ -122,16 +131,28 @@ export function AdminStudents({
     .sort((a, b) => (b.joinedAt ?? "").localeCompare(a.joinedAt ?? ""));
 
   function deriveSubInfo(studentId: string) {
-    const activeSub = subscriptions.find(
+    const studentSubs = subscriptions.filter(
       (s) => s.studentId === studentId && s.status === "active"
     );
+    if (studentSubs.length === 0) return { name: null, credits: "—" };
+    const totalCredits = studentSubs.reduce((sum, s) => {
+      if (s.remainingCredits === null) return Infinity;
+      return sum === Infinity ? Infinity : sum + (s.remainingCredits ?? 0);
+    }, 0 as number);
+    const firstName = studentSubs[0].productName;
+    const label = studentSubs.length > 1 ? `${firstName} +${studentSubs.length - 1}` : firstName;
     return {
-      name: activeSub?.productName ?? null,
-      credits: activeSub
-        ? activeSub.remainingCredits === null
-          ? "∞"
-          : String(activeSub.remainingCredits)
-        : "—",
+      name: label,
+      credits: totalCredits === Infinity ? "∞" : String(totalCredits),
+    };
+  }
+
+  function computeStudentImpact(studentId: string): StudentImpact {
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      activeSubscriptions: subscriptions.filter((s) => s.studentId === studentId && s.status === "active").length,
+      futureBookings: bookings.filter((b) => b.studentId === studentId && b.date >= today && b.status !== "cancelled").length,
+      pendingPenalties: penalties.filter((p) => p.studentId === studentId && p.resolution === "monetary_pending").length,
     };
   }
 
@@ -248,6 +269,7 @@ export function AdminStudents({
                     walletTransactions={walletTransactions}
                     bookings={bookings}
                     penalties={penalties}
+                    attendanceRecords={attendanceRecords}
                     benefits={computeMemberBenefits({
                       dateOfBirth: s.dateOfBirth,
                       referenceDate: new Date().toISOString().slice(0, 10),
@@ -274,6 +296,7 @@ export function AdminStudents({
       {deactivateStudent && (
         <DeactivateConfirmDialog
           student={deactivateStudent}
+          impact={computeStudentImpact(deactivateStudent.id)}
           onClose={() => setDeactivateStudent(null)}
         />
       )}
@@ -281,6 +304,7 @@ export function AdminStudents({
       {deleteStudentTarget && (
         <DeleteStudentDialog
           student={deleteStudentTarget}
+          impact={computeStudentImpact(deleteStudentTarget.id)}
           onClose={() => setDeleteStudentTarget(null)}
         />
       )}

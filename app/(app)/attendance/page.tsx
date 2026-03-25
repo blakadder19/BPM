@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth";
-import { getAttendanceRepo, getBookingRepo, getStudentRepo } from "@/lib/repositories";
+import { getAttendanceRepo, getBookingRepo, getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -57,6 +57,19 @@ export default async function AttendancePage({
   const allStudents = await getStudentRepo().getAll();
   const studentOptions = allStudents.map((s) => ({ id: s.id, fullName: s.fullName }));
 
+  const allSubs = await getSubscriptionRepo().getAll();
+  const activeSubOptions = allSubs
+    .filter((s) => s.status === "active")
+    .map((s) => ({
+      id: s.id,
+      studentId: s.studentId,
+      productName: s.productName,
+      productType: s.productType,
+      remainingCredits: s.remainingCredits,
+      classesUsed: s.classesUsed,
+      classesPerTerm: s.classesPerTerm,
+    }));
+
   return (
     <AttendanceClient
       mockToday={today}
@@ -66,6 +79,7 @@ export default async function AttendancePage({
       allClasses={allInstances}
       isDev={isDev}
       studentOptions={studentOptions}
+      activeSubscriptions={activeSubOptions}
       initialClassFilter={params.classTitle ?? ""}
       initialDateFilter={params.date ?? ""}
       initialStudentSearch={params.student ?? ""}

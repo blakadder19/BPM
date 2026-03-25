@@ -285,6 +285,8 @@ export function AdminSchedule({
           teacherRoster={teacherRoster}
           teacherNameMap={teacherNameMap}
           pairPresets={pairPresets}
+          allTerms={allTerms}
+          inactiveTeacherIds={inactiveTeacherIds}
           onCreateInstance={handleCreateFromDay}
           onReschedule={handleReschedule}
           forcedViewMode={viewMode}
@@ -333,7 +335,30 @@ export function AdminSchedule({
                       className="cursor-pointer hover:bg-gray-50"
                       onClick={() => setExpandedId(isExpanded ? null : bc.id)}
                     >
-                      <Td className="font-medium text-gray-900">{bc.title}</Td>
+                      <Td className="font-medium text-gray-900">
+                        <div className="flex items-center gap-1.5">
+                          {bc.title}
+                          {(() => {
+                            if (!bc.termId) return null;
+                            const lt = allTerms?.find((t) => t.id === bc.termId);
+                            const today = new Date().toISOString().slice(0, 10);
+                            const isFutureTerm = lt && today < lt.startDate;
+                            let wk: number | null = null;
+                            if (lt && !isFutureTerm) {
+                              const diff = new Date(bc.date + "T00:00:00").getTime() - new Date(lt.startDate + "T00:00:00").getTime();
+                              if (diff >= 0) wk = Math.min(Math.floor(diff / (7 * 86_400_000)) + 1, 4);
+                            }
+                            return (
+                              <>
+                                {bc.termBound && <Badge variant="warning">Term-enforced</Badge>}
+                                {!bc.termBound && <Badge variant="default">Term-linked</Badge>}
+                                {isFutureTerm && <Badge variant="info">Future term</Badge>}
+                                {wk && <Badge variant="info">W{wk}</Badge>}
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </Td>
                       <Td>
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={bc.classType} />
@@ -459,7 +484,7 @@ export function AdminSchedule({
           defaultDate={addDefaultDate ?? undefined}
         />
       )}
-      {editTarget && <EditInstanceDialog instance={editTarget} onClose={() => setEditTarget(null)} />}
+      {editTarget && <EditInstanceDialog instance={editTarget} allTerms={allTerms} onClose={() => setEditTarget(null)} />}
       {showGenerate && (
         <GenerateScheduleDialog
           activeTemplateCount={activeTemplateCount}

@@ -70,9 +70,8 @@ function TemplateForm({
 }) {
   const [classType, setClassType] = useState(initial.classType ?? "class");
   const [styleId, setStyleId] = useState(initial.styleId ?? "");
-  const [isTermBound, setIsTermBound] = useState(
-    initial.termBound === true || (initial.termBound === undefined && isTermBoundLevel(initial.level ?? null))
-  );
+  const [selectedTermId, setSelectedTermId] = useState(initial.termId ?? "");
+  const [isTermBound, setIsTermBound] = useState(initial.termBound ?? false);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -139,7 +138,10 @@ function TemplateForm({
           <select
             name="level"
             defaultValue={initial.level ?? ""}
-            onChange={(e) => setIsTermBound(isTermBoundLevel(e.target.value || null))}
+            onChange={(e) => {
+              const lv = e.target.value || null;
+              if (isTermBoundLevel(lv) && !isTermBound) setIsTermBound(true);
+            }}
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           >
             <option value="">— None —</option>
@@ -217,29 +219,43 @@ function TemplateForm({
             Active
           </label>
         </div>
-        <input type="hidden" name="termBound" value={isTermBound ? "true" : "false"} />
-        {isTermBound && (
-          <span className="flex items-center gap-1.5 text-xs text-amber-700">
-            <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
-            Term-bound (Beginner course)
-          </span>
-        )}
       </div>
 
-      {isTermBound && allTerms && allTerms.length > 0 && (
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Linked Term *</label>
-          <select
-            name="termId"
-            defaultValue={initial.termId ?? ""}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-          >
-            <option value="">— Select a term —</option>
-            {allTerms.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
-        </div>
+      {allTerms && allTerms.length > 0 && (
+        <fieldset className="space-y-3 rounded-lg border border-gray-200 p-3">
+          <legend className="px-1 text-xs font-semibold text-gray-500">Term Settings</legend>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Linked Term</label>
+            <select
+              name="termId"
+              value={selectedTermId}
+              onChange={(e) => {
+                setSelectedTermId(e.target.value);
+                if (!e.target.value) setIsTermBound(false);
+              }}
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            >
+              <option value="">— No term —</option>
+              {allTerms.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}{t.startDate && t.endDate ? ` (${t.startDate} to ${t.endDate})` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedTermId && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={isTermBound}
+                onChange={(e) => setIsTermBound(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+              />
+              Enforce term late-entry rules
+            </label>
+          )}
+          <input type="hidden" name="termBound" value={selectedTermId && isTermBound ? "true" : "false"} />
+        </fieldset>
       )}
 
       <div className="flex justify-end gap-3 pt-2">
@@ -361,27 +377,23 @@ export function TemplateDetailPanel({
               <Detail label="Time" value={`${formatTime(c.startTime)} – ${formatTime(c.endTime)}`} />
               <Detail label="Location" value={c.location} />
               <Detail label="Active" value={c.isActive ? "Yes" : "No"} />
-              <Detail label="Term-bound">
-                {c.termBound ? (
+              <Detail label="Term">
+                {linkedTerm ? (
                   <span className="flex items-center gap-1.5">
-                    <Badge variant="warning">Term-bound</Badge>
-                    {linkedTerm ? linkedTerm.name : (
-                      c.termId
-                        ? <span className="text-amber-600">⚠ Linked term not found</span>
-                        : <span className="text-gray-400">No term linked</span>
-                    )}
+                    {c.termBound ? <Badge variant="warning">Term-enforced</Badge> : <Badge variant="default">Term-linked</Badge>}
+                    {linkedTerm.name}
                   </span>
+                ) : c.termId ? (
+                  <span className="text-amber-600">⚠ Linked term not found</span>
                 ) : (
-                  <span className="text-gray-400">No (open class)</span>
+                  <span className="text-gray-400">No term linked</span>
                 )}
               </Detail>
-              {c.termBound && linkedTerm && linkedTerm.startDate && linkedTerm.endDate && (
+              {linkedTerm && linkedTerm.startDate && linkedTerm.endDate && (
                 <Detail label="Term Period" value={`${formatDate(linkedTerm.startDate)} – ${formatDate(linkedTerm.endDate)}`} />
               )}
-              {c.termBound && c.termId && !linkedTerm && (
-                <Detail label="Term Period">
-                  <span className="text-amber-600 text-xs">Term ID {c.termId.slice(0, 8)}… could not be resolved</span>
-                </Detail>
+              {linkedTerm && (
+                <Detail label="Enforcement" value={c.termBound ? "ON — late-entry rules apply" : "OFF — informational only"} />
               )}
             </dl>
           </div>

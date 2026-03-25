@@ -44,7 +44,7 @@ import {
 } from "@/lib/supabase/schedule-persistence";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 import { getTermRepo } from "@/lib/repositories";
-import { findTermForDate, isTermBoundLevel } from "@/lib/domain/term-rules";
+import { findTermForDate } from "@/lib/domain/term-rules";
 import { requireRole } from "@/lib/auth";
 import type { ClassType, InstanceStatus } from "@/types/domain";
 import { isClassEnded } from "@/lib/domain/datetime";
@@ -59,7 +59,20 @@ function isUUID(id: string): boolean {
 }
 
 function dbError(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  const raw = err instanceof Error ? err.message : String(err);
+  if (raw.includes("duplicate key") || raw.includes("unique constraint") || raw.includes("already exists")) {
+    if (raw.includes("class_instances") || raw.includes("schedule")) {
+      return "A class instance with this combination of class, date, and time already exists.";
+    }
+    return "A record with these details already exists. Please check for duplicates.";
+  }
+  if (raw.includes("violates foreign key") || raw.includes("referenced")) {
+    return "This record is linked to other data and cannot be removed. Try deactivating it instead.";
+  }
+  if (raw.includes("violates not-null") || raw.includes("null value in column")) {
+    return "A required field is missing. Please check the form and try again.";
+  }
+  return raw;
 }
 
 const VALID_CLASS_TYPES = new Set<string>(["class", "social", "student_practice"]);
@@ -92,8 +105,8 @@ export async function createTemplateAction(
   const followerCap = formData.get("followerCap") ? Number(formData.get("followerCap")) : null;
   const location = (formData.get("location") as string)?.trim() || "Studio A";
   const isActive = formData.get("isActive") === "true";
-  const termBound = isTermBoundLevel(level);
-  const termId = termBound ? ((formData.get("termId") as string)?.trim() || null) : null;
+  const termId = (formData.get("termId") as string)?.trim() || null;
+  const termBound = termId ? formData.get("termBound") === "true" : false;
   const notes = (formData.get("notes") as string)?.trim() || null;
 
   if (!title) return { success: false, error: "Title is required" };
@@ -163,13 +176,17 @@ export async function updateTemplateAction(
     followerCap: formData.get("followerCap") ? Number(formData.get("followerCap")) : null,
     location: (formData.get("location") as string)?.trim() || "Studio A",
     isActive: formData.get("isActive") === "true",
-    termBound: isTermBoundLevel((formData.get("level") as string)?.trim() || null),
-    termId: isTermBoundLevel((formData.get("level") as string)?.trim() || null) ? ((formData.get("termId") as string)?.trim() || null) : null,
+    termId: (formData.get("termId") as string)?.trim() || null,
+    termBound: ((formData.get("termId") as string)?.trim()) ? formData.get("termBound") === "true" : false,
   };
 
   const dbPatch: Record<string, unknown> = { ...patch };
-  if (!patch.termBound) { delete dbPatch.termBound; delete dbPatch.termId; }
   delete dbPatch.notes;
+
+  const existingTemplate = getTemplate(id);
+  if (!existingTemplate) return { success: false, error: "Template not found" };
+  const oldTermId = existingTemplate.termId ?? null;
+  const oldTermBound = existingTemplate.termBound ?? false;
 
   try {
     await saveTemplateToDB(id, dbPatch);
@@ -180,6 +197,34 @@ export async function updateTemplateAction(
 
   const updated = updateTemplate(id, patch);
   if (!updated) return { success: false, error: "Template not found in memory" };
+
+  const termChanged = patch.termId !== oldTermId || patch.termBound !== oldTermBound;
+  if (termChanged) {
+    const today = new Date().toISOString().slice(0, 10);
+    const inherited = getInstances().filter(
+      (i) =>
+        i.classId === id &&
+        i.date >= today &&
+        (i.termId ?? null) === oldTermId &&
+        (i.termBound ?? false) === oldTermBound
+    );
+
+    let newTerm: { id: string; startDate: string; endDate: string } | null = null;
+    if (patch.termId) {
+      const allTerms = await getTermRepo().getAll();
+      newTerm = allTerms.find((t) => t.id === patch.termId) ?? null;
+    }
+
+    for (const inst of inherited) {
+      if (newTerm && (inst.date < newTerm.startDate || inst.date > newTerm.endDate)) {
+        updateInstance(inst.id, { termId: null, termBound: false });
+        try { await saveInstanceToDB(inst.id, { termId: null, termBound: false }); } catch { /* best effort */ }
+      } else {
+        updateInstance(inst.id, { termId: patch.termId ?? null, termBound: patch.termBound });
+        try { await saveInstanceToDB(inst.id, { termId: patch.termId ?? null, termBound: patch.termBound }); } catch { /* best effort */ }
+      }
+    }
+  }
 
   revalidateClasses();
   return { success: true };
@@ -239,22 +284,25 @@ export async function createInstanceAction(
   const tpl = templateId ? getTemplate(templateId) : null;
 
   const instanceLevel = (formData.get("level") as string)?.trim() || tpl?.level || null;
-  const resolvedTermBound = isTermBoundLevel(instanceLevel);
+  const formTermBound = formData.get("termBound");
+  const resolvedTermBound = formTermBound !== null
+    ? formTermBound === "true"
+    : (tpl?.termBound ?? false);
   let resolvedTermId = (formData.get("termId") as string)?.trim() || tpl?.termId || null;
-  if (resolvedTermBound) {
+
+  if (resolvedTermId) {
     const allTerms = await getTermRepo().getAll();
-    if (resolvedTermId) {
-      const linkedTerm = allTerms.find((t) => t.id === resolvedTermId);
-      if (linkedTerm && (date < linkedTerm.startDate || date > linkedTerm.endDate)) {
-        return { success: false, error: "This class date falls outside the selected term. Choose a date within the term period." };
-      }
+    const linkedTerm = allTerms.find((t) => t.id === resolvedTermId);
+    if (linkedTerm && (date < linkedTerm.startDate || date > linkedTerm.endDate)) {
+      return { success: false, error: "This class date falls outside the selected term. Choose a date within the term period." };
+    }
+  } else if (resolvedTermBound) {
+    const allTerms = await getTermRepo().getAll();
+    const matchedTerm = findTermForDate(allTerms, date);
+    if (matchedTerm) {
+      resolvedTermId = matchedTerm.id;
     } else {
-      const matchedTerm = findTermForDate(allTerms, date);
-      if (matchedTerm) {
-        resolvedTermId = matchedTerm.id;
-      } else {
-        return { success: false, error: "This is a Beginner course (term-bound) but no defined term covers the selected date. Please check the date or create the matching term first." };
-      }
+      return { success: false, error: "Term enforcement is enabled but no defined term covers the selected date. Please check the date or create the matching term first." };
     }
   }
 
@@ -319,19 +367,31 @@ export async function updateInstanceAction(
   const existing = getInstance(id);
   if (!existing) return { success: false, error: "Instance not found" };
 
-  if (existing.termBound) {
-    const finalDate = (patch.date as string) ?? existing.date;
+  const formTermId = formData.get("termId");
+  const formTermBound = formData.get("termBound");
+  if (formTermId !== null) {
+    patch.termId = (formTermId as string).trim() || null;
+  }
+  if (formTermBound !== null) {
+    patch.termBound = formTermBound === "true";
+    if (!patch.termBound && patch.termId === undefined) patch.termId = null;
+  }
+
+  const effectiveTermId = (patch.termId as string | null | undefined) ?? existing.termId;
+  const effectiveTermBound = (patch.termBound as boolean | undefined) ?? existing.termBound;
+  const finalDate = (patch.date as string) ?? existing.date;
+
+  if (effectiveTermId) {
     const allTerms = await getTermRepo().getAll();
-    if (existing.termId) {
-      const linkedTerm = allTerms.find((t) => t.id === existing.termId);
-      if (linkedTerm && (finalDate < linkedTerm.startDate || finalDate > linkedTerm.endDate)) {
-        return { success: false, error: "This class date falls outside the selected term. Choose a date within the term period." };
-      }
-    } else {
-      const matchedTerm = findTermForDate(allTerms, finalDate);
-      if (!matchedTerm) {
-        return { success: false, error: "This is a Beginner course (term-bound) but no defined term covers the selected date. Please check the date or create the matching term first." };
-      }
+    const linkedTerm = allTerms.find((t) => t.id === effectiveTermId);
+    if (linkedTerm && (finalDate < linkedTerm.startDate || finalDate > linkedTerm.endDate)) {
+      return { success: false, error: "This class date falls outside the selected term. Choose a date within the term period." };
+    }
+  } else if (effectiveTermBound) {
+    const allTerms = await getTermRepo().getAll();
+    const matchedTerm = findTermForDate(allTerms, finalDate);
+    if (!matchedTerm) {
+      return { success: false, error: "Term enforcement is enabled but no defined term covers the selected date. Please check the date or create the matching term first." };
     }
   }
 
@@ -589,11 +649,15 @@ export async function createTeacherAction(
   const fullName = (formData.get("fullName") as string)?.trim();
   if (!fullName) return { success: false, error: "Name is required" };
 
+  const rawCategory = (formData.get("category") as string)?.trim() || null;
+  const category = rawCategory as import("@/lib/services/teacher-roster-store").TeacherCategory;
+
   const data = {
     fullName,
     email: (formData.get("email") as string)?.trim() || null,
     phone: (formData.get("phone") as string)?.trim() || null,
     notes: (formData.get("notes") as string)?.trim() || null,
+    category,
     isActive: formData.get("isActive") !== "false",
   };
 
@@ -624,11 +688,15 @@ export async function updateTeacherAction(
   const fullName = (formData.get("fullName") as string)?.trim();
   if (!fullName) return { success: false, error: "Name is required" };
 
+  const rawCategory = (formData.get("category") as string)?.trim() || null;
+  const category = rawCategory as import("@/lib/services/teacher-roster-store").TeacherCategory;
+
   const patch = {
     fullName,
     email: (formData.get("email") as string)?.trim() || null,
     phone: (formData.get("phone") as string)?.trim() || null,
     notes: (formData.get("notes") as string)?.trim() || null,
+    category,
     isActive: formData.get("isActive") !== "false",
   };
 

@@ -9,7 +9,7 @@ import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { getProductRepo } from "@/lib/repositories";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { computeBookability, type BookabilityContext, type ClassInstanceInfo } from "@/lib/domain/bookability";
-import { isTermBoundLevel } from "@/lib/domain/term-rules";
+
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getStudentRepo, getSubscriptionRepo, getCocRepo } from "@/lib/repositories";
 import { updateSubscription } from "@/lib/services/subscription-service";
@@ -125,7 +125,7 @@ export async function createStudentBooking(input: {
     currentLeaders: allBookingsForClass.filter((b) => b.danceRole === "leader").length,
     currentFollowers: allBookingsForClass.filter((b) => b.danceRole === "follower").length,
     totalBooked: allBookingsForClass.length,
-    termBound: isTermBoundLevel(rawCls.level),
+    termBound: rawCls.termBound ?? false,
     termId: rawCls.termId ?? null,
   };
 

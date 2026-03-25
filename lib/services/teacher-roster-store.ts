@@ -12,18 +12,33 @@ function hasSupabaseConfig(): boolean {
   return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
+export type TeacherCategory =
+  | "core_instructor"
+  | "instructor"
+  | "assistant"
+  | "yoga"
+  | null;
+
+export const TEACHER_CATEGORY_LABELS: Record<string, string> = {
+  core_instructor: "Core Instructor",
+  instructor: "Instructor",
+  assistant: "Assistant",
+  yoga: "Yoga",
+};
+
 export interface Teacher {
   id: string;
   fullName: string;
   email: string | null;
   phone: string | null;
   notes: string | null;
+  category: TeacherCategory;
   isActive: boolean;
 }
 
 const SEED_TEACHERS: Teacher[] = [
-  { id: "t-01", fullName: "María García", email: "maria@bpm.dance", phone: null, notes: null, isActive: true },
-  { id: "t-02", fullName: "Carlos Rivera", email: "carlos@bpm.dance", phone: null, notes: null, isActive: true },
+  { id: "t-01", fullName: "María García", email: "maria@bpm.dance", phone: null, notes: null, category: "instructor", isActive: true },
+  { id: "t-02", fullName: "Carlos Rivera", email: "carlos@bpm.dance", phone: null, notes: null, category: "instructor", isActive: true },
 ];
 
 let teachers: Teacher[] | null = null;
@@ -52,6 +67,7 @@ export function createTeacher(data: {
   email: string | null;
   phone: string | null;
   notes: string | null;
+  category?: TeacherCategory;
   isActive: boolean;
 }): Teacher {
   const list = init();
@@ -61,13 +77,14 @@ export function createTeacher(data: {
     email: data.email,
     phone: data.phone,
     notes: data.notes,
+    category: data.category ?? null,
     isActive: data.isActive,
   };
   list.push(t);
   return t;
 }
 
-type TeacherPatch = Partial<Pick<Teacher, "fullName" | "email" | "phone" | "notes" | "isActive">>;
+type TeacherPatch = Partial<Pick<Teacher, "fullName" | "email" | "phone" | "notes" | "category" | "isActive">>;
 
 export function updateTeacher(id: string, patch: TeacherPatch): Teacher | null {
   const list = init();

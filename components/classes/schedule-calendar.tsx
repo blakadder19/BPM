@@ -88,6 +88,8 @@ interface ScheduleCalendarProps {
   teacherRoster: Teacher[];
   teacherNameMap: Record<string, string>;
   pairPresets: PairPreset[];
+  allTerms?: { id: string; name: string; startDate: string; endDate: string }[];
+  inactiveTeacherIds?: string[];
   onCreateInstance?: (date: string) => void;
   onEditInstance?: (instance: MockBookableClass) => void;
   onReschedule?: (instanceId: string, newDate: string) => void;
@@ -135,11 +137,15 @@ export function ScheduleCalendar({
   teacherRoster,
   teacherNameMap,
   pairPresets,
+  allTerms,
+  inactiveTeacherIds,
   onCreateInstance,
   onEditInstance,
   onReschedule,
   forcedViewMode,
 }: ScheduleCalendarProps) {
+  const inactiveSet = useMemo(() => new Set(inactiveTeacherIds ?? []), [inactiveTeacherIds]);
+  const instanceMap = useMemo(() => new Map(instances.map((i) => [i.id, i])), [instances]);
   const [internalViewMode, setInternalViewMode] = useState<"weekly" | "monthly">("weekly");
   const viewMode = forcedViewMode ?? internalViewMode;
   const setViewMode = setInternalViewMode;
@@ -238,6 +244,20 @@ export function ScheduleCalendar({
     if (onReschedule) onReschedule(instanceId, newDate);
   }, [onReschedule]);
 
+  function getTermTag(entry: ResolvedEntry): { enforced: boolean; week: number | null; isFuture: boolean } | undefined {
+    const inst = instanceMap.get(entry.instanceId);
+    if (!inst?.termId) return undefined;
+    const lt = allTerms?.find((t) => t.id === inst.termId);
+    const today = new Date().toISOString().slice(0, 10);
+    const isFuture = !!(lt && today < lt.startDate);
+    let week: number | null = null;
+    if (lt && !isFuture) {
+      const diff = new Date(inst.date + "T00:00:00").getTime() - new Date(lt.startDate + "T00:00:00").getTime();
+      if (diff >= 0) week = Math.min(Math.floor(diff / (7 * 86_400_000)) + 1, 4);
+    }
+    return { enforced: inst.termBound ?? false, week, isFuture };
+  }
+
   return (
     <div className="space-y-4">
       {/* View toggle + filters */}
@@ -301,6 +321,8 @@ export function ScheduleCalendar({
           onCardClick={handleCardClick}
           onCreateInstance={onCreateInstance}
           onDrop={handleDrop}
+          getTermTag={getTermTag}
+          inactiveTeacherIds={inactiveSet}
         />
       ) : (
         <MonthlyGrid
@@ -311,6 +333,8 @@ export function ScheduleCalendar({
           onCardClick={handleCardClick}
           onCreateInstance={onCreateInstance}
           onDrop={handleDrop}
+          getTermTag={getTermTag}
+          inactiveTeacherIds={inactiveSet}
         />
       )}
 
@@ -404,6 +428,8 @@ function WeeklyGrid({
   onCardClick,
   onCreateInstance,
   onDrop,
+  getTermTag,
+  inactiveTeacherIds,
 }: {
   entries: ResolvedEntry[];
   weekOffset: number;
@@ -412,6 +438,8 @@ function WeeklyGrid({
   onCardClick: (entry: ResolvedEntry) => void;
   onCreateInstance?: (date: string) => void;
   onDrop?: (instanceId: string, newDate: string) => void;
+  getTermTag?: (entry: ResolvedEntry) => { enforced: boolean; week: number | null; isFuture: boolean } | undefined;
+  inactiveTeacherIds?: Set<string>;
 }) {
   const baseDate = useMemo(() => {
     const d = new Date();
@@ -488,7 +516,7 @@ function WeeklyGrid({
               ) : (
                 <div className="space-y-2">
                   {dayEntries.map((entry) => (
-                    <CalendarCard key={entry.instanceId} entry={entry} hasConflict={conflictIds.has(entry.instanceId)} compact={false} onClick={() => onCardClick(entry)} />
+                    <CalendarCard key={entry.instanceId} entry={entry} hasConflict={conflictIds.has(entry.instanceId)} compact={false} termTag={getTermTag?.(entry)} inactiveTeacherIds={inactiveTeacherIds} onClick={() => onCardClick(entry)} />
                   ))}
                 </div>
               )}
@@ -510,6 +538,8 @@ function MonthlyGrid({
   onCardClick,
   onCreateInstance,
   onDrop,
+  getTermTag,
+  inactiveTeacherIds,
 }: {
   entries: ResolvedEntry[];
   monthOffset: number;
@@ -518,6 +548,8 @@ function MonthlyGrid({
   onCardClick: (entry: ResolvedEntry) => void;
   onCreateInstance?: (date: string) => void;
   onDrop?: (instanceId: string, newDate: string) => void;
+  getTermTag?: (entry: ResolvedEntry) => { enforced: boolean; week: number | null; isFuture: boolean } | undefined;
+  inactiveTeacherIds?: Set<string>;
 }) {
   const targetDate = useMemo(() => {
     const now = new Date();
@@ -605,7 +637,7 @@ function MonthlyGrid({
                     </div>
                     <div className="space-y-0.5">
                       {visible.map((entry) => (
-                        <CalendarCard key={entry.instanceId} entry={entry} hasConflict={conflictIds.has(entry.instanceId)} compact onClick={() => onCardClick(entry)} />
+                        <CalendarCard key={entry.instanceId} entry={entry} hasConflict={conflictIds.has(entry.instanceId)} compact termTag={getTermTag?.(entry)} inactiveTeacherIds={inactiveTeacherIds} onClick={() => onCardClick(entry)} />
                       ))}
                       {overflow > 0 && (
                         <p className="text-center text-[10px] text-gray-400">+{overflow} more</p>
@@ -637,13 +669,21 @@ function CalendarCard({
   entry,
   hasConflict,
   compact,
+  termTag,
+  inactiveTeacherIds,
   onClick,
 }: {
   entry: ResolvedEntry;
   hasConflict: boolean;
   compact: boolean;
+  termTag?: { enforced: boolean; week: number | null; isFuture: boolean };
+  inactiveTeacherIds?: Set<string>;
   onClick: () => void;
 }) {
+  const hasInactiveTeacher = inactiveTeacherIds && (
+    (entry.teacher1Id && inactiveTeacherIds.has(entry.teacher1Id)) ||
+    (entry.teacher2Id && inactiveTeacherIds.has(entry.teacher2Id))
+  );
   const teacherText = entry.teacher1Name
     ? `${entry.teacher1Name}${entry.teacher2Name ? ` & ${entry.teacher2Name}` : ""}`
     : null;
@@ -682,11 +722,13 @@ function CalendarCard({
           <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusInfo.color}`} title={statusInfo.label} />
           <span className="truncate text-[10px] font-medium text-gray-800">{entry.classTitle}</span>
           {hasConflict && <span className="shrink-0 text-[9px] font-bold text-red-500">!</span>}
+          {termTag?.isFuture && <span className="shrink-0 text-[9px] font-medium text-gray-500">Future</span>}
+          {termTag?.week && <span className="shrink-0 text-[9px] font-medium text-indigo-600">W{termTag.week}</span>}
         </div>
         <div className="flex items-center gap-1 text-[9px] text-gray-500">
           <span>{formatTime(entry.startTime)}</span>
           {teacherText ? (
-            <span className="truncate text-gray-400">· {teacherText}</span>
+            <span className={`truncate ${hasInactiveTeacher ? "text-amber-500" : "text-gray-400"}`}>· {teacherText}{hasInactiveTeacher ? " ⚠" : ""}</span>
           ) : (
             <span className={entry.source === "blocked" ? "text-gray-400" : "text-red-400"}>
               · {entry.source === "blocked" ? "No teacher assigned" : "No regular teacher"}
@@ -711,6 +753,9 @@ function CalendarCard({
           <span className="text-[10px] text-gray-400">{statusInfo.label}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {termTag?.enforced && <Badge variant="warning" className="text-[10px]">Term</Badge>}
+          {termTag?.isFuture && <Badge variant="info" className="text-[10px]">Future term</Badge>}
+          {termTag?.week && <Badge variant="info" className="text-[10px]">W{termTag.week}</Badge>}
           {hasConflict && <Badge variant="danger" className="text-[10px]">Conflict</Badge>}
           <span className={`mt-0.5 inline-block h-2 w-2 rounded-full ${dotColor}`} title={sourceLabel} />
         </div>
@@ -723,6 +768,7 @@ function CalendarCard({
         {teacherText ? (
           <p className="text-xs text-gray-600">
             {teacherText}
+            {hasInactiveTeacher && <Badge variant="warning" className="ml-1.5 text-[10px]">Inactive</Badge>}
             {(entry.source === "override" || entry.source === "one-off") && <Badge variant="info" className="ml-1.5 text-[10px]">This date only</Badge>}
           </p>
         ) : entry.source === "blocked" ? (

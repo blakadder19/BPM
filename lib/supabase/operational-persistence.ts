@@ -188,6 +188,8 @@ function rowToAttendance(r: Record<string, unknown>): StoredAttendance {
     markedBy: r.marked_by as string,
     markedAt: r.marked_at as string,
     notes: (r.notes as string) ?? null,
+    source: (r.source as StoredAttendance["source"]) ?? "walk_in",
+    subscriptionId: (r.subscription_id as string) ?? null,
   };
 }
 
@@ -205,6 +207,8 @@ function attendanceToRow(a: StoredAttendance) {
     marked_by: a.markedBy,
     marked_at: a.markedAt,
     notes: a.notes,
+    source: a.source,
+    subscription_id: a.subscriptionId,
   };
 }
 

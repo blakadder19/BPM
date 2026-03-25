@@ -46,8 +46,6 @@ export async function createTemplateToDB(data: {
   if (!hasSupabaseConfig()) return null;
   const { supabaseScheduleRepo } = require("@/lib/repositories/supabase/schedule-repository");
   const { notes: _notes, ...safeData } = data;
-  if (!safeData.termBound) delete safeData.termBound;
-  if (!safeData.termId) delete safeData.termId;
   return await supabaseScheduleRepo.createTemplate(safeData);
 }
 
@@ -91,10 +89,7 @@ export async function createInstanceInDB(data: {
 }): Promise<MockBookableClass | null> {
   if (!hasSupabaseConfig()) return null;
   const { supabaseScheduleRepo } = require("@/lib/repositories/supabase/schedule-repository");
-  const safeData = { ...data };
-  if (!safeData.termBound) delete safeData.termBound;
-  if (!safeData.termId) delete safeData.termId;
-  return await supabaseScheduleRepo.createInstance(safeData);
+  return await supabaseScheduleRepo.createInstance(data);
 }
 
 export async function saveInstanceToDB(id: string, patch: Record<string, unknown>): Promise<void> {

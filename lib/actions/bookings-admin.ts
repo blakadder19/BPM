@@ -7,7 +7,7 @@ import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getSettings } from "@/lib/services/settings-store";
 import { getSubscriptionRepo, getTermRepo } from "@/lib/repositories";
 import { updateSubscription as repoUpdateSub } from "@/lib/services/subscription-service";
-import { findTermForDate, getTermWeekNumber, isDateInTerm, isTermBoundLevel } from "@/lib/domain/term-rules";
+import { findTermForDate, getTermWeekNumber, isDateInTerm } from "@/lib/domain/term-rules";
 import {
   getCancellationContext,
   penaltiesApplyTo,
@@ -131,10 +131,8 @@ export async function adminCreateBookingAction(
     return { success: false, error: "Class has ended — use attendance correction instead of new booking" };
   }
 
-  // Term-bound class restriction — late-entry policy
-  // Derive from level, not from persisted flag, to avoid stale data on non-beginner classes
-  const classLevel = rawInstance?.level ?? null;
-  const isTermBound = isTermBoundLevel(classLevel);
+  // Term restriction — only applies when the instance has enforcement enabled
+  const isTermBound = rawInstance?.termBound ?? false;
 
   if (isTermBound && cls) {
     const linkedTermId = rawInstance?.termId;
@@ -163,6 +161,21 @@ export async function adminCreateBookingAction(
         };
       }
     }
+  }
+
+  const { getAttendanceService } = await import("@/lib/services/attendance-store");
+  const attSvc = getAttendanceService();
+  const existingManualAtt = attSvc.records.find(
+    (r) =>
+      r.bookableClassId === bookableClassId &&
+      r.studentId === studentId &&
+      !r.bookingId
+  );
+  if (existingManualAtt) {
+    return {
+      success: false,
+      error: "This student already has a manual attendance record for this class. Use the existing attendance record instead of creating a duplicate booking.",
+    };
   }
 
   const result = svc.adminBook({
@@ -273,6 +286,13 @@ export async function adminCancelBookingAction(
     }
   }
 
+  // Sync attendance — remove attendance record tied to this booking
+  const attSvc = getAttendanceService();
+  const linkedAtt = attSvc.deleteByBookingId(bookingId);
+  if (linkedAtt && isRealUser(booking.studentId)) {
+    await deleteAttendanceFromDB(linkedAtt.id);
+  }
+
   if (isRealUser(booking.studentId)) {
     const cancelledBooking = svc.bookings.find((b) => b.id === bookingId);
     if (cancelledBooking) await saveBookingToDB(cancelledBooking);
@@ -289,6 +309,7 @@ export async function adminCancelBookingAction(
   }
 
   revalidatePath("/bookings");
+  revalidatePath("/attendance");
   revalidatePath("/penalties");
   revalidatePath("/dashboard");
   revalidatePath("/classes");

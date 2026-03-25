@@ -9,7 +9,7 @@ import { updateSubscription } from "@/lib/services/subscription-service";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import type { AttendanceMark, CheckInMethod, ClassType } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
-import { saveAttendanceToDB, saveBookingToDB, savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
+import { saveAttendanceToDB, saveBookingToDB, savePenaltyToDB, updatePenaltyInDB, deleteAttendanceFromDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { requireRole } from "@/lib/auth";
 
@@ -90,6 +90,10 @@ export async function markStudentAttendance(params: {
   markedBy: string;
   checkInMethod?: CheckInMethod;
   notes?: string;
+  /** Walk-in source: subscription | drop_in | walk_in | admin */
+  attendanceSource?: "subscription" | "drop_in" | "walk_in" | "admin";
+  /** Direct subscription ID for attendance-first flows (walk-in with subscription) */
+  directSubscriptionId?: string | null;
 }): Promise<MarkAttendanceResult> {
   await ensureOperationalDataHydrated();
   await requireRole(["admin", "teacher"]);
@@ -110,6 +114,30 @@ export async function markStudentAttendance(params: {
   const bookingSvc = getBookingService();
   const penaltySvc = getPenaltyService();
 
+  if (!params.bookingId) {
+    const existingBooking = bookingSvc.bookings.find(
+      (b) =>
+        b.bookableClassId === params.bookableClassId &&
+        b.studentId === params.studentId &&
+        ["confirmed", "checked_in", "waitlisted"].includes(b.status)
+    );
+    if (existingBooking) {
+      return {
+        success: false,
+        status: params.status,
+        penaltyCreated: false,
+        penaltyDescription: null,
+        bookingStatusChange: null,
+        creditRestored: false,
+        error: "This student already has a booking for this class. Use the existing booking to mark attendance instead.",
+      };
+    }
+  }
+
+  const hasExplicitSource = params.attendanceSource !== undefined;
+  const resolvedSource = params.attendanceSource
+    ?? (params.bookingId ? "booking" : "walk_in");
+
   const outcome = attendanceSvc.markAttendance({
     bookableClassId: params.bookableClassId,
     studentId: params.studentId,
@@ -121,6 +149,12 @@ export async function markStudentAttendance(params: {
     markedBy: params.markedBy,
     checkInMethod: params.checkInMethod,
     notes: params.notes ?? null,
+    ...(hasExplicitSource
+      ? {
+          source: resolvedSource as import("@/lib/services/attendance-service").AttendanceSource,
+          subscriptionId: params.directSubscriptionId,
+        }
+      : {}),
   });
 
   if (outcome.type === "error") {
@@ -159,51 +193,77 @@ export async function markStudentAttendance(params: {
   }
 
   // ── Credit/class restoration logic ──
-  // Credits are consumed at booking time.
+  // Credits are consumed at booking time (booking flow) or at attendance time (walk-in with subscription).
   // Excused: ALWAYS refund the credit (business rule).
   // Absent: refund depends on the refundCreditOnAbsent setting.
   // Present/Late: consume if not already consumed (reversal from absent/excused).
   let bookingStatusChange: string | null = null;
   let creditRestored = false;
+  let creditConsumed = false;
 
-  if (params.bookingId) {
-    const booking = bookingSvc.bookings.find((b) => b.id === params.bookingId);
-    const subId = booking?.subscriptionId ?? null;
+  const booking = params.bookingId ? bookingSvc.bookings.find((b) => b.id === params.bookingId) : null;
+  const storedRecord = outcome.record;
+  const subId = booking?.subscriptionId
+    ?? params.directSubscriptionId
+    ?? storedRecord?.subscriptionId
+    ?? null;
+  const isAttendanceFirst = !params.bookingId && !!subId;
+  const effectiveSource = storedRecord?.source ?? resolvedSource;
+  const skipCredits = effectiveSource === "drop_in" || effectiveSource === "walk_in" || effectiveSource === "admin";
 
-    if (booking) {
-      bookingStatusChange = booking.status;
-    }
+  const prevSourceWasNonConsuming = outcome.type === "updated"
+    && (outcome.previousSource === "drop_in" || outcome.previousSource === "walk_in" || outcome.previousSource === "admin");
 
+  if (booking) {
+    bookingStatusChange = booking.status;
+  }
+
+  if (subId && !skipCredits) {
     const { getSettings } = await import("@/lib/services/settings-store");
     const settings = getSettings();
     const newConsumed = isAttended(newStatus);
 
-    // Determine whether the credit was effectively consumed before this change
     let prevConsumed: boolean;
     if (previousStatus === null) {
-      prevConsumed = true; // first-time marking, credit consumed at booking time
+      prevConsumed = isAttendanceFirst ? false : true;
+    } else if (prevSourceWasNonConsuming) {
+      prevConsumed = false;
     } else if (previousStatus === "excused") {
-      prevConsumed = false; // excused always refunds
+      prevConsumed = false;
     } else if (previousStatus === "absent") {
-      prevConsumed = !settings.refundCreditOnAbsent; // absent refund depends on setting
+      prevConsumed = !settings.refundCreditOnAbsent;
     } else {
-      prevConsumed = true; // present/late = consumed
+      prevConsumed = true;
+    }
+
+    // First-time attendance-first subscription: consume credit now
+    if (isAttendanceFirst && previousStatus === null && newConsumed) {
+      await adjustEntitlement(subId, false, true);
+      creditConsumed = true;
+    }
+
+    // Source changed from non-consuming to subscription: consume credit now
+    if (prevSourceWasNonConsuming && newConsumed) {
+      await adjustEntitlement(subId, false, true);
+      creditConsumed = true;
     }
 
     // Excused always refunds
-    if (newStatus === "excused" && subId && prevConsumed) {
+    if (newStatus === "excused" && prevConsumed) {
       await adjustEntitlement(subId, true, false);
       creditRestored = true;
     }
 
     // Absent: refund only if setting is ON
-    if (newStatus === "absent" && subId && prevConsumed && settings.refundCreditOnAbsent) {
+    if (newStatus === "absent" && prevConsumed && settings.refundCreditOnAbsent) {
       await adjustEntitlement(subId, true, false);
+      creditRestored = true;
     }
 
     // Reversal to present/late: re-consume credit if it was previously refunded
-    if (previousStatus !== null && !prevConsumed && newConsumed && subId) {
+    if (previousStatus !== null && !prevConsumed && !prevSourceWasNonConsuming && newConsumed) {
       await adjustEntitlement(subId, false, true);
+      creditConsumed = true;
     }
   }
 
@@ -292,6 +352,9 @@ export async function markStudentAttendance(params: {
   revalidatePath("/penalties");
   revalidatePath("/dashboard");
   revalidatePath("/bookings");
+  if (creditConsumed || creditRestored) {
+    revalidatePath("/students");
+  }
 
   return {
     success: true,
@@ -327,8 +390,60 @@ export async function closeAttendanceForPastClasses(): Promise<{
   return result;
 }
 
-/** Dev-only: remove all attendance records from the store. */
-export async function clearAllAttendanceAction(): Promise<{
+/**
+ * Delete a manual attendance record (no booking linked).
+ * If the record consumed a subscription credit, restore it.
+ */
+export async function deleteAttendanceRecordAction(
+  attendanceId: string
+): Promise<{ success: boolean; error?: string; creditRestored?: boolean }> {
+  await requireRole(["admin"]);
+  await ensureOperationalDataHydrated();
+
+  if (!attendanceId) return { success: false, error: "Missing attendance ID" };
+
+  const svc = getAttendanceService();
+  const record = svc.records.find((r) => r.id === attendanceId);
+  if (!record) return { success: false, error: "Attendance record not found" };
+
+  if (record.bookingId) {
+    return { success: false, error: "This attendance record is linked to a booking. Manage it from Bookings instead." };
+  }
+
+  let creditRestored = false;
+
+  if (record.subscriptionId && record.source === "subscription") {
+    const wasConsumed = record.status === "present" || record.status === "late";
+    if (wasConsumed) {
+      const sub = await getSubscriptionRepo().getById(record.subscriptionId);
+      if (sub) {
+        if (sub.productType === "membership") {
+          await updateSubscription(sub.id, { classesUsed: Math.max(0, sub.classesUsed - 1) });
+        } else if (sub.remainingCredits !== null) {
+          await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits + 1 });
+        }
+        creditRestored = true;
+      }
+    }
+  }
+
+  svc.deleteById(attendanceId);
+
+  if (isRealUser(record.studentId)) {
+    await deleteAttendanceFromDB(attendanceId);
+  }
+
+  revalidatePath("/attendance");
+  revalidatePath("/dashboard");
+  if (creditRestored) revalidatePath("/students");
+  return { success: true, creditRestored };
+}
+
+/**
+ * Dev-only: remove manual (non-booking-linked) attendance records.
+ * Booking-linked records are preserved to maintain booking lifecycle integrity.
+ */
+export async function clearManualAttendanceAction(): Promise<{
   success: boolean;
   cleared: number;
   error?: string;
@@ -338,7 +453,7 @@ export async function clearAllAttendanceAction(): Promise<{
     return { success: false, cleared: 0, error: "Not available in production" };
   }
   const svc = getAttendanceService();
-  const cleared = svc.clearAll();
+  const cleared = svc.clearManualRecords();
   revalidatePath("/attendance");
   return { success: true, cleared };
 }

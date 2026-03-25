@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { MockClass, MockTeacherPair } from "@/lib/mock-data";
 import type { Teacher } from "@/lib/services/teacher-roster-store";
+import { TEACHER_CATEGORY_LABELS } from "@/lib/services/teacher-roster-store";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +13,14 @@ import {
   DialogBody,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+
+const CATEGORY_OPTIONS = [
+  { value: "", label: "— None —" },
+  { value: "core_instructor", label: "Core Instructor" },
+  { value: "instructor", label: "Instructor" },
+  { value: "assistant", label: "Assistant" },
+  { value: "yoga", label: "Yoga" },
+];
 
 // ── Teacher Roster dialogs ──────────────────────────────────
 
@@ -69,6 +78,19 @@ function TeacherForm({
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
           />
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Role / Category</label>
+        <select
+          name="category"
+          defaultValue={initial.category ?? ""}
+          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        >
+          {CATEGORY_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
       </div>
 
       <div>

@@ -207,7 +207,13 @@ export function AdminTemplates({
                       {isRoleBalanced && <Badge variant="info">RB</Badge>}
                     </div>
                   </Td>
-                  <Td>{c.level ?? "—"}</Td>
+                  <Td>
+                    <div className="flex items-center gap-1.5">
+                      {c.level ?? "—"}
+                      {c.termId && c.termBound && <Badge variant="warning">Term-enforced</Badge>}
+                      {c.termId && !c.termBound && <Badge variant="default">Term-linked</Badge>}
+                    </div>
+                  </Td>
                   <Td>{dayName(c.dayOfWeek)}</Td>
                   <Td>{formatTime(c.startTime)} – {formatTime(c.endTime)}</Td>
                   <Td>
