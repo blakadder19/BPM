@@ -37,6 +37,7 @@ import { markStudentAttendance } from "@/lib/actions/attendance";
 import { validateTokenCheckInAction } from "@/lib/actions/checkin";
 import type { AttendanceMark, ClassType } from "@/types/domain";
 import type { StoredAttendance } from "@/lib/services/attendance-service";
+import { CLASS_TYPE_CONFIG } from "@/config/event-types";
 
 // ── Prop types (serializable slices of mock data) ────────────
 
@@ -534,7 +535,7 @@ function ClassAttendanceCard({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-semibold text-gray-900">{bc.title}</h3>
-              {bc.styleName && <StatusBadge status={bc.classType} />}
+              {(bc.classType !== "class" || bc.styleName) && <StatusBadge status={bc.classType} />}
               {bc.status === "scheduled" && (
                 <span className="inline-flex items-center rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
                   Scheduled
@@ -1220,6 +1221,25 @@ function AddAttendanceDialog({
   const selectedClass = eligibleClasses.find((c) => c.id === bookableClassId);
   const selectedSub = studentSubs.find((s) => s.id === subscriptionId);
 
+  const classTypeConf = selectedClass
+    ? CLASS_TYPE_CONFIG[selectedClass.classType as ClassType]
+    : null;
+  const creditsApply = classTypeConf?.creditsApply ?? true;
+
+  const effectiveSourceOptions = useMemo(() => {
+    if (!creditsApply) {
+      return SOURCE_OPTIONS.filter((o) => o.value !== "subscription");
+    }
+    return SOURCE_OPTIONS;
+  }, [creditsApply]);
+
+  useEffect(() => {
+    if (!creditsApply && source === "subscription") {
+      setSource("walk_in");
+      setSubscriptionId("");
+    }
+  }, [creditsApply, source]);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -1285,12 +1305,20 @@ function AddAttendanceDialog({
                 {eligibleClasses.map((c) => <option key={c.id} value={c.id}>{c.title} — {c.date} {c.startTime}</option>)}
               </select>
               {eligibleClasses.length === 0 && <p className="mt-1 text-xs text-gray-400">No eligible classes (today or past) found.</p>}
+              {selectedClass && selectedClass.classType !== "class" && (
+                <div className="mt-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                  <span className="font-medium">{classTypeConf?.label ?? selectedClass.classType}</span>
+                  {selectedClass.classType === "social"
+                    ? " — Socials do not consume credits, generate penalties, or require bookings."
+                    : " — Student Practice does not consume credits or generate penalties."}
+                </div>
+              )}
             </div>
 
             <div>
               <Label>Source *</Label>
               <select value={source} onChange={(e) => { setSource(e.target.value as AttendanceSource); setSubscriptionId(""); }} className={inputCls}>
-                {SOURCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {effectiveSourceOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
               <p className="mt-1 text-xs text-gray-500">{SOURCE_OPTIONS.find((o) => o.value === source)?.hint}</p>
             </div>
@@ -1311,9 +1339,14 @@ function AddAttendanceDialog({
                     ))}
                   </select>
                 )}
-                {selectedSub && (
+                {selectedSub && creditsApply && (
                   <p className="mt-1 text-xs text-indigo-600">
                     1 credit will be consumed from {selectedSub.productName}.
+                  </p>
+                )}
+                {selectedSub && !creditsApply && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    No credit will be consumed — {classTypeConf?.label} events do not use credits.
                   </p>
                 )}
               </div>

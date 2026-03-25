@@ -91,6 +91,10 @@ export async function adminCreateBookingAction(
   const svc = getBookingService();
   const cls = svc.getClass(bookableClassId);
 
+  const { getInstances: getInst } = await import("@/lib/services/schedule-store");
+  const allInstances = getInst();
+  const rawInstance = allInstances.find((i) => i.id === bookableClassId);
+
   // Entitlement validation when source is "subscription"
   if (source === "subscription" && !subscriptionId) {
     return { success: false, error: "A subscription must be selected when booking source is Subscription" };
@@ -99,6 +103,34 @@ export async function adminCreateBookingAction(
     const sub = await getSubscriptionRepo().getById(subscriptionId);
     if (!sub) {
       return { success: false, error: "Entitlement not found" };
+    }
+
+    // Access rule validation: style, class type, level
+    const { getAccessRule } = await import("@/config/product-access");
+    const { canAccessClass } = await import("@/lib/domain/product-access");
+    const accessRule = getAccessRule(sub.productId);
+    if (accessRule && rawInstance) {
+      const classStyleId = rawInstance.styleId ?? (
+        rawInstance.styleName
+          ? getDanceStyles().find((s) => s.name === rawInstance.styleName)?.id ?? null
+          : null
+      );
+      const accessResult = canAccessClass(
+        accessRule,
+        sub.selectedStyleId,
+        sub.selectedStyleIds,
+        {
+          classType: rawInstance.classType,
+          danceStyleId: classStyleId,
+          level: rawInstance.level ?? null,
+        }
+      );
+      if (!accessResult.granted) {
+        return {
+          success: false,
+          error: `This subscription cannot be used for this class: ${accessResult.reason}.`,
+        };
+      }
     }
 
     // Term validation: check the class date falls within the entitlement's own term
@@ -122,11 +154,19 @@ export async function adminCreateBookingAction(
     }
   }
 
-  // Time gate — admin can book during live window but not after class ends
-  const { getInstances } = await import("@/lib/services/schedule-store");
-  const allInstances = getInstances();
-  const rawInstance = allInstances.find((i) => i.id === bookableClassId);
+  // Event-type bookability gate
+  if (rawInstance) {
+    const { CLASS_TYPE_CONFIG } = await import("@/config/event-types");
+    const typeConfig = CLASS_TYPE_CONFIG[rawInstance.classType];
+    if (!typeConfig.bookable) {
+      return {
+        success: false,
+        error: `${typeConfig.label} events are not bookable. Use Attendance to record participation instead.`,
+      };
+    }
+  }
 
+  // Time gate — admin can book during live window but not after class ends
   if (rawInstance && isClassEnded(rawInstance.date, rawInstance.endTime)) {
     return { success: false, error: "Class has ended — use attendance correction instead of new booking" };
   }

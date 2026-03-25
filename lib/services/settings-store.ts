@@ -62,8 +62,7 @@ export interface AppSettings {
   provisionalNotes: string;
 }
 
-const DEFAULT_PROVISIONAL_NOTES = `- Bronze / Silver / Gold membership: exact class/style mapping pending academy confirmation
-- Rainbow membership: exact scope pending academy confirmation
+const DEFAULT_PROVISIONAL_NOTES = `- Rainbow membership: exact scope pending academy confirmation
 - Beginners Latin Combo: two-of-three Beginner 1 mapping pending
 - Student Practice: final bookable/penalty rule pending academy confirmation`;
 

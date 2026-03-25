@@ -59,6 +59,8 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   monetary_pending: { label: "Unresolved",     variant: "danger" },
   waived:                { label: "Waived",              variant: "default" },
   attendance_corrected:  { label: "Attendance Corrected", variant: "default" },
+  enquiry:               { label: "Enquiry",             variant: "info" },
+  pending:               { label: "Pending",             variant: "warning" },
 };
 
 interface StatusBadgeProps {

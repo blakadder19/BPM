@@ -8,3 +8,4 @@ export { supabaseBookingRepo } from "./booking-repository";
 export { supabaseAttendanceRepo } from "./attendance-repository";
 export { supabasePenaltyRepo } from "./penalty-repository";
 export { supabaseCreditRepo } from "./credit-repository";
+export { supabaseStudioHireRepo } from "./studio-hire-repository";

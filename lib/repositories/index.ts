@@ -17,12 +17,14 @@ import type { IBookingRepository } from "./interfaces/booking-repository";
 import type { IAttendanceRepository } from "./interfaces/attendance-repository";
 import type { IPenaltyRepository } from "./interfaces/penalty-repository";
 import type { ICreditRepository } from "./interfaces/credit-repository";
+import type { IStudioHireRepository } from "./interfaces/studio-hire-repository";
 
 import { memorySettingsRepo } from "./memory/settings-repository";
 import { memoryBookingRepo } from "./memory/booking-repository";
 import { memoryAttendanceRepo } from "./memory/attendance-repository";
 import { memoryPenaltyRepo } from "./memory/penalty-repository";
 import { memoryCreditRepo } from "./memory/credit-repository";
+import { memoryStudioHireRepo } from "./memory/studio-hire-repository";
 
 function resolveRepo<T>(memory: T, supabaseLoader: () => T): T {
   if (getDataProvider() === "supabase") return supabaseLoader();
@@ -108,5 +110,12 @@ export function getCreditRepo(): ICreditRepository {
   return resolveRepo(memoryCreditRepo, () => {
     const { supabaseCreditRepo } = require("./supabase/credit-repository");
     return supabaseCreditRepo;
+  });
+}
+
+export function getStudioHireRepo(): IStudioHireRepository {
+  return resolveRepo(memoryStudioHireRepo, () => {
+    const { supabaseStudioHireRepo } = require("./supabase/studio-hire-repository");
+    return supabaseStudioHireRepo;
   });
 }

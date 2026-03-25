@@ -6,7 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { effectiveInstanceStatus } from "@/lib/domain/datetime";
-import type { InstanceStatus } from "@/types/domain";
+import { canAccessClass } from "@/lib/domain/product-access";
+import { getAccessRule } from "@/config/product-access";
+import { CLASS_TYPE_CONFIG } from "@/config/event-types";
+import type { InstanceStatus, ClassType } from "@/types/domain";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
@@ -42,6 +45,8 @@ export interface ClassInstanceOption {
   startTime: string;
   endTime: string;
   styleName: string | null;
+  styleId: string | null;
+  classType: string;
   level: string | null;
   location: string;
   status: string;
@@ -65,6 +70,7 @@ export interface WaitlistEntryView {
 
 export interface SubscriptionOption {
   id: string;
+  productId: string;
   productName: string;
   productType: string;
   status: string;
@@ -74,6 +80,8 @@ export interface SubscriptionOption {
   termId: string | null;
   validFrom: string;
   validUntil: string | null;
+  selectedStyleId: string | null;
+  selectedStyleIds: string[] | null;
 }
 
 const INPUT_CLASS =
@@ -115,6 +123,11 @@ export function AddBookingDialog({
     selectedClass.bookedCount >= selectedClass.maxCapacity;
   const requiresRole = selectedClass?.danceStyleRequiresBalance ?? false;
 
+  const classTypeConfig = selectedClass
+    ? CLASS_TYPE_CONFIG[selectedClass.classType as ClassType]
+    : null;
+  const isNonBookable = classTypeConfig ? !classTypeConfig.bookable : false;
+
   const showSubscription = selectedSource === "subscription";
 
   const studentSubs = useMemo(() => {
@@ -145,13 +158,17 @@ export function AddBookingDialog({
         })
         .filter((c) => c.effStatus !== "ended" && c.effStatus !== "cancelled" && c.effStatus !== "closed")
         .map((c) => {
+          const typeConf = CLASS_TYPE_CONFIG[c.classType as ClassType];
+          const typeTag = c.classType !== "class" ? ` [${typeConf?.label ?? c.classType}]` : "";
           const capacityStr = c.maxCapacity
             ? `${c.bookedCount}/${c.maxCapacity} booked`
             : "Unlimited";
-          const badgeConfig = STATUS_BADGE_MAP[c.effStatus] ?? { label: c.effStatus, variant: "default" as const };
+          const badgeConfig = !typeConf?.bookable
+            ? { label: "Not bookable", variant: "warning" as const }
+            : (STATUS_BADGE_MAP[c.effStatus] ?? { label: c.effStatus, variant: "default" as const });
           return {
             value: c.id,
-            label: `${c.title} — ${formatDate(c.date)} ${formatTime(c.startTime)}`,
+            label: `${c.title}${typeTag} — ${formatDate(c.date)} ${formatTime(c.startTime)}`,
             detail: `${capacityStr} · ${c.location}`,
             badge: badgeConfig,
           };
@@ -159,9 +176,28 @@ export function AddBookingDialog({
     [classInstances]
   );
 
+  const eligibleSubs = useMemo(() => {
+    if (!selectedClass) return studentSubs;
+    return studentSubs.filter((s) => {
+      const rule = getAccessRule(s.productId);
+      if (!rule) return true;
+      const result = canAccessClass(
+        rule,
+        s.selectedStyleId,
+        s.selectedStyleIds,
+        {
+          classType: selectedClass.classType as ClassType,
+          danceStyleId: selectedClass.styleId,
+          level: selectedClass.level,
+        }
+      );
+      return result.granted;
+    });
+  }, [studentSubs, selectedClass]);
+
   const subscriptionSearchOptions = useMemo(
     () =>
-      studentSubs.map((s) => {
+      eligibleSubs.map((s) => {
         let detail: string;
         if (s.productType === "membership" && s.classesPerTerm !== null) {
           const remaining = s.classesPerTerm - s.classesUsed;
@@ -175,10 +211,10 @@ export function AddBookingDialog({
         }
         return { value: s.id, label: s.productName, detail };
       }),
-    [studentSubs]
+    [eligibleSubs]
   );
 
-  const selectedSubOption = studentSubs.find((s) => s.id === selectedSubscription);
+  const selectedSubOption = eligibleSubs.find((s) => s.id === selectedSubscription);
   const isEntitlementExhausted = selectedSubOption
     ? selectedSubOption.productType === "membership" && selectedSubOption.classesPerTerm !== null
       ? selectedSubOption.classesUsed >= selectedSubOption.classesPerTerm
@@ -189,7 +225,7 @@ export function AddBookingDialog({
 
   useEffect(() => {
     setSelectedSubscription("");
-  }, [selectedStudentId]);
+  }, [selectedStudentId, selectedClassId]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -269,29 +305,47 @@ export function AddBookingDialog({
             {selectedClass && (
               <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600 space-y-1">
                 <p className="flex items-center gap-2">
-                  <span className="font-medium">Status:</span>{" "}
+                  <span className="font-medium">Type:</span>{" "}
+                  <span className={isNonBookable ? "font-semibold text-amber-700" : ""}>
+                    {classTypeConfig?.label ?? selectedClass.classType}
+                  </span>
+                  <span className="font-medium ml-2">Status:</span>{" "}
                   <StatusBadge status={selectedClass.status} />
                   {selectedClass.status === "scheduled" && (
                     <span className="text-amber-600 font-medium">— Not yet open for student booking</span>
                   )}
                 </p>
-                <p>
-                  <span className="font-medium">Capacity:</span>{" "}
-                  {selectedClass.maxCapacity
-                    ? `${selectedClass.bookedCount} / ${selectedClass.maxCapacity}`
-                    : "Unlimited"}
-                </p>
-                {requiresRole && (
-                  <p>
-                    <span className="font-medium">Roles:</span>{" "}
-                    Leaders {selectedClass.leaderCount}/{selectedClass.leaderCap ?? "∞"} ·{" "}
-                    Followers {selectedClass.followerCount}/{selectedClass.followerCap ?? "∞"}
-                  </p>
+                {isNonBookable && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 mt-1">
+                    <p className="font-medium">{classTypeConfig?.label} events are not bookable</p>
+                    <p className="text-xs mt-0.5">
+                      {selectedClass.classType === "social"
+                        ? "Socials do not consume credits or generate penalties. Use Attendance to record participation."
+                        : "Student Practice is not bookable (configurable in Settings). Use Attendance to record participation."}
+                    </p>
+                  </div>
                 )}
-                {isFull && (
-                  <p className="text-amber-600 font-medium">
-                    Class is full — booking will be waitlisted unless forced.
-                  </p>
+                {!isNonBookable && (
+                  <>
+                    <p>
+                      <span className="font-medium">Capacity:</span>{" "}
+                      {selectedClass.maxCapacity
+                        ? `${selectedClass.bookedCount} / ${selectedClass.maxCapacity}`
+                        : "Unlimited"}
+                    </p>
+                    {requiresRole && (
+                      <p>
+                        <span className="font-medium">Roles:</span>{" "}
+                        Leaders {selectedClass.leaderCount}/{selectedClass.leaderCap ?? "∞"} ·{" "}
+                        Followers {selectedClass.followerCount}/{selectedClass.followerCap ?? "∞"}
+                      </p>
+                    )}
+                    {isFull && (
+                      <p className="text-amber-600 font-medium">
+                        Class is full — booking will be waitlisted unless forced.
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -331,25 +385,35 @@ export function AddBookingDialog({
             {showSubscription && (
               <div>
                 <Label>Subscription / Product *</Label>
-                {studentSubs.length > 0 ? (
+                {!selectedStudentId ? (
+                  <p className="text-xs text-gray-400 italic py-1">
+                    Select a student first.
+                  </p>
+                ) : !selectedClassId ? (
+                  <p className="text-xs text-gray-400 italic py-1">
+                    Select a class first to see eligible subscriptions.
+                  </p>
+                ) : eligibleSubs.length > 0 ? (
                   <SearchableSelect
                     options={subscriptionSearchOptions}
                     value={selectedSubscription}
                     onChange={setSelectedSubscription}
                     placeholder="Select subscription…"
-                    disabled={!selectedStudentId}
                   />
-                ) : selectedStudentId ? (
+                ) : studentSubs.length > 0 ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                    <p className="font-medium">No eligible active subscription</p>
+                    <p className="font-medium">No eligible subscription for this class</p>
                     <p className="mt-1 text-xs">
-                      This student has no active subscription for this class. Switch Source to <strong>Drop-in</strong> or <strong>Admin</strong> to create this booking without a subscription.
+                      This student has {studentSubs.length} active subscription{studentSubs.length !== 1 ? "s" : ""}, but none cover this class (style, level, or class type mismatch). Switch Source to <strong>Drop-in</strong> or <strong>Admin</strong> instead.
                     </p>
                   </div>
                 ) : (
-                  <p className="text-xs text-gray-400 italic py-1">
-                    Select a student first.
-                  </p>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    <p className="font-medium">No active subscriptions</p>
+                    <p className="mt-1 text-xs">
+                      This student has no active subscriptions. Switch Source to <strong>Drop-in</strong> or <strong>Admin</strong> to create this booking without a subscription.
+                    </p>
+                  </div>
                 )}
               </div>
             )}
@@ -396,7 +460,7 @@ export function AddBookingDialog({
             </Button>
             <Button
               type="submit"
-              disabled={isPending || (showSubscription && !!selectedStudentId && studentSubs.length === 0)}
+              disabled={isPending || isNonBookable || (showSubscription && !!selectedStudentId && !!selectedClassId && eligibleSubs.length === 0)}
             >
               {isPending ? "Creating…" : "Create Booking"}
             </Button>

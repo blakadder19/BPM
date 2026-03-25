@@ -55,6 +55,12 @@ function checkStyleAccess(
   selectedStyleIds: string[] | null | undefined,
   classCtx: AccessClassContext
 ): boolean {
+  // Non-class event types (e.g. student_practice) that have no dance style
+  // are not style-restricted — if the class type is already permitted, pass.
+  if (!classCtx.danceStyleId && classCtx.classType !== "class") {
+    return true;
+  }
+
   const sa = rule.styleAccess;
 
   switch (sa.type) {

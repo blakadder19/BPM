@@ -8,3 +8,4 @@ export { memoryBookingRepo } from "./booking-repository";
 export { memoryAttendanceRepo } from "./attendance-repository";
 export { memoryPenaltyRepo } from "./penalty-repository";
 export { memoryCreditRepo } from "./credit-repository";
+export { memoryStudioHireRepo } from "./studio-hire-repository";

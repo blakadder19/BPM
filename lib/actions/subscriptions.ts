@@ -54,6 +54,17 @@ export async function createSubscriptionAction(
   const selectedStyleId = (formData.get("selectedStyleId") as string)?.trim() || null;
   const selectedStyleName = (formData.get("selectedStyleName") as string)?.trim() || null;
 
+  let selectedStyleIds: string[] | null = null;
+  let selectedStyleNames: string[] | null = null;
+  const rawIds = formData.get("selectedStyleIds") as string;
+  const rawNames = formData.get("selectedStyleNames") as string;
+  if (rawIds) {
+    try { selectedStyleIds = JSON.parse(rawIds); } catch { /* ignore */ }
+  }
+  if (rawNames) {
+    try { selectedStyleNames = JSON.parse(rawNames); } catch { /* ignore */ }
+  }
+
   if (!studentId) return { success: false, error: "Missing student ID" };
   if (!productId) return { success: false, error: "Please select a product" };
   if (!paymentMethodRaw || !VALID_PAYMENT_METHODS.has(paymentMethodRaw)) {
@@ -110,6 +121,8 @@ export async function createSubscriptionAction(
     classesPerTerm,
     selectedStyleId,
     selectedStyleName,
+    selectedStyleIds,
+    selectedStyleNames,
   });
 
   if (result.success) revalidatePath("/students");
@@ -127,10 +140,28 @@ export async function updateSubscriptionAction(
   if (!id) return { success: false, error: "Missing subscription ID" };
   if (!VALID_STATUSES.has(statusRaw)) return { success: false, error: "Invalid status" };
 
-  const result = await updateSubscription(id, {
+  const patch: Parameters<typeof updateSubscription>[1] = {
     status: statusRaw as SubscriptionStatus,
     notes,
-  });
+  };
+
+  const selectedStyleId = formData.get("selectedStyleId") as string | null;
+  const selectedStyleName = formData.get("selectedStyleName") as string | null;
+  if (selectedStyleId !== null) {
+    patch.selectedStyleId = selectedStyleId || null;
+    patch.selectedStyleName = selectedStyleName || null;
+  }
+
+  const rawStyleIds = formData.get("selectedStyleIds") as string | null;
+  const rawStyleNames = formData.get("selectedStyleNames") as string | null;
+  if (rawStyleIds !== null) {
+    try { patch.selectedStyleIds = JSON.parse(rawStyleIds); } catch { /* ignore */ }
+  }
+  if (rawStyleNames !== null) {
+    try { patch.selectedStyleNames = JSON.parse(rawStyleNames); } catch { /* ignore */ }
+  }
+
+  const result = await updateSubscription(id, patch);
 
   if (result.success) revalidatePath("/students");
   return result;

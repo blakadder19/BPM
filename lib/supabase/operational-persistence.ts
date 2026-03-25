@@ -414,3 +414,94 @@ export async function saveSubscriptionToDB(s: MockSubscription): Promise<void> {
     console.warn("[op-persistence] saveSubscription error:", e instanceof Error ? e.message : e);
   }
 }
+
+// ── Studio Hire ──────────────────────────────────────────────
+
+import type { StoredStudioHire } from "@/lib/services/studio-hire-service";
+
+function rowToStudioHire(r: Record<string, unknown>): StoredStudioHire {
+  return {
+    id: r.id as string,
+    requesterName: r.requester_name as string,
+    contactEmail: (r.contact_email as string) ?? null,
+    contactPhone: (r.contact_phone as string) ?? null,
+    date: r.date as string,
+    startTime: r.start_time as string,
+    endTime: r.end_time as string,
+    expectedAttendees: r.expected_attendees != null ? Number(r.expected_attendees) : null,
+    bookingType: r.booking_type as StoredStudioHire["bookingType"],
+    isBlockBooking: !!r.is_block_booking,
+    blockDetails: (r.block_details as string) ?? null,
+    status: r.status as StoredStudioHire["status"],
+    depositRequiredCents: r.deposit_required_cents != null ? Number(r.deposit_required_cents) : null,
+    depositPaidCents: r.deposit_paid_cents != null ? Number(r.deposit_paid_cents) : null,
+    cancellationOutcome: (r.cancellation_outcome as StoredStudioHire["cancellationOutcome"]) ?? null,
+    refundedCents: r.refunded_cents != null ? Number(r.refunded_cents) : null,
+    cancelledAt: (r.cancelled_at as string) ?? null,
+    cancellationNote: (r.cancellation_note as string) ?? null,
+    adminNote: (r.admin_note as string) ?? null,
+    createdAt: r.created_at as string,
+    updatedAt: r.updated_at as string,
+  };
+}
+
+function studioHireToRow(e: StoredStudioHire): Record<string, unknown> {
+  return {
+    id: e.id,
+    requester_name: e.requesterName,
+    contact_email: e.contactEmail,
+    contact_phone: e.contactPhone,
+    date: e.date,
+    start_time: e.startTime,
+    end_time: e.endTime,
+    expected_attendees: e.expectedAttendees,
+    booking_type: e.bookingType,
+    is_block_booking: e.isBlockBooking,
+    block_details: e.blockDetails,
+    status: e.status,
+    deposit_required_cents: e.depositRequiredCents,
+    deposit_paid_cents: e.depositPaidCents,
+    cancellation_outcome: e.cancellationOutcome,
+    refunded_cents: e.refundedCents,
+    cancelled_at: e.cancelledAt,
+    cancellation_note: e.cancellationNote,
+    admin_note: e.adminNote,
+    created_at: e.createdAt,
+    updated_at: e.updatedAt,
+  };
+}
+
+export async function loadStudioHiresFromDB(): Promise<StoredStudioHire[]> {
+  const client = getClient();
+  if (!client) return [];
+  try {
+    const { data, error } = await client.from("op_studio_hires").select("*");
+    if (error) { console.warn("[op-persistence] loadStudioHires:", error.message); return []; }
+    return (data ?? []).map(rowToStudioHire);
+  } catch (e) {
+    console.warn("[op-persistence] loadStudioHires error:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
+export async function saveStudioHireToDB(entry: StoredStudioHire): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client.from("op_studio_hires").upsert(studioHireToRow(entry), { onConflict: "id" });
+    if (error) console.warn("[op-persistence] saveStudioHire:", error.message);
+  } catch (e) {
+    console.warn("[op-persistence] saveStudioHire error:", e instanceof Error ? e.message : e);
+  }
+}
+
+export async function deleteStudioHireFromDB(id: string): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client.from("op_studio_hires").delete().eq("id", id);
+    if (error) console.warn("[op-persistence] deleteStudioHire:", error.message);
+  } catch (e) {
+    console.warn("[op-persistence] deleteStudioHire error:", e instanceof Error ? e.message : e);
+  }
+}

@@ -205,6 +205,8 @@ export default async function BookingsPage({
         startTime: c.startTime,
         endTime: c.endTime,
         styleName: c.styleName,
+        styleId: c.styleId ?? (style?.id ?? null),
+        classType: c.classType,
         level: c.level ?? null,
         location: c.location,
         status: c.status,
@@ -234,6 +236,7 @@ export default async function BookingsPage({
     string,
     {
       id: string;
+      productId: string;
       productName: string;
       productType: string;
       status: string;
@@ -243,6 +246,8 @@ export default async function BookingsPage({
       termId: string | null;
       validFrom: string;
       validUntil: string | null;
+      selectedStyleId: string | null;
+      selectedStyleIds: string[] | null;
     }[]
   > = {};
   for (const sub of allSubs) {
@@ -252,6 +257,7 @@ export default async function BookingsPage({
     }
     subscriptionsByStudent[sub.studentId].push({
       id: sub.id,
+      productId: sub.productId,
       productName: sub.productName,
       productType: sub.productType,
       status: sub.status,
@@ -261,6 +267,8 @@ export default async function BookingsPage({
       termId: sub.termId,
       validFrom: sub.validFrom,
       validUntil: sub.validUntil,
+      selectedStyleId: sub.selectedStyleId,
+      selectedStyleIds: sub.selectedStyleIds,
     });
   }
 

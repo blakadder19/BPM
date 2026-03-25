@@ -77,6 +77,10 @@ export async function updateSubscription(
     autoRenew?: boolean;
     classesUsed?: number;
     classesPerTerm?: number | null;
+    selectedStyleId?: string | null;
+    selectedStyleName?: string | null;
+    selectedStyleIds?: string[] | null;
+    selectedStyleNames?: string[] | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const result = await getSubscriptionRepo().update(id, patch);

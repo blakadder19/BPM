@@ -139,6 +139,12 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
     if (patch.autoRenew !== undefined) fields.auto_renew = patch.autoRenew;
     if (patch.classesUsed !== undefined) fields.classes_used = patch.classesUsed;
     if (patch.classesPerTerm !== undefined) fields.classes_per_term = patch.classesPerTerm;
+    if (patch.selectedStyleId !== undefined) fields.dance_style_id = patch.selectedStyleId;
+    if (patch.selectedStyleNames !== undefined) {
+      fields.selected_style_names = patch.selectedStyleNames;
+    } else if (patch.selectedStyleName !== undefined) {
+      fields.selected_style_names = patch.selectedStyleName ? [patch.selectedStyleName] : null;
+    }
 
     if (Object.keys(fields).length === 0) return this.getById(id);
 

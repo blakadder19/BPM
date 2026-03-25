@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Settings,
   AlertTriangle,
+  Building2,
 } from "lucide-react";
 
 export interface NavItem {
@@ -28,6 +29,7 @@ export const NAVIGATION: NavItem[] = [
   { name: "Terms", href: "/terms", icon: CalendarRange, roles: ["admin"] },
   { name: "Products", href: "/products", icon: Package, roles: ["admin"] },
   { name: "Penalties", href: "/penalties", icon: AlertTriangle, roles: ["admin", "student"] },
+  { name: "Studio Hire", href: "/studio-hire", icon: Building2, roles: ["admin"] },
   { name: "Settings", href: "/settings", icon: Settings, roles: ["admin"] },
 ];
 
@@ -44,6 +46,7 @@ const ROUTE_ACCESS: { prefix: string; roles: UserRole[] }[] = [
   { prefix: "/terms", roles: ["admin"] },
   { prefix: "/products", roles: ["admin"] },
   { prefix: "/penalties", roles: ["admin", "student"] },
+  { prefix: "/studio-hire", roles: ["admin"] },
   { prefix: "/settings", roles: ["admin"] },
 ];
 

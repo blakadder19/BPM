@@ -288,3 +288,38 @@ export interface AdminTask {
   details: Record<string, unknown> | null;
   createdAt: string;
 }
+
+// ── Studio Hire ──────────────────────────────────────────────
+
+export type StudioHireStatus = "enquiry" | "pending" | "confirmed" | "cancelled";
+export type StudioHireBookingType = "private_event" | "rehearsal" | "workshop" | "photoshoot" | "other";
+
+export type StudioHireCancellationOutcome =
+  | "no_deposit"
+  | "deposit_retained"
+  | "deposit_refunded"
+  | "deposit_partial_refund";
+
+export interface StudioHire {
+  id: string;
+  requesterName: string;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+  expectedAttendees: number | null;
+  bookingType: StudioHireBookingType;
+  isBlockBooking: boolean;
+  blockDetails: string | null;
+  status: StudioHireStatus;
+  depositRequiredCents: number | null;
+  depositPaidCents: number | null;
+  cancellationOutcome: StudioHireCancellationOutcome | null;
+  refundedCents: number | null;
+  cancelledAt: string | null;
+  cancellationNote: string | null;
+  adminNote: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

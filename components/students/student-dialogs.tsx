@@ -23,8 +23,9 @@ import {
   createSubscriptionAction,
   updateSubscriptionAction,
 } from "@/lib/actions/subscriptions";
+import { getAccessRule, type StyleAccess } from "@/config/product-access";
 import type { StudentListItem } from "@/types/domain";
-import type { MockSubscription, MockProduct, MockTerm } from "@/lib/mock-data";
+import type { MockSubscription, MockProduct, MockTerm, MockDanceStyle } from "@/lib/mock-data";
 import { DANCE_STYLES } from "@/lib/mock-data";
 
 const SELECT_CLASS =
@@ -544,26 +545,50 @@ export function AddSubscriptionDialog({
   const [selectedProductId, setSelectedProductId] = useState("");
   const [selectedTermId, setSelectedTermId] = useState("");
   const [selectedStyleId, setSelectedStyleId] = useState("");
+  const [selectedStyleIds, setSelectedStyleIds] = useState<string[]>([]);
 
   const selectedProduct = products.find((p) => p.id === selectedProductId);
   const selectedTerm = terms.find((t) => t.id === selectedTermId);
   const groups = groupProducts(products);
   const eligibleTerms = terms.filter((t) => t.status === "active" || t.status === "upcoming");
 
-  const needsStyleSelector =
-    selectedProduct?.productType === "pass" &&
-    selectedProduct.styleName?.includes("selected style");
+  const accessRule = selectedProductId ? getAccessRule(selectedProductId) : undefined;
+  const styleAccess = accessRule?.styleAccess;
+
+  function handleProductChange(productId: string) {
+    setSelectedProductId(productId);
+    setSelectedStyleId("");
+    setSelectedStyleIds([]);
+  }
+
+  function toggleMultiStyle(styleId: string, pickCount: number) {
+    setSelectedStyleIds((prev) => {
+      if (prev.includes(styleId)) return prev.filter((id) => id !== styleId);
+      if (prev.length >= pickCount) return prev;
+      return [...prev, styleId];
+    });
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     formData.set("productId", selectedProductId);
     formData.set("termId", selectedTermId);
-    if (selectedStyleId) {
+
+    if (styleAccess?.type === "selected_style" && selectedStyleId) {
       formData.set("selectedStyleId", selectedStyleId);
       const style = DANCE_STYLES.find((s) => s.id === selectedStyleId);
       if (style) formData.set("selectedStyleName", style.name);
     }
+
+    if (styleAccess?.type === "course_group" && selectedStyleIds.length > 0) {
+      formData.set("selectedStyleIds", JSON.stringify(selectedStyleIds));
+      const names = selectedStyleIds
+        .map((id) => DANCE_STYLES.find((s) => s.id === id)?.name)
+        .filter(Boolean) as string[];
+      formData.set("selectedStyleNames", JSON.stringify(names));
+    }
+
     startTransition(async () => {
       const result = await createSubscriptionAction(formData);
       if (result.success) {
@@ -589,7 +614,7 @@ export function AddSubscriptionDialog({
               <select
                 id="as-product"
                 value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
+                onChange={(e) => handleProductChange(e.target.value)}
                 className={SELECT_CLASS}
                 required
               >
@@ -607,7 +632,7 @@ export function AddSubscriptionDialog({
                   <optgroup label="Passes">
                     {groups.passes.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} {p.totalCredits ? `(${p.totalCredits} credits)` : ""}
+                        {p.name} {p.totalCredits ? `(${p.totalCredits} classes)` : ""}
                       </option>
                     ))}
                   </optgroup>
@@ -648,23 +673,13 @@ export function AddSubscriptionDialog({
               </div>
             )}
 
-            {needsStyleSelector && (
-              <div className="space-y-1.5">
-                <Label htmlFor="as-style">Style *</Label>
-                <select
-                  id="as-style"
-                  value={selectedStyleId}
-                  onChange={(e) => setSelectedStyleId(e.target.value)}
-                  className={SELECT_CLASS}
-                  required
-                >
-                  <option value="">Select style…</option>
-                  {DANCE_STYLES.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
+            <StyleSelectionField
+              styleAccess={styleAccess}
+              selectedStyleId={selectedStyleId}
+              selectedStyleIds={selectedStyleIds}
+              onSingleChange={setSelectedStyleId}
+              onMultiToggle={toggleMultiStyle}
+            />
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -715,7 +730,7 @@ export function AddSubscriptionDialog({
                   <p><span className="font-medium">Classes/term:</span> {selectedProduct.classesPerTerm}</p>
                 )}
                 {selectedProduct.totalCredits && (
-                  <p><span className="font-medium">Credits:</span> {selectedProduct.totalCredits}</p>
+                  <p><span className="font-medium">Total classes:</span> {selectedProduct.totalCredits}</p>
                 )}
               </div>
             )}
@@ -760,9 +775,43 @@ export function EditSubscriptionDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  const accessRule = getAccessRule(sub.productId);
+  const styleAccess = accessRule?.styleAccess;
+
+  const [selectedStyleId, setSelectedStyleId] = useState(sub.selectedStyleId ?? "");
+  const [selectedStyleIds, setSelectedStyleIds] = useState<string[]>(
+    sub.selectedStyleIds ?? []
+  );
+
+  function toggleMultiStyle(styleId: string, pickCount: number) {
+    setSelectedStyleIds((prev) => {
+      if (prev.includes(styleId)) return prev.filter((id) => id !== styleId);
+      if (prev.length >= pickCount) return prev;
+      return [...prev, styleId];
+    });
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
+
+    if (styleAccess?.type === "selected_style" && selectedStyleId) {
+      formData.set("selectedStyleId", selectedStyleId);
+      const style = DANCE_STYLES.find((s) => s.id === selectedStyleId);
+      if (style) formData.set("selectedStyleName", style.name);
+    } else if (!selectedStyleId) {
+      formData.set("selectedStyleId", "");
+      formData.set("selectedStyleName", "");
+    }
+
+    if (styleAccess?.type === "course_group" && selectedStyleIds.length > 0) {
+      formData.set("selectedStyleIds", JSON.stringify(selectedStyleIds));
+      const names = selectedStyleIds
+        .map((id) => DANCE_STYLES.find((s) => s.id === id)?.name)
+        .filter(Boolean) as string[];
+      formData.set("selectedStyleNames", JSON.stringify(names));
+    }
+
     startTransition(async () => {
       const result = await updateSubscriptionAction(formData);
       if (result.success) {
@@ -802,6 +851,15 @@ export function EditSubscriptionDialog({
                 ))}
               </select>
             </div>
+
+            <StyleSelectionField
+              styleAccess={styleAccess}
+              selectedStyleId={selectedStyleId}
+              selectedStyleIds={selectedStyleIds}
+              onSingleChange={setSelectedStyleId}
+              onMultiToggle={toggleMultiStyle}
+            />
+
             <div className="space-y-1.5">
               <Label htmlFor="es-notes">Notes</Label>
               <textarea
@@ -827,4 +885,116 @@ export function EditSubscriptionDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+// ── Style Selection Field (shared between Add and Edit) ──────
+
+function resolveStylePool(styleAccess: StyleAccess): MockDanceStyle[] {
+  switch (styleAccess.type) {
+    case "selected_style":
+      if (styleAccess.allowedStyleIds) {
+        const allowed = new Set(styleAccess.allowedStyleIds);
+        return DANCE_STYLES.filter((s) => allowed.has(s.id));
+      }
+      return [...DANCE_STYLES];
+    case "course_group":
+      const pool = new Set(styleAccess.poolStyleIds);
+      return DANCE_STYLES.filter((s) => pool.has(s.id));
+    case "fixed":
+      const fixed = new Set(styleAccess.styleIds);
+      return DANCE_STYLES.filter((s) => fixed.has(s.id));
+    default:
+      return [];
+  }
+}
+
+function StyleSelectionField({
+  styleAccess,
+  selectedStyleId,
+  selectedStyleIds,
+  onSingleChange,
+  onMultiToggle,
+}: {
+  styleAccess: StyleAccess | undefined;
+  selectedStyleId: string;
+  selectedStyleIds: string[];
+  onSingleChange: (id: string) => void;
+  onMultiToggle: (id: string, pickCount: number) => void;
+}) {
+  if (!styleAccess) return null;
+
+  if (styleAccess.type === "selected_style") {
+    const styles = resolveStylePool(styleAccess);
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor="as-style">Style *</Label>
+        <select
+          id="as-style"
+          value={selectedStyleId}
+          onChange={(e) => onSingleChange(e.target.value)}
+          className={SELECT_CLASS}
+          required
+        >
+          <option value="">Select style…</option>
+          {styles.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <p className="text-xs text-gray-400">
+          Student uses this product for the selected style only.
+        </p>
+      </div>
+    );
+  }
+
+  if (styleAccess.type === "course_group") {
+    const styles = resolveStylePool(styleAccess);
+    const { pickCount } = styleAccess;
+    return (
+      <div className="space-y-1.5">
+        <Label>
+          Select {pickCount} style{pickCount !== 1 ? "s" : ""} *
+        </Label>
+        <div className="space-y-1 rounded-lg border border-gray-200 bg-white p-2">
+          {styles.map((s) => {
+            const checked = selectedStyleIds.includes(s.id);
+            const disabled = !checked && selectedStyleIds.length >= pickCount;
+            return (
+              <label
+                key={s.id}
+                className={`flex items-center gap-2 rounded px-2 py-1.5 text-sm ${
+                  disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-gray-50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={disabled}
+                  onChange={() => onMultiToggle(s.id, pickCount)}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                {s.name}
+              </label>
+            );
+          })}
+        </div>
+        <p className="text-xs text-gray-400">
+          {selectedStyleIds.length} of {pickCount} selected.
+        </p>
+      </div>
+    );
+  }
+
+  if (styleAccess.type === "fixed") {
+    const styles = resolveStylePool(styleAccess);
+    if (styles.length === 0) return null;
+    return (
+      <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+        <span className="font-medium">Styles:</span>{" "}
+        {styles.map((s) => s.name).join(", ")}
+      </div>
+    );
+  }
+
+  return null;
 }

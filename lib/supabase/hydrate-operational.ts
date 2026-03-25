@@ -21,7 +21,9 @@ import {
   loadAttendanceFromDB,
   loadPenaltiesFromDB,
   loadSubscriptionsFromDB,
+  loadStudioHiresFromDB,
 } from "./operational-persistence";
+import { getStudioHireService } from "@/lib/services/studio-hire-store";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 
 const g = globalThis as unknown as {
@@ -29,6 +31,7 @@ const g = globalThis as unknown as {
   __bpm_opHydratedAttendance?: boolean;
   __bpm_opHydratedPenalties?: boolean;
   __bpm_opHydratedSubscriptions?: boolean;
+  __bpm_opHydratedStudioHires?: boolean;
   __bpm_validUserIds?: Set<string>;
 };
 
@@ -129,6 +132,16 @@ export async function hydrateSubscriptions(): Promise<void> {
   store.push(...valid);
 }
 
+export async function hydrateStudioHires(): Promise<void> {
+  if (g.__bpm_opHydratedStudioHires || !hasSupabaseConfig()) return;
+  g.__bpm_opHydratedStudioHires = true;
+
+  const svc = getStudioHireService();
+  const dbEntries = await loadStudioHiresFromDB();
+  svc.entries.length = 0;
+  svc.entries.push(...dbEntries);
+}
+
 /**
  * Hydrate all operational services from Supabase.
  * Safe to call multiple times — each service only loads once per server lifecycle.
@@ -140,6 +153,7 @@ export async function ensureOperationalDataHydrated(): Promise<void> {
     hydrateAttendance(),
     hydratePenalties(),
     hydrateSubscriptions(),
+    hydrateStudioHires(),
   ]);
 }
 
@@ -151,5 +165,6 @@ export function resetHydrationFlags(): void {
   g.__bpm_opHydratedAttendance = false;
   g.__bpm_opHydratedPenalties = false;
   g.__bpm_opHydratedSubscriptions = false;
+  g.__bpm_opHydratedStudioHires = false;
   g.__bpm_validUserIds = undefined;
 }

@@ -45,6 +45,10 @@ export interface SubscriptionPatch {
   autoRenew?: boolean;
   classesUsed?: number;
   classesPerTerm?: number | null;
+  selectedStyleId?: string | null;
+  selectedStyleName?: string | null;
+  selectedStyleIds?: string[] | null;
+  selectedStyleNames?: string[] | null;
 }
 
 export interface ISubscriptionRepository {

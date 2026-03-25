@@ -100,6 +100,10 @@ export function updateSubscription(
     autoRenew?: boolean;
     classesUsed?: number;
     classesPerTerm?: number | null;
+    selectedStyleId?: string | null;
+    selectedStyleName?: string | null;
+    selectedStyleIds?: string[] | null;
+    selectedStyleNames?: string[] | null;
   }
 ): MockSubscription | null {
   const list = init();
@@ -119,6 +123,10 @@ export function updateSubscription(
   if (patch.autoRenew !== undefined) sub.autoRenew = patch.autoRenew;
   if (patch.classesUsed !== undefined) sub.classesUsed = patch.classesUsed;
   if (patch.classesPerTerm !== undefined) sub.classesPerTerm = patch.classesPerTerm;
+  if (patch.selectedStyleId !== undefined) sub.selectedStyleId = patch.selectedStyleId;
+  if (patch.selectedStyleName !== undefined) sub.selectedStyleName = patch.selectedStyleName;
+  if (patch.selectedStyleIds !== undefined) sub.selectedStyleIds = patch.selectedStyleIds;
+  if (patch.selectedStyleNames !== undefined) sub.selectedStyleNames = patch.selectedStyleNames;
 
   return { ...sub };
 }

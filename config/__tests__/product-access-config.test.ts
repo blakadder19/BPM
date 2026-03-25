@@ -4,8 +4,8 @@
  * Validates that:
  *   - The static config is internally consistent
  *   - Socials cannot be booked and have no penalties/credits
- *   - Provisional rules (Bronze/Silver/Gold, Yoga, Latin Combo)
- *     do not break production booking flows
+ *   - Provisional rules (Yoga Gold, Latin Combo) do not break
+ *     production booking flows
  *   - Every product rule produces a human-readable description
  *   - Credit deduction priority only contains valid product types
  */

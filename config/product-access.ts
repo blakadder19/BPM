@@ -8,8 +8,8 @@
  *   "course_group"    — student picks N from a pool (Latin Combo)
  *   "social_only"     — socials only (excluded from class booking flow)
  *
- * PROVISIONAL rules are clearly marked. The exact mapping for Standard memberships
- * (which exclude "Salsa & Bachata") is pending academy confirmation.
+ * Standard memberships explicitly EXCLUDE Salsa & Bachata styles.
+ * Per BPM pricing: "N classes per month (excluding Salsa & Bachata classes)."
  */
 
 import type { ClassType } from "@/types/domain";
@@ -19,7 +19,7 @@ import type { ClassType } from "@/types/domain";
 export type StyleAccess =
   | { type: "all" }
   | { type: "fixed"; styleIds: string[] }
-  | { type: "selected_style" }
+  | { type: "selected_style"; allowedStyleIds?: string[] }
   | { type: "course_group"; poolStyleIds: string[]; pickCount: number }
   | { type: "social_only" };
 
@@ -39,7 +39,14 @@ export interface ProductAccessRule {
 const BACHATA_STYLE_IDS = ["ds-1", "ds-2", "ds-3"];
 const SALSA_STYLE_IDS = ["ds-4", "ds-5"];
 const YOGA_STYLE_IDS = ["ds-9"];
+export const ALL_LATIN_STYLE_IDS = [...BACHATA_STYLE_IDS, ...SALSA_STYLE_IDS];
 export const LATIN_COMBO_POOL_STYLE_IDS = ["ds-1", "ds-4", "ds-5"];
+
+/**
+ * Standard memberships include everything EXCEPT Salsa & Bachata.
+ * Per BPM: Reggaeton, Ladies Styling, Afro-Cuban, Yoga, Kids Hip Hop.
+ */
+const STANDARD_MEMBERSHIP_STYLE_IDS = ["ds-6", "ds-7", "ds-8", "ds-9", "ds-10"];
 
 // ── Product access rules ────────────────────────────────────
 
@@ -58,7 +65,7 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   {
     productId: "p-lat-bronze",
     allowedClassTypes: ["class"],
-    styleAccess: { type: "selected_style" },
+    styleAccess: { type: "selected_style", allowedStyleIds: ALL_LATIN_STYLE_IDS },
     allowedLevels: null,
     isProvisional: false,
     provisionalNote: null,
@@ -66,7 +73,7 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   {
     productId: "p-lat-silver",
     allowedClassTypes: ["class"],
-    styleAccess: { type: "selected_style" },
+    styleAccess: { type: "selected_style", allowedStyleIds: ALL_LATIN_STYLE_IDS },
     allowedLevels: null,
     isProvisional: false,
     provisionalNote: null,
@@ -74,7 +81,7 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   {
     productId: "p-lat-gold",
     allowedClassTypes: ["class"],
-    styleAccess: { type: "selected_style" },
+    styleAccess: { type: "selected_style", allowedStyleIds: ALL_LATIN_STYLE_IDS },
     allowedLevels: null,
     isProvisional: false,
     provisionalNote: null,
@@ -110,7 +117,7 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   {
     productId: "p-beg12",
     allowedClassTypes: ["class"],
-    styleAccess: { type: "selected_style" },
+    styleAccess: { type: "selected_style", allowedStyleIds: ALL_LATIN_STYLE_IDS },
     allowedLevels: ["Beginner 1", "Beginner 2"],
     isProvisional: false,
     provisionalNote: null,
@@ -142,10 +149,10 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   {
     productId: "p-mem-bronze-std",
     allowedClassTypes: ["class", "student_practice"],
-    styleAccess: { type: "all" },
+    styleAccess: { type: "fixed", styleIds: STANDARD_MEMBERSHIP_STYLE_IDS },
     allowedLevels: null,
-    isProvisional: true,
-    provisionalNote: "Standard membership excludes Salsa & Bachata — exact enforcement TBD",
+    isProvisional: false,
+    provisionalNote: null,
   },
   {
     productId: "p-mem-bronze-bach",
@@ -176,10 +183,10 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   {
     productId: "p-mem-silver-std",
     allowedClassTypes: ["class", "student_practice"],
-    styleAccess: { type: "all" },
+    styleAccess: { type: "fixed", styleIds: STANDARD_MEMBERSHIP_STYLE_IDS },
     allowedLevels: null,
-    isProvisional: true,
-    provisionalNote: "Standard membership excludes Salsa & Bachata — exact enforcement TBD",
+    isProvisional: false,
+    provisionalNote: null,
   },
   {
     productId: "p-mem-silver-bach",
@@ -210,10 +217,10 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
   {
     productId: "p-mem-gold-std",
     allowedClassTypes: ["class", "student_practice"],
-    styleAccess: { type: "all" },
+    styleAccess: { type: "fixed", styleIds: STANDARD_MEMBERSHIP_STYLE_IDS },
     allowedLevels: null,
-    isProvisional: true,
-    provisionalNote: "Standard membership excludes Salsa & Bachata — exact enforcement TBD",
+    isProvisional: false,
+    provisionalNote: null,
   },
   {
     productId: "p-mem-gold-bach",
@@ -315,8 +322,12 @@ export function buildDynamicAccessRulesMap(
 
 /**
  * Human-readable summary of a product's access rule.
+ * When resolveStyleName is provided, fixed style lists are rendered with names.
  */
-export function describeAccess(rule: ProductAccessRule): string {
+export function describeAccess(
+  rule: ProductAccessRule,
+  resolveStyleName?: (id: string) => string | undefined
+): string {
   const sa = rule.styleAccess;
   const levels = rule.allowedLevels
     ? rule.allowedLevels.join(", ")
@@ -327,13 +338,26 @@ export function describeAccess(rule: ProductAccessRule): string {
     case "all":
       styleDesc = "All styles";
       break;
-    case "fixed":
-      styleDesc = sa.styleIds.length > 0
-        ? `${sa.styleIds.length} fixed style(s)`
-        : "No styles (TBD)";
+    case "fixed": {
+      if (sa.styleIds.length === 0) {
+        styleDesc = "No styles (TBD)";
+      } else if (isStandardMembershipStyleSet(sa.styleIds)) {
+        styleDesc = "Excl. Salsa & Bachata";
+      } else if (resolveStyleName) {
+        const names = sa.styleIds
+          .map(resolveStyleName)
+          .filter(Boolean);
+        styleDesc =
+          names.length > 0 ? names.join(", ") : `${sa.styleIds.length} style(s)`;
+      } else {
+        styleDesc = `${sa.styleIds.length} fixed style(s)`;
+      }
       break;
+    }
     case "selected_style":
-      styleDesc = "1 selected style";
+      styleDesc = sa.allowedStyleIds
+        ? `1 of ${sa.allowedStyleIds.length} styles`
+        : "1 selected style";
       break;
     case "course_group":
       styleDesc = `Pick ${sa.pickCount} of ${sa.poolStyleIds.length}`;
@@ -344,4 +368,11 @@ export function describeAccess(rule: ProductAccessRule): string {
   }
 
   return `${styleDesc} · ${levels}`;
+}
+
+function isStandardMembershipStyleSet(styleIds: string[]): boolean {
+  if (styleIds.length !== STANDARD_MEMBERSHIP_STYLE_IDS.length) return false;
+  const sorted = [...styleIds].sort();
+  const expected = [...STANDARD_MEMBERSHIP_STYLE_IDS].sort();
+  return sorted.every((id, i) => id === expected[i]);
 }

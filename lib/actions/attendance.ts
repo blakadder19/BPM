@@ -209,7 +209,9 @@ export async function markStudentAttendance(params: {
     ?? null;
   const isAttendanceFirst = !params.bookingId && !!subId;
   const effectiveSource = storedRecord?.source ?? resolvedSource;
-  const skipCredits = effectiveSource === "drop_in" || effectiveSource === "walk_in" || effectiveSource === "admin";
+  const { CLASS_TYPE_CONFIG } = await import("@/config/event-types");
+  const typeCreditsApply = CLASS_TYPE_CONFIG[params.classType]?.creditsApply ?? true;
+  const skipCredits = !typeCreditsApply || effectiveSource === "drop_in" || effectiveSource === "walk_in" || effectiveSource === "admin";
 
   const prevSourceWasNonConsuming = outcome.type === "updated"
     && (outcome.previousSource === "drop_in" || outcome.previousSource === "walk_in" || outcome.previousSource === "admin");
