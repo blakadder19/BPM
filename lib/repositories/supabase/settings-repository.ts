@@ -1,8 +1,9 @@
 /**
  * Supabase-mode SettingsRepository.
  *
- * Delegates to the file-backed settings store (.data/settings.json).
- * A future enhancement can read/write the business_rules table instead.
+ * Delegates to the settings store which reads from a globalThis cache
+ * (hydrated from business_rules on cold start) and writes through to
+ * the business_rules table.
  */
 
 import type { ISettingsRepository } from "../interfaces/settings-repository";

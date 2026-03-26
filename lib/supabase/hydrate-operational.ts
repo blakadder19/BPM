@@ -25,6 +25,7 @@ import {
 } from "./operational-persistence";
 import { getStudioHireService } from "@/lib/services/studio-hire-store";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
+import { hydrateSettings, resetSettingsHydration } from "@/lib/services/settings-store";
 
 const g = globalThis as unknown as {
   __bpm_opHydratedBookings?: boolean;
@@ -147,6 +148,10 @@ export async function hydrateStudioHires(): Promise<void> {
  * Safe to call multiple times — each service only loads once per server lifecycle.
  */
 export async function ensureOperationalDataHydrated(): Promise<void> {
+  // Settings must hydrate first — other stores may call getSettings() during
+  // request handling, so the cache must be warm before any page renders.
+  await hydrateSettings();
+
   await Promise.all([
     ensureScheduleBootstrapped(),
     hydrateBookings(),
@@ -167,4 +172,5 @@ export function resetHydrationFlags(): void {
   g.__bpm_opHydratedSubscriptions = false;
   g.__bpm_opHydratedStudioHires = false;
   g.__bpm_validUserIds = undefined;
+  resetSettingsHydration();
 }

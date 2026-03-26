@@ -6,11 +6,13 @@
  * Any configurable values (like closure minutes) must be passed as parameters.
  *
  * All class times are in local Dublin time. We parse "YYYY-MM-DD" + "HH:MM"
- * without a Z suffix so JS interprets them as local time. This is correct
- * for a server running in the academy's timezone.
+ * without a Z suffix so JS interprets them as local time.
  *
- * PROVISIONAL: When deploying to a server in a different timezone, add
- * explicit Europe/Dublin handling here.
+ * DEPLOYMENT REQUIREMENT: The server must run with TZ=Europe/Dublin.
+ * On Vercel, set this as an environment variable. Without it, times
+ * will be interpreted as UTC, making late-cancel windows, attendance
+ * closure, check-in eligibility, and class started/ended detection
+ * off by 0–1 hours depending on DST.
  */
 
 const DEFAULT_CLOSURE_MINUTES = 60;

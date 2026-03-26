@@ -1,11 +1,14 @@
 /**
- * Settings store — file-backed in development, DB-backed in production.
+ * Settings store — Supabase-backed in production, file-backed in local dev.
  *
- * Uses synchronous file I/O so getSettings() can be called from
- * pure domain logic without async. The JSON file lives at .data/settings.json
- * (gitignored). On first access or if the file is missing, defaults are used.
+ * In production (Supabase mode), settings are stored in the `business_rules`
+ * table under key `app_settings`. On cold start the row is loaded into a
+ * globalThis cache; reads stay synchronous so pure domain logic can call
+ * getSettings() without async. Writes update the cache and fire-and-forget
+ * a DB upsert.
  *
- * In production this would read/write a settings table via Supabase.
+ * In local dev (memory mode / no Supabase config), settings fall back to
+ * .data/settings.json on disk.
  *
  * SERVER-ONLY — must never be imported by client components.
  */
@@ -13,6 +16,7 @@
 import "server-only";
 import fs from "node:fs";
 import path from "node:path";
+import { createClient } from "@supabase/supabase-js";
 import {
   LATE_CANCEL_FEE_CENTS,
   NO_SHOW_FEE_CENTS,
@@ -62,8 +66,6 @@ export interface AppSettings {
   provisionalNotes: string;
 }
 
-const DEFAULT_PROVISIONAL_NOTES = ``;
-
 function defaults(): AppSettings {
   return {
     lateCancelFeeCents: LATE_CANCEL_FEE_CENTS,
@@ -95,26 +97,106 @@ function defaults(): AppSettings {
     allowAdminLateEntryIntoTermBound: true,
     adminLateEntryMaxClassNumber: 2,
 
-    provisionalNotes: DEFAULT_PROVISIONAL_NOTES,
+    provisionalNotes: "",
   };
 }
 
-// ── File path ────────────────────────────────────────────────
+// ── globalThis cache (survives across requests within one Lambda lifecycle) ──
+
+const g = globalThis as unknown as {
+  __bpm_settings?: AppSettings;
+  __bpm_settingsHydrated?: boolean;
+  __bpm_settingsAcademyId?: string;
+};
+
+// ── Supabase helpers ─────────────────────────────────────────
+
+function hasSupabaseConfig(): boolean {
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
+
+function getSupabaseClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+const SETTINGS_KEY = "app_settings";
+
+/**
+ * Load the full AppSettings blob from business_rules.
+ * Also resolves the academy_id for future writes.
+ */
+async function loadSettingsFromDB(): Promise<Partial<AppSettings> | null> {
+  const client = getSupabaseClient();
+  if (!client) return null;
+
+  const { data, error } = await client
+    .from("business_rules")
+    .select("value, academy_id")
+    .eq("key", SETTINGS_KEY)
+    .maybeSingle();
+
+  if (!error && data) {
+    g.__bpm_settingsAcademyId = data.academy_id;
+    return data.value as Partial<AppSettings>;
+  }
+
+  // No settings row yet — resolve academy_id for the first write
+  if (!g.__bpm_settingsAcademyId) {
+    const { data: academy } = await client
+      .from("academies")
+      .select("id")
+      .limit(1)
+      .maybeSingle();
+    if (academy) g.__bpm_settingsAcademyId = academy.id;
+  }
+
+  return null;
+}
+
+/**
+ * Fire-and-forget upsert of the full settings blob into business_rules.
+ */
+function saveSettingsToDB(settings: AppSettings): void {
+  const client = getSupabaseClient();
+  if (!client) return;
+  const academyId = g.__bpm_settingsAcademyId;
+  if (!academyId) return;
+
+  Promise.resolve(
+    client
+      .from("business_rules")
+      .upsert(
+        {
+          academy_id: academyId,
+          key: SETTINGS_KEY,
+          value: settings as unknown as Record<string, unknown>,
+          description: "Full app settings blob (managed by Settings page)",
+        },
+        { onConflict: "academy_id,key" }
+      )
+  )
+    .then(({ error }) => {
+      if (error) console.warn("[settings-store] DB write failed:", error.message);
+    })
+    .catch((e: unknown) => {
+      console.warn("[settings-store] DB write error:", e instanceof Error ? e.message : e);
+    });
+}
+
+// ── File-based fallback (local dev / memory mode) ────────────
 
 const DATA_DIR = path.join(process.cwd(), ".data");
 const SETTINGS_FILE = path.join(DATA_DIR, "settings.json");
 
-function ensureDataDir(): void {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-}
-
-// ── Test detection ───────────────────────────────────────────
-
 const IS_TEST = typeof process !== "undefined" && !!process.env["VITEST"];
-
-// ── Read / Write ─────────────────────────────────────────────
 
 function readFromDisk(): AppSettings {
   if (IS_TEST) return defaults();
@@ -129,22 +211,55 @@ function readFromDisk(): AppSettings {
 
 function writeToDisk(settings: AppSettings): void {
   if (IS_TEST) return;
-  ensureDataDir();
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), "utf-8");
 }
 
-// ── Public API (same shape as before) ────────────────────────
+// ── Public API ───────────────────────────────────────────────
 
 export function getSettings(): AppSettings {
+  if (hasSupabaseConfig() && g.__bpm_settingsHydrated) {
+    return g.__bpm_settings ?? defaults();
+  }
   return readFromDisk();
 }
 
 export function updateSettings(patch: Partial<AppSettings>): AppSettings {
-  const current = readFromDisk();
+  const current = getSettings();
   const updated = { ...current, ...patch };
   if (patch.roleBalancedStyleNames) {
     updated.roleBalancedStyleNames = [...patch.roleBalancedStyleNames];
   }
-  writeToDisk(updated);
+
+  if (hasSupabaseConfig()) {
+    g.__bpm_settings = updated;
+    saveSettingsToDB(updated);
+  } else {
+    writeToDisk(updated);
+  }
+
   return { ...updated };
+}
+
+// ── Hydration (called from hydrate-operational.ts on cold start) ──
+
+export async function hydrateSettings(): Promise<void> {
+  if (g.__bpm_settingsHydrated || !hasSupabaseConfig()) return;
+  g.__bpm_settingsHydrated = true;
+
+  try {
+    const dbSettings = await loadSettingsFromDB();
+    g.__bpm_settings = dbSettings
+      ? { ...defaults(), ...dbSettings }
+      : defaults();
+  } catch (e) {
+    console.warn("[settings-store] Hydration failed, using defaults:", e instanceof Error ? e.message : e);
+    g.__bpm_settings = defaults();
+  }
+}
+
+export function resetSettingsHydration(): void {
+  g.__bpm_settingsHydrated = false;
+  g.__bpm_settings = undefined;
+  g.__bpm_settingsAcademyId = undefined;
 }
