@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { formatCents } from "@/lib/utils";
-import { PRODUCT_ACCESS_RULES, describeAccess } from "@/config/product-access";
 import { ProductDetailPanel } from "./product-detail-panel";
 import {
   AddProductDialog,
@@ -50,9 +49,15 @@ const TABLE_HEADERS = [
   "",
 ];
 
-const rulesByProduct = new Map(
-  PRODUCT_ACCESS_RULES.map((r) => [r.productId, r])
-);
+function describeScopeFromProduct(p: MockProduct): string {
+  const styles = p.allowedStyleNames?.length
+    ? p.allowedStyleNames.join(", ")
+    : p.styleName ?? "All styles";
+  const levels = p.allowedLevels?.length
+    ? p.allowedLevels.join(", ")
+    : "All levels";
+  return `${styles} · ${levels}`;
+}
 
 interface DanceStyleOption {
   id: string;
@@ -133,7 +138,6 @@ export function AdminProducts({
         <AdminTable headers={TABLE_HEADERS} count={filtered.length}>
           {filtered.map((p) => {
             const isExpanded = expandedId === p.id;
-            const rule = rulesByProduct.get(p.id);
             return (
               <Fragment key={p.id}>
                 <tr
@@ -184,13 +188,9 @@ export function AdminProducts({
                     )}
                   </Td>
                   <Td>
-                    {rule ? (
-                      <span className="text-xs text-gray-600">
-                        {describeAccess(rule)}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-400">No rule</span>
-                    )}
+                    <span className="text-xs text-gray-600">
+                      {describeScopeFromProduct(p)}
+                    </span>
                   </Td>
                   <Td>
                     <Badge variant={p.isActive ? "success" : "default"}>

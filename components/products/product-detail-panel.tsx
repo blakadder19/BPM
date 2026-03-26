@@ -5,7 +5,6 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/utils";
-import { getAccessRule, describeAccess } from "@/config/product-access";
 import type { MockProduct, MockSubscription } from "@/lib/mock-data";
 
 interface ProductDetailPanelProps {
@@ -21,7 +20,6 @@ export function ProductDetailPanel({
   studentNameMap,
   colSpan,
 }: ProductDetailPanelProps) {
-  const rule = getAccessRule(product.id);
   const linkedSubs = subscriptions.filter((s) => s.productId === product.id);
   const activeSubs = linkedSubs.filter((s) => s.status === "active");
   const [showAllSubs, setShowAllSubs] = useState(false);
@@ -74,42 +72,23 @@ export function ProductDetailPanel({
             )}
           </Section>
 
-          {/* ── Access Rules ── */}
-          <Section title="Access Rules">
-            {rule ? (
-              <>
-                <DL label="Access Summary" value={describeAccess(rule)} />
-                <DL
-                  label="Class Types"
-                  value={rule.allowedClassTypes.join(", ")}
-                />
-                <DL
-                  label="Style Access"
-                  value={describeStyleAccess(rule)}
-                />
-                <DL
-                  label="Levels"
-                  value={rule.allowedLevels?.join(", ") ?? "All levels"}
-                />
-                {rule.isProvisional && rule.provisionalNote && (
-                  <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                    {rule.provisionalNote}
-                  </div>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-gray-400">
-                No access rule configured for this product.
-              </p>
-            )}
-          </Section>
-
-          {/* ── Scope ── */}
-          <Section title="Scope">
-            <DL label="Styles" value={product.styleName ?? "—"} />
+          {/* ── Restrictions ── */}
+          <Section title="Restrictions">
+            <DL
+              label="Allowed Styles"
+              value={
+                product.allowedStyleNames?.length
+                  ? product.allowedStyleNames.join(", ")
+                  : product.styleName ?? "All styles (unrestricted)"
+              }
+            />
             <DL
               label="Allowed Levels"
-              value={product.allowedLevels?.join(", ") ?? "All levels"}
+              value={
+                product.allowedLevels?.length
+                  ? product.allowedLevels.join(", ")
+                  : "All levels (unrestricted)"
+              }
             />
           </Section>
 
@@ -204,22 +183,3 @@ function DL({ label, value }: { label: string; value: string }) {
   );
 }
 
-function describeStyleAccess(
-  rule: NonNullable<ReturnType<typeof getAccessRule>>
-): string {
-  const sa = rule.styleAccess;
-  switch (sa.type) {
-    case "all":
-      return "All styles";
-    case "fixed":
-      return sa.styleIds.length > 0
-        ? `${sa.styleIds.length} fixed style(s)`
-        : "No styles assigned (TBD)";
-    case "selected_style":
-      return "Student selects 1 style at purchase";
-    case "course_group":
-      return `Student picks ${sa.pickCount} of ${sa.poolStyleIds.length} styles`;
-    case "social_only":
-      return "Social events only";
-  }
-}
