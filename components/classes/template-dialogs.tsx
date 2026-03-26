@@ -170,11 +170,11 @@ function TemplateForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Start Time *</label>
-          <input name="startTime" type="time" defaultValue={initial.startTime ?? "19:00"} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+          <input name="startTime" type="time" defaultValue={initial.startTime ?? ""} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">End Time *</label>
-          <input name="endTime" type="time" defaultValue={initial.endTime ?? "20:00"} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+          <input name="endTime" type="time" defaultValue={initial.endTime ?? ""} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
         </div>
       </div>
 
@@ -195,7 +195,7 @@ function TemplateForm({
 
       <div>
         <label className="block text-sm font-medium text-gray-700">Location</label>
-        <input name="location" defaultValue={initial.location ?? "Studio A"} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+        <input name="location" defaultValue={initial.location ?? ""} placeholder="e.g. Studio A, Studio B" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
       </div>
 
       <div>

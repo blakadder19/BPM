@@ -288,7 +288,7 @@ export function getAccessRulesMap(): Map<string, ProductAccessRule> {
  * 4. When danceStyles are provided, remap mock style IDs in access rules to real UUIDs.
  */
 export function buildDynamicAccessRulesMap(
-  products: { id: string; name: string; productType: string; allowedLevels: string[] | null }[],
+  products: { id: string; name: string; productType: string; allowedLevels: string[] | null; allowedStyleIds?: string[] | null }[],
   danceStyles?: { id: string; name: string }[]
 ): Map<string, ProductAccessRule> {
   const map = new Map(rulesByProductId);
@@ -318,13 +318,18 @@ export function buildDynamicAccessRulesMap(
       continue;
     }
 
+    const styleAccess: StyleAccess =
+      p.allowedStyleIds && p.allowedStyleIds.length > 0
+        ? { type: "fixed", styleIds: p.allowedStyleIds }
+        : { type: "all" };
+
     const inferred: ProductAccessRule = {
       productId: p.id,
       allowedClassTypes: p.productType === "membership" ? ["class", "student_practice"] : ["class"],
-      styleAccess: { type: "all" },
+      styleAccess,
       allowedLevels: p.allowedLevels,
-      isProvisional: true,
-      provisionalNote: `Auto-inferred rule for "${p.name}"`,
+      isProvisional: false,
+      provisionalNote: null,
     };
     map.set(p.id, inferred);
   }

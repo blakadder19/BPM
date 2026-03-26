@@ -40,6 +40,8 @@ export function createProduct(data: {
   durationDays: number | null;
   styleName: string | null;
   allowedLevels: string[] | null;
+  allowedStyleIds?: string[] | null;
+  allowedStyleNames?: string[] | null;
   isProvisional: boolean;
   notes: string | null;
   validityDescription: string | null;
@@ -62,6 +64,8 @@ export function createProduct(data: {
     durationDays: data.durationDays,
     styleName: data.styleName,
     allowedLevels: data.allowedLevels,
+    allowedStyleIds: data.allowedStyleIds ?? null,
+    allowedStyleNames: data.allowedStyleNames ?? null,
     isActive: true,
     isProvisional: data.isProvisional,
     notes: data.notes,
@@ -89,6 +93,8 @@ type ProductPatch = Partial<
     | "durationDays"
     | "styleName"
     | "allowedLevels"
+    | "allowedStyleIds"
+    | "allowedStyleNames"
     | "isActive"
     | "isProvisional"
     | "notes"
@@ -119,6 +125,8 @@ export function updateProduct(
   if (patch.durationDays !== undefined) product.durationDays = patch.durationDays;
   if (patch.styleName !== undefined) product.styleName = patch.styleName;
   if (patch.allowedLevels !== undefined) product.allowedLevels = patch.allowedLevels;
+  if (patch.allowedStyleIds !== undefined) product.allowedStyleIds = patch.allowedStyleIds;
+  if (patch.allowedStyleNames !== undefined) product.allowedStyleNames = patch.allowedStyleNames;
   if (patch.isActive !== undefined) product.isActive = patch.isActive;
   if (patch.isProvisional !== undefined) product.isProvisional = patch.isProvisional;
   if (patch.notes !== undefined) product.notes = patch.notes;

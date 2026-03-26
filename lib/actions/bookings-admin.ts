@@ -106,30 +106,35 @@ export async function adminCreateBookingAction(
     }
 
     // Access rule validation: style, class type, level
-    const { getAccessRule } = await import("@/config/product-access");
+    const { buildDynamicAccessRulesMap } = await import("@/config/product-access");
     const { canAccessClass } = await import("@/lib/domain/product-access");
-    const accessRule = getAccessRule(sub.productId);
-    if (accessRule && rawInstance) {
+    const { getProductRepo } = await import("@/lib/repositories");
+    const allProducts = await getProductRepo().getAll();
+    const accessRulesMap = buildDynamicAccessRulesMap(allProducts, getDanceStyles());
+    const accessRule = accessRulesMap.get(sub.productId);
+    if (rawInstance) {
       const classStyleId = rawInstance.styleId ?? (
         rawInstance.styleName
           ? getDanceStyles().find((s) => s.name === rawInstance.styleName)?.id ?? null
           : null
       );
-      const accessResult = canAccessClass(
-        accessRule,
-        sub.selectedStyleId,
-        sub.selectedStyleIds,
-        {
-          classType: rawInstance.classType,
-          danceStyleId: classStyleId,
-          level: rawInstance.level ?? null,
+      if (accessRule) {
+        const accessResult = canAccessClass(
+          accessRule,
+          sub.selectedStyleId,
+          sub.selectedStyleIds,
+          {
+            classType: rawInstance.classType,
+            danceStyleId: classStyleId,
+            level: rawInstance.level ?? null,
+          }
+        );
+        if (!accessResult.granted) {
+          return {
+            success: false,
+            error: `This subscription cannot be used for this class: ${accessResult.reason}.`,
+          };
         }
-      );
-      if (!accessResult.granted) {
-        return {
-          success: false,
-          error: `This subscription cannot be used for this class: ${accessResult.reason}.`,
-        };
       }
     }
 

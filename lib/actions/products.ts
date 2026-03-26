@@ -19,9 +19,10 @@ function parseOptionalInt(raw: string | null): number | null {
   return isNaN(n) ? null : n;
 }
 
-function parseLevels(raw: string | null): string[] | null {
-  if (!raw || raw.trim() === "") return null;
-  return raw.split(",").map((s) => s.trim()).filter(Boolean);
+function parseMultiSelect(formData: FormData, key: string): string[] | null {
+  const values = formData.getAll(key) as string[];
+  const filtered = values.filter(Boolean);
+  return filtered.length > 0 ? filtered : null;
 }
 
 function eurosToCents(raw: string | null): number {
@@ -42,8 +43,10 @@ export async function createProductAction(
   const priceCents = eurosToCents(formData.get("priceEuros") as string);
   const totalCredits = parseOptionalInt(formData.get("totalCredits") as string);
   const durationDays = parseOptionalInt(formData.get("durationDays") as string);
-  const styleName = (formData.get("styleName") as string)?.trim() || null;
-  const allowedLevels = parseLevels(formData.get("allowedLevels") as string);
+  const allowedStyleIds = parseMultiSelect(formData, "allowedStyleIds");
+  const allowedStyleNames = parseMultiSelect(formData, "allowedStyleNames");
+  const styleName = allowedStyleNames ? allowedStyleNames.join(", ") : null;
+  const allowedLevels = parseMultiSelect(formData, "allowedLevels");
   const isProvisional = formData.get("isProvisional") === "on" || formData.get("isProvisional") === "true";
   const notes = (formData.get("notes") as string)?.trim() || null;
   const validityDescription = (formData.get("validityDescription") as string)?.trim() || null;
@@ -67,6 +70,8 @@ export async function createProductAction(
     durationDays,
     styleName,
     allowedLevels,
+    allowedStyleIds,
+    allowedStyleNames,
     isProvisional,
     notes,
     validityDescription,
@@ -92,8 +97,10 @@ export async function updateProductAction(
   const priceCents = eurosToCents(formData.get("priceEuros") as string);
   const totalCredits = parseOptionalInt(formData.get("totalCredits") as string);
   const durationDays = parseOptionalInt(formData.get("durationDays") as string);
-  const styleName = (formData.get("styleName") as string)?.trim() || null;
-  const allowedLevels = parseLevels(formData.get("allowedLevels") as string);
+  const allowedStyleIds = parseMultiSelect(formData, "allowedStyleIds");
+  const allowedStyleNames = parseMultiSelect(formData, "allowedStyleNames");
+  const styleName = allowedStyleNames ? allowedStyleNames.join(", ") : null;
+  const allowedLevels = parseMultiSelect(formData, "allowedLevels");
   const isActive = formData.get("isActive") === "on" || formData.get("isActive") === "true";
   const isProvisional = formData.get("isProvisional") === "on" || formData.get("isProvisional") === "true";
   const notes = (formData.get("notes") as string)?.trim() || null;
@@ -119,6 +126,8 @@ export async function updateProductAction(
     durationDays,
     styleName,
     allowedLevels,
+    allowedStyleIds,
+    allowedStyleNames,
     isActive,
     isProvisional,
     notes,

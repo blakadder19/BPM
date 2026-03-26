@@ -11,6 +11,7 @@ import type { TermLike } from "./term-rules";
 export interface ClassContext {
   classType: ClassType;
   styleName: string | null;
+  styleId: string | null;
   level: string | null;
   date: string;
 }
@@ -28,27 +29,36 @@ export interface ValidEntitlement {
 
 function styleMatches(
   access: StyleAccess,
-  classStyleName: string | null,
+  cls: ClassContext,
   sub: MockSubscription
 ): boolean {
   switch (access.type) {
     case "all":
       return true;
     case "fixed":
+      if (cls.styleId) return access.styleIds.includes(cls.styleId);
+      if (!cls.styleName) return false;
       return false;
     case "selected_style":
-      if (!classStyleName) return false;
-      if (sub.selectedStyleName === classStyleName) return true;
-      if (sub.selectedStyleNames && sub.selectedStyleNames.includes(classStyleName)) return true;
+      if (!cls.styleName && !cls.styleId) return false;
+      if (cls.styleId && sub.selectedStyleId) {
+        return cls.styleId === sub.selectedStyleId;
+      }
+      if (cls.styleId && sub.selectedStyleIds) {
+        return sub.selectedStyleIds.includes(cls.styleId);
+      }
+      if (sub.selectedStyleName === cls.styleName) return true;
+      if (sub.selectedStyleNames && cls.styleName && sub.selectedStyleNames.includes(cls.styleName)) return true;
       return false;
     case "course_group":
-      if (!classStyleName) return false;
-      if (sub.selectedStyleNames && sub.selectedStyleNames.length > 0) {
-        return sub.selectedStyleNames.includes(classStyleName);
+      if (!cls.styleName && !cls.styleId) return false;
+      if (cls.styleId && sub.selectedStyleIds && sub.selectedStyleIds.length > 0) {
+        return sub.selectedStyleIds.includes(cls.styleId);
       }
-      return access.poolStyleIds.some((id) => {
-        return false;
-      });
+      if (sub.selectedStyleNames && sub.selectedStyleNames.length > 0 && cls.styleName) {
+        return sub.selectedStyleNames.includes(cls.styleName);
+      }
+      return false;
     case "social_only":
       return false;
   }
@@ -90,7 +100,7 @@ export function isEntitlementValidForClass(
   if (!hasRemainingUsage(sub)) return false;
   if (!accessRule) return false;
   if (!classTypeMatches(accessRule.allowedClassTypes, cls.classType)) return false;
-  if (!styleMatches(accessRule.styleAccess, cls.styleName, sub)) return false;
+  if (!styleMatches(accessRule.styleAccess, cls, sub)) return false;
   if (!levelMatches(accessRule.allowedLevels, cls.level)) return false;
 
   // PROVISIONAL: Subscription-to-term matching is disabled for now.

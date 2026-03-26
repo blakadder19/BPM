@@ -87,6 +87,7 @@ export default async function ClassesPage() {
         title: rawCls.title,
         classType: rawCls.classType,
         styleName: rawCls.styleName,
+        styleId: rawCls.styleId,
         level: rawCls.level,
         date: rawCls.date,
         startTime: rawCls.startTime,

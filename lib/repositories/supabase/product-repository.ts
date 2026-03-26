@@ -17,8 +17,10 @@ function toMockProduct(row: ProductRow): MockProduct {
     priceCents: row.price_cents,
     totalCredits: row.total_credits,
     durationDays: row.duration_days,
-    styleName: null, // resolved from dance_style_id join if needed
+    styleName: null,
     allowedLevels: row.allowed_levels,
+    allowedStyleIds: (row as Record<string, unknown>).allowed_style_ids as string[] | null ?? null,
+    allowedStyleNames: (row as Record<string, unknown>).allowed_style_names as string[] | null ?? null,
     isActive: row.is_active,
     isProvisional: row.is_provisional,
     notes: row.notes ?? null,
@@ -68,6 +70,8 @@ export const supabaseProductRepo: IProductRepository = {
         total_credits: input.totalCredits,
         duration_days: input.durationDays,
         allowed_levels: input.allowedLevels,
+        allowed_style_ids: input.allowedStyleIds,
+        allowed_style_names: input.allowedStyleNames,
         is_provisional: input.isProvisional,
         notes: input.notes,
         validity_description: input.validityDescription,
@@ -94,6 +98,8 @@ export const supabaseProductRepo: IProductRepository = {
     if (patch.totalCredits !== undefined) fields.total_credits = patch.totalCredits;
     if (patch.durationDays !== undefined) fields.duration_days = patch.durationDays;
     if (patch.allowedLevels !== undefined) fields.allowed_levels = patch.allowedLevels;
+    if (patch.allowedStyleIds !== undefined) fields.allowed_style_ids = patch.allowedStyleIds;
+    if (patch.allowedStyleNames !== undefined) fields.allowed_style_names = patch.allowedStyleNames;
     if (patch.isProvisional !== undefined) fields.is_provisional = patch.isProvisional;
     if (patch.notes !== undefined) fields.notes = patch.notes;
     if (patch.validityDescription !== undefined) fields.validity_description = patch.validityDescription;

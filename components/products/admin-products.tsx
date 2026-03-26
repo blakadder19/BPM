@@ -54,16 +54,23 @@ const rulesByProduct = new Map(
   PRODUCT_ACCESS_RULES.map((r) => [r.productId, r])
 );
 
+interface DanceStyleOption {
+  id: string;
+  name: string;
+}
+
 interface AdminProductsProps {
   products: MockProduct[];
   subscriptions: MockSubscription[];
   studentNameMap: Record<string, string>;
+  danceStyles?: DanceStyleOption[];
 }
 
 export function AdminProducts({
   products,
   subscriptions,
   studentNameMap,
+  danceStyles = [],
 }: AdminProductsProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -243,10 +250,10 @@ export function AdminProducts({
         </AdminTable>
       )}
 
-      {showAdd && <AddProductDialog onClose={() => setShowAdd(false)} />}
+      {showAdd && <AddProductDialog onClose={() => setShowAdd(false)} danceStyles={danceStyles} />}
 
       {editProduct && (
-        <EditProductDialog product={editProduct} onClose={() => setEditProduct(null)} />
+        <EditProductDialog product={editProduct} onClose={() => setEditProduct(null)} danceStyles={danceStyles} />
       )}
 
       {deactivateProduct && (

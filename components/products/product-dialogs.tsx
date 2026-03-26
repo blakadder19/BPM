@@ -21,6 +21,13 @@ import {
 import type { MockProduct } from "@/lib/mock-data";
 import type { ProductType } from "@/types/domain";
 
+interface DanceStyleOption {
+  id: string;
+  name: string;
+}
+
+const LEVEL_OPTIONS = ["Beginner 1", "Beginner 2", "Intermediate", "Open"];
+
 const SELECT_CLASS =
   "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100";
 
@@ -35,14 +42,40 @@ const TYPE_OPTIONS = [
 function ProductFormFields({
   defaults,
   showStatus,
+  danceStyles = [],
 }: {
   defaults?: MockProduct;
   showStatus?: boolean;
+  danceStyles?: DanceStyleOption[];
 }) {
   const [productType, setProductType] = useState<ProductType>(defaults?.productType ?? "membership");
+  const [selectedStyleIds, setSelectedStyleIds] = useState<Set<string>>(
+    new Set(defaults?.allowedStyleIds ?? [])
+  );
+  const [selectedLevels, setSelectedLevels] = useState<Set<string>>(
+    new Set(defaults?.allowedLevels ?? [])
+  );
   const isMembership = productType === "membership";
   const isPass = productType === "pass";
   const isDropIn = productType === "drop_in";
+
+  function toggleStyle(id: string) {
+    setSelectedStyleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleLevel(name: string) {
+    setSelectedLevels((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  }
 
   return (
     <>
@@ -157,24 +190,56 @@ function ProductFormFields({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="pf-styleName">Scope / Styles</Label>
-          <Input
-            id="pf-styleName"
-            name="styleName"
-            defaultValue={defaults?.styleName ?? ""}
-            placeholder="e.g. All styles, Yoga only"
-          />
+          <Label>Allowed Styles</Label>
+          <p className="text-xs text-gray-500">Leave all unchecked for unrestricted (all styles).</p>
+          {danceStyles.length > 0 ? (
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2">
+              {danceStyles.map((s) => (
+                <label key={s.id} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedStyleIds.has(s.id)}
+                    onChange={() => toggleStyle(s.id)}
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {s.name}
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-amber-600">No dance styles loaded — restrictions cannot be configured.</p>
+          )}
+          {Array.from(selectedStyleIds).map((id) => {
+            const style = danceStyles.find((s) => s.id === id);
+            return (
+              <span key={id}>
+                <input type="hidden" name="allowedStyleIds" value={id} />
+                {style && <input type="hidden" name="allowedStyleNames" value={style.name} />}
+              </span>
+            );
+          })}
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="pf-allowedLevels">Allowed Levels</Label>
-          <Input
-            id="pf-allowedLevels"
-            name="allowedLevels"
-            defaultValue={defaults?.allowedLevels?.join(", ") ?? ""}
-            placeholder="e.g. Beginner 1, Beginner 2"
-          />
+          <Label>Allowed Levels</Label>
+          <p className="text-xs text-gray-500">Leave all unchecked for unrestricted (all levels).</p>
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2">
+            {LEVEL_OPTIONS.map((lvl) => (
+              <label key={lvl} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedLevels.has(lvl)}
+                  onChange={() => toggleLevel(lvl)}
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                {lvl}
+              </label>
+            ))}
+          </div>
+          {Array.from(selectedLevels).map((lvl) => (
+            <input key={lvl} type="hidden" name="allowedLevels" value={lvl} />
+          ))}
         </div>
       </div>
       <div className="space-y-1.5">
@@ -268,7 +333,7 @@ function ProductFormFields({
 
 // ── Add Product Dialog ───────────────────────────────────────
 
-export function AddProductDialog({ onClose }: { onClose: () => void }) {
+export function AddProductDialog({ onClose, danceStyles = [] }: { onClose: () => void; danceStyles?: DanceStyleOption[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -295,7 +360,7 @@ export function AddProductDialog({ onClose }: { onClose: () => void }) {
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">
-            <ProductFormFields />
+            <ProductFormFields danceStyles={danceStyles} />
             {error && <p className="text-sm text-red-600">{error}</p>}
           </DialogBody>
           <DialogFooter>
@@ -317,9 +382,11 @@ export function AddProductDialog({ onClose }: { onClose: () => void }) {
 export function EditProductDialog({
   product,
   onClose,
+  danceStyles = [],
 }: {
   product: MockProduct;
   onClose: () => void;
+  danceStyles?: DanceStyleOption[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -348,7 +415,7 @@ export function EditProductDialog({
         <form onSubmit={handleSubmit}>
           <input type="hidden" name="id" value={product.id} />
           <DialogBody className="space-y-4">
-            <ProductFormFields defaults={product} showStatus />
+            <ProductFormFields defaults={product} showStatus danceStyles={danceStyles} />
             {error && <p className="text-sm text-red-600">{error}</p>}
           </DialogBody>
           <DialogFooter>

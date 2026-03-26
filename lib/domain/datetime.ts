@@ -5,28 +5,100 @@
  * It must remain pure — no imports from server-only modules (settings-store, etc.).
  * Any configurable values (like closure minutes) must be passed as parameters.
  *
- * All class times are in local Dublin time. We parse "YYYY-MM-DD" + "HH:MM"
- * without a Z suffix so JS interprets them as local time.
+ * All class times are stored as academy-local date + time strings
+ * (e.g. "2026-03-30" + "19:00"). This module converts them to proper
+ * UTC-based Date objects using the Intl API with an explicit timezone,
+ * so it works correctly regardless of the server's system timezone.
  *
- * DEPLOYMENT REQUIREMENT: The server must run with TZ=Europe/Dublin.
- * On Vercel, set this as an environment variable. Without it, times
- * will be interpreted as UTC, making late-cancel windows, attendance
- * closure, check-in eligibility, and class started/ended detection
- * off by 0–1 hours depending on DST.
+ * Server-side: APP_TIMEZONE env var can override the default.
+ * Client-side: falls back to "Europe/Dublin" (NEXT_PUBLIC_ not needed
+ * because the academy timezone is a fixed constant).
  */
 
+const ACADEMY_TIMEZONE = process.env.APP_TIMEZONE || "Europe/Dublin";
+
 const DEFAULT_CLOSURE_MINUTES = 60;
+
+// ── Timezone conversion (Intl-based, no external deps) ──────
+
+/**
+ * Cached DateTimeFormat for resolving UTC offsets in the academy timezone.
+ * Lazy-init to avoid module-load-time issues in edge runtimes.
+ */
+let _offsetFmt: Intl.DateTimeFormat | undefined;
+function offsetFmt(): Intl.DateTimeFormat {
+  return (_offsetFmt ??= new Intl.DateTimeFormat("en-US", {
+    timeZone: ACADEMY_TIMEZONE,
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+  }));
+}
+
+/**
+ * UTC offset (in ms) of the academy timezone at a given UTC instant.
+ * Positive = ahead of UTC (e.g. +3_600_000 during Irish Summer Time).
+ */
+function tzOffsetMs(utcDate: Date): number {
+  const parts = offsetFmt().formatToParts(utcDate);
+  const v = (t: string) =>
+    parseInt(parts.find((p) => p.type === t)!.value, 10);
+  // Date.UTC handles hour>=24 by rolling to the next day, which is
+  // correct for the rare case where formatToParts outputs hour 24.
+  const localAsUtc = Date.UTC(
+    v("year"), v("month") - 1, v("day"),
+    v("hour"), v("minute"), v("second"),
+  );
+  return localAsUtc - utcDate.getTime();
+}
+
+/**
+ * Convert an academy-local date + time to a UTC-based Date.
+ * Uses a double-check to handle DST transition boundaries correctly.
+ */
+function toAcademyDate(dateStr: string, timeStr: string): Date {
+  const [y, mo, d] = dateStr.split("-").map(Number);
+  const tp = timeStr.split(":").map(Number);
+  const h = tp[0], mi = tp[1], s = tp[2] ?? 0;
+
+  // Treat the local components as-if UTC to get an initial guess
+  const utcGuess = Date.UTC(y, mo - 1, d, h, mi, s);
+  const off1 = tzOffsetMs(new Date(utcGuess));
+  const adjusted = utcGuess - off1;
+
+  // Re-check offset at the adjusted instant (may differ across a DST switch)
+  const off2 = tzOffsetMs(new Date(adjusted));
+  return new Date(off1 === off2 ? adjusted : utcGuess - off2);
+}
+
+// ── Date formatting in academy timezone ──────────────────────
+
+let _dateFmt: Intl.DateTimeFormat | undefined;
+function dateFmt(): Intl.DateTimeFormat {
+  return (_dateFmt ??= new Intl.DateTimeFormat("en-US", {
+    timeZone: ACADEMY_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }));
+}
+
+// ── Public helpers ───────────────────────────────────────────
 
 function normalizeTime(t: string): string {
   return t.length <= 5 ? `${t}:00` : t;
 }
 
 export function classStartDT(date: string, startTime: string): Date {
-  return new Date(`${date}T${normalizeTime(startTime)}`);
+  return toAcademyDate(date, normalizeTime(startTime));
 }
 
 export function classEndDT(date: string, endTime: string): Date {
-  return new Date(`${date}T${normalizeTime(endTime)}`);
+  return toAcademyDate(date, normalizeTime(endTime));
 }
 
 export function getNow(): Date {
@@ -34,11 +106,9 @@ export function getNow(): Date {
 }
 
 export function getTodayStr(): string {
-  const now = getNow();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+  const parts = dateFmt().formatToParts(getNow());
+  const v = (t: string) => parts.find((p) => p.type === t)!.value;
+  return `${v("year")}-${v("month")}-${v("day")}`;
 }
 
 export function isClassStarted(date: string, startTime: string): boolean {
@@ -56,9 +126,8 @@ export function isClassInFuture(date: string, startTime: string): boolean {
  */
 export function isAfterClosureWindow(date: string, startTime: string, closureMinutes?: number): boolean {
   const mins = closureMinutes ?? DEFAULT_CLOSURE_MINUTES;
-  const closure = classStartDT(date, startTime);
-  closure.setMinutes(closure.getMinutes() + mins);
-  return getNow() > closure;
+  const start = classStartDT(date, startTime);
+  return getNow().getTime() > start.getTime() + mins * 60_000;
 }
 
 /**
@@ -69,8 +138,8 @@ export function isCheckInOpen(date: string, startTime: string, closureMinutes?: 
   const now = getNow();
   const start = classStartDT(date, startTime);
   const mins = closureMinutes ?? DEFAULT_CLOSURE_MINUTES;
-  const closure = new Date(start.getTime() + mins * 60_000);
-  return now >= start && now <= closure;
+  const closure = start.getTime() + mins * 60_000;
+  return now >= start && now.getTime() <= closure;
 }
 
 /**

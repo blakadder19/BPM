@@ -24,6 +24,8 @@ export async function createProduct(data: {
   durationDays: number | null;
   styleName: string | null;
   allowedLevels: string[] | null;
+  allowedStyleIds: string[] | null;
+  allowedStyleNames: string[] | null;
   isProvisional: boolean;
   notes: string | null;
   validityDescription: string | null;
@@ -54,6 +56,8 @@ export async function updateProduct(
     durationDays?: number | null;
     styleName?: string | null;
     allowedLevels?: string[] | null;
+    allowedStyleIds?: string[] | null;
+    allowedStyleNames?: string[] | null;
     isActive?: boolean;
     isProvisional?: boolean;
     notes?: string | null;

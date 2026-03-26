@@ -37,6 +37,7 @@ export interface ClassInstanceInfo {
   title: string;
   classType: ClassType;
   styleName: string | null;
+  styleId: string | null;
   level: string | null;
   date: string;
   startTime: string;
@@ -166,6 +167,7 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
   const classCtx: ClassContext = {
     classType: cls.classType,
     styleName: cls.styleName,
+    styleId: cls.styleId,
     level: cls.level,
     date: cls.date,
   };

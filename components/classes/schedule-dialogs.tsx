@@ -220,11 +220,11 @@ export function AddInstanceDialog({
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Start *</label>
-                <input name="startTime" type="time" defaultValue={tpl?.startTime ?? "19:00"} key={`st-${selectedTemplateId}`} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="startTime" type="time" defaultValue={tpl?.startTime ?? ""} key={`st-${selectedTemplateId}`} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">End *</label>
-                <input name="endTime" type="time" defaultValue={tpl?.endTime ?? "20:00"} key={`et-${selectedTemplateId}`} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="endTime" type="time" defaultValue={tpl?.endTime ?? ""} key={`et-${selectedTemplateId}`} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
               </div>
             </div>
 
@@ -246,7 +246,7 @@ export function AddInstanceDialog({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Location</label>
-                <input name="location" defaultValue={tpl?.location ?? "Studio A"} key={`loc-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="location" defaultValue={tpl?.location ?? ""} key={`loc-${selectedTemplateId}`} placeholder="e.g. Studio A, Studio B" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Status</label>
