@@ -385,53 +385,64 @@ function remapStyleAccess(
 }
 
 /**
- * Human-readable summary of a product's access rule.
+ * Human-readable style and level descriptions derived from the access rule.
+ */
+export function describeAccessParts(
+  rule: ProductAccessRule,
+  resolveStyleName?: (id: string) => string | undefined
+): { styles: string; levels: string } {
+  const sa = rule.styleAccess;
+  const levels = rule.allowedLevels
+    ? rule.allowedLevels.join(", ")
+    : "All levels";
+
+  let styles: string;
+  switch (sa.type) {
+    case "all":
+      styles = "All styles";
+      break;
+    case "fixed": {
+      if (sa.styleIds.length === 0) {
+        styles = "No styles (TBD)";
+      } else if (isStandardMembershipStyleSet(sa.styleIds)) {
+        styles = "Excl. Salsa & Bachata";
+      } else if (resolveStyleName) {
+        const names = sa.styleIds
+          .map(resolveStyleName)
+          .filter(Boolean);
+        styles =
+          names.length > 0 ? names.join(", ") : `${sa.styleIds.length} style(s)`;
+      } else {
+        styles = `${sa.styleIds.length} fixed style(s)`;
+      }
+      break;
+    }
+    case "selected_style":
+      styles = sa.allowedStyleIds
+        ? `1 of ${sa.allowedStyleIds.length} styles`
+        : "1 selected style";
+      break;
+    case "course_group":
+      styles = `Pick ${sa.pickCount} of ${sa.poolStyleIds.length}`;
+      break;
+    case "social_only":
+      styles = "Socials only";
+      break;
+  }
+
+  return { styles, levels };
+}
+
+/**
+ * Human-readable summary of a product's access rule (combined string).
  * When resolveStyleName is provided, fixed style lists are rendered with names.
  */
 export function describeAccess(
   rule: ProductAccessRule,
   resolveStyleName?: (id: string) => string | undefined
 ): string {
-  const sa = rule.styleAccess;
-  const levels = rule.allowedLevels
-    ? rule.allowedLevels.join(", ")
-    : "All levels";
-
-  let styleDesc: string;
-  switch (sa.type) {
-    case "all":
-      styleDesc = "All styles";
-      break;
-    case "fixed": {
-      if (sa.styleIds.length === 0) {
-        styleDesc = "No styles (TBD)";
-      } else if (isStandardMembershipStyleSet(sa.styleIds)) {
-        styleDesc = "Excl. Salsa & Bachata";
-      } else if (resolveStyleName) {
-        const names = sa.styleIds
-          .map(resolveStyleName)
-          .filter(Boolean);
-        styleDesc =
-          names.length > 0 ? names.join(", ") : `${sa.styleIds.length} style(s)`;
-      } else {
-        styleDesc = `${sa.styleIds.length} fixed style(s)`;
-      }
-      break;
-    }
-    case "selected_style":
-      styleDesc = sa.allowedStyleIds
-        ? `1 of ${sa.allowedStyleIds.length} styles`
-        : "1 selected style";
-      break;
-    case "course_group":
-      styleDesc = `Pick ${sa.pickCount} of ${sa.poolStyleIds.length}`;
-      break;
-    case "social_only":
-      styleDesc = "Socials only";
-      break;
-  }
-
-  return `${styleDesc} · ${levels}`;
+  const { styles, levels } = describeAccessParts(rule, resolveStyleName);
+  return `${styles} · ${levels}`;
 }
 
 function isStandardMembershipStyleSet(styleIds: string[]): boolean {

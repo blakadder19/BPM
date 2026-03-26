@@ -223,8 +223,6 @@ export async function markStudentAttendance(params: {
   if (subId && !skipCredits) {
     const { getSettings } = await import("@/lib/services/settings-store");
     const settings = getSettings();
-    const newConsumed = isAttended(newStatus);
-
     let prevConsumed: boolean;
     if (previousStatus === null) {
       prevConsumed = isAttendanceFirst ? false : true;
@@ -238,35 +236,24 @@ export async function markStudentAttendance(params: {
       prevConsumed = true;
     }
 
-    // First-time attendance-first subscription: consume credit now
-    if (isAttendanceFirst && previousStatus === null && newConsumed) {
-      await adjustEntitlement(subId, false, true);
-      creditConsumed = true;
+    // Determine the correct consumed state for the new status.
+    // Attendance-first (first mark) and source-change: only consume on actual attendance (present/late).
+    // Booking-flow or subsequent updates: excused = refund, absent = depends on setting, present/late = consumed.
+    const isFirstAttendanceFirstMark = isAttendanceFirst && previousStatus === null;
+    let newShouldBeConsumed: boolean;
+    if (isFirstAttendanceFirstMark || prevSourceWasNonConsuming) {
+      newShouldBeConsumed = isAttended(newStatus);
+    } else if (newStatus === "excused") {
+      newShouldBeConsumed = false;
+    } else if (newStatus === "absent") {
+      newShouldBeConsumed = !settings.refundCreditOnAbsent;
+    } else {
+      newShouldBeConsumed = true;
     }
 
-    // Source changed from non-consuming to subscription: consume credit now
-    if (prevSourceWasNonConsuming && newConsumed) {
-      await adjustEntitlement(subId, false, true);
-      creditConsumed = true;
-    }
-
-    // Excused always refunds
-    if (newStatus === "excused" && prevConsumed) {
-      await adjustEntitlement(subId, true, false);
-      creditRestored = true;
-    }
-
-    // Absent: refund only if setting is ON
-    if (newStatus === "absent" && prevConsumed && settings.refundCreditOnAbsent) {
-      await adjustEntitlement(subId, true, false);
-      creditRestored = true;
-    }
-
-    // Reversal to present/late: re-consume credit if it was previously refunded
-    if (previousStatus !== null && !prevConsumed && !prevSourceWasNonConsuming && newConsumed) {
-      await adjustEntitlement(subId, false, true);
-      creditConsumed = true;
-    }
+    await adjustEntitlement(subId, prevConsumed, newShouldBeConsumed);
+    if (prevConsumed && !newShouldBeConsumed) creditRestored = true;
+    if (!prevConsumed && newShouldBeConsumed) creditConsumed = true;
   }
 
   // ── Penalty logic ──

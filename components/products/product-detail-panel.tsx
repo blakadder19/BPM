@@ -6,12 +6,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { formatCents } from "@/lib/utils";
 import type { MockProduct, MockSubscription } from "@/lib/mock-data";
+import type { ProductScope } from "./admin-products";
 
 interface ProductDetailPanelProps {
   product: MockProduct;
   subscriptions: MockSubscription[];
   studentNameMap: Record<string, string>;
   colSpan: number;
+  scope?: ProductScope;
 }
 
 export function ProductDetailPanel({
@@ -19,6 +21,7 @@ export function ProductDetailPanel({
   subscriptions,
   studentNameMap,
   colSpan,
+  scope,
 }: ProductDetailPanelProps) {
   const linkedSubs = subscriptions.filter((s) => s.productId === product.id);
   const activeSubs = linkedSubs.filter((s) => s.status === "active");
@@ -76,19 +79,11 @@ export function ProductDetailPanel({
           <Section title="Restrictions">
             <DL
               label="Allowed Styles"
-              value={
-                product.allowedStyleNames?.length
-                  ? product.allowedStyleNames.join(", ")
-                  : product.styleName ?? "All styles (unrestricted)"
-              }
+              value={scope?.styles ?? "—"}
             />
             <DL
               label="Allowed Levels"
-              value={
-                product.allowedLevels?.length
-                  ? product.allowedLevels.join(", ")
-                  : "All levels (unrestricted)"
-              }
+              value={scope?.levels ?? "—"}
             />
           </Section>
 
