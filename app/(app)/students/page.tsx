@@ -7,6 +7,7 @@ import {
   getBookingRepo,
   getPenaltyRepo,
   getAttendanceRepo,
+  getDanceStyleRepo,
 } from "@/lib/repositories";
 import { getWalletTransactions } from "@/lib/services/wallet-service";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
@@ -23,12 +24,13 @@ export default async function StudentsPage({
 
   await ensureOperationalDataHydrated();
 
-  const [students, subscriptions, walletTransactions, products, terms] = await Promise.all([
+  const [students, subscriptions, walletTransactions, products, terms, danceStyles] = await Promise.all([
     getStudentRepo().getAll(),
     getSubscriptionRepo().getAll(),
     getWalletTransactions(),
     getProductRepo().getAll(),
     getTermRepo().getAll(),
+    getDanceStyleRepo().getAll(),
   ]);
 
   const bookingSvc = getBookingRepo().getService();
@@ -83,6 +85,7 @@ export default async function StudentsPage({
       subscriptions={subscriptions}
       terms={terms}
       products={products}
+      danceStyles={danceStyles}
       walletTransactions={walletTransactions}
       bookings={bookings}
       penalties={penalties}

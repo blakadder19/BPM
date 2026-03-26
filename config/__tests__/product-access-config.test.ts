@@ -4,8 +4,7 @@
  * Validates that:
  *   - The static config is internally consistent
  *   - Socials cannot be booked and have no penalties/credits
- *   - Provisional rules (Yoga Gold, Latin Combo) do not break
- *     production booking flows
+ *   - All finalized product rules work correctly in booking flows
  *   - Every product rule produces a human-readable description
  *   - Credit deduction priority only contains valid product types
  */
@@ -186,14 +185,14 @@ describe("Student Practice — Member Benefit Access", () => {
   });
 });
 
-// ── Provisional Rules — Production Safety ───────────────────
+// ── Finalized Product Rules ─────────────────────────────────
 
-describe("Provisional Rules — Do Not Break Production Flows", () => {
+describe("Finalized Product Rules", () => {
   describe("Latin Combo (course_group)", () => {
     const rule = getAccessRule("p-latin-combo")!;
 
-    it("is marked provisional", () => {
-      expect(rule.isProvisional).toBe(true);
+    it("is finalized (not provisional)", () => {
+      expect(rule.isProvisional).toBe(false);
     });
 
     it("grants access when student selected the matching style", () => {
@@ -217,7 +216,41 @@ describe("Provisional Rules — Do Not Break Production Flows", () => {
     });
   });
 
-  describe("non-provisional products work correctly", () => {
+  describe("Gold Yoga Pass (yoga-only)", () => {
+    const rule = getAccessRule("p-yoga-gold")!;
+
+    it("is finalized (not provisional)", () => {
+      expect(rule.isProvisional).toBe(false);
+    });
+
+    it("grants access to yoga classes", () => {
+      const yogaClass: AccessClassContext = { classType: "class", danceStyleId: "ds-9", level: null };
+      expect(canAccessClass(rule, null, null, yogaClass).granted).toBe(true);
+    });
+
+    it("denies access to non-yoga classes", () => {
+      expect(canAccessClass(rule, null, null, bachataClass).granted).toBe(false);
+    });
+  });
+
+  describe("Rainbow Membership (all-access)", () => {
+    const rule = getAccessRule("p-mem-rainbow")!;
+
+    it("is finalized (not provisional)", () => {
+      expect(rule.isProvisional).toBe(false);
+    });
+
+    it("grants access to any class style", () => {
+      expect(canAccessClass(rule, null, null, bachataClass).granted).toBe(true);
+      expect(canAccessClass(rule, null, null, cubanClass).granted).toBe(true);
+    });
+
+    it("grants access to student practice", () => {
+      expect(canAccessClass(rule, null, null, practiceEvent).granted).toBe(true);
+    });
+  });
+
+  describe("other finalized products", () => {
     it("Drop-in (p-dropin) grants access to any class, any level", () => {
       const rule = getAccessRule("p-dropin")!;
       expect(rule.isProvisional).toBe(false);

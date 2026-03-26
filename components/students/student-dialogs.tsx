@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,10 +23,9 @@ import {
   createSubscriptionAction,
   updateSubscriptionAction,
 } from "@/lib/actions/subscriptions";
-import { getAccessRule, type StyleAccess } from "@/config/product-access";
+import { getAccessRule, buildDynamicAccessRulesMap, type StyleAccess } from "@/config/product-access";
 import type { StudentListItem } from "@/types/domain";
 import type { MockSubscription, MockProduct, MockTerm, MockDanceStyle } from "@/lib/mock-data";
-import { DANCE_STYLES } from "@/lib/mock-data";
 
 const SELECT_CLASS =
   "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100";
@@ -532,11 +531,13 @@ export function AddSubscriptionDialog({
   studentId,
   products,
   terms,
+  danceStyles,
   onClose,
 }: {
   studentId: string;
   products: MockProduct[];
   terms: MockTerm[];
+  danceStyles: MockDanceStyle[];
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -552,7 +553,8 @@ export function AddSubscriptionDialog({
   const groups = groupProducts(products);
   const eligibleTerms = terms.filter((t) => t.status === "active" || t.status === "upcoming");
 
-  const accessRule = selectedProductId ? getAccessRule(selectedProductId) : undefined;
+  const accessRulesMap = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
+  const accessRule = selectedProductId ? (accessRulesMap.get(selectedProductId) ?? getAccessRule(selectedProductId)) : undefined;
   const styleAccess = accessRule?.styleAccess;
 
   function handleProductChange(productId: string) {
@@ -577,14 +579,14 @@ export function AddSubscriptionDialog({
 
     if (styleAccess?.type === "selected_style" && selectedStyleId) {
       formData.set("selectedStyleId", selectedStyleId);
-      const style = DANCE_STYLES.find((s) => s.id === selectedStyleId);
+      const style = danceStyles.find((s) => s.id === selectedStyleId);
       if (style) formData.set("selectedStyleName", style.name);
     }
 
     if (styleAccess?.type === "course_group" && selectedStyleIds.length > 0) {
       formData.set("selectedStyleIds", JSON.stringify(selectedStyleIds));
       const names = selectedStyleIds
-        .map((id) => DANCE_STYLES.find((s) => s.id === id)?.name)
+        .map((id) => danceStyles.find((s) => s.id === id)?.name)
         .filter(Boolean) as string[];
       formData.set("selectedStyleNames", JSON.stringify(names));
     }
@@ -675,6 +677,7 @@ export function AddSubscriptionDialog({
 
             <StyleSelectionField
               styleAccess={styleAccess}
+              danceStyles={danceStyles}
               selectedStyleId={selectedStyleId}
               selectedStyleIds={selectedStyleIds}
               onSingleChange={setSelectedStyleId}
@@ -766,16 +769,21 @@ export function AddSubscriptionDialog({
 
 export function EditSubscriptionDialog({
   subscription: sub,
+  products,
+  danceStyles,
   onClose,
 }: {
   subscription: MockSubscription;
+  products: MockProduct[];
+  danceStyles: MockDanceStyle[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const accessRule = getAccessRule(sub.productId);
+  const accessRulesMap = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
+  const accessRule = accessRulesMap.get(sub.productId) ?? getAccessRule(sub.productId);
   const styleAccess = accessRule?.styleAccess;
 
   const [selectedStyleId, setSelectedStyleId] = useState(sub.selectedStyleId ?? "");
@@ -797,7 +805,7 @@ export function EditSubscriptionDialog({
 
     if (styleAccess?.type === "selected_style" && selectedStyleId) {
       formData.set("selectedStyleId", selectedStyleId);
-      const style = DANCE_STYLES.find((s) => s.id === selectedStyleId);
+      const style = danceStyles.find((s) => s.id === selectedStyleId);
       if (style) formData.set("selectedStyleName", style.name);
     } else if (!selectedStyleId) {
       formData.set("selectedStyleId", "");
@@ -807,7 +815,7 @@ export function EditSubscriptionDialog({
     if (styleAccess?.type === "course_group" && selectedStyleIds.length > 0) {
       formData.set("selectedStyleIds", JSON.stringify(selectedStyleIds));
       const names = selectedStyleIds
-        .map((id) => DANCE_STYLES.find((s) => s.id === id)?.name)
+        .map((id) => danceStyles.find((s) => s.id === id)?.name)
         .filter(Boolean) as string[];
       formData.set("selectedStyleNames", JSON.stringify(names));
     }
@@ -854,6 +862,7 @@ export function EditSubscriptionDialog({
 
             <StyleSelectionField
               styleAccess={styleAccess}
+              danceStyles={danceStyles}
               selectedStyleId={selectedStyleId}
               selectedStyleIds={selectedStyleIds}
               onSingleChange={setSelectedStyleId}
@@ -889,20 +898,22 @@ export function EditSubscriptionDialog({
 
 // ── Style Selection Field (shared between Add and Edit) ──────
 
-function resolveStylePool(styleAccess: StyleAccess): MockDanceStyle[] {
+function resolveStylePool(styleAccess: StyleAccess, danceStyles: MockDanceStyle[]): MockDanceStyle[] {
   switch (styleAccess.type) {
     case "selected_style":
       if (styleAccess.allowedStyleIds) {
         const allowed = new Set(styleAccess.allowedStyleIds);
-        return DANCE_STYLES.filter((s) => allowed.has(s.id));
+        return danceStyles.filter((s) => allowed.has(s.id));
       }
-      return [...DANCE_STYLES];
-    case "course_group":
+      return [...danceStyles];
+    case "course_group": {
       const pool = new Set(styleAccess.poolStyleIds);
-      return DANCE_STYLES.filter((s) => pool.has(s.id));
-    case "fixed":
+      return danceStyles.filter((s) => pool.has(s.id));
+    }
+    case "fixed": {
       const fixed = new Set(styleAccess.styleIds);
-      return DANCE_STYLES.filter((s) => fixed.has(s.id));
+      return danceStyles.filter((s) => fixed.has(s.id));
+    }
     default:
       return [];
   }
@@ -910,12 +921,14 @@ function resolveStylePool(styleAccess: StyleAccess): MockDanceStyle[] {
 
 function StyleSelectionField({
   styleAccess,
+  danceStyles,
   selectedStyleId,
   selectedStyleIds,
   onSingleChange,
   onMultiToggle,
 }: {
   styleAccess: StyleAccess | undefined;
+  danceStyles: MockDanceStyle[];
   selectedStyleId: string;
   selectedStyleIds: string[];
   onSingleChange: (id: string) => void;
@@ -924,7 +937,7 @@ function StyleSelectionField({
   if (!styleAccess) return null;
 
   if (styleAccess.type === "selected_style") {
-    const styles = resolveStylePool(styleAccess);
+    const styles = resolveStylePool(styleAccess, danceStyles);
     return (
       <div className="space-y-1.5">
         <Label htmlFor="as-style">Style *</Label>
@@ -948,7 +961,7 @@ function StyleSelectionField({
   }
 
   if (styleAccess.type === "course_group") {
-    const styles = resolveStylePool(styleAccess);
+    const styles = resolveStylePool(styleAccess, danceStyles);
     const { pickCount } = styleAccess;
     return (
       <div className="space-y-1.5">
@@ -986,7 +999,7 @@ function StyleSelectionField({
   }
 
   if (styleAccess.type === "fixed") {
-    const styles = resolveStylePool(styleAccess);
+    const styles = resolveStylePool(styleAccess, danceStyles);
     if (styles.length === 0) return null;
     return (
       <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-xs text-gray-600">

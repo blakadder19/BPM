@@ -165,7 +165,7 @@ function RosterSection({ roster, assignments, scheduleInstances }: { roster: Tea
                   <Td className="font-medium text-gray-900">{t.fullName}</Td>
                   <Td>
                     {t.category ? (
-                      <Badge variant={t.category === "core_instructor" ? "info" : t.category === "yoga" ? "success" : "default"}>
+                      <Badge variant={t.category === "core_instructor" ? "info" : t.category === "yoga" ? "success" : t.category === "crew" ? "warning" : "default"}>
                         {TEACHER_CATEGORY_LABELS[t.category] ?? t.category}
                       </Badge>
                     ) : (

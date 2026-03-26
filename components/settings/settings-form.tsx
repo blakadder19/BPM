@@ -215,17 +215,14 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
                 checked={s.weeklyEventsBookable}
                 onChange={(v) => setBool("weeklyEventsBookable", v)}
               />
-              <div className="flex items-center gap-2">
-                <CheckboxField
-                  name="studentPracticeBookable"
-                  label="Student Practice is bookable"
-                  checked={s.studentPracticeBookable}
-                  onChange={(v) => setBool("studentPracticeBookable", v)}
-                />
-                <Badge variant="warning">PROVISIONAL</Badge>
-              </div>
+              <CheckboxField
+                name="studentPracticeBookable"
+                label="Student Practice is bookable"
+                checked={s.studentPracticeBookable}
+                onChange={(v) => setBool("studentPracticeBookable", v)}
+              />
               <p className="text-xs text-gray-400 pt-1">
-                Student Practice bookability is pending academy confirmation.
+                When disabled, Student Practice is pay-at-reception only (not bookable online).
               </p>
             </CardContent>
           </Card>

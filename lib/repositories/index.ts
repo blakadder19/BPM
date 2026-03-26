@@ -18,6 +18,7 @@ import type { IAttendanceRepository } from "./interfaces/attendance-repository";
 import type { IPenaltyRepository } from "./interfaces/penalty-repository";
 import type { ICreditRepository } from "./interfaces/credit-repository";
 import type { IStudioHireRepository } from "./interfaces/studio-hire-repository";
+import type { IDanceStyleRepository } from "./interfaces/dance-style-repository";
 
 import { memorySettingsRepo } from "./memory/settings-repository";
 import { memoryBookingRepo } from "./memory/booking-repository";
@@ -43,12 +44,11 @@ export function getStudentRepo(): IStudentRepository {
 }
 
 export function getProductRepo(): IProductRepository {
-  if (getDataProvider() === "supabase") {
+  const { memoryProductRepo } = require("./memory/product-repository");
+  return resolveRepo(memoryProductRepo, () => {
     const { supabaseProductRepo } = require("./supabase/product-repository");
     return supabaseProductRepo;
-  }
-  const { hybridProductRepo } = require("./hybrid-product-repository");
-  return hybridProductRepo;
+  });
 }
 
 export function getTermRepo(): ITermRepository {
@@ -118,4 +118,13 @@ export function getStudioHireRepo(): IStudioHireRepository {
     const { supabaseStudioHireRepo } = require("./supabase/studio-hire-repository");
     return supabaseStudioHireRepo;
   });
+}
+
+export function getDanceStyleRepo(): IDanceStyleRepository {
+  if (getDataProvider() === "supabase") {
+    const { supabaseDanceStyleRepo } = require("./supabase/dance-style-repository");
+    return supabaseDanceStyleRepo;
+  }
+  const { memoryDanceStyleRepo } = require("./memory/dance-style-repository");
+  return memoryDanceStyleRepo;
 }

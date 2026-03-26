@@ -20,6 +20,7 @@ const CATEGORY_OPTIONS = [
   { value: "instructor", label: "Instructor" },
   { value: "assistant", label: "Assistant" },
   { value: "yoga", label: "Yoga" },
+  { value: "crew", label: "Crew" },
 ];
 
 // ── Teacher Roster dialogs ──────────────────────────────────

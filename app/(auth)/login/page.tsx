@@ -56,7 +56,6 @@ export default function LoginPage() {
     }
 
     router.push(next || "/dashboard");
-    router.refresh();
   }
 
   function fillDemo(email: string) {

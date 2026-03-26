@@ -38,6 +38,7 @@ import { validateTokenCheckInAction } from "@/lib/actions/checkin";
 import type { AttendanceMark, ClassType } from "@/types/domain";
 import type { StoredAttendance } from "@/lib/services/attendance-service";
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
+import { checkStudentPracticePayment } from "@/lib/domain/student-practice-rules";
 
 // ── Prop types (serializable slices of mock data) ────────────
 
@@ -201,6 +202,7 @@ export function AttendanceClient({
           students={studentOptions ?? []}
           classes={allClasses}
           subscriptions={activeSubscriptions ?? []}
+          attendanceRecords={attendanceRecords}
           onClose={() => setShowAddAttendance(false)}
           currentUserName={currentUserName}
         />
@@ -957,33 +959,33 @@ function HistoryRow({
 
   return (
     <>
-      <tr className={isPending ? "opacity-60" : undefined}>
-        <Td className="font-medium text-gray-900">{a.studentName}</Td>
-        <Td>{a.classTitle}</Td>
-        <Td>{formatDate(a.date)}</Td>
-        <Td>
-          <select
-            value={currentStatus}
-            onChange={(e) => handleStatusChange(e.target.value as AttendanceMark)}
-            disabled={isPending}
-            className={cn(
-              "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-100",
-              currentStatus === "present" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-              currentStatus === "late" && "border-amber-200 bg-amber-50 text-amber-700",
-              currentStatus === "absent" && "border-red-200 bg-red-50 text-red-700",
-              currentStatus === "excused" && "border-blue-200 bg-blue-50 text-blue-700"
-            )}
-          >
-            <option value="present">Present</option>
-            <option value="late">Late</option>
-            <option value="absent">Absent</option>
-            <option value="excused">Excused</option>
-          </select>
-        </Td>
+    <tr className={isPending ? "opacity-60" : undefined}>
+      <Td className="font-medium text-gray-900">{a.studentName}</Td>
+      <Td>{a.classTitle}</Td>
+      <Td>{formatDate(a.date)}</Td>
+      <Td>
+        <select
+          value={currentStatus}
+          onChange={(e) => handleStatusChange(e.target.value as AttendanceMark)}
+          disabled={isPending}
+          className={cn(
+            "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-100",
+            currentStatus === "present" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+            currentStatus === "late" && "border-amber-200 bg-amber-50 text-amber-700",
+            currentStatus === "absent" && "border-red-200 bg-red-50 text-red-700",
+            currentStatus === "excused" && "border-blue-200 bg-blue-50 text-blue-700"
+          )}
+        >
+          <option value="present">Present</option>
+          <option value="late">Late</option>
+          <option value="absent">Absent</option>
+          <option value="excused">Excused</option>
+        </select>
+      </Td>
         <Td><SourceBadge source={a.source ?? "walk_in"} /></Td>
-        <Td className="capitalize">{a.checkInMethod}</Td>
-        <Td>{a.markedBy}</Td>
-        <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
+      <Td className="capitalize">{a.checkInMethod}</Td>
+      <Td>{a.markedBy}</Td>
+      <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
         <Td>
           {isDeletable && (
             <button
@@ -996,7 +998,7 @@ function HistoryRow({
             </button>
           )}
         </Td>
-      </tr>
+    </tr>
 
       {reversalConfirm && (
         <tr><td colSpan={9} className="p-0">
@@ -1186,12 +1188,14 @@ function AddAttendanceDialog({
   students,
   classes,
   subscriptions,
+  attendanceRecords,
   onClose,
   currentUserName,
 }: {
   students: StudentOption[];
   classes: BookableClassProp[];
   subscriptions: SubscriptionOption[];
+  attendanceRecords: StoredAttendance[];
   onClose: () => void;
   currentUserName?: string;
 }) {
@@ -1225,6 +1229,38 @@ function AddAttendanceDialog({
     ? CLASS_TYPE_CONFIG[selectedClass.classType as ClassType]
     : null;
   const creditsApply = classTypeConf?.creditsApply ?? true;
+
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
+
+  const classTypeByInstanceId = useMemo(
+    () => new Map(classes.map((c) => [c.id, c.classType])),
+    [classes]
+  );
+
+  const practiceCheck = useMemo(() => {
+    if (!selectedClass || selectedClass.classType !== "student_practice" || !studentId) {
+      return null;
+    }
+    const sameDayAttended = attendanceRecords
+      .filter(
+        (a) =>
+          a.studentId === studentId &&
+          a.date === selectedClass.date &&
+          (a.status === "present" || a.status === "late")
+      )
+      .map((a) => a.bookableClassId);
+
+    return checkStudentPracticePayment(
+      studentId,
+      selectedClass.date,
+      sameDayAttended,
+      classTypeByInstanceId
+    );
+  }, [studentId, selectedClass, attendanceRecords, classTypeByInstanceId]);
+
+  useEffect(() => {
+    setPaymentConfirmed(false);
+  }, [studentId, bookableClassId]);
 
   const effectiveSourceOptions = useMemo(() => {
     if (!creditsApply) {
@@ -1305,12 +1341,34 @@ function AddAttendanceDialog({
                 {eligibleClasses.map((c) => <option key={c.id} value={c.id}>{c.title} — {c.date} {c.startTime}</option>)}
               </select>
               {eligibleClasses.length === 0 && <p className="mt-1 text-xs text-gray-400">No eligible classes (today or past) found.</p>}
-              {selectedClass && selectedClass.classType !== "class" && (
+              {selectedClass && selectedClass.classType !== "class" && selectedClass.classType !== "student_practice" && (
                 <div className="mt-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
                   <span className="font-medium">{classTypeConf?.label ?? selectedClass.classType}</span>
-                  {selectedClass.classType === "social"
-                    ? " — Socials do not consume credits, generate penalties, or require bookings."
-                    : " — Student Practice does not consume credits or generate penalties."}
+                  {" — Socials do not consume credits, generate penalties, or require bookings."}
+                </div>
+              )}
+              {practiceCheck && practiceCheck.requiresPayment && (
+                <div className="mt-1.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <p className="flex items-center gap-1.5 font-semibold">
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                    Payment Required
+                  </p>
+                  <p className="mt-1">{practiceCheck.reason}</p>
+                  <label className="mt-2 flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={paymentConfirmed}
+                      onChange={(e) => setPaymentConfirmed(e.target.checked)}
+                      className="rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                    />
+                    <span className="font-medium">I confirm payment has been collected</span>
+                  </label>
+                </div>
+              )}
+              {practiceCheck && !practiceCheck.requiresPayment && (
+                <div className="mt-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                  <span className="font-medium">Student Practice — Free entry. </span>
+                  {practiceCheck.reason}
                 </div>
               )}
             </div>
@@ -1335,9 +1393,9 @@ function AddAttendanceDialog({
                       <option key={s.id} value={s.id}>
                         {s.productName}
                         {s.remainingCredits !== null ? ` (${s.remainingCredits} credits left)` : s.classesPerTerm !== null ? ` (${s.classesPerTerm - s.classesUsed} classes left)` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  </option>
+                ))}
+              </select>
                 )}
                 {selectedSub && creditsApply && (
                   <p className="mt-1 text-xs text-indigo-600">
@@ -1349,7 +1407,7 @@ function AddAttendanceDialog({
                     No credit will be consumed — {classTypeConf?.label} events do not use credits.
                   </p>
                 )}
-              </div>
+            </div>
             )}
 
             <div>
@@ -1396,7 +1454,12 @@ function AddAttendanceDialog({
           </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>Cancel</Button>
-            <Button type="submit" disabled={isPending}>{isPending ? "Saving…" : "Create Record"}</Button>
+            <Button
+              type="submit"
+              disabled={isPending || (practiceCheck?.requiresPayment && !paymentConfirmed)}
+            >
+              {isPending ? "Saving…" : "Create Record"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

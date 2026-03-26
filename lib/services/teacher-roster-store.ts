@@ -17,6 +17,7 @@ export type TeacherCategory =
   | "instructor"
   | "assistant"
   | "yoga"
+  | "crew"
   | null;
 
 export const TEACHER_CATEGORY_LABELS: Record<string, string> = {
@@ -24,6 +25,7 @@ export const TEACHER_CATEGORY_LABELS: Record<string, string> = {
   instructor: "Instructor",
   assistant: "Assistant",
   yoga: "Yoga",
+  crew: "Crew",
 };
 
 export interface Teacher {
@@ -37,8 +39,20 @@ export interface Teacher {
 }
 
 const SEED_TEACHERS: Teacher[] = [
-  { id: "t-01", fullName: "María García", email: "maria@bpm.dance", phone: null, notes: null, category: "instructor", isActive: true },
-  { id: "t-02", fullName: "Carlos Rivera", email: "carlos@bpm.dance", phone: null, notes: null, category: "instructor", isActive: true },
+  { id: "t-01", fullName: "Zaria",    email: null, phone: null, notes: null, category: "core_instructor", isActive: true },
+  { id: "t-02", fullName: "Guillermo", email: null, phone: null, notes: null, category: "core_instructor", isActive: true },
+  { id: "t-03", fullName: "Berkan",   email: null, phone: null, notes: null, category: "core_instructor", isActive: true },
+  { id: "t-04", fullName: "Bilge",    email: null, phone: null, notes: null, category: "core_instructor", isActive: true },
+  { id: "t-05", fullName: "Miguel",   email: null, phone: null, notes: null, category: "instructor", isActive: true },
+  { id: "t-06", fullName: "Seda",     email: null, phone: null, notes: null, category: "instructor", isActive: true },
+  { id: "t-07", fullName: "Mario",    email: null, phone: null, notes: null, category: "instructor", isActive: true },
+  { id: "t-08", fullName: "Camila",   email: null, phone: null, notes: null, category: "instructor", isActive: true },
+  { id: "t-09", fullName: "Jennifer", email: null, phone: null, notes: null, category: "yoga", isActive: true },
+  { id: "t-10", fullName: "Gizem",    email: null, phone: null, notes: null, category: "yoga", isActive: true },
+  { id: "t-11", fullName: "Corey",    email: null, phone: null, notes: null, category: "crew", isActive: true },
+  { id: "t-12", fullName: "Orlaith",  email: null, phone: null, notes: null, category: "crew", isActive: true },
+  { id: "t-13", fullName: "Marta",    email: null, phone: null, notes: null, category: "crew", isActive: true },
+  { id: "t-14", fullName: "Laura",    email: null, phone: null, notes: null, category: "crew", isActive: true },
 ];
 
 let teachers: Teacher[] | null = null;

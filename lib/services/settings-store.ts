@@ -62,9 +62,7 @@ export interface AppSettings {
   provisionalNotes: string;
 }
 
-const DEFAULT_PROVISIONAL_NOTES = `- Rainbow membership: exact scope pending academy confirmation
-- Beginners Latin Combo: two-of-three Beginner 1 mapping pending
-- Student Practice: final bookable/penalty rule pending academy confirmation`;
+const DEFAULT_PROVISIONAL_NOTES = ``;
 
 function defaults(): AppSettings {
   return {

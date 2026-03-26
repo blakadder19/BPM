@@ -9,7 +9,7 @@ import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
-import { getTermWeekNumber } from "@/lib/domain/term-rules";
+import { deriveTermStatus, getTermWeekNumber } from "@/lib/domain/term-rules";
 import { AddTermDialog, EditTermDialog } from "./term-dialogs";
 import type { MockTerm } from "@/lib/mock-data";
 
@@ -50,7 +50,8 @@ export function AdminTerms({ terms }: AdminTermsProps) {
       ) : (
         <AdminTable headers={TABLE_HEADERS} count={terms.length}>
           {terms.map((t) => {
-            const isActive = t.status === "active";
+            const effectiveStatus = deriveTermStatus(t, today);
+            const isActive = effectiveStatus === "active";
             const weekNum = isActive ? getTermWeekNumber(today, t) : null;
             return (
               <tr key={t.id} className="hover:bg-gray-50">
@@ -58,7 +59,7 @@ export function AdminTerms({ terms }: AdminTermsProps) {
                 <Td>{formatDate(t.startDate)}</Td>
                 <Td>{formatDate(t.endDate)}</Td>
                 <Td>
-                  <StatusBadge status={t.status} />
+                  <StatusBadge status={effectiveStatus} />
                 </Td>
                 <Td>
                   {weekNum !== null ? (

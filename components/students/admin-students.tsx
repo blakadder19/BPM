@@ -31,6 +31,7 @@ import type {
   MockBooking,
   MockPenalty,
   MockProduct,
+  MockDanceStyle,
 } from "@/lib/mock-data";
 
 const ROLE_OPTIONS = [
@@ -72,6 +73,7 @@ interface AdminStudentsProps {
   subscriptions: MockSubscription[];
   terms: MockTerm[];
   products: MockProduct[];
+  danceStyles: MockDanceStyle[];
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
@@ -84,6 +86,7 @@ export function AdminStudents({
   subscriptions,
   terms,
   products,
+  danceStyles,
   walletTransactions,
   bookings,
   penalties,
@@ -314,12 +317,13 @@ export function AdminStudents({
           studentId={addSubStudentId}
           products={products}
           terms={terms}
+          danceStyles={danceStyles}
           onClose={() => setAddSubStudentId(null)}
         />
       )}
 
       {editSub && (
-        <EditSubscriptionDialog subscription={editSub} onClose={() => setEditSub(null)} />
+        <EditSubscriptionDialog subscription={editSub} products={products} danceStyles={danceStyles} onClose={() => setEditSub(null)} />
       )}
     </div>
   );

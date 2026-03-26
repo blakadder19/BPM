@@ -40,6 +40,11 @@ const BACHATA_STYLE_IDS = ["ds-1", "ds-2", "ds-3"];
 const SALSA_STYLE_IDS = ["ds-4", "ds-5"];
 const YOGA_STYLE_IDS = ["ds-9"];
 export const ALL_LATIN_STYLE_IDS = [...BACHATA_STYLE_IDS, ...SALSA_STYLE_IDS];
+
+/**
+ * Latin Combo pool: Bachata (ds-1), Cuban (ds-4), Salsa Line (ds-5).
+ * Student picks 2 of these 3 Beginner 1 courses.
+ */
 export const LATIN_COMBO_POOL_STYLE_IDS = ["ds-1", "ds-4", "ds-5"];
 
 /**
@@ -109,8 +114,8 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
     allowedClassTypes: ["class"],
     styleAccess: { type: "fixed", styleIds: YOGA_STYLE_IDS },
     allowedLevels: null,
-    isProvisional: true,
-    provisionalNote: "Gold Yoga Pass extrapolated from pricing pattern — pending confirmation",
+    isProvisional: false,
+    provisionalNote: null,
   },
 
   // ── Promo passes ────────────────────────────────────────
@@ -131,8 +136,8 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
       pickCount: 2,
     },
     allowedLevels: ["Beginner 1"],
-    isProvisional: true,
-    provisionalNote: "Pick 2 of 3 Latin styles; exact pool configurable",
+    isProvisional: false,
+    provisionalNote: null,
   },
 
   // ── Social Pass ─────────────────────────────────────────
@@ -280,9 +285,11 @@ export function getAccessRulesMap(): Map<string, ProductAccessRule> {
  * 1. Start with the hardcoded rules (covers seed products).
  * 2. For each real product NOT already in the map, match by name to a seed product's rule.
  * 3. If no name match, infer a default rule from the product's type and properties.
+ * 4. When danceStyles are provided, remap mock style IDs in access rules to real UUIDs.
  */
 export function buildDynamicAccessRulesMap(
-  products: { id: string; name: string; productType: string; allowedLevels: string[] | null }[]
+  products: { id: string; name: string; productType: string; allowedLevels: string[] | null }[],
+  danceStyles?: { id: string; name: string }[]
 ): Map<string, ProductAccessRule> {
   const map = new Map(rulesByProductId);
 
@@ -297,12 +304,17 @@ export function buildDynamicAccessRulesMap(
     // seed data unavailable — rely on inference below
   }
 
+  const mockIdRemapper = danceStyles ? buildMockIdRemapper(danceStyles) : null;
+
   for (const p of products) {
     if (map.has(p.id)) continue;
 
     const matched = seedNameToRule.get(p.name);
     if (matched) {
-      map.set(p.id, { ...matched, productId: p.id });
+      const remapped = mockIdRemapper
+        ? { ...matched, productId: p.id, styleAccess: remapStyleAccess(matched.styleAccess, mockIdRemapper) }
+        : { ...matched, productId: p.id };
+      map.set(p.id, remapped);
       continue;
     }
 
@@ -318,6 +330,53 @@ export function buildDynamicAccessRulesMap(
   }
 
   return map;
+}
+
+/**
+ * Maps mock style IDs (e.g. "ds-1") to real Supabase UUIDs by matching names.
+ */
+function buildMockIdRemapper(
+  realStyles: { id: string; name: string }[]
+): Map<string, string> {
+  let mockStyles: { id: string; name: string }[];
+  try {
+    const { DANCE_STYLES } = require("@/lib/mock-data");
+    mockStyles = DANCE_STYLES;
+  } catch {
+    return new Map();
+  }
+
+  const realByName = new Map(realStyles.map((s) => [s.name, s.id]));
+  const remap = new Map<string, string>();
+  for (const mock of mockStyles) {
+    const realId = realByName.get(mock.name);
+    if (realId && realId !== mock.id) {
+      remap.set(mock.id, realId);
+    }
+  }
+  return remap;
+}
+
+function remapStyleAccess(
+  sa: StyleAccess,
+  remap: Map<string, string>
+): StyleAccess {
+  if (remap.size === 0) return sa;
+
+  const r = (id: string) => remap.get(id) ?? id;
+
+  switch (sa.type) {
+    case "fixed":
+      return { ...sa, styleIds: sa.styleIds.map(r) };
+    case "selected_style":
+      return sa.allowedStyleIds
+        ? { ...sa, allowedStyleIds: sa.allowedStyleIds.map(r) }
+        : sa;
+    case "course_group":
+      return { ...sa, poolStyleIds: sa.poolStyleIds.map(r) };
+    default:
+      return sa;
+  }
 }
 
 /**

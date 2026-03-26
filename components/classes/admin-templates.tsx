@@ -27,8 +27,12 @@ const DAY_OPTIONS = [
   { value: "4", label: "Thu" },
   { value: "5", label: "Fri" },
   { value: "6", label: "Sat" },
-  { value: "7", label: "Sun" },
+  { value: "0", label: "Sun" },
 ];
+
+function mondayFirstOrder(dow: number): number {
+  return dow === 0 ? 7 : dow;
+}
 
 const TYPE_OPTIONS = [
   { value: "class", label: "Class" },
@@ -98,23 +102,28 @@ export function AdminTemplates({
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return templates.filter((c) => {
-      if (
-        q &&
-        !c.title.toLowerCase().includes(q) &&
-        !(c.styleName?.toLowerCase().includes(q)) &&
-        !(c.level?.toLowerCase().includes(q)) &&
-        !c.location.toLowerCase().includes(q)
-      ) {
-        return false;
-      }
-      if (dayFilter && c.dayOfWeek !== Number(dayFilter)) return false;
-      if (typeFilter && c.classType !== typeFilter) return false;
-      if (activeFilter === "active" && !c.isActive) return false;
-      if (activeFilter === "inactive" && c.isActive) return false;
-      if (styleFilter && c.styleName !== styleFilter) return false;
-      return true;
-    });
+    return templates
+      .filter((c) => {
+        if (
+          q &&
+          !c.title.toLowerCase().includes(q) &&
+          !(c.styleName?.toLowerCase().includes(q)) &&
+          !(c.level?.toLowerCase().includes(q)) &&
+          !c.location.toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+        if (dayFilter && c.dayOfWeek !== Number(dayFilter)) return false;
+        if (typeFilter && c.classType !== typeFilter) return false;
+        if (activeFilter === "active" && !c.isActive) return false;
+        if (activeFilter === "inactive" && c.isActive) return false;
+        if (styleFilter && c.styleName !== styleFilter) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const dayDiff = mondayFirstOrder(a.dayOfWeek) - mondayFirstOrder(b.dayOfWeek);
+        return dayDiff !== 0 ? dayDiff : a.startTime.localeCompare(b.startTime);
+      });
   }, [templates, search, dayFilter, typeFilter, activeFilter, styleFilter]);
 
   function handleToggleActive(id: string) {
@@ -197,7 +206,7 @@ export function AdminTemplates({
                         <Badge variant="warning">Not Bookable</Badge>
                       )}
                       {c.classType === "student_practice" && !settings.studentPracticeBookable && (
-                        <Badge variant="warning">Provisional</Badge>
+                        <Badge variant="warning">Not Bookable</Badge>
                       )}
                     </div>
                   </Td>

@@ -359,7 +359,7 @@ export function TemplateDetailPanel({
     c.classType === "social" && !settings.socialsBookable
       ? "Socials are not bookable (Settings)"
       : c.classType === "student_practice" && !settings.studentPracticeBookable
-        ? "Student Practice is not bookable / provisional (Settings)"
+        ? "Student Practice is not bookable (Settings)"
         : null;
 
   return (
