@@ -11,9 +11,11 @@ const SHORT_MONTHS = [
 ] as const;
 
 export function formatDate(date: Date | string): string {
+  if (typeof date === "string" && date === "") return "—";
   const d = typeof date === "string"
     ? new Date(date.includes("T") ? date : date + "T12:00:00Z")
     : date;
+  if (isNaN(d.getTime())) return "—";
   return `${SHORT_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 

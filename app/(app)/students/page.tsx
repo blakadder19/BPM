@@ -12,6 +12,8 @@ import {
 import { getWalletTransactions } from "@/lib/services/wallet-service";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { getInstances } from "@/lib/services/schedule-store";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { AdminStudents } from "@/components/students/admin-students";
 
 export default async function StudentsPage({
@@ -34,6 +36,32 @@ export default async function StudentsPage({
   ]);
 
   const bookingSvc = getBookingRepo().getService();
+
+  const instances = getInstances();
+  const allDanceStyles = getDanceStyles();
+  bookingSvc.refreshClasses(
+    instances.map((bc) => {
+      const style = bc.styleName
+        ? allDanceStyles.find((s) => s.name === bc.styleName)
+        : null;
+      return {
+        id: bc.id,
+        title: bc.title,
+        classType: bc.classType,
+        styleName: bc.styleName,
+        danceStyleRequiresBalance: style?.requiresRoleBalance ?? false,
+        status: bc.status,
+        date: bc.date,
+        startTime: bc.startTime,
+        endTime: bc.endTime,
+        maxCapacity: bc.maxCapacity,
+        leaderCap: bc.leaderCap,
+        followerCap: bc.followerCap,
+        location: bc.location,
+      };
+    })
+  );
+
   const penaltySvc = getPenaltyRepo().getService();
   const attendanceSvc = getAttendanceRepo().getService();
   const bookings = bookingSvc.getAllBookings().map((b) => {

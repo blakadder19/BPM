@@ -68,7 +68,11 @@ export function StudentDetailPanel({
     .slice(0, 10);
 
   const recentBookings = bookings
-    .filter((b) => b.studentId === student.id)
+    .filter((b) =>
+      b.studentId === student.id &&
+      (b.status === "confirmed" || b.status === "checked_in") &&
+      b.date !== ""
+    )
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
 
