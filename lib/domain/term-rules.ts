@@ -125,3 +125,24 @@ export function isBeginnerEntryWeek(
 export function isBeginnerEntryClass(level: string | null): boolean {
   return beginnerMaxEntryWeek(level) > 0;
 }
+
+/**
+ * Given a list of terms sorted by startDate and a reference term,
+ * returns the term whose startDate immediately follows the reference
+ * term's endDate (i.e. starts the day after or within a short gap).
+ *
+ * "Consecutive" is defined as: the next term in chronological order
+ * after the reference term, regardless of gap size. This matches the
+ * BPM term structure where terms follow sequentially.
+ */
+export function getNextConsecutiveTerm<T extends TermLike>(
+  terms: T[],
+  referenceTermId: string
+): T | null {
+  const sorted = [...terms].sort((a, b) =>
+    a.startDate.localeCompare(b.startDate)
+  );
+  const idx = sorted.findIndex((t) => t.id === referenceTermId);
+  if (idx === -1 || idx === sorted.length - 1) return null;
+  return sorted[idx + 1];
+}

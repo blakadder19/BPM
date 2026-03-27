@@ -16,6 +16,8 @@ interface BookingDetailPanelProps {
   onViewWaitlist: () => void;
   onRestore?: () => void;
   hasLinkedPenalty?: boolean;
+  isOrphaned?: boolean;
+  classEnded?: boolean;
 }
 
 export function BookingDetailPanel({
@@ -27,14 +29,23 @@ export function BookingDetailPanel({
   onViewWaitlist,
   onRestore,
   hasLinkedPenalty,
+  isOrphaned,
+  classEnded,
 }: BookingDetailPanelProps) {
   const isActive = b.status === "confirmed" || b.status === "checked_in";
   const isCancelled = b.status === "cancelled" || b.status === "late_cancelled";
+  const actionsDisabled = isOrphaned || classEnded;
 
   return (
     <tr>
       <td colSpan={colSpan} className="bg-gray-50 p-0">
         <div className="grid gap-5 px-8 py-5 md:grid-cols-2">
+          {isOrphaned && (
+            <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              <p className="font-medium">Orphaned booking</p>
+              <p className="mt-1">The linked class instance no longer exists. Only deletion is available.</p>
+            </div>
+          )}
           <Section title="Student">
             <DL label="Name" value={b.studentName} />
             <DL label="Student ID" value={b.studentId ?? "—"} />
@@ -133,19 +144,19 @@ export function BookingDetailPanel({
 
           <Section title="Actions" className="md:col-span-2">
             <div className="flex flex-wrap items-center gap-2">
-              {b.status === "confirmed" && (
+              {b.status === "confirmed" && !actionsDisabled && (
                 <Button variant="outline" size="sm" onClick={onCheckIn}>
                   <Check className="h-3.5 w-3.5 mr-1" />
                   Check In
                 </Button>
               )}
-              {isActive && (
+              {isActive && !actionsDisabled && (
                 <Button variant="danger" size="sm" onClick={onCancel}>
                   <XIcon className="h-3.5 w-3.5 mr-1" />
                   Cancel Booking
                 </Button>
               )}
-              {isCancelled && onRestore && (
+              {isCancelled && onRestore && !actionsDisabled && (
                 <Button variant="outline" size="sm" onClick={onRestore}>
                   <RotateCcw className="h-3.5 w-3.5 mr-1" />
                   Restore Booking

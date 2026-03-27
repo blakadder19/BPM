@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { CreditService, type StoredSubscription } from "../credit-service";
+import { getAccessRulesMap } from "@/config/product-access";
 
 function makeSub(overrides: Partial<StoredSubscription> & { id: string }): StoredSubscription {
   return {
@@ -118,6 +119,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-4",
         level: "Beginner 1",
         className: "Cuban Beginner 1",
+        accessRules: getAccessRulesMap(),
       });
 
       expect(result.deducted).toBe(true);
@@ -137,6 +139,8 @@ describe("CreditService", () => {
         }),
       ]);
 
+      const rules = getAccessRulesMap();
+
       const bachata = service.deductForBooking({
         studentId: "s-1",
         bookingId: "b-1",
@@ -144,6 +148,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-1",
         level: "Beginner 1",
         className: "Bachata Beginner 1",
+        accessRules: rules,
       });
       expect(bachata.deducted).toBe(true);
 
@@ -154,6 +159,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-4",
         level: "Beginner 1",
         className: "Cuban Beginner 1",
+        accessRules: rules,
       });
       expect(cuban.deducted).toBe(false);
       expect(cuban.reason).toContain("No subscription covers");

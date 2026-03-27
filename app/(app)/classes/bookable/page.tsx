@@ -8,6 +8,7 @@ import { getPresets } from "@/lib/services/pair-preset-store";
 import { getSettings } from "@/lib/services/settings-store";
 import { getTermRepo } from "@/lib/repositories";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
+import { getTodayStr } from "@/lib/domain/datetime";
 import { AdminSchedule } from "@/components/classes/admin-schedule";
 
 export default async function BookableClassesPage({
@@ -53,6 +54,7 @@ export default async function BookableClassesPage({
       pairPresets={pairPresets}
       isDev={isDev}
       initialSearch={params.search ?? ""}
+      today={getTodayStr()}
     />
   );
 }

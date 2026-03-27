@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/utils";
-import { getAccessRule, describeAccess } from "@/config/product-access";
+import type { MockProduct } from "@/lib/mock-data";
 import { deriveDisplayStatus } from "@/lib/domain/subscription-display-status";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
@@ -32,6 +32,7 @@ interface StudentDetailPanelProps {
   student: StudentListItem;
   subscriptions: MockSubscription[];
   terms: MockTerm[];
+  products?: MockProduct[];
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
@@ -42,10 +43,21 @@ interface StudentDetailPanelProps {
   colSpan: number;
 }
 
+function describeProductScope(p: MockProduct): string {
+  const styles = p.allowedStyleNames?.length
+    ? p.allowedStyleNames.join(", ")
+    : p.styleName ?? "All styles";
+  const levels = p.allowedLevels?.length
+    ? p.allowedLevels.join(", ")
+    : "All levels";
+  return `${styles} · ${levels}`;
+}
+
 export function StudentDetailPanel({
   student,
   subscriptions,
   terms,
+  products = [],
   walletTransactions,
   bookings,
   penalties,
@@ -68,7 +80,11 @@ export function StudentDetailPanel({
     .slice(0, 10);
 
   const recentBookings = bookings
-    .filter((b) => b.studentId === student.id)
+    .filter((b) =>
+      b.studentId === student.id &&
+      (b.status === "confirmed" || b.status === "checked_in") &&
+      b.date !== ""
+    )
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
 
@@ -154,7 +170,7 @@ export function StudentDetailPanel({
                   </p>
                 )}
                 {activeSubs.map((sub) => (
-                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} />
+                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} />
                 ))}
                 {inactiveSubs.length > 0 && (
                   <>
@@ -162,7 +178,7 @@ export function StudentDetailPanel({
                       Product History ({inactiveSubs.length})
                     </p>
                     {inactiveSubs.map((sub) => (
-                      <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} />
+                      <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} />
                     ))}
                   </>
                 )}
@@ -339,6 +355,7 @@ function SubCard({
   sub,
   allStudentSubs,
   termsById,
+  products,
   onEdit,
   onRemove,
   onDelete,
@@ -346,11 +363,12 @@ function SubCard({
   sub: MockSubscription;
   allStudentSubs: MockSubscription[];
   termsById: Map<string, MockTerm>;
+  products: MockProduct[];
   onEdit: (sub: MockSubscription) => void;
   onRemove: (sub: MockSubscription) => void;
   onDelete: (sub: MockSubscription) => void;
 }) {
-  const rule = getAccessRule(sub.productId);
+  const product = products.find((p) => p.id === sub.productId);
   const term = sub.termId ? termsById.get(sub.termId) : null;
   const isActive = sub.status === "active";
   const displayStatus = deriveDisplayStatus(sub, allStudentSubs);
@@ -409,10 +427,10 @@ function SubCard({
           Styles: {sub.selectedStyleNames.join(", ")}
         </span>
       )}
-      {rule && (
-        <span className="text-xs text-gray-400">{describeAccess(rule)}</span>
+      {product && (
+        <span className="text-xs text-gray-400">{describeProductScope(product)}</span>
       )}
-      {rule?.isProvisional && <StatusBadge status="provisional" />}
+      {product?.isProvisional && <StatusBadge status="provisional" />}
       {sub.assignedBy && (
         <span className="text-xs text-gray-400">
           Assigned by {sub.assignedBy}

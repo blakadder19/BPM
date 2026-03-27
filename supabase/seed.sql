@@ -105,9 +105,8 @@ insert into terms (id, academy_id, name, start_date, end_date, status) values
 insert into dance_styles (id, name, requires_role_balance, sort_order) values
   ('d0d0d0d0-0000-0000-0000-000000000001', 'Bachata',               true,  1),
   ('d0d0d0d0-0000-0000-0000-000000000002', 'Bachata Tradicional',   true,  2),
-  ('d0d0d0d0-0000-0000-0000-000000000003', 'Bachata Partnerwork',   true,  3),
-  ('d0d0d0d0-0000-0000-0000-000000000004', 'Cuban',                 true,  4),
-  ('d0d0d0d0-0000-0000-0000-000000000005', 'Salsa Line',            true,  5),
+  ('d0d0d0d0-0000-0000-0000-000000000004', 'Cuban',                 true,  3),
+  ('d0d0d0d0-0000-0000-0000-000000000005', 'Salsa Line',            true,  4),
   ('d0d0d0d0-0000-0000-0000-000000000006', 'Reggaeton',             false, 6),
   ('d0d0d0d0-0000-0000-0000-000000000007', 'Ladies Styling',        false, 7),
   ('d0d0d0d0-0000-0000-0000-000000000008', 'Afro-Cuban',            false, 8),
@@ -121,7 +120,7 @@ insert into dance_styles (id, name, requires_role_balance, sort_order) values
 -- term_id points to Term 1 for term-bound classes.
 --
 -- Abbreviations for dance_style_id:
---   ds01 = Bachata, ds02 = Bachata Tradicional, ds03 = Bachata Partnerwork
+--   ds01 = Bachata, ds02 = Bachata Tradicional
 --   ds04 = Cuban, ds05 = Salsa Line, ds06 = Reggaeton
 --   ds07 = Ladies Styling, ds08 = Afro-Cuban, ds09 = Yoga, ds10 = Kids Hip Hop
 
@@ -374,72 +373,82 @@ end $$;
 
 -- ── Products (final BPM catalog matching lib/mock-data.ts) ──
 
-insert into products (id, academy_id, name, description, long_description, product_type, price_cents, total_credits, duration_days, dance_style_id, allowed_levels, term_bound, recurring, classes_per_term, auto_renew, benefits, credits_model, is_provisional, metadata) values
+insert into products (id, academy_id, name, description, long_description, product_type, price_cents, total_credits, duration_days, dance_style_id, allowed_levels, term_bound, recurring, classes_per_term, auto_renew, benefits, credits_model, is_provisional, metadata, allowed_style_ids, allowed_style_names, style_name, span_terms) values
 
   -- ── Drop-in ──
   ('f0f0f0f0-0000-0000-0000-000000000007', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Drop In', 'One class pass. Pay at reception.',
    'A single-use class entry valid for any style and any level. Pay at reception or have it assigned by an admin. No term commitment required.',
    'drop_in', 1500, 1, null, null, null, false, false, null, false,
-   null, 'single_use', false, '{}'),
+   null, 'single_use', false, '{}',
+   null, null, 'All styles', null),
 
   -- ── Latin Passes (monthly, selected style) ──
   ('f0f0f0f0-0000-0000-0000-000000000010', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Bronze Latin Pass', '4 classes per month. One dance style of your choice.',
    '4 classes per month in one dance style of your choice. Pay online or at reception.',
    'pass', 5500, 4, 30, null, null, false, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000001','d0d0d0d0-0000-0000-0000-000000000002','d0d0d0d0-0000-0000-0000-000000000004','d0d0d0d0-0000-0000-0000-000000000005']::uuid[], ARRAY['Bachata','Bachata Tradicional','Cuban','Salsa Line'], '1 selected style', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000011', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Silver Latin Pass', '8 classes per month. One dance style of your choice.',
    '8 classes per month in one dance style of your choice. Pay online or at reception.',
    'pass', 10500, 8, 30, null, null, false, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000001','d0d0d0d0-0000-0000-0000-000000000002','d0d0d0d0-0000-0000-0000-000000000004','d0d0d0d0-0000-0000-0000-000000000005']::uuid[], ARRAY['Bachata','Bachata Tradicional','Cuban','Salsa Line'], '1 selected style', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000012', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Gold Latin Pass', '12 classes per month. One dance style of your choice.',
    '12 classes per month in one dance style of your choice. Pay online or at reception.',
    'pass', 15500, 12, 30, null, null, false, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000001','d0d0d0d0-0000-0000-0000-000000000002','d0d0d0d0-0000-0000-0000-000000000004','d0d0d0d0-0000-0000-0000-000000000005']::uuid[], ARRAY['Bachata','Bachata Tradicional','Cuban','Salsa Line'], '1 selected style', null),
 
   -- ── Yoga Passes (monthly, yoga only) ──
   ('f0f0f0f0-0000-0000-0000-000000000013', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Bronze Yoga Pass', '4 yoga classes per month.',
    '4 yoga classes per month. Pay online or at reception.',
    'pass', 5500, 4, 30, null, null, false, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009']::uuid[], ARRAY['Yoga'], 'Yoga', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000014', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Silver Yoga Pass', '8 yoga classes per month.',
    '8 yoga classes per month. Pay online or at reception.',
    'pass', 10500, 8, 30, null, null, false, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009']::uuid[], ARRAY['Yoga'], 'Yoga', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000015', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Gold Yoga Pass', '12 yoga classes per month.',
    '12 yoga classes per month. Pay online or at reception.',
    'pass', 15500, 12, 30, null, null, false, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009']::uuid[], ARRAY['Yoga'], 'Yoga', null),
 
   -- ── Promo / Combo Passes ──
   ('f0f0f0f0-0000-0000-0000-000000000005', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Beginners 1 & 2 Promo Pass', '8 classes of one dance style. Covers Beginner 1 + 2.',
-   '8 classes in one selected dance style covering Beginner 1 and Beginner 2 levels. Pay at reception or online.',
+   '8 classes in one selected dance style covering Beginner 1 and Beginner 2 levels. Spans 2 terms (4 Beginner 1 + 4 Beginner 2). Pay at reception or online.',
    'pass', 10000, 8, 56, null, '{Beginner 1,Beginner 2}', true, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000001','d0d0d0d0-0000-0000-0000-000000000002','d0d0d0d0-0000-0000-0000-000000000004','d0d0d0d0-0000-0000-0000-000000000005']::uuid[], ARRAY['Bachata','Bachata Tradicional','Cuban','Salsa Line'], '1 selected style', 2),
 
   ('f0f0f0f0-0000-0000-0000-000000000006', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Latin Combo (Mix and Match)', '8 classes. Mix two of our three Beginner 1 courses.',
    'Mix and match two of our three Beginner 1 courses (Bachata, Cuban, Salsa Line). Includes 8 classes. Pay at reception or online.',
    'pass', 9000, 8, 56, null, '{Beginner 1}', true, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000001','d0d0d0d0-0000-0000-0000-000000000004','d0d0d0d0-0000-0000-0000-000000000005']::uuid[], ARRAY['Bachata','Cuban','Salsa Line'], 'Pick 2 of 3 Latin', null),
 
   -- ── Social Pass ──
   ('f0f0f0f0-0000-0000-0000-000000000016', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Social Pass', '20 socials per month. Weekday socials + weekend student practice.',
    'Access to standard weekday socials (Mon, Wed, Fri, and weekend student practice). Includes 20 socials per month. Events are not included.',
    'pass', 10000, 20, 30, null, null, false, false, null, false,
-   null, 'fixed', false, '{}'),
+   null, 'fixed', false, '{}',
+   null, null, 'Socials only', null),
 
   -- ── Bronze Memberships (4 classes/month) ──
   ('f0f0f0f0-0000-0000-0000-000000000001', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
@@ -447,28 +456,32 @@ insert into products (id, academy_id, name, description, long_description, produ
    '4 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.',
    'membership', 6500, null, null, null, null, true, true, 4, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000006','d0d0d0d0-0000-0000-0000-000000000007','d0d0d0d0-0000-0000-0000-000000000008','d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Afro-Cuban','Kids Hip Hop','Ladies Styling','Reggaeton','Yoga'], 'Excl. Salsa & Bachata', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000020', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Bronze Bachata Membership', '4 classes per month (Bachata classes only).',
    '4 Bachata classes per month. Cash or card with auto-renewal.',
    'membership', 6500, null, null, null, null, true, true, 4, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000001','d0d0d0d0-0000-0000-0000-000000000002']::uuid[], ARRAY['Bachata','Bachata Tradicional'], 'Bachata', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000021', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Bronze Salsa Membership', '4 classes per month (Salsa classes only).',
    '4 Salsa classes per month. Cash or card with auto-renewal.',
    'membership', 6500, null, null, null, null, true, true, 4, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000004','d0d0d0d0-0000-0000-0000-000000000005']::uuid[], ARRAY['Cuban','Salsa Line'], 'Salsa', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000022', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Bronze Yoga Membership', '4 classes per month (Yoga classes only).',
    '4 Yoga classes per month. Cash or card with auto-renewal.',
    'membership', 6000, null, null, null, null, true, true, 4, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009']::uuid[], ARRAY['Yoga'], 'Yoga', null),
 
   -- ── Silver Memberships (8 classes/month) ──
   ('f0f0f0f0-0000-0000-0000-000000000002', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
@@ -476,28 +489,32 @@ insert into products (id, academy_id, name, description, long_description, produ
    '8 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.',
    'membership', 12000, null, null, null, null, true, true, 8, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000006','d0d0d0d0-0000-0000-0000-000000000007','d0d0d0d0-0000-0000-0000-000000000008','d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Afro-Cuban','Kids Hip Hop','Ladies Styling','Reggaeton','Yoga'], 'Excl. Salsa & Bachata', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000023', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Silver Bachata Membership', '8 classes per month (Bachata classes only).',
    '8 Bachata classes per month. Cash or card with auto-renewal.',
    'membership', 12000, null, null, null, null, true, true, 8, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000001','d0d0d0d0-0000-0000-0000-000000000002']::uuid[], ARRAY['Bachata','Bachata Tradicional'], 'Bachata', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000024', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Silver Salsa Membership', '8 classes per month (Salsa classes only).',
    '8 Salsa classes per month. Cash or card with auto-renewal.',
    'membership', 12000, null, null, null, null, true, true, 8, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000004','d0d0d0d0-0000-0000-0000-000000000005']::uuid[], ARRAY['Cuban','Salsa Line'], 'Salsa', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000025', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Silver Yoga Membership', '8 classes per month (Yoga classes only).',
    '8 Yoga classes per month. Cash or card with auto-renewal.',
    'membership', 11000, null, null, null, null, true, true, 8, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009']::uuid[], ARRAY['Yoga'], 'Yoga', null),
 
   -- ── Gold Memberships (12 classes/month) ──
   ('f0f0f0f0-0000-0000-0000-000000000003', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
@@ -505,28 +522,32 @@ insert into products (id, academy_id, name, description, long_description, produ
    '12 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.',
    'membership', 17000, null, null, null, null, true, true, 12, true,
    '{"Earlybird access to studio events","Priority class booking","Exclusive quarterly event for Gold members","Special discounts on merchandise and studio events","Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000006','d0d0d0d0-0000-0000-0000-000000000007','d0d0d0d0-0000-0000-0000-000000000008','d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Afro-Cuban','Kids Hip Hop','Ladies Styling','Reggaeton','Yoga'], 'Excl. Salsa & Bachata', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000026', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Gold Bachata Membership', '12 classes per month (Bachata classes only).',
    '12 Bachata classes per month. Cash or card with auto-renewal.',
    'membership', 17000, null, null, null, null, true, true, 12, true,
    '{"Earlybird access to studio events","Priority class booking","Exclusive quarterly event for Gold members","Special discounts on merchandise and studio events","Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000001','d0d0d0d0-0000-0000-0000-000000000002']::uuid[], ARRAY['Bachata','Bachata Tradicional'], 'Bachata', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000027', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Gold Salsa Membership', '12 classes per month (Salsa classes only).',
    '12 Salsa classes per month. Cash or card with auto-renewal.',
    'membership', 17000, null, null, null, null, true, true, 12, true,
    '{"Earlybird access to studio events","Priority class booking","Exclusive quarterly event for Gold members","Special discounts on merchandise and studio events","Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000004','d0d0d0d0-0000-0000-0000-000000000005']::uuid[], ARRAY['Cuban','Salsa Line'], 'Salsa', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000028', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Gold Yoga Membership', '12 classes per month (Yoga classes only).',
    '12 Yoga classes per month. Cash or card with auto-renewal.',
    'membership', 16000, null, null, null, null, true, true, 12, true,
    '{"Earlybird access to studio events","Priority class booking","Exclusive quarterly event for Gold members","Special discounts on merchandise and studio events","Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
-   'unlimited', false, '{}'),
+   'unlimited', false, '{}',
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009']::uuid[], ARRAY['Yoga'], 'Yoga', null),
 
   -- ── Rainbow Membership (all-access, 16 classes/month) ──
   ('f0f0f0f0-0000-0000-0000-000000000004', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
@@ -534,7 +555,8 @@ insert into products (id, academy_id, name, description, long_description, produ
    '16 classes per month across all styles. Our all-access membership with maximum flexibility. Cash or card with auto-renewal.',
    'membership', 22000, null, null, null, null, true, true, 16, true,
    '{"Earlybird access to studio events","Priority class booking","Exclusive quarterly event for Gold members","Special discounts on merchandise and studio events","Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week","Free BPM T-shirt"}',
-   'unlimited', false, '{}');
+   'unlimited', false, '{}',
+   null, null, 'All styles', null);
 
 
 -- ── Subscriptions / Bookings / CoC ────────────────────────────
@@ -552,4 +574,4 @@ insert into business_rules (academy_id, key, value, description, is_provisional)
   ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'credit_deduction_priority',  '["promo_pass","pack","drop_in","membership"]',             'Order to resolve credit source when booking',          true),
   ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'student_practice_bookable',  'false',                                                   'Whether Student Practice events are bookable',         true),
   ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'waitlist_offer_expiry_hours','4',                                                       'Hours before a waitlist offer expires',                 true),
-  ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'role_balanced_styles',       '["Bachata","Bachata Tradicional","Bachata Partnerwork","Cuban","Salsa Line"]', 'Styles requiring leader/follower balance', false);
+  ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'role_balanced_styles',       '["Bachata","Bachata Tradicional","Cuban","Salsa Line"]', 'Styles requiring leader/follower balance', false);

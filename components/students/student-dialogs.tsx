@@ -23,7 +23,8 @@ import {
   createSubscriptionAction,
   updateSubscriptionAction,
 } from "@/lib/actions/subscriptions";
-import { getAccessRule, buildDynamicAccessRulesMap, type StyleAccess } from "@/config/product-access";
+import { buildDynamicAccessRulesMap, type StyleAccess } from "@/config/product-access";
+import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
 import type { StudentListItem } from "@/types/domain";
 import type { MockSubscription, MockProduct, MockTerm, MockDanceStyle } from "@/lib/mock-data";
 
@@ -553,8 +554,15 @@ export function AddSubscriptionDialog({
   const groups = groupProducts(products);
   const eligibleTerms = terms.filter((t) => t.status === "active" || t.status === "upcoming");
 
+  const isSpanProduct = (selectedProduct?.spanTerms ?? 0) >= 2;
+  const resolvedNextTerm = useMemo(() => {
+    if (!isSpanProduct || !selectedTermId) return null;
+    return getNextConsecutiveTerm(terms, selectedTermId);
+  }, [isSpanProduct, selectedTermId, terms]);
+  const spanTermError = isSpanProduct && selectedTermId && !resolvedNextTerm;
+
   const accessRulesMap = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
-  const accessRule = selectedProductId ? (accessRulesMap.get(selectedProductId) ?? getAccessRule(selectedProductId)) : undefined;
+  const accessRule = selectedProductId ? accessRulesMap.get(selectedProductId) : undefined;
   const styleAccess = accessRule?.styleAccess;
 
   function handleProductChange(productId: string) {
@@ -573,9 +581,18 @@ export function AddSubscriptionDialog({
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (spanTermError) {
+      setError("Cannot assign — no next consecutive term exists. Create the next term first.");
+      return;
+    }
+
     const formData = new FormData(e.currentTarget);
     formData.set("productId", selectedProductId);
     formData.set("termId", selectedTermId);
+
+    if (isSpanProduct && resolvedNextTerm) {
+      formData.set("spanTerms", String(selectedProduct!.spanTerms));
+    }
 
     if (styleAccess?.type === "selected_style" && selectedStyleId) {
       formData.set("selectedStyleId", selectedStyleId);
@@ -653,21 +670,46 @@ export function AddSubscriptionDialog({
 
             {selectedProduct?.termBound && (
               <div className="space-y-1.5">
-                <Label htmlFor="as-term">Term</Label>
+                <Label htmlFor="as-term">
+                  {isSpanProduct ? "Start Term *" : "Term"}
+                </Label>
                 <select
                   id="as-term"
                   value={selectedTermId}
                   onChange={(e) => setSelectedTermId(e.target.value)}
                   className={SELECT_CLASS}
+                  required={isSpanProduct}
                 >
-                  <option value="">— No term —</option>
+                  <option value="">{isSpanProduct ? "Select start term…" : "— No term —"}</option>
                   {eligibleTerms.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name} ({t.startDate} → {t.endDate})
                     </option>
                   ))}
                 </select>
-                {selectedTerm && (
+
+                {isSpanProduct && selectedTerm && resolvedNextTerm && (
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-800 space-y-1">
+                    <p className="font-medium">
+                      Covers: {selectedTerm.name} + {resolvedNextTerm.name}
+                    </p>
+                    <p>
+                      Validity: {selectedTerm.startDate} → {resolvedNextTerm.endDate}
+                    </p>
+                    <p className="text-indigo-600">
+                      Covers 4 Beginner 1 classes + 4 Beginner 2 classes in consecutive terms.
+                    </p>
+                  </div>
+                )}
+
+                {spanTermError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    No next consecutive term exists after {selectedTerm?.name ?? "the selected term"}.
+                    Please create the next term first, or select an earlier start term.
+                  </div>
+                )}
+
+                {!isSpanProduct && selectedTerm && (
                   <p className="text-xs text-gray-500">
                     Dates auto-set: {selectedTerm.startDate} → {selectedTerm.endDate}
                   </p>
@@ -755,7 +797,7 @@ export function AddSubscriptionDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || !!spanTermError}>
               {isPending ? "Assigning…" : "Assign Entitlement"}
             </Button>
           </DialogFooter>
@@ -783,7 +825,7 @@ export function EditSubscriptionDialog({
   const [error, setError] = useState<string | null>(null);
 
   const accessRulesMap = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
-  const accessRule = accessRulesMap.get(sub.productId) ?? getAccessRule(sub.productId);
+  const accessRule = accessRulesMap.get(sub.productId);
   const styleAccess = accessRule?.styleAccess;
 
   const [selectedStyleId, setSelectedStyleId] = useState(sub.selectedStyleId ?? "");

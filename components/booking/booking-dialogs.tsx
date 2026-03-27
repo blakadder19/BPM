@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { canAccessClass } from "@/lib/domain/product-access";
-import { getAccessRule } from "@/config/product-access";
+import type { ProductAccessRule } from "@/config/product-access";
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
 import type { InstanceStatus, ClassType } from "@/types/domain";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -99,11 +99,13 @@ export function AddBookingDialog({
   students,
   classInstances,
   subscriptionsByStudent,
+  accessRulesMap,
   onClose,
 }: {
   students: StudentOption[];
   classInstances: ClassInstanceOption[];
   subscriptionsByStudent?: Record<string, SubscriptionOption[]>;
+  accessRulesMap?: Record<string, ProductAccessRule>;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -179,7 +181,7 @@ export function AddBookingDialog({
   const eligibleSubs = useMemo(() => {
     if (!selectedClass) return studentSubs;
     return studentSubs.filter((s) => {
-      const rule = getAccessRule(s.productId);
+      const rule = accessRulesMap?.[s.productId];
       if (!rule) return true;
       const result = canAccessClass(
         rule,
@@ -193,7 +195,7 @@ export function AddBookingDialog({
       );
       return result.granted;
     });
-  }, [studentSubs, selectedClass]);
+  }, [studentSubs, selectedClass, accessRulesMap]);
 
   const subscriptionSearchOptions = useMemo(
     () =>
@@ -476,6 +478,14 @@ export function AddBookingDialog({
 function ConsequenceSummary({ c, mode }: { c: BookingConsequences; mode: "cancel" | "delete" }) {
   const items: React.ReactNode[] = [];
 
+  if (c.isOrphaned) {
+    items.push(
+      <li key="orphaned" className="text-red-700 font-medium">
+        The linked class no longer exists (orphaned booking).
+      </li>
+    );
+  }
+
   if (c.hasStarted) {
     items.push(
       <li key="started" className="text-red-700">This class has already started.</li>
@@ -693,6 +703,7 @@ export function DeleteBookingDialog({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [consequences, setConsequences] = useState<BookingConsequences | null>(null);
+  const [consequencesReady, setConsequencesReady] = useState(false);
   const [result, setResult] = useState<{
     deletedAttendance: boolean;
     deletedPenalty: boolean;
@@ -701,12 +712,17 @@ export function DeleteBookingDialog({
 
   useEffect(() => {
     let cancelled = false;
-    computeBookingConsequencesAction(booking.id).then((res) => {
-      if (cancelled) return;
-      if (res.success && res.consequences) {
-        setConsequences(res.consequences);
-      }
-    });
+    computeBookingConsequencesAction(booking.id)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.consequences) {
+          setConsequences(res.consequences);
+        }
+        setConsequencesReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) setConsequencesReady(true);
+      });
     return () => { cancelled = true; };
   }, [booking.id]);
 
@@ -782,6 +798,13 @@ export function DeleteBookingDialog({
               <p className="text-sm font-medium text-gray-700">What will be removed:</p>
               <ConsequenceSummary c={consequences} mode="delete" />
             </div>
+          ) : consequencesReady ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <p className="font-medium">Orphaned booking</p>
+              <p className="mt-1">
+                The linked class no longer exists. Deleting will remove this booking record and any linked attendance or penalty data.
+              </p>
+            </div>
           ) : (
             <p className="text-sm text-gray-400 animate-pulse">Loading consequences…</p>
           )}
@@ -795,7 +818,7 @@ export function DeleteBookingDialog({
               <Button
                 variant="danger"
                 onClick={handleDelete}
-                disabled={isPending || !consequences}
+                disabled={isPending || !consequencesReady}
               >
                 {isPending ? "Deleting…" : "Permanently Delete"}
               </Button>

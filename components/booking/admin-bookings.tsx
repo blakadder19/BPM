@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminTable, Td } from "@/components/ui/admin-table";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime } from "@/lib/utils";
+import { isClassEnded } from "@/lib/domain/datetime";
 import { BookingDetailPanel } from "./booking-detail-panel";
 import {
   AddBookingDialog,
@@ -25,6 +26,7 @@ import {
   adminCheckInBookingAction,
   adminRestoreBookingAction,
 } from "@/lib/actions/bookings-admin";
+import type { ProductAccessRule } from "@/config/product-access";
 import type { BookingView } from "@/app/(app)/bookings/page";
 
 // ── Filter options ───────────────────────────────────────────
@@ -58,8 +60,10 @@ interface AdminBookingsProps {
   classInstances: ClassInstanceOption[];
   waitlistEntries: WaitlistEntryView[];
   subscriptionsByStudent: Record<string, SubscriptionOption[]>;
+  accessRulesMap?: Record<string, ProductAccessRule>;
   initialSearch?: string;
   isDev?: boolean;
+  today?: string;
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -70,8 +74,10 @@ export function AdminBookings({
   classInstances,
   waitlistEntries,
   subscriptionsByStudent,
+  accessRulesMap,
   initialSearch,
   isDev,
+  today: todayProp,
 }: AdminBookingsProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -91,7 +97,7 @@ export function AdminBookings({
   const [deleteTarget, setDeleteTarget] = useState<BookingView | null>(null);
   const [waitlistClassId, setWaitlistClassId] = useState<string | null>(null);
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = todayProp ?? new Date().toISOString().slice(0, 10);
 
   const typeOptions = useMemo(() => {
     const types = new Set(bookings.map((b) => b.classType).filter(Boolean));
@@ -120,7 +126,10 @@ export function AdminBookings({
       if (sourceFilter && b.source !== sourceFilter) return false;
       if (typeFilter && b.classType !== typeFilter) return false;
       if (locationFilter && b.location !== locationFilter) return false;
-      if (upcomingOnly && b.date < today) return false;
+      if (upcomingOnly) {
+        if (b.date < today) return false;
+        if (b.date === today && b.endTime && isClassEnded(b.date, b.endTime)) return false;
+      }
       if (waitlistOnly) {
         const hasWaitlist = waitlistEntries.some(
           (w) => w.classId === b.classId
@@ -303,11 +312,13 @@ export function AdminBookings({
           const isExpanded = expandedId === b.id;
           const isActive =
             b.status === "confirmed" || b.status === "checked_in";
+          const classEnded = !!(b.endTime && isClassEnded(b.date, b.endTime));
+          const actionsDisabled = b.isOrphaned || classEnded;
 
           return (
             <TableRowGroup key={b.id}>
               <tr
-                className="cursor-pointer hover:bg-gray-50"
+                className={`cursor-pointer hover:bg-gray-50 ${b.isOrphaned ? "opacity-60 bg-gray-50" : ""}`}
                 onClick={() => setExpandedId(isExpanded ? null : b.id)}
               >
                 <Td className="w-8">
@@ -322,8 +333,8 @@ export function AdminBookings({
                 </Td>
                 <Td>
                   {b.classTitle}
-                  {b.classTitle === "(Deleted class)" && (
-                    <span className="ml-1.5 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">Removed</span>
+                  {b.isOrphaned && (
+                    <span className="ml-1.5 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">Orphaned</span>
                   )}
                 </Td>
                 <Td>
@@ -362,7 +373,7 @@ export function AdminBookings({
                     className="flex items-center gap-1.5"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {b.status === "confirmed" && (
+                    {b.status === "confirmed" && !actionsDisabled && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -371,7 +382,7 @@ export function AdminBookings({
                         Check In
                       </Button>
                     )}
-                    {isActive && (
+                    {isActive && !actionsDisabled && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -380,7 +391,7 @@ export function AdminBookings({
                         Cancel
                       </Button>
                     )}
-                    {(b.status === "cancelled" || b.status === "late_cancelled") && (
+                    {(b.status === "cancelled" || b.status === "late_cancelled") && !actionsDisabled && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -409,6 +420,8 @@ export function AdminBookings({
                   onCheckIn={() => handleCheckIn(b.id)}
                   onRestore={() => handleRestore(b.id)}
                   onViewWaitlist={() => openWaitlistForBooking(b)}
+                  isOrphaned={b.isOrphaned}
+                  classEnded={classEnded}
                 />
               )}
             </TableRowGroup>
@@ -422,6 +435,7 @@ export function AdminBookings({
           students={students}
           classInstances={classInstances}
           subscriptionsByStudent={subscriptionsByStudent}
+          accessRulesMap={accessRulesMap}
           onClose={() => setShowAdd(false)}
         />
       )}

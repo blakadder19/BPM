@@ -201,6 +201,7 @@ export function AttendanceClient({
         <AddAttendanceDialog
           students={studentOptions ?? []}
           classes={allClasses}
+          today={mockToday}
           subscriptions={activeSubscriptions ?? []}
           attendanceRecords={attendanceRecords}
           onClose={() => setShowAddAttendance(false)}
@@ -1187,6 +1188,7 @@ const SOURCE_OPTIONS: { value: AttendanceSource; label: string; hint: string }[]
 function AddAttendanceDialog({
   students,
   classes,
+  today: todayProp,
   subscriptions,
   attendanceRecords,
   onClose,
@@ -1194,6 +1196,7 @@ function AddAttendanceDialog({
 }: {
   students: StudentOption[];
   classes: BookableClassProp[];
+  today: string;
   subscriptions: SubscriptionOption[];
   attendanceRecords: StoredAttendance[];
   onClose: () => void;
@@ -1210,10 +1213,11 @@ function AddAttendanceDialog({
   const [status, setStatus] = useState<AttendanceMark>("present");
   const [notes, setNotes] = useState("");
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const eligibleClasses = useMemo(
-    () => classes.filter((c) => c.date <= today).sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime)),
-    [classes, today]
+    () => classes
+      .filter((c) => c.date === todayProp)
+      .sort((a, b) => b.startTime.localeCompare(a.startTime)),
+    [classes, todayProp]
   );
 
   const studentSubs = useMemo(

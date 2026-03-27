@@ -138,14 +138,24 @@ export async function adminCreateBookingAction(
       }
     }
 
-    // Term validation: check the class date falls within the entitlement's own term
+    // Term / validity date validation: use the subscription's own validFrom/validUntil
+    // which correctly spans multiple terms for products like Beginners 1 & 2 Promo Pass
     if (sub.termId && cls) {
-      const subTerm = await getTermRepo().getById(sub.termId);
-      if (subTerm && !isDateInTerm(cls.date, subTerm)) {
-        return {
-          success: false,
-          error: `Entitlement is not valid for this class date — the assigned term "${subTerm.name}" runs ${subTerm.startDate} to ${subTerm.endDate}.`,
-        };
+      if (sub.validFrom && sub.validUntil) {
+        if (cls.date < sub.validFrom || cls.date > sub.validUntil) {
+          return {
+            success: false,
+            error: `Entitlement is not valid for this class date — it covers ${sub.validFrom} to ${sub.validUntil}.`,
+          };
+        }
+      } else {
+        const subTerm = await getTermRepo().getById(sub.termId);
+        if (subTerm && !isDateInTerm(cls.date, subTerm)) {
+          return {
+            success: false,
+            error: `Entitlement is not valid for this class date — the assigned term "${subTerm.name}" runs ${subTerm.startDate} to ${subTerm.endDate}.`,
+          };
+        }
       }
     }
 
@@ -577,6 +587,7 @@ export interface BookingConsequences {
   classTitle: string;
   classDate: string;
   classStartTime: string;
+  isOrphaned: boolean;
   isLate: boolean;
   hasStarted: boolean;
   cutoffMinutes: number;
@@ -614,11 +625,13 @@ export async function computeBookingConsequencesAction(
   if (!booking) return { success: false, error: "Booking not found" };
 
   const cls = svc.getClass(booking.bookableClassId);
-  if (!cls) return { success: false, error: "Class not found" };
+  const isOrphaned = !cls;
 
-  const ctx = getCancellationContext(cls.date, cls.startTime);
-  const isLate = !isNaN(ctx.classStart.getTime()) && ctx.isLate;
-  const hasStarted = !isNaN(ctx.classStart.getTime()) && ctx.hasStarted;
+  const ctx = cls
+    ? getCancellationContext(cls.date, cls.startTime)
+    : null;
+  const isLate = ctx ? !isNaN(ctx.classStart.getTime()) && ctx.isLate : false;
+  const hasStarted = ctx ? !isNaN(ctx.classStart.getTime()) && ctx.hasStarted : false;
 
   const settings = getSettings();
 
@@ -673,13 +686,14 @@ export async function computeBookingConsequencesAction(
       bookingStatus: booking.status,
       bookingSource: booking.source,
       studentName: booking.studentName,
-      classTitle: cls.title,
-      classDate: cls.date,
-      classStartTime: cls.startTime,
+      classTitle: cls?.title ?? "(Deleted class)",
+      classDate: cls?.date ?? "",
+      classStartTime: cls?.startTime ?? "",
+      isOrphaned,
       isLate,
       hasStarted,
-      cutoffMinutes: ctx.cutoffMinutes,
-      minutesUntilStart: !isNaN(ctx.classStart.getTime()) ? ctx.minutesUntilStart : 0,
+      cutoffMinutes: ctx?.cutoffMinutes ?? 0,
+      minutesUntilStart: ctx && !isNaN(ctx.classStart.getTime()) ? ctx.minutesUntilStart : 0,
       lateCancelFeeCents: penaltyFeeCents("late_cancel"),
       lateCancelPenaltiesEnabled: settings.lateCancelPenaltiesEnabled ?? false,
       hasSubscription,

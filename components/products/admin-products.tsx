@@ -49,14 +49,9 @@ const TABLE_HEADERS = [
   "",
 ];
 
-function describeScopeFromProduct(p: MockProduct): string {
-  const styles = p.allowedStyleNames?.length
-    ? p.allowedStyleNames.join(", ")
-    : p.styleName ?? "All styles";
-  const levels = p.allowedLevels?.length
-    ? p.allowedLevels.join(", ")
-    : "All levels";
-  return `${styles} · ${levels}`;
+export interface ProductScope {
+  styles: string;
+  levels: string;
 }
 
 interface DanceStyleOption {
@@ -69,6 +64,7 @@ interface AdminProductsProps {
   subscriptions: MockSubscription[];
   studentNameMap: Record<string, string>;
   danceStyles?: DanceStyleOption[];
+  scopeMap?: Record<string, ProductScope>;
 }
 
 export function AdminProducts({
@@ -76,6 +72,7 @@ export function AdminProducts({
   subscriptions,
   studentNameMap,
   danceStyles = [],
+  scopeMap = {},
 }: AdminProductsProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -189,7 +186,9 @@ export function AdminProducts({
                   </Td>
                   <Td>
                     <span className="text-xs text-gray-600">
-                      {describeScopeFromProduct(p)}
+                      {scopeMap[p.id]
+                        ? `${scopeMap[p.id].styles} · ${scopeMap[p.id].levels}`
+                        : "—"}
                     </span>
                   </Td>
                   <Td>
@@ -242,6 +241,7 @@ export function AdminProducts({
                     subscriptions={subscriptions}
                     studentNameMap={studentNameMap}
                     colSpan={TABLE_HEADERS.length}
+                    scope={scopeMap[p.id]}
                   />
                 )}
               </Fragment>

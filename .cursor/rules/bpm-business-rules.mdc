@@ -15,7 +15,7 @@ alwaysApply: true
 ## Role Balancing
 
 Applies to these styles only (configurable list):
-Bachata, Bachata Tradicional, Bachata Partnerwork, Cuban, Salsa Line
+Bachata, Bachata Tradicional, Cuban, Salsa Line
 
 Each class booking tracks leader/follower role. Waitlist logic is per-role.
 

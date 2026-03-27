@@ -17,16 +17,15 @@ const TABLE_HEADERS = ["Name", "Start", "End", "Status", "Week #", ""];
 
 interface AdminTermsProps {
   terms: MockTerm[];
+  today: string;
 }
 
-export function AdminTerms({ terms }: AdminTermsProps) {
+export function AdminTerms({ terms, today }: AdminTermsProps) {
   const router = useRouter();
   const [showAdd, setShowAdd] = useState(false);
   const [editTerm, setEditTerm] = useState<MockTerm | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MockTerm | null>(null);
   const [delPending, startDel] = useTransition();
-
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="space-y-6">

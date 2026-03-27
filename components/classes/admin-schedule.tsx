@@ -19,7 +19,7 @@ import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime } from "@/lib/utils";
-import { effectiveInstanceStatus } from "@/lib/domain/datetime";
+import { effectiveInstanceStatus, isClassEnded } from "@/lib/domain/datetime";
 import {
   AddInstanceDialog,
   EditInstanceDialog,
@@ -65,6 +65,7 @@ interface AdminScheduleProps {
   pairPresets: PairPreset[];
   isDev?: boolean;
   initialSearch?: string;
+  today?: string;
 }
 
 export function AdminSchedule({
@@ -80,6 +81,7 @@ export function AdminSchedule({
   pairPresets,
   isDev,
   initialSearch,
+  today: todayProp,
 }: AdminScheduleProps) {
   const inactiveSet = useMemo(() => new Set(inactiveTeacherIds ?? []), [inactiveTeacherIds]);
   const router = useRouter();
@@ -88,6 +90,8 @@ export function AdminSchedule({
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
+  const [hidePast, setHidePast] = useState(true);
+  const today = todayProp ?? new Date().toISOString().slice(0, 10);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -152,6 +156,10 @@ export function AdminSchedule({
     const q = search.toLowerCase();
     return instances
       .filter((bc) => {
+        if (hidePast) {
+          if (bc.date < today) return false;
+          if (bc.date === today && isClassEnded(bc.date, bc.endTime)) return false;
+        }
         if (
           q &&
           !bc.title.toLowerCase().includes(q) &&
@@ -167,7 +175,7 @@ export function AdminSchedule({
         const dc = a.date.localeCompare(b.date);
         return dc !== 0 ? dc : a.startTime.localeCompare(b.startTime);
       });
-  }, [instances, search, statusFilter, typeFilter, styleFilter]);
+  }, [instances, search, statusFilter, typeFilter, styleFilter, hidePast, today]);
 
   function handleStatusChange(id: string, status: string) {
     startStatusTransition(async () => {
@@ -273,6 +281,15 @@ export function AdminSchedule({
             {styleOptions.length > 1 && (
               <SelectFilter value={styleFilter} onChange={setStyleFilter} options={styleOptions} placeholder="All Styles" />
             )}
+            <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap">
+              <input
+                type="checkbox"
+                checked={hidePast}
+                onChange={(e) => setHidePast(e.target.checked)}
+                className="rounded border-gray-300"
+              />
+              Upcoming only
+            </label>
           </div>
         )}
       </div>
@@ -341,7 +358,6 @@ export function AdminSchedule({
                           {(() => {
                             if (!bc.termId) return null;
                             const lt = allTerms?.find((t) => t.id === bc.termId);
-                            const today = new Date().toISOString().slice(0, 10);
                             const isFutureTerm = lt && today < lt.startDate;
                             let wk: number | null = null;
                             if (lt && !isFutureTerm) {

@@ -5,12 +5,14 @@ import {
   getAttendanceRepo,
   getSubscriptionRepo,
   getStudentRepo,
+  getProductRepo,
 } from "@/lib/repositories";
 import { getInstances } from "@/lib/services/schedule-store";
-import { isClassInFuture, isClassEnded } from "@/lib/domain/datetime";
+import { isClassInFuture, isClassEnded, getTodayStr } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { StudentBookings } from "@/components/booking/student-bookings";
 import { AdminBookings } from "@/components/booking/admin-bookings";
 
@@ -52,6 +54,7 @@ export interface BookingView {
   followerCount: number;
   waitlistCount: number;
   checkInToken: string | null;
+  isOrphaned: boolean;
 }
 
 export default async function BookingsPage({
@@ -137,6 +140,7 @@ export default async function BookingsPage({
       followerCount: activeForClass.filter((x) => x.danceRole === "follower").length,
       waitlistCount: waitlistForClass.length,
       checkInToken: b.checkInToken ?? null,
+      isOrphaned: classDeleted,
     };
   }
 
@@ -274,6 +278,13 @@ export default async function BookingsPage({
 
   const isDev = process.env.NODE_ENV === "development";
 
+  const allProducts = await getProductRepo().getAll();
+  const dynamicRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
+  const serializedAccessRules: Record<string, import("@/config/product-access").ProductAccessRule> = {};
+  for (const [k, v] of dynamicRulesMap) {
+    serializedAccessRules[k] = v;
+  }
+
   return (
     <AdminBookings
       bookings={enriched}
@@ -281,8 +292,10 @@ export default async function BookingsPage({
       classInstances={classInstanceOptions}
       waitlistEntries={waitlistEntryViews}
       subscriptionsByStudent={subscriptionsByStudent}
+      accessRulesMap={serializedAccessRules}
       initialSearch={params.classTitle ?? ""}
       isDev={isDev}
+      today={getTodayStr()}
     />
   );
 }

@@ -7,6 +7,7 @@ import {
   updateSubscription,
 } from "@/lib/services/subscription-service";
 import { getProductRepo, getTermRepo } from "@/lib/repositories";
+import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
 const VALID_STATUSES = new Set<string>([
@@ -85,6 +86,19 @@ export async function createSubscriptionAction(
     if (!term) return { success: false, error: "Term not found" };
     validFrom = term.startDate;
     validUntil = term.endDate;
+
+    const spanTerms = product.spanTerms ?? 1;
+    if (spanTerms >= 2) {
+      const allTerms = await getTermRepo().getAll();
+      const nextTerm = getNextConsecutiveTerm(allTerms, termId);
+      if (!nextTerm) {
+        return {
+          success: false,
+          error: `Cannot assign — no next consecutive term exists after "${term.name}". Please create the next term first.`,
+        };
+      }
+      validUntil = nextTerm.endDate;
+    }
   } else if (product.durationDays) {
     const today = new Date().toISOString().slice(0, 10);
     validFrom = today;
