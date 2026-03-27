@@ -22,19 +22,23 @@ function getClient() {
 
 // ── Bookings ───────────────────────────────────────────────
 
+function str(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
+
 function rowToBooking(r: Record<string, unknown>): StoredBooking {
   return {
-    id: r.id as string,
-    bookableClassId: r.bookable_class_id as string,
-    studentId: r.student_id as string,
-    studentName: r.student_name as string,
+    id: str(r.id),
+    bookableClassId: str(r.bookable_class_id),
+    studentId: str(r.student_id),
+    studentName: str(r.student_name),
     danceRole: (r.dance_role as DanceRole) ?? null,
-    status: r.status as BookingStatus,
+    status: (r.status as BookingStatus) ?? "confirmed",
     source: (r.source as BookingSource) ?? "subscription",
     subscriptionId: (r.subscription_id as string) ?? null,
     subscriptionName: (r.subscription_name as string) ?? null,
     adminNote: (r.admin_note as string) ?? null,
-    bookedAt: r.booked_at as string,
+    bookedAt: str(r.booked_at, new Date().toISOString()),
     cancelledAt: (r.cancelled_at as string) ?? null,
     checkInToken: (r.check_in_token as string) ?? null,
   };
@@ -108,14 +112,14 @@ export async function deleteBookingFromDB(id: string): Promise<void> {
 
 function rowToWaitlist(r: Record<string, unknown>): StoredWaitlistEntry {
   return {
-    id: r.id as string,
-    bookableClassId: r.bookable_class_id as string,
-    studentId: r.student_id as string,
-    studentName: r.student_name as string,
+    id: str(r.id),
+    bookableClassId: str(r.bookable_class_id),
+    studentId: str(r.student_id),
+    studentName: str(r.student_name),
     danceRole: (r.dance_role as DanceRole) ?? null,
-    status: r.status as WaitlistStatus,
-    position: r.position as number,
-    joinedAt: r.joined_at as string,
+    status: (r.status as WaitlistStatus) ?? "waiting",
+    position: (r.position as number) ?? 0,
+    joinedAt: str(r.joined_at, new Date().toISOString()),
     promotedAt: (r.promoted_at as string) ?? null,
   };
 }
@@ -176,17 +180,17 @@ export async function deleteWaitlistFromDB(id: string): Promise<void> {
 
 function rowToAttendance(r: Record<string, unknown>): StoredAttendance {
   return {
-    id: r.id as string,
-    bookableClassId: r.bookable_class_id as string,
-    studentId: r.student_id as string,
-    studentName: r.student_name as string,
+    id: str(r.id),
+    bookableClassId: str(r.bookable_class_id),
+    studentId: str(r.student_id),
+    studentName: str(r.student_name),
     bookingId: (r.booking_id as string) ?? null,
-    classTitle: r.class_title as string,
-    date: r.date as string,
-    status: r.status as AttendanceMark,
+    classTitle: str(r.class_title),
+    date: str(r.date),
+    status: (r.status as AttendanceMark) ?? "present",
     checkInMethod: (r.check_in_method as CheckInMethod) ?? "manual",
-    markedBy: r.marked_by as string,
-    markedAt: r.marked_at as string,
+    markedBy: str(r.marked_by),
+    markedAt: str(r.marked_at, new Date().toISOString()),
     notes: (r.notes as string) ?? null,
     source: (r.source as StoredAttendance["source"]) ?? "walk_in",
     subscriptionId: (r.subscription_id as string) ?? null,
@@ -251,20 +255,20 @@ export async function deleteAttendanceFromDB(id: string): Promise<void> {
 
 function rowToPenalty(r: Record<string, unknown>): StoredPenalty {
   return {
-    id: r.id as string,
-    studentId: r.student_id as string,
-    studentName: r.student_name as string,
+    id: str(r.id),
+    studentId: str(r.student_id),
+    studentName: str(r.student_name),
     bookingId: (r.booking_id as string) ?? null,
-    bookableClassId: r.bookable_class_id as string,
-    classTitle: r.class_title as string,
-    classDate: r.class_date as string,
-    reason: r.reason as PenaltyReason,
-    amountCents: r.amount_cents as number,
-    resolution: r.resolution as PenaltyResolution,
+    bookableClassId: str(r.bookable_class_id),
+    classTitle: str(r.class_title),
+    classDate: str(r.class_date),
+    reason: (r.reason as PenaltyReason) ?? "no_show",
+    amountCents: (r.amount_cents as number) ?? 0,
+    resolution: (r.resolution as PenaltyResolution) ?? "monetary_pending",
     subscriptionId: (r.subscription_id as string) ?? null,
     creditDeducted: (r.credit_deducted as number) ?? 0,
     notes: (r.notes as string) ?? null,
-    createdAt: r.created_at as string,
+    createdAt: str(r.created_at, new Date().toISOString()),
   };
 }
 
@@ -337,26 +341,26 @@ export async function deletePenaltyFromDB(id: string): Promise<void> {
 
 function rowToSubscription(r: Record<string, unknown>): MockSubscription {
   return {
-    id: r.id as string,
-    studentId: r.student_id as string,
-    productId: r.product_id as string,
-    productName: r.product_name as string,
-    productType: r.product_type as ProductType,
-    status: r.status as SubscriptionStatus,
+    id: str(r.id),
+    studentId: str(r.student_id),
+    productId: str(r.product_id),
+    productName: str(r.product_name),
+    productType: (r.product_type as ProductType) ?? "membership",
+    status: (r.status as SubscriptionStatus) ?? "active",
     totalCredits: (r.total_credits as number) ?? null,
     remainingCredits: (r.remaining_credits as number) ?? null,
-    validFrom: r.valid_from as string,
+    validFrom: str(r.valid_from, new Date().toISOString().slice(0, 10)),
     validUntil: (r.valid_until as string) ?? null,
     selectedStyleId: (r.selected_style_id as string) ?? null,
     selectedStyleName: (r.selected_style_name as string) ?? null,
-    selectedStyleIds: r.selected_style_ids ? JSON.parse(r.selected_style_ids as string) : null,
-    selectedStyleNames: r.selected_style_names ? JSON.parse(r.selected_style_names as string) : null,
+    selectedStyleIds: r.selected_style_ids ? JSON.parse(str(r.selected_style_ids, "null")) : null,
+    selectedStyleNames: r.selected_style_names ? JSON.parse(str(r.selected_style_names, "null")) : null,
     notes: (r.notes as string) ?? null,
     termId: (r.term_id as string) ?? null,
     paymentMethod: (r.payment_method as PaymentMethod) ?? "cash",
     paymentStatus: (r.payment_status as SalePaymentStatus) ?? "paid",
     assignedBy: (r.assigned_by as string) ?? null,
-    assignedAt: (r.assigned_at as string) ?? new Date().toISOString(),
+    assignedAt: str(r.assigned_at) || new Date().toISOString(),
     autoRenew: (r.auto_renew as boolean) ?? false,
     classesUsed: (r.classes_used as number) ?? 0,
     classesPerTerm: (r.classes_per_term as number) ?? null,
@@ -421,13 +425,13 @@ import type { StoredStudioHire } from "@/lib/services/studio-hire-service";
 
 function rowToStudioHire(r: Record<string, unknown>): StoredStudioHire {
   return {
-    id: r.id as string,
-    requesterName: r.requester_name as string,
+    id: str(r.id),
+    requesterName: str(r.requester_name),
     contactEmail: (r.contact_email as string) ?? null,
     contactPhone: (r.contact_phone as string) ?? null,
-    date: r.date as string,
-    startTime: r.start_time as string,
-    endTime: r.end_time as string,
+    date: str(r.date),
+    startTime: str(r.start_time),
+    endTime: str(r.end_time),
     expectedAttendees: r.expected_attendees != null ? Number(r.expected_attendees) : null,
     bookingType: r.booking_type as StoredStudioHire["bookingType"],
     isBlockBooking: !!r.is_block_booking,
@@ -440,8 +444,8 @@ function rowToStudioHire(r: Record<string, unknown>): StoredStudioHire {
     cancelledAt: (r.cancelled_at as string) ?? null,
     cancellationNote: (r.cancellation_note as string) ?? null,
     adminNote: (r.admin_note as string) ?? null,
-    createdAt: r.created_at as string,
-    updatedAt: r.updated_at as string,
+    createdAt: str(r.created_at, new Date().toISOString()),
+    updatedAt: str(r.updated_at, new Date().toISOString()),
   };
 }
 

@@ -7,7 +7,7 @@ import {
   getStudentRepo,
 } from "@/lib/repositories";
 import { getInstances } from "@/lib/services/schedule-store";
-import { isClassInFuture, isClassEnded } from "@/lib/domain/datetime";
+import { isClassInFuture, isClassEnded, getTodayStr } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -283,6 +283,7 @@ export default async function BookingsPage({
       subscriptionsByStudent={subscriptionsByStudent}
       initialSearch={params.classTitle ?? ""}
       isDev={isDev}
+      today={getTodayStr()}
     />
   );
 }

@@ -10,7 +10,8 @@ const SHORT_MONTHS = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
 
-export function formatDate(date: Date | string): string {
+export function formatDate(date: Date | string | null | undefined): string {
+  if (date == null) return "—";
   if (typeof date === "string" && date === "") return "—";
   const d = typeof date === "string"
     ? new Date(date.includes("T") ? date : date + "T12:00:00Z")
@@ -19,14 +20,18 @@ export function formatDate(date: Date | string): string {
   return `${SHORT_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
-export function formatShortDate(dateStr: string): string {
+export function formatShortDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
   const d = new Date(dateStr + "T12:00:00Z");
+  if (isNaN(d.getTime())) return "—";
   return `${SHORT_DAYS[d.getUTCDay()]}, ${d.getUTCDate()} ${SHORT_MONTHS[d.getUTCMonth()]}`;
 }
 
-export function formatTime(time: string): string {
+export function formatTime(time: string | null | undefined): string {
+  if (!time) return "—";
   const [hours, minutes] = time.split(":");
   const h = parseInt(hours, 10);
+  if (isNaN(h)) return "—";
   const suffix = h >= 12 ? "PM" : "AM";
   const display = h > 12 ? h - 12 : h === 0 ? 12 : h;
   return `${display}:${minutes} ${suffix}`;

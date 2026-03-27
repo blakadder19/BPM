@@ -60,6 +60,7 @@ interface AdminBookingsProps {
   subscriptionsByStudent: Record<string, SubscriptionOption[]>;
   initialSearch?: string;
   isDev?: boolean;
+  today?: string;
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -72,6 +73,7 @@ export function AdminBookings({
   subscriptionsByStudent,
   initialSearch,
   isDev,
+  today: todayProp,
 }: AdminBookingsProps) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -91,7 +93,7 @@ export function AdminBookings({
   const [deleteTarget, setDeleteTarget] = useState<BookingView | null>(null);
   const [waitlistClassId, setWaitlistClassId] = useState<string | null>(null);
 
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = todayProp ?? new Date().toISOString().slice(0, 10);
 
   const typeOptions = useMemo(() => {
     const types = new Set(bookings.map((b) => b.classType).filter(Boolean));
