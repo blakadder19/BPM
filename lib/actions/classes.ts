@@ -1092,6 +1092,305 @@ export async function bulkDefaultAssignmentAction(
   return { success: true, updated };
 }
 
+// ── Bulk create instances ───────────────────────────────────
+
+export async function bulkCreateInstancesAction(
+  templateIds: string[],
+  startDate: string,
+  endDate: string,
+  status: InstanceStatus
+): Promise<{ success: boolean; created: number; skipped: number; failed: number; error?: string }> {
+  await requireRole(["admin"]);
+  await ensureScheduleBootstrapped();
+
+  const empty = { success: false, created: 0, skipped: 0, failed: 0 };
+  if (!templateIds.length) return { ...empty, error: "No templates selected" };
+  if (!startDate || !endDate) return { ...empty, error: "Date range required" };
+  if (endDate < startDate) return { ...empty, error: "End date must be after start date" };
+  if (!VALID_STATUSES.has(status)) return { ...empty, error: "Invalid status" };
+
+  const allTerms = await getTermRepo().getAll();
+  const termRanges = allTerms.map((t) => ({ id: t.id, startDate: t.startDate, endDate: t.endDate }));
+
+  const selectedTemplates = templateIds
+    .map((id) => getTemplate(id))
+    .filter((t): t is NonNullable<ReturnType<typeof getTemplate>> => !!t);
+
+  if (selectedTemplates.length === 0) {
+    return { ...empty, error: "No valid templates found" };
+  }
+
+  const existingKeys = new Set<string>();
+  for (const inst of getInstances()) {
+    if (inst.classId) existingKeys.add(`${inst.classId}|${inst.date}|${inst.startTime}`);
+  }
+
+  let created = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  const start = new Date(startDate + "T12:00:00");
+  const end = new Date(endDate + "T12:00:00");
+
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const jsDay = d.getDay();
+    const dateStr = d.toISOString().slice(0, 10);
+
+    for (const tpl of selectedTemplates) {
+      if (tpl.dayOfWeek !== jsDay) continue;
+
+      const key = `${tpl.id}|${dateStr}|${tpl.startTime}`;
+      if (existingKeys.has(key)) { skipped++; continue; }
+
+      let termId = tpl.termId ?? null;
+      const termBound = tpl.termBound ?? false;
+
+      if (termBound && termId) {
+        const linked = termRanges.find((t) => t.id === termId);
+        if (linked && (dateStr < linked.startDate || dateStr > linked.endDate)) { skipped++; continue; }
+      } else if (termBound && !termId) {
+        const matched = termRanges.find((t) => t.startDate <= dateStr && dateStr <= t.endDate);
+        if (matched) { termId = matched.id; } else { skipped++; continue; }
+      } else if (!termId) {
+        const matched = termRanges.find((t) => t.startDate <= dateStr && dateStr <= t.endDate);
+        if (matched) termId = matched.id;
+      }
+
+      const instanceData = {
+        classId: tpl.id,
+        title: tpl.title,
+        classType: tpl.classType as ClassType,
+        styleName: tpl.styleName,
+        styleId: tpl.styleId,
+        level: tpl.level,
+        date: dateStr,
+        startTime: tpl.startTime,
+        endTime: tpl.endTime,
+        maxCapacity: tpl.maxCapacity,
+        leaderCap: tpl.leaderCap,
+        followerCap: tpl.followerCap,
+        location: tpl.location,
+        status,
+        notes: null as string | null,
+        termBound,
+        termId,
+      };
+
+      try {
+        const dbInst = await createInstanceInDB({
+          ...instanceData,
+          classType: instanceData.classType as "class" | "social" | "student_practice",
+        });
+        const memInst = createInstance(instanceData);
+        if (dbInst) memInst.id = dbInst.id;
+        existingKeys.add(key);
+        created++;
+      } catch (err) {
+        console.error("[bulkCreateInstancesAction] Failed:", dbError(err));
+        failed++;
+      }
+    }
+  }
+
+  revalidateClasses();
+
+  if (failed > 0 && created === 0) {
+    return { success: false, created, skipped, failed, error: `All ${failed} instances failed to create` };
+  }
+  if (failed > 0) {
+    return { success: false, created, skipped, failed, error: `Created ${created} but ${failed} failed` };
+  }
+  return { success: true, created, skipped, failed };
+}
+
+// ── Copy previous month schedule ────────────────────────────
+
+export async function copyMonthScheduleAction(
+  sourceYM: string,
+  targetYM: string,
+  opts: { copyTeachers: boolean; copyNotes: boolean; status: InstanceStatus }
+): Promise<{ success: boolean; created: number; skipped: number; failed: number; error?: string }> {
+  await requireRole(["admin"]);
+  await ensureScheduleBootstrapped();
+
+  const empty = { success: false, created: 0, skipped: 0, failed: 0 };
+
+  if (!/^\d{4}-\d{2}$/.test(sourceYM) || !/^\d{4}-\d{2}$/.test(targetYM)) {
+    return { ...empty, error: "Invalid month format" };
+  }
+  if (sourceYM === targetYM) return { ...empty, error: "Source and target months must be different" };
+  if (!VALID_STATUSES.has(opts.status)) return { ...empty, error: "Invalid status" };
+
+  const [sy, sm] = sourceYM.split("-").map(Number);
+  const srcStart = `${sourceYM}-01`;
+  const srcLastDay = new Date(sy, sm, 0).getDate();
+  const srcEnd = `${sourceYM}-${String(srcLastDay).padStart(2, "0")}`;
+
+  const [ty, tm] = targetYM.split("-").map(Number);
+  const tgtStart = `${targetYM}-01`;
+  const tgtLastDay = new Date(ty, tm, 0).getDate();
+  const tgtEnd = `${targetYM}-${String(tgtLastDay).padStart(2, "0")}`;
+
+  const allInstances = getInstances();
+  const sourceInstances = allInstances.filter((bc) => bc.date >= srcStart && bc.date <= srcEnd);
+
+  if (sourceInstances.length === 0) {
+    return { ...empty, error: `No class instances found in ${sourceYM}` };
+  }
+
+  type SlotRep = {
+    dayOfWeek: number;
+    classId: string | null;
+    title: string;
+    classType: ClassType;
+    styleName: string | null;
+    styleId: string | null;
+    level: string | null;
+    startTime: string;
+    endTime: string;
+    maxCapacity: number | null;
+    leaderCap: number | null;
+    followerCap: number | null;
+    location: string;
+    teacherOverride1Id?: string | null;
+    teacherOverride2Id?: string | null;
+    termBound?: boolean;
+    notes?: string | null;
+  };
+
+  const slotMap = new Map<string, { rep: SlotRep; latestDate: string }>();
+  for (const bc of sourceInstances) {
+    const dow = new Date(bc.date + "T12:00:00").getDay();
+    const key = bc.classId
+      ? `${dow}|${bc.classId}|${bc.startTime}`
+      : `${dow}|${bc.title}|${bc.startTime}|${bc.endTime}`;
+    const existing = slotMap.get(key);
+
+    if (!existing || bc.date > existing.latestDate) {
+      slotMap.set(key, {
+        latestDate: bc.date,
+        rep: {
+          dayOfWeek: dow,
+          classId: bc.classId,
+          title: bc.title,
+          classType: bc.classType,
+          styleName: bc.styleName,
+          styleId: bc.styleId,
+          level: bc.level,
+          startTime: bc.startTime,
+          endTime: bc.endTime,
+          maxCapacity: bc.maxCapacity,
+          leaderCap: bc.leaderCap,
+          followerCap: bc.followerCap,
+          location: bc.location,
+          teacherOverride1Id: bc.teacherOverride1Id,
+          teacherOverride2Id: bc.teacherOverride2Id,
+          termBound: bc.termBound,
+          notes: bc.notes,
+        },
+      });
+    }
+  }
+
+  const slots = Array.from(slotMap.values()).map((v) => v.rep);
+
+  const existingKeys = new Set<string>();
+  for (const inst of allInstances) {
+    if (inst.classId) existingKeys.add(`${inst.classId}|${inst.date}|${inst.startTime}`);
+  }
+
+  const allTerms = await getTermRepo().getAll();
+  const termRanges = allTerms.map((t) => ({ id: t.id, startDate: t.startDate, endDate: t.endDate }));
+
+  let created = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  const start = new Date(tgtStart + "T12:00:00");
+  const end = new Date(tgtEnd + "T12:00:00");
+
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const dow = d.getDay();
+    const dateStr = d.toISOString().slice(0, 10);
+
+    for (const slot of slots) {
+      if (slot.dayOfWeek !== dow) continue;
+
+      const dupKey = slot.classId
+        ? `${slot.classId}|${dateStr}|${slot.startTime}`
+        : null;
+      if (dupKey && existingKeys.has(dupKey)) { skipped++; continue; }
+
+      let termId: string | null = null;
+      const matchedTerm = termRanges.find((t) => t.startDate <= dateStr && dateStr <= t.endDate);
+      if (matchedTerm) termId = matchedTerm.id;
+
+      const instanceData = {
+        classId: slot.classId,
+        title: slot.title,
+        classType: slot.classType,
+        styleName: slot.styleName,
+        styleId: slot.styleId,
+        level: slot.level,
+        date: dateStr,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        maxCapacity: slot.maxCapacity,
+        leaderCap: slot.leaderCap,
+        followerCap: slot.followerCap,
+        location: slot.location,
+        status: opts.status,
+        notes: (opts.copyNotes ? slot.notes : null) as string | null,
+        termBound: slot.termBound ?? false,
+        termId,
+        ...(opts.copyTeachers
+          ? {
+              teacherOverride1Id: slot.teacherOverride1Id ?? null,
+              teacherOverride2Id: slot.teacherOverride2Id ?? null,
+            }
+          : {}),
+      };
+
+      try {
+        const dbInst = await createInstanceInDB({
+          ...instanceData,
+          classType: instanceData.classType as "class" | "social" | "student_practice",
+        });
+        const memInst = createInstance(instanceData);
+        if (dbInst) memInst.id = dbInst.id;
+
+        if (opts.copyTeachers && (slot.teacherOverride1Id || slot.teacherOverride2Id)) {
+          const overridePatch = {
+            teacherOverride1Id: slot.teacherOverride1Id ?? null,
+            teacherOverride2Id: slot.teacherOverride2Id ?? null,
+          };
+          const newId = dbInst?.id ?? memInst.id;
+          try {
+            await saveInstanceToDB(newId, overridePatch);
+          } catch { /* best effort */ }
+          Object.assign(memInst, overridePatch);
+        }
+
+        if (dupKey) existingKeys.add(dupKey);
+        created++;
+      } catch (err) {
+        console.error("[copyMonthScheduleAction] Failed:", dbError(err));
+        failed++;
+      }
+    }
+  }
+
+  revalidateClasses();
+
+  if (failed > 0 && created === 0) {
+    return { success: false, created, skipped, failed, error: `All ${failed} instances failed to create` };
+  }
+  if (failed > 0) {
+    return { success: false, created, skipped, failed, error: `Created ${created} but ${failed} failed` };
+  }
+  return { success: true, created, skipped, failed };
+}
+
 // ── Dev-only actions ────────────────────────────────────────
 
 export async function clearScheduleAction(): Promise<{

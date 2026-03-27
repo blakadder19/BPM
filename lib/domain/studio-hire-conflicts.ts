@@ -1,8 +1,8 @@
 /**
  * Pure domain logic for Studio Hire time-slot conflict detection.
  *
- * Structured so additional conflict sources (class schedule, external calendar)
- * can be added as new functions without rewriting the core overlap logic.
+ * Supports overnight bookings: when endTime <= startTime, the booking
+ * is understood to span from startTime on `date` to endTime on `date + 1`.
  */
 
 export interface TimeSlot {
@@ -18,17 +18,61 @@ export interface ConflictResult {
   conflicts: TimeSlot[];
 }
 
+function nextDay(date: string): string {
+  const d = new Date(date + "T12:00:00");
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Whether endTime <= startTime, meaning it crosses midnight. */
+export function isOvernightBooking(startTime: string, endTime: string): boolean {
+  return endTime <= startTime;
+}
+
 /**
- * Two time slots on the same date overlap when one starts before the other ends
- * and vice versa.  Touching boundaries (10:00–11:00 and 11:00–12:00) are NOT
- * considered overlapping — the first has ended when the second begins.
+ * Expand a booking into one or two same-day segments for overlap checking.
+ * A normal booking yields one segment; an overnight booking yields two:
+ *   segment 1: date startTime→"24:00"
+ *   segment 2: date+1 "00:00"→endTime
  */
-export function timeSlotsOverlap(
+function toSegments(slot: { date: string; startTime: string; endTime: string }): { date: string; startTime: string; endTime: string }[] {
+  if (!isOvernightBooking(slot.startTime, slot.endTime)) {
+    return [slot];
+  }
+  return [
+    { date: slot.date, startTime: slot.startTime, endTime: "24:00" },
+    { date: nextDay(slot.date), startTime: "00:00", endTime: slot.endTime },
+  ];
+}
+
+/**
+ * Two same-day segments overlap when one starts before the other ends
+ * and vice versa. Touching boundaries (10:00–11:00 and 11:00–12:00) are NOT
+ * considered overlapping.
+ */
+function segmentsOverlap(
   a: { date: string; startTime: string; endTime: string },
   b: { date: string; startTime: string; endTime: string }
 ): boolean {
   if (a.date !== b.date) return false;
   return a.startTime < b.endTime && b.startTime < a.endTime;
+}
+
+/**
+ * Two time slots overlap if any of their same-day segments overlap.
+ */
+export function timeSlotsOverlap(
+  a: { date: string; startTime: string; endTime: string },
+  b: { date: string; startTime: string; endTime: string }
+): boolean {
+  const segsA = toSegments(a);
+  const segsB = toSegments(b);
+  for (const sa of segsA) {
+    for (const sb of segsB) {
+      if (segmentsOverlap(sa, sb)) return true;
+    }
+  }
+  return false;
 }
 
 /**

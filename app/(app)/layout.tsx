@@ -1,12 +1,18 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
 import { getDevStudentId } from "@/lib/actions/auth";
-import { getStudentRepo } from "@/lib/repositories";
+import { getStudentRepo, getTermRepo } from "@/lib/repositories";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { UserProvider } from "@/components/providers/user-provider";
 import { DevPanelGate } from "@/components/dev/dev-panel-gate";
 import { SessionGuard } from "@/components/layout/session-guard";
+import { computeAdminAlerts, type AdminAlert } from "@/lib/domain/admin-alerts";
+import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
+import { getInstances } from "@/lib/services/schedule-store";
+import { getAssignments } from "@/lib/services/teacher-store";
+import { getTodayStr } from "@/lib/domain/datetime";
+import { getSettings } from "@/lib/services/settings-store";
 
 export default async function AppLayout({
   children,
@@ -36,6 +42,24 @@ export default async function AppLayout({
     devStudentId = (await getDevStudentId()) ?? undefined;
   }
 
+  let adminAlerts: AdminAlert[] = [];
+  if (user.role === "admin") {
+    try {
+      await ensureScheduleBootstrapped();
+      const terms = await getTermRepo().getAll();
+      const settings = getSettings();
+      adminAlerts = computeAdminAlerts({
+        terms,
+        instances: getInstances(),
+        teacherAssignments: getAssignments(),
+        today: getTodayStr(),
+        disabledAlertIds: settings.disabledAlertIds,
+      });
+    } catch {
+      // Alert computation is best-effort — never block the layout
+    }
+  }
+
   const panelStudentId = devStudentId ?? user.id;
   const panelStudentName = devStudentId
     ? devStudents?.find((s) => s.id === devStudentId)?.fullName ?? user.fullName
@@ -48,6 +72,7 @@ export default async function AppLayout({
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
           user={user}
+          alerts={adminAlerts}
           devStudents={devStudents}
           devStudentId={devStudentId}
         />

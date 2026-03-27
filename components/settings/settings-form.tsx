@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Save, CheckCircle, AlertTriangle } from "lucide-react";
+import { Save, CheckCircle, AlertTriangle, Database, Wifi, WifiOff, Info, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { saveSettings } from "@/lib/actions/settings";
 import type { AppSettings } from "@/lib/services/settings-store";
+import { ALERT_TYPE_META } from "@/lib/domain/admin-alerts";
+
+export type SupabaseStatus =
+  | { state: "connected"; projectUrl: string; tableCount: number }
+  | { state: "not_configured" }
+  | { state: "error"; detail: string };
 
 interface StyleOption {
   id: string;
@@ -20,9 +26,10 @@ interface StyleOption {
 interface SettingsFormProps {
   initialSettings: AppSettings;
   allStyles: StyleOption[];
+  supabaseStatus?: SupabaseStatus;
 }
 
-export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) {
+export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: SettingsFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -31,6 +38,7 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
   const [s, setS] = useState<AppSettings>({
     ...initialSettings,
     roleBalancedStyleNames: initialSettings.roleBalancedStyleNames ?? [],
+    disabledAlertIds: initialSettings.disabledAlertIds ?? [],
     provisionalNotes: initialSettings.provisionalNotes ?? "",
   });
 
@@ -60,6 +68,18 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
 
   function setNotes(value: string) {
     setS((prev) => ({ ...prev, provisionalNotes: value }));
+    setSaved(false);
+    setError(null);
+  }
+
+  function toggleAlertId(alertId: string) {
+    setS((prev) => {
+      const current = prev.disabledAlertIds ?? [];
+      const next = current.includes(alertId)
+        ? current.filter((id) => id !== alertId)
+        : [...current, alertId];
+      return { ...prev, disabledAlertIds: next };
+    });
     setSaved(false);
     setError(null);
   }
@@ -154,9 +174,16 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
           {/* ── 2. Role Balance ───────────────────────────────── */}
           <Card>
             <CardHeader>
-              <CardTitle>Role Balance</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>Role Balance</CardTitle>
+                <Badge variant="muted">Partially wired</Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-1 flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>The imbalance number is saved but booking enforcement still uses a static default. The style checkboxes control display badges in Schedule/Templates.</span>
+              </div>
               <NumberField
                 id="allowedRoleImbalance"
                 label="Max leader/follower imbalance"
@@ -191,7 +218,7 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
                   })}
                 </div>
                 <p className="text-xs text-gray-400 pt-1">
-                  Checked styles enforce leader/follower balance when booking.
+                  Checked styles show role-balance indicators in Schedule and Templates.
                 </p>
               </div>
             </CardContent>
@@ -200,9 +227,16 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
           {/* ── 3. Class Availability ────────────────────────── */}
           <Card>
             <CardHeader>
-              <CardTitle>Class Availability</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>Class Availability</CardTitle>
+                <Badge variant="muted">UI only</Badge>
+              </div>
             </CardHeader>
             <CardContent className="space-y-2">
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3 flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>These toggles control display labels only. Booking enforcement uses the event type configuration and is not yet driven by these settings.</span>
+              </div>
               <CheckboxField
                 name="socialsBookable"
                 label="Socials are bookable"
@@ -230,9 +264,16 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
           {/* ── 4. Waitlist ──────────────────────────────────── */}
           <Card>
             <CardHeader>
-              <CardTitle>Waitlist</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>Waitlist</CardTitle>
+                <Badge variant="muted">Not yet wired</Badge>
+              </div>
             </CardHeader>
             <CardContent>
+              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3 flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>This setting is saved but not yet consumed by any waitlist logic. It will be wired when automated waitlist offer expiry is implemented.</span>
+              </div>
               <NumberField
                 id="waitlistOfferExpiryHours"
                 label="Waitlist offer expiry (hours)"
@@ -326,7 +367,46 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
             </CardContent>
           </Card>
 
-          {/* ── 7. Provisional / Pending Decisions ───────────── */}
+          {/* ── 7. Admin Alerts ─────────────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-5 w-5 text-gray-400" />
+                Admin Alerts
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-gray-500">
+                Choose which operational alerts appear in the bell icon. Disabled alerts are hidden but can be re-enabled at any time.
+              </p>
+              <div className="space-y-2">
+                {ALERT_TYPE_META.map((meta) => {
+                  const isEnabled = !(s.disabledAlertIds ?? []).includes(meta.id);
+                  return (
+                    <label key={meta.id} className="flex items-start gap-2.5 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isEnabled}
+                        onChange={() => toggleAlertId(meta.id)}
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className={isEnabled ? "text-gray-700 font-medium" : "text-gray-400 line-through"}>
+                          {meta.label}
+                        </span>
+                        <p className="text-xs text-gray-400 leading-snug">{meta.description}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              {(s.disabledAlertIds ?? []).map((id) => (
+                <input key={id} type="hidden" name="disabledAlertIds" value={id} />
+              ))}
+            </CardContent>
+          </Card>
+
+          {/* ── 8. Provisional / Pending Decisions ───────────── */}
           <Card className="lg:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -354,26 +434,25 @@ export function SettingsForm({ initialSettings, allStyles }: SettingsFormProps) 
             </CardContent>
           </Card>
 
-          {/* ── 6. System Status (read-only) ─────────────────── */}
+          {/* ── System Status (read-only) ─────────────────────── */}
           <Card>
             <CardHeader>
-              <CardTitle>Supabase</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5 text-gray-400" />
+                Supabase
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-gray-500">
-                Database connection not configured. Add your Supabase
-                credentials to{" "}
-                <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">
-                  .env.local
-                </code>{" "}
-                to connect.
-              </p>
+              <SupabaseStatusDisplay status={supabaseStatus} />
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Payments</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle>Payments</CardTitle>
+                <Badge variant="muted">Not implemented</Badge>
+              </div>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-gray-500">
@@ -456,5 +535,67 @@ function CheckboxField({
       />
       <span>{label}</span>
     </label>
+  );
+}
+
+function SupabaseStatusDisplay({ status }: { status?: SupabaseStatus }) {
+  if (!status || status.state === "not_configured") {
+    return (
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100">
+          <WifiOff className="h-5 w-5 text-gray-400" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-gray-700">Not configured</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Add <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
+            <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">SUPABASE_SERVICE_ROLE_KEY</code> to
+            your environment to connect.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status.state === "error") {
+    return (
+      <div className="flex items-start gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50">
+          <AlertTriangle className="h-5 w-5 text-red-500" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-red-700">Connection error</p>
+          <p className="text-xs text-red-600 mt-0.5">{status.detail}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const hostname = (() => {
+    try {
+      return new URL(status.projectUrl).hostname;
+    } catch {
+      return status.projectUrl;
+    }
+  })();
+
+  return (
+    <div className="flex items-start gap-3">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-50">
+        <Wifi className="h-5 w-5 text-emerald-500" />
+      </div>
+      <div>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-emerald-700">Connected</p>
+          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+        </div>
+        <p className="text-xs text-gray-500 mt-0.5">
+          {hostname}
+        </p>
+        <p className="text-xs text-gray-400 mt-0.5">
+          Settings are persisted to the <code className="rounded bg-gray-100 px-1 py-0.5">business_rules</code> table.
+        </p>
+      </div>
+    </div>
   );
 }

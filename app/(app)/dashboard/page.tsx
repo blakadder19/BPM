@@ -11,7 +11,7 @@ import {
   getAttendanceRepo,
 } from "@/lib/repositories";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
-import { getTodayStr, isClassInFuture, effectiveInstanceStatus } from "@/lib/domain/datetime";
+import { getTodayStr, isClassInFuture, isClassEnded, effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { computeMemberBenefits } from "@/lib/domain/member-benefits";
@@ -167,7 +167,11 @@ export default async function DashboardPage() {
   const penaltySvc = getPenaltyRepo().getService();
 
   const upcomingInstances = allInstances
-    .filter((bc) => bc.date >= todayStr && bc.classType === "class")
+    .filter((bc) =>
+      bc.date >= todayStr &&
+      bc.classType === "class" &&
+      !isClassEnded(bc.date, bc.endTime)
+    )
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
 
   const todaysClassCount = allInstances.filter(
@@ -177,11 +181,14 @@ export default async function DashboardPage() {
   const upcomingBookingCount = bookingSvc.bookings.filter((b) => {
     if (b.status !== "confirmed") return false;
     const cls = bookingSvc.getClass(b.bookableClassId);
-    return cls ? cls.date >= todayStr : false;
+    if (!cls || cls.date < todayStr) return false;
+    return !isClassEnded(cls.date, cls.endTime);
   }).length;
 
   const upcomingClassIds = new Set(
-    allInstances.filter((bc) => bc.date >= todayStr).map((bc) => bc.id)
+    allInstances
+      .filter((bc) => bc.date >= todayStr && !isClassEnded(bc.date, bc.endTime))
+      .map((bc) => bc.id)
   );
   const activeWaitlistCount = bookingSvc.waitlist.filter(
     (w) => w.status === "waiting" && upcomingClassIds.has(w.bookableClassId)

@@ -14,6 +14,9 @@ import {
   Clock,
   StickyNote,
   Banknote,
+  List,
+  Calendar,
+  Moon,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -32,7 +35,7 @@ import {
   DialogBody,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { formatDate } from "@/lib/utils";
+import { formatDate, cn } from "@/lib/utils";
 import type { StoredStudioHire } from "@/lib/services/studio-hire-service";
 import type {
   StudioHireStatus,
@@ -42,6 +45,7 @@ import type {
 import {
   findStudioHireConflicts,
   formatConflictMessage,
+  isOvernightBooking,
 } from "@/lib/domain/studio-hire-conflicts";
 import {
   computeDepositSummary,
@@ -55,6 +59,7 @@ import {
   updateStudioHireStatusAction,
   deleteStudioHireAction,
 } from "@/lib/actions/studio-hire";
+import { StudioHireCalendar } from "./studio-hire-calendar";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -89,6 +94,8 @@ const INPUT_CLS =
 
 // ── Main Component ───────────────────────────────────────────
 
+type ViewMode = "table" | "calendar";
+
 export function AdminStudioHire({
   entries,
 }: {
@@ -96,6 +103,7 @@ export function AdminStudioHire({
 }) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<StoredStudioHire | null>(null);
   const [detail, setDetail] = useState<StoredStudioHire | null>(null);
@@ -121,30 +129,65 @@ export function AdminStudioHire({
         title="Studio Hire"
         description="Manage studio hire enquiries and bookings"
         actions={
-          <Button onClick={() => setShowAdd(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New Enquiry
-          </Button>
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
+              <button
+                onClick={() => setViewMode("table")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  viewMode === "table"
+                    ? "bg-gray-100 text-gray-900"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+              >
+                <List className="h-4 w-4" />
+                Table
+              </button>
+              <button
+                onClick={() => setViewMode("calendar")}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  viewMode === "calendar"
+                    ? "bg-gray-100 text-gray-900"
+                    : "text-gray-500 hover:text-gray-700"
+                )}
+              >
+                <Calendar className="h-4 w-4" />
+                Calendar
+              </button>
+            </div>
+            <Button onClick={() => setShowAdd(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              New Enquiry
+            </Button>
+          </div>
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="w-72">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Search by name, email, type…"
+      {viewMode === "table" && (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="w-72">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search by name, email, type…"
+            />
+          </div>
+          <SelectFilter
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={STATUS_OPTIONS}
+            placeholder="All statuses"
           />
         </div>
-        <SelectFilter
-          value={statusFilter}
-          onChange={setStatusFilter}
-          options={STATUS_OPTIONS}
-          placeholder="All statuses"
-        />
-      </div>
+      )}
 
-      {filtered.length === 0 ? (
+      {viewMode === "calendar" ? (
+        <StudioHireCalendar
+          entries={filtered}
+          onEntryClick={(e) => setDetail(e)}
+        />
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={Building2}
           title="No studio hire entries"
@@ -195,6 +238,9 @@ export function AdminStudioHire({
                 <p>{formatDate(e.date)}</p>
                 <p className="text-xs text-gray-400">
                   {e.startTime} – {e.endTime}
+                  {isOvernightBooking(e.startTime, e.endTime) && (
+                    <span className="ml-1 text-indigo-500" title="Ends next day">+1d</span>
+                  )}
                 </p>
               </Td>
               <Td>
@@ -288,8 +334,10 @@ function StudioHireFormDialog({
 
   const isEdit = !!entry;
 
+  const isOvernight = formStart !== "" && formEnd !== "" && formEnd <= formStart;
+
   const conflictWarning = useMemo(() => {
-    if (!formDate || !formStart || !formEnd || formStart >= formEnd) return null;
+    if (!formDate || !formStart || !formEnd || formStart === formEnd) return null;
     const { hasConflict, conflicts } = findStudioHireConflicts(
       { date: formDate, startTime: formStart, endTime: formEnd },
       entries,
@@ -404,6 +452,13 @@ function StudioHireFormDialog({
                 />
               </div>
             </div>
+
+            {isOvernight && (
+              <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+                <Moon className="h-4 w-4 flex-shrink-0" />
+                Overnight booking — ends next day
+              </div>
+            )}
 
             {conflictWarning && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -647,6 +702,11 @@ function DetailDialog({
             <div className="flex items-center gap-2 text-gray-600">
               <Clock className="h-4 w-4 text-gray-400" />
               {entry.startTime} – {entry.endTime}
+              {isOvernightBooking(entry.startTime, entry.endTime) && (
+                <span className="ml-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-600">
+                  <Moon className="h-3 w-3" /> next day
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 text-gray-600">
               <Building2 className="h-4 w-4 text-gray-400" />
