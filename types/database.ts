@@ -282,6 +282,10 @@ export interface Database {
           duration_days: number | null;
           dance_style_id: string | null;
           allowed_levels: string[] | null;
+          allowed_style_ids: string[] | null;
+          allowed_style_names: string[] | null;
+          style_name: string | null;
+          span_terms: number | null;
           is_active: boolean;
           is_provisional: boolean;
           term_bound: boolean;

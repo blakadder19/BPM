@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { canAccessClass } from "@/lib/domain/product-access";
-import { getAccessRule } from "@/config/product-access";
+import type { ProductAccessRule } from "@/config/product-access";
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
 import type { InstanceStatus, ClassType } from "@/types/domain";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -99,11 +99,13 @@ export function AddBookingDialog({
   students,
   classInstances,
   subscriptionsByStudent,
+  accessRulesMap,
   onClose,
 }: {
   students: StudentOption[];
   classInstances: ClassInstanceOption[];
   subscriptionsByStudent?: Record<string, SubscriptionOption[]>;
+  accessRulesMap?: Record<string, ProductAccessRule>;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -179,7 +181,7 @@ export function AddBookingDialog({
   const eligibleSubs = useMemo(() => {
     if (!selectedClass) return studentSubs;
     return studentSubs.filter((s) => {
-      const rule = getAccessRule(s.productId);
+      const rule = accessRulesMap?.[s.productId];
       if (!rule) return true;
       const result = canAccessClass(
         rule,
@@ -193,7 +195,7 @@ export function AddBookingDialog({
       );
       return result.granted;
     });
-  }, [studentSubs, selectedClass]);
+  }, [studentSubs, selectedClass, accessRulesMap]);
 
   const subscriptionSearchOptions = useMemo(
     () =>

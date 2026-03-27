@@ -7,7 +7,7 @@
 
 import { resolveSubscription } from "@/lib/domain/credit-rules";
 import type { ActiveSubscription } from "@/lib/domain/credit-rules";
-import { getAccessRulesMap } from "@/config/product-access";
+import type { ProductAccessRule } from "@/config/product-access";
 import { generateId } from "@/lib/utils";
 import type { ClassType, ProductType, SubscriptionStatus, TxType } from "@/types/domain";
 
@@ -84,6 +84,7 @@ export class CreditService {
     danceStyleId: string | null;
     level: string | null;
     className: string;
+    accessRules?: Map<string, ProductAccessRule>;
   }): CreditDeductionResult {
     const studentSubs = this.subscriptions.filter(
       (s) => s.studentId === params.studentId && s.status === "active"
@@ -104,7 +105,6 @@ export class CreditService {
       selectedStyleIds: s.selectedStyleIds,
     }));
 
-    const accessRules = getAccessRulesMap();
     const chosen = resolveSubscription(
       activeSubs,
       {
@@ -112,7 +112,7 @@ export class CreditService {
         danceStyleId: params.danceStyleId,
         level: params.level,
       },
-      accessRules
+      params.accessRules
     );
 
     if (!chosen) {

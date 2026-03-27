@@ -26,6 +26,7 @@ import {
   adminCheckInBookingAction,
   adminRestoreBookingAction,
 } from "@/lib/actions/bookings-admin";
+import type { ProductAccessRule } from "@/config/product-access";
 import type { BookingView } from "@/app/(app)/bookings/page";
 
 // ── Filter options ───────────────────────────────────────────
@@ -59,6 +60,7 @@ interface AdminBookingsProps {
   classInstances: ClassInstanceOption[];
   waitlistEntries: WaitlistEntryView[];
   subscriptionsByStudent: Record<string, SubscriptionOption[]>;
+  accessRulesMap?: Record<string, ProductAccessRule>;
   initialSearch?: string;
   isDev?: boolean;
   today?: string;
@@ -72,6 +74,7 @@ export function AdminBookings({
   classInstances,
   waitlistEntries,
   subscriptionsByStudent,
+  accessRulesMap,
   initialSearch,
   isDev,
   today: todayProp,
@@ -432,6 +435,7 @@ export function AdminBookings({
           students={students}
           classInstances={classInstances}
           subscriptionsByStudent={subscriptionsByStudent}
+          accessRulesMap={accessRulesMap}
           onClose={() => setShowAdd(false)}
         />
       )}

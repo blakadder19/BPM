@@ -23,7 +23,7 @@ import {
   createSubscriptionAction,
   updateSubscriptionAction,
 } from "@/lib/actions/subscriptions";
-import { getAccessRule, buildDynamicAccessRulesMap, type StyleAccess } from "@/config/product-access";
+import { buildDynamicAccessRulesMap, type StyleAccess } from "@/config/product-access";
 import type { StudentListItem } from "@/types/domain";
 import type { MockSubscription, MockProduct, MockTerm, MockDanceStyle } from "@/lib/mock-data";
 
@@ -554,7 +554,7 @@ export function AddSubscriptionDialog({
   const eligibleTerms = terms.filter((t) => t.status === "active" || t.status === "upcoming");
 
   const accessRulesMap = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
-  const accessRule = selectedProductId ? (accessRulesMap.get(selectedProductId) ?? getAccessRule(selectedProductId)) : undefined;
+  const accessRule = selectedProductId ? accessRulesMap.get(selectedProductId) : undefined;
   const styleAccess = accessRule?.styleAccess;
 
   function handleProductChange(productId: string) {
@@ -783,7 +783,7 @@ export function EditSubscriptionDialog({
   const [error, setError] = useState<string | null>(null);
 
   const accessRulesMap = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
-  const accessRule = accessRulesMap.get(sub.productId) ?? getAccessRule(sub.productId);
+  const accessRule = accessRulesMap.get(sub.productId);
   const styleAccess = accessRule?.styleAccess;
 
   const [selectedStyleId, setSelectedStyleId] = useState(sub.selectedStyleId ?? "");
