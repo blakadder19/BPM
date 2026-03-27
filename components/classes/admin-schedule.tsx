@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Inbox, Plus, ChevronDown, ChevronUp, Pencil,
   CalendarPlus, Trash2, XCircle, Lock, Unlock, Users,
-  List, Calendar, LayoutGrid,
+  List, Calendar, LayoutGrid, ListChecks, Copy,
 } from "lucide-react";
 import type { MockBookableClass, MockClass, MockTeacherPair } from "@/lib/mock-data";
 import type { Teacher } from "@/lib/services/teacher-roster-store";
@@ -27,6 +27,8 @@ import {
   InstanceDetailPanel,
   TeacherOverrideDialog,
 } from "./schedule-dialogs";
+import { BulkCreateDialog } from "./bulk-create-dialog";
+import { CopyMonthDialog } from "./copy-month-dialog";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { RescheduleConfirmDialog } from "./reschedule-confirm-dialog";
 
@@ -97,6 +99,8 @@ export function AdminSchedule({
   const [showAdd, setShowAdd] = useState(false);
   const [addDefaultDate, setAddDefaultDate] = useState<string | null>(null);
   const [showGenerate, setShowGenerate] = useState(false);
+  const [showBulkCreate, setShowBulkCreate] = useState(false);
+  const [showCopyMonth, setShowCopyMonth] = useState(false);
   const [editTarget, setEditTarget] = useState<MockBookableClass | null>(null);
   const [overrideTarget, setOverrideTarget] = useState<MockBookableClass | null>(null);
   const [statusPending, startStatusTransition] = useTransition();
@@ -150,6 +154,14 @@ export function AdminSchedule({
   const styleOptions = useMemo(() => {
     const names = new Set(instances.map((bc) => bc.styleName).filter(Boolean) as string[]);
     return Array.from(names).sort().map((n) => ({ value: n, label: n }));
+  }, [instances]);
+
+  const existingInstanceKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const bc of instances) {
+      if (bc.classId) keys.add(`${bc.classId}|${bc.date}|${bc.startTime}`);
+    }
+    return keys;
   }, [instances]);
 
   const filtered = useMemo(() => {
@@ -232,6 +244,14 @@ export function AdminSchedule({
               </Button>
             </>
           )}
+          <Button variant="outline" onClick={() => setShowCopyMonth(true)}>
+            <Copy className="mr-1.5 h-4 w-4" />
+            Copy Previous Month
+          </Button>
+          <Button variant="outline" onClick={() => setShowBulkCreate(true)}>
+            <ListChecks className="mr-1.5 h-4 w-4" />
+            Bulk Create
+          </Button>
           <Button onClick={() => { setAddDefaultDate(null); setShowAdd(true); }}>
             <Plus className="mr-1.5 h-4 w-4" />
             Add Instance
@@ -325,6 +345,12 @@ export function AdminSchedule({
                       <CalendarPlus className="mr-1.5 h-4 w-4" /> Generate
                     </Button>
                   )}
+                  <Button variant="outline" onClick={() => setShowCopyMonth(true)}>
+                    <Copy className="mr-1.5 h-4 w-4" /> Copy Month
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowBulkCreate(true)}>
+                    <ListChecks className="mr-1.5 h-4 w-4" /> Bulk Create
+                  </Button>
                   <Button onClick={() => { setAddDefaultDate(null); setShowAdd(true); }}>
                     <Plus className="mr-1.5 h-4 w-4" /> Add Instance
                   </Button>
@@ -506,6 +532,21 @@ export function AdminSchedule({
           activeTemplateCount={activeTemplateCount}
           totalTemplateCount={totalTemplateCount}
           onClose={() => setShowGenerate(false)}
+        />
+      )}
+      {showBulkCreate && (
+        <BulkCreateDialog
+          templates={templates}
+          allTerms={allTerms}
+          existingKeys={existingInstanceKeys}
+          onClose={() => setShowBulkCreate(false)}
+        />
+      )}
+      {showCopyMonth && (
+        <CopyMonthDialog
+          instances={instances}
+          existingKeys={existingInstanceKeys}
+          onClose={() => setShowCopyMonth(false)}
         />
       )}
       {overrideTarget && (

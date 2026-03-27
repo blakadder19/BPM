@@ -60,6 +60,9 @@ export async function saveSettings(
   const rawStyles = formData.getAll("roleBalancedStyleNames") as string[];
   const roleBalancedStyleNames = rawStyles.filter((s) => VALID_STYLE_NAMES.has(s));
 
+  // --- Disabled alert IDs (multi-checkbox) ---
+  const disabledAlertIds = formData.getAll("disabledAlertIds") as string[];
+
   // --- Provisional notes ---
   const provisionalNotes = ((formData.get("provisionalNotes") as string) ?? "").trim();
 
@@ -68,6 +71,7 @@ export async function saveSettings(
     ...attendanceNumeric,
     ...booleanFields,
     roleBalancedStyleNames,
+    disabledAlertIds,
     provisionalNotes,
   };
 

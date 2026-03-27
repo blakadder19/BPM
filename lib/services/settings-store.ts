@@ -62,6 +62,9 @@ export interface AppSettings {
   allowAdminLateEntryIntoTermBound: boolean;
   adminLateEntryMaxClassNumber: number;
 
+  // Admin alert preferences
+  disabledAlertIds: string[];
+
   // Provisional notes
   provisionalNotes: string;
 }
@@ -96,6 +99,8 @@ function defaults(): AppSettings {
 
     allowAdminLateEntryIntoTermBound: true,
     adminLateEntryMaxClassNumber: 2,
+
+    disabledAlertIds: [],
 
     provisionalNotes: "",
   };
@@ -229,6 +234,9 @@ export function updateSettings(patch: Partial<AppSettings>): AppSettings {
   const updated = { ...current, ...patch };
   if (patch.roleBalancedStyleNames) {
     updated.roleBalancedStyleNames = [...patch.roleBalancedStyleNames];
+  }
+  if (patch.disabledAlertIds) {
+    updated.disabledAlertIds = [...patch.disabledAlertIds];
   }
 
   if (hasSupabaseConfig()) {

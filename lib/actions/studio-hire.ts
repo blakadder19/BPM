@@ -79,8 +79,8 @@ export async function createStudioHireAction(
   if (!date || !startTime || !endTime) {
     return { success: false, error: "Date, start time, and end time are required" };
   }
-  if (startTime >= endTime) {
-    return { success: false, error: "End time must be after start time" };
+  if (startTime === endTime) {
+    return { success: false, error: "Start time and end time cannot be the same" };
   }
   if (!bookingType || !VALID_BOOKING_TYPES.includes(bookingType as StudioHireBookingType)) {
     return { success: false, error: "Valid booking type is required" };
@@ -171,8 +171,8 @@ export async function updateStudioHireAction(
   if (requesterName !== undefined && !requesterName) {
     return { success: false, error: "Requester name cannot be empty" };
   }
-  if (startTime && endTime && startTime >= endTime) {
-    return { success: false, error: "End time must be after start time" };
+  if (startTime && endTime && startTime === endTime) {
+    return { success: false, error: "Start time and end time cannot be the same" };
   }
   if (status && !VALID_STATUSES.includes(status)) {
     return { success: false, error: "Invalid status" };
