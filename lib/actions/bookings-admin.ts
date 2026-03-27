@@ -138,14 +138,24 @@ export async function adminCreateBookingAction(
       }
     }
 
-    // Term validation: check the class date falls within the entitlement's own term
+    // Term / validity date validation: use the subscription's own validFrom/validUntil
+    // which correctly spans multiple terms for products like Beginners 1 & 2 Promo Pass
     if (sub.termId && cls) {
-      const subTerm = await getTermRepo().getById(sub.termId);
-      if (subTerm && !isDateInTerm(cls.date, subTerm)) {
-        return {
-          success: false,
-          error: `Entitlement is not valid for this class date — the assigned term "${subTerm.name}" runs ${subTerm.startDate} to ${subTerm.endDate}.`,
-        };
+      if (sub.validFrom && sub.validUntil) {
+        if (cls.date < sub.validFrom || cls.date > sub.validUntil) {
+          return {
+            success: false,
+            error: `Entitlement is not valid for this class date — it covers ${sub.validFrom} to ${sub.validUntil}.`,
+          };
+        }
+      } else {
+        const subTerm = await getTermRepo().getById(sub.termId);
+        if (subTerm && !isDateInTerm(cls.date, subTerm)) {
+          return {
+            success: false,
+            error: `Entitlement is not valid for this class date — the assigned term "${subTerm.name}" runs ${subTerm.startDate} to ${subTerm.endDate}.`,
+          };
+        }
       }
     }
 
