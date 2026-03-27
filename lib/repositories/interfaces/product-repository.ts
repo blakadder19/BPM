@@ -22,6 +22,7 @@ export interface CreateProductData {
   classesPerTerm?: number | null;
   autoRenew?: boolean;
   benefits?: string[] | null;
+  spanTerms?: number | null;
 }
 
 export type ProductPatch = Partial<
@@ -47,6 +48,7 @@ export type ProductPatch = Partial<
     | "classesPerTerm"
     | "autoRenew"
     | "benefits"
+    | "spanTerms"
   >
 >;
 

@@ -36,7 +36,7 @@ export interface ProductAccessRule {
 
 // ── Style ID groups ─────────────────────────────────────────
 
-const BACHATA_STYLE_IDS = ["ds-1", "ds-2", "ds-3"];
+const BACHATA_STYLE_IDS = ["ds-1", "ds-2"];
 const SALSA_STYLE_IDS = ["ds-4", "ds-5"];
 const YOGA_STYLE_IDS = ["ds-9"];
 export const ALL_LATIN_STYLE_IDS = [...BACHATA_STYLE_IDS, ...SALSA_STYLE_IDS];
@@ -278,21 +278,16 @@ export function getAccessRulesMap(): Map<string, ProductAccessRule> {
 }
 
 /**
- * Builds an access-rules map that works with REAL product IDs (e.g. Supabase UUIDs),
- * not just the hardcoded seed IDs in PRODUCT_ACCESS_RULES.
+ * Builds an access-rules map from product fields, falling back to hardcoded
+ * seed rules only for MODE inference (selected_style, course_group, etc.).
  *
- * Strategy:
- * 1. Start with the hardcoded rules (covers seed products).
- * 2. For each real product NOT already in the map, match by name to a seed product's rule.
- * 3. If no name match, infer a default rule from the product's type and properties.
- * 4. When danceStyles are provided, remap mock style IDs in access rules to real UUIDs.
+ * Style IDs always come from the product's allowedStyleIds — NOT from hardcoded
+ * arrays. This makes the product record the single source of truth.
  */
 export function buildDynamicAccessRulesMap(
   products: { id: string; name: string; productType: string; allowedLevels: string[] | null; allowedStyleIds?: string[] | null }[],
   danceStyles?: { id: string; name: string }[]
 ): Map<string, ProductAccessRule> {
-  const map = new Map(rulesByProductId);
-
   const seedNameToRule = new Map<string, ProductAccessRule>();
   try {
     const { PRODUCTS } = require("@/lib/mock-data");
@@ -301,40 +296,67 @@ export function buildDynamicAccessRulesMap(
       if (rule) seedNameToRule.set(sp.name, rule);
     }
   } catch {
-    // seed data unavailable — rely on inference below
+    // seed data unavailable
   }
 
   const mockIdRemapper = danceStyles ? buildMockIdRemapper(danceStyles) : null;
+  const r = (id: string) => mockIdRemapper?.get(id) ?? id;
+  const rList = (ids: string[]) => ids.map(r);
+
+  const map = new Map<string, ProductAccessRule>();
 
   for (const p of products) {
-    if (map.has(p.id)) continue;
+    const seedRule = rulesByProductId.get(p.id) ?? seedNameToRule.get(p.name);
+    const pStyleIds = p.allowedStyleIds?.length
+      ? rList(p.allowedStyleIds)
+      : null;
 
-    const matched = seedNameToRule.get(p.name);
-    if (matched) {
-      const remapped = mockIdRemapper
-        ? { ...matched, productId: p.id, styleAccess: remapStyleAccess(matched.styleAccess, mockIdRemapper) }
-        : { ...matched, productId: p.id };
-      map.set(p.id, remapped);
-      continue;
+    let styleAccess: StyleAccess;
+    if (seedRule) {
+      styleAccess = overrideStyleIdsFromProduct(seedRule.styleAccess, pStyleIds, mockIdRemapper);
+    } else if (pStyleIds) {
+      styleAccess = { type: "fixed", styleIds: pStyleIds };
+    } else {
+      styleAccess = { type: "all" };
     }
 
-    const styleAccess: StyleAccess =
-      p.allowedStyleIds && p.allowedStyleIds.length > 0
-        ? { type: "fixed", styleIds: p.allowedStyleIds }
-        : { type: "all" };
-
-    const inferred: ProductAccessRule = {
+    const rule: ProductAccessRule = {
       productId: p.id,
-      allowedClassTypes: p.productType === "membership" ? ["class", "student_practice"] : ["class"],
+      allowedClassTypes: seedRule?.allowedClassTypes
+        ?? (p.productType === "membership" ? ["class", "student_practice"] : ["class"]),
       styleAccess,
-      allowedLevels: p.allowedLevels,
-      isProvisional: false,
-      provisionalNote: null,
+      allowedLevels: p.allowedLevels ?? seedRule?.allowedLevels ?? null,
+      isProvisional: seedRule?.isProvisional ?? false,
+      provisionalNote: seedRule?.provisionalNote ?? null,
     };
-    map.set(p.id, inferred);
+    map.set(p.id, rule);
   }
 
   return map;
+}
+
+/**
+ * Override style IDs inside a StyleAccess with the product's saved IDs,
+ * keeping the access MODE from the seed rule.
+ */
+function overrideStyleIdsFromProduct(
+  sa: StyleAccess,
+  productStyleIds: string[] | null,
+  mockIdRemapper: Map<string, string> | null,
+): StyleAccess {
+  if (!productStyleIds) {
+    return mockIdRemapper ? remapStyleAccess(sa, mockIdRemapper) : sa;
+  }
+  switch (sa.type) {
+    case "fixed":
+      return { type: "fixed", styleIds: productStyleIds };
+    case "selected_style":
+      return { type: "selected_style", allowedStyleIds: productStyleIds };
+    case "course_group":
+      return { type: "course_group", poolStyleIds: productStyleIds, pickCount: sa.pickCount };
+    default:
+      return sa;
+  }
 }
 
 /**

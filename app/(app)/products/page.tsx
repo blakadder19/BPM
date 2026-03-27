@@ -3,7 +3,20 @@ import { getProductRepo, getSubscriptionRepo, getStudentRepo } from "@/lib/repos
 import { AdminProducts } from "@/components/products/admin-products";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
-import { buildDynamicAccessRulesMap, describeAccessParts } from "@/config/product-access";
+import type { MockProduct } from "@/lib/mock-data";
+
+/**
+ * Derive scope description from saved product fields (single source of truth).
+ */
+function describeProductScope(p: MockProduct): { styles: string; levels: string } {
+  const styles = p.allowedStyleNames?.length
+    ? p.allowedStyleNames.join(", ")
+    : p.styleName ?? "All styles";
+  const levels = p.allowedLevels?.length
+    ? p.allowedLevels.join(", ")
+    : "All levels";
+  return { styles, levels };
+}
 
 export default async function ProductsPage() {
   await requireRole(["admin"]);
@@ -16,16 +29,10 @@ export default async function ProductsPage() {
   ]);
 
   const danceStyles = getDanceStyles().map((s) => ({ id: s.id, name: s.name }));
-  const styleNameById = new Map(danceStyles.map((s) => [s.id, s.name]));
-  const resolveStyleName = (id: string) => styleNameById.get(id);
 
-  const accessRulesMap = buildDynamicAccessRulesMap(products, danceStyles);
   const scopeMap: Record<string, { styles: string; levels: string }> = {};
   for (const p of products) {
-    const rule = accessRulesMap.get(p.id);
-    if (rule) {
-      scopeMap[p.id] = describeAccessParts(rule, resolveStyleName);
-    }
+    scopeMap[p.id] = describeProductScope(p);
   }
 
   const studentNameMap: Record<string, string> = {};

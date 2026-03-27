@@ -51,6 +51,7 @@ export function createProduct(data: {
   classesPerTerm?: number | null;
   autoRenew?: boolean;
   benefits?: string[] | null;
+  spanTerms?: number | null;
 }): MockProduct {
   const list = init();
   const product: MockProduct = {
@@ -76,6 +77,7 @@ export function createProduct(data: {
     classesPerTerm: data.classesPerTerm ?? null,
     autoRenew: data.autoRenew ?? false,
     benefits: data.benefits ?? null,
+    spanTerms: data.spanTerms ?? null,
   };
   list.push(product);
   return product;
@@ -105,6 +107,7 @@ type ProductPatch = Partial<
     | "classesPerTerm"
     | "autoRenew"
     | "benefits"
+    | "spanTerms"
   >
 >;
 
@@ -137,6 +140,7 @@ export function updateProduct(
   if (patch.classesPerTerm !== undefined) product.classesPerTerm = patch.classesPerTerm;
   if (patch.autoRenew !== undefined) product.autoRenew = patch.autoRenew;
   if (patch.benefits !== undefined) product.benefits = patch.benefits;
+  if (patch.spanTerms !== undefined) product.spanTerms = patch.spanTerms;
 
   return { ...product };
 }

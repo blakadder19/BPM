@@ -269,6 +269,7 @@ export function AdminStudents({
                     student={s}
                     subscriptions={subscriptions}
                     terms={terms}
+                    products={products}
                     walletTransactions={walletTransactions}
                     bookings={bookings}
                     penalties={penalties}

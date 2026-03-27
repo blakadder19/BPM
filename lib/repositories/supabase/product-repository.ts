@@ -8,6 +8,7 @@ import type { IProductRepository, CreateProductData, ProductPatch } from "../int
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
 
 function toMockProduct(row: ProductRow): MockProduct {
+  const ext = row as Record<string, unknown>;
   return {
     id: row.id,
     name: row.name,
@@ -17,10 +18,10 @@ function toMockProduct(row: ProductRow): MockProduct {
     priceCents: row.price_cents,
     totalCredits: row.total_credits,
     durationDays: row.duration_days,
-    styleName: null,
+    styleName: (ext.style_name as string | null) ?? null,
     allowedLevels: row.allowed_levels,
-    allowedStyleIds: (row as Record<string, unknown>).allowed_style_ids as string[] | null ?? null,
-    allowedStyleNames: (row as Record<string, unknown>).allowed_style_names as string[] | null ?? null,
+    allowedStyleIds: (ext.allowed_style_ids as string[] | null) ?? null,
+    allowedStyleNames: (ext.allowed_style_names as string[] | null) ?? null,
     isActive: row.is_active,
     isProvisional: row.is_provisional,
     notes: row.notes ?? null,
@@ -31,6 +32,7 @@ function toMockProduct(row: ProductRow): MockProduct {
     classesPerTerm: row.classes_per_term,
     autoRenew: row.auto_renew,
     benefits: row.benefits,
+    spanTerms: (ext.span_terms as number | null) ?? null,
   };
 }
 
@@ -72,6 +74,7 @@ export const supabaseProductRepo: IProductRepository = {
         allowed_levels: input.allowedLevels,
         allowed_style_ids: input.allowedStyleIds,
         allowed_style_names: input.allowedStyleNames,
+        style_name: input.styleName ?? null,
         is_provisional: input.isProvisional,
         notes: input.notes,
         validity_description: input.validityDescription,
@@ -81,6 +84,7 @@ export const supabaseProductRepo: IProductRepository = {
         classes_per_term: input.classesPerTerm ?? null,
         auto_renew: input.autoRenew ?? false,
         benefits: input.benefits ?? null,
+        span_terms: input.spanTerms ?? null,
       } as never)
       .select()
       .single();
@@ -110,6 +114,8 @@ export const supabaseProductRepo: IProductRepository = {
     if (patch.autoRenew !== undefined) fields.auto_renew = patch.autoRenew;
     if (patch.benefits !== undefined) fields.benefits = patch.benefits;
     if (patch.isActive !== undefined) fields.is_active = patch.isActive;
+    if (patch.spanTerms !== undefined) fields.span_terms = patch.spanTerms;
+    if (patch.styleName !== undefined) fields.style_name = patch.styleName;
 
     if (Object.keys(fields).length === 0) return this.getById(id);
 

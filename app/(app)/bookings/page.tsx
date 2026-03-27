@@ -52,6 +52,7 @@ export interface BookingView {
   followerCount: number;
   waitlistCount: number;
   checkInToken: string | null;
+  isOrphaned: boolean;
 }
 
 export default async function BookingsPage({
@@ -137,6 +138,7 @@ export default async function BookingsPage({
       followerCount: activeForClass.filter((x) => x.danceRole === "follower").length,
       waitlistCount: waitlistForClass.length,
       checkInToken: b.checkInToken ?? null,
+      isOrphaned: classDeleted,
     };
   }
 

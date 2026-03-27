@@ -78,7 +78,7 @@ docs/
 
 Key configurable rules live in `config/business-rules.ts` and `lib/services/settings-store.ts`:
 
-- **Role-balanced styles**: Bachata, Bachata Tradicional, Bachata Partnerwork, Cuban, Salsa Line
+- **Role-balanced styles**: Bachata, Bachata Tradicional, Cuban, Salsa Line
 - **Late cancel fee**: €2 (within 60 min of class start) — enabled by default
 - **No-show fee**: €5 — disabled by default
 - **Socials**: not online-bookable, excluded from penalties

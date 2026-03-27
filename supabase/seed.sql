@@ -105,9 +105,8 @@ insert into terms (id, academy_id, name, start_date, end_date, status) values
 insert into dance_styles (id, name, requires_role_balance, sort_order) values
   ('d0d0d0d0-0000-0000-0000-000000000001', 'Bachata',               true,  1),
   ('d0d0d0d0-0000-0000-0000-000000000002', 'Bachata Tradicional',   true,  2),
-  ('d0d0d0d0-0000-0000-0000-000000000003', 'Bachata Partnerwork',   true,  3),
-  ('d0d0d0d0-0000-0000-0000-000000000004', 'Cuban',                 true,  4),
-  ('d0d0d0d0-0000-0000-0000-000000000005', 'Salsa Line',            true,  5),
+  ('d0d0d0d0-0000-0000-0000-000000000004', 'Cuban',                 true,  3),
+  ('d0d0d0d0-0000-0000-0000-000000000005', 'Salsa Line',            true,  4),
   ('d0d0d0d0-0000-0000-0000-000000000006', 'Reggaeton',             false, 6),
   ('d0d0d0d0-0000-0000-0000-000000000007', 'Ladies Styling',        false, 7),
   ('d0d0d0d0-0000-0000-0000-000000000008', 'Afro-Cuban',            false, 8),
@@ -121,7 +120,7 @@ insert into dance_styles (id, name, requires_role_balance, sort_order) values
 -- term_id points to Term 1 for term-bound classes.
 --
 -- Abbreviations for dance_style_id:
---   ds01 = Bachata, ds02 = Bachata Tradicional, ds03 = Bachata Partnerwork
+--   ds01 = Bachata, ds02 = Bachata Tradicional
 --   ds04 = Cuban, ds05 = Salsa Line, ds06 = Reggaeton
 --   ds07 = Ladies Styling, ds08 = Afro-Cuban, ds09 = Yoga, ds10 = Kids Hip Hop
 
@@ -552,4 +551,4 @@ insert into business_rules (academy_id, key, value, description, is_provisional)
   ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'credit_deduction_priority',  '["promo_pass","pack","drop_in","membership"]',             'Order to resolve credit source when booking',          true),
   ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'student_practice_bookable',  'false',                                                   'Whether Student Practice events are bookable',         true),
   ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'waitlist_offer_expiry_hours','4',                                                       'Hours before a waitlist offer expires',                 true),
-  ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'role_balanced_styles',       '["Bachata","Bachata Tradicional","Bachata Partnerwork","Cuban","Salsa Line"]', 'Styles requiring leader/follower balance', false);
+  ('a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001', 'role_balanced_styles',       '["Bachata","Bachata Tradicional","Cuban","Salsa Line"]', 'Styles requiring leader/follower balance', false);

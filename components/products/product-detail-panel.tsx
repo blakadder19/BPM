@@ -79,12 +79,23 @@ export function ProductDetailPanel({
           <Section title="Restrictions">
             <DL
               label="Allowed Styles"
-              value={scope?.styles ?? "—"}
+              value={
+                product.allowedStyleNames?.length
+                  ? product.allowedStyleNames.join(", ")
+                  : product.styleName ?? "All styles"
+              }
             />
             <DL
               label="Allowed Levels"
-              value={scope?.levels ?? "—"}
+              value={
+                product.allowedLevels?.length
+                  ? product.allowedLevels.join(", ")
+                  : "All levels"
+              }
             />
+            {product.spanTerms && product.spanTerms > 1 && (
+              <DL label="Spans" value={`${product.spanTerms} terms`} />
+            )}
           </Section>
 
           {/* ── Usage ── */}

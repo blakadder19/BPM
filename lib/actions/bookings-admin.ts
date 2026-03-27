@@ -577,6 +577,7 @@ export interface BookingConsequences {
   classTitle: string;
   classDate: string;
   classStartTime: string;
+  isOrphaned: boolean;
   isLate: boolean;
   hasStarted: boolean;
   cutoffMinutes: number;
@@ -614,11 +615,13 @@ export async function computeBookingConsequencesAction(
   if (!booking) return { success: false, error: "Booking not found" };
 
   const cls = svc.getClass(booking.bookableClassId);
-  if (!cls) return { success: false, error: "Class not found" };
+  const isOrphaned = !cls;
 
-  const ctx = getCancellationContext(cls.date, cls.startTime);
-  const isLate = !isNaN(ctx.classStart.getTime()) && ctx.isLate;
-  const hasStarted = !isNaN(ctx.classStart.getTime()) && ctx.hasStarted;
+  const ctx = cls
+    ? getCancellationContext(cls.date, cls.startTime)
+    : null;
+  const isLate = ctx ? !isNaN(ctx.classStart.getTime()) && ctx.isLate : false;
+  const hasStarted = ctx ? !isNaN(ctx.classStart.getTime()) && ctx.hasStarted : false;
 
   const settings = getSettings();
 
@@ -673,13 +676,14 @@ export async function computeBookingConsequencesAction(
       bookingStatus: booking.status,
       bookingSource: booking.source,
       studentName: booking.studentName,
-      classTitle: cls.title,
-      classDate: cls.date,
-      classStartTime: cls.startTime,
+      classTitle: cls?.title ?? "(Deleted class)",
+      classDate: cls?.date ?? "",
+      classStartTime: cls?.startTime ?? "",
+      isOrphaned,
       isLate,
       hasStarted,
-      cutoffMinutes: ctx.cutoffMinutes,
-      minutesUntilStart: !isNaN(ctx.classStart.getTime()) ? ctx.minutesUntilStart : 0,
+      cutoffMinutes: ctx?.cutoffMinutes ?? 0,
+      minutesUntilStart: ctx && !isNaN(ctx.classStart.getTime()) ? ctx.minutesUntilStart : 0,
       lateCancelFeeCents: penaltyFeeCents("late_cancel"),
       lateCancelPenaltiesEnabled: settings.lateCancelPenaltiesEnabled ?? false,
       hasSubscription,

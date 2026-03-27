@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminTable, Td } from "@/components/ui/admin-table";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatTime } from "@/lib/utils";
+import { isClassEnded } from "@/lib/domain/datetime";
 import { BookingDetailPanel } from "./booking-detail-panel";
 import {
   AddBookingDialog,
@@ -122,7 +123,10 @@ export function AdminBookings({
       if (sourceFilter && b.source !== sourceFilter) return false;
       if (typeFilter && b.classType !== typeFilter) return false;
       if (locationFilter && b.location !== locationFilter) return false;
-      if (upcomingOnly && b.date < today) return false;
+      if (upcomingOnly) {
+        if (b.date < today) return false;
+        if (b.date === today && b.endTime && isClassEnded(b.date, b.endTime)) return false;
+      }
       if (waitlistOnly) {
         const hasWaitlist = waitlistEntries.some(
           (w) => w.classId === b.classId
@@ -305,11 +309,13 @@ export function AdminBookings({
           const isExpanded = expandedId === b.id;
           const isActive =
             b.status === "confirmed" || b.status === "checked_in";
+          const classEnded = !!(b.endTime && isClassEnded(b.date, b.endTime));
+          const actionsDisabled = b.isOrphaned || classEnded;
 
           return (
             <TableRowGroup key={b.id}>
               <tr
-                className="cursor-pointer hover:bg-gray-50"
+                className={`cursor-pointer hover:bg-gray-50 ${b.isOrphaned ? "opacity-60 bg-gray-50" : ""}`}
                 onClick={() => setExpandedId(isExpanded ? null : b.id)}
               >
                 <Td className="w-8">
@@ -324,8 +330,8 @@ export function AdminBookings({
                 </Td>
                 <Td>
                   {b.classTitle}
-                  {b.classTitle === "(Deleted class)" && (
-                    <span className="ml-1.5 inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">Removed</span>
+                  {b.isOrphaned && (
+                    <span className="ml-1.5 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600">Orphaned</span>
                   )}
                 </Td>
                 <Td>
@@ -364,7 +370,7 @@ export function AdminBookings({
                     className="flex items-center gap-1.5"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {b.status === "confirmed" && (
+                    {b.status === "confirmed" && !actionsDisabled && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -373,7 +379,7 @@ export function AdminBookings({
                         Check In
                       </Button>
                     )}
-                    {isActive && (
+                    {isActive && !actionsDisabled && (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -382,7 +388,7 @@ export function AdminBookings({
                         Cancel
                       </Button>
                     )}
-                    {(b.status === "cancelled" || b.status === "late_cancelled") && (
+                    {(b.status === "cancelled" || b.status === "late_cancelled") && !actionsDisabled && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -411,6 +417,8 @@ export function AdminBookings({
                   onCheckIn={() => handleCheckIn(b.id)}
                   onRestore={() => handleRestore(b.id)}
                   onViewWaitlist={() => openWaitlistForBooking(b)}
+                  isOrphaned={b.isOrphaned}
+                  classEnded={classEnded}
                 />
               )}
             </TableRowGroup>

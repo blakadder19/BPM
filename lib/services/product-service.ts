@@ -35,6 +35,7 @@ export async function createProduct(data: {
   classesPerTerm?: number | null;
   autoRenew?: boolean;
   benefits?: string[] | null;
+  spanTerms?: number | null;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     await getProductRepo().create(data);
@@ -68,6 +69,7 @@ export async function updateProduct(
     classesPerTerm?: number | null;
     autoRenew?: boolean;
     benefits?: string[] | null;
+    spanTerms?: number | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const result = await getProductRepo().update(id, patch);
