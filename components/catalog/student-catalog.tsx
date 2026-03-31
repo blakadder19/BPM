@@ -56,6 +56,7 @@ export interface CatalogProduct {
   spanTerms: number | null;
   termName: string | null;
   alreadyActive: boolean;
+  activePaymentStatus: string | null;
   styleSelectionMode: StyleSelectionMode;
   selectableStyles: StyleOption[];
   pickCount: number;
@@ -188,9 +189,11 @@ function ProductCard({
           <StatusBadge status={p.productType} />
         </div>
         {p.alreadyActive && (
-          <div className="flex items-center gap-1.5 text-xs font-medium text-green-700 mt-1">
+          <div className={`flex items-center gap-1.5 text-xs font-medium mt-1 ${
+            p.activePaymentStatus === "pending" ? "text-amber-700" : "text-green-700"
+          }`}>
             <CheckCircle2 className="h-3.5 w-3.5" />
-            You have this
+            {p.activePaymentStatus === "pending" ? "Active · Payment pending" : "You have this"}
           </div>
         )}
       </CardHeader>
@@ -291,7 +294,13 @@ function ProductCard({
 
       <div className="border-t border-gray-100 p-3 sm:p-4">
         {p.alreadyActive ? (
-          <p className="text-center text-sm font-medium text-green-700">Already active</p>
+          <p className={`text-center text-sm font-medium ${
+            p.activePaymentStatus === "pending" ? "text-amber-700" : "text-green-700"
+          }`}>
+            {p.activePaymentStatus === "pending"
+              ? "Active · Please complete payment at reception"
+              : "Already active"}
+          </p>
         ) : (
           <Button className="w-full" onClick={() => onSelect(p)}>
             Get Started

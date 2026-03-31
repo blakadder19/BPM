@@ -52,6 +52,7 @@ import { saveBookingToDB, deleteWaitlistFromDB, deleteAttendanceFromDB } from "@
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { addClassCancellationNotices, type ClassCancellationNotice } from "@/lib/services/class-cancellation-store";
+import { saveNotificationsToDB } from "@/lib/supabase/notification-persistence";
 import { findTermForDate } from "@/lib/domain/term-rules";
 import { requireRole } from "@/lib/auth";
 import type { ClassType, InstanceStatus } from "@/types/domain";
@@ -547,7 +548,11 @@ export async function updateInstanceStatusAction(
     );
     affectedStudents = notices.length;
     if (notices.length > 0) {
-      addClassCancellationNotices(notices);
+      const full = addClassCancellationNotices(notices);
+      const realUserNotices = full.filter((n) => isRealUser(n.studentId));
+      if (realUserNotices.length > 0) {
+        await saveNotificationsToDB(realUserNotices);
+      }
     }
   }
 
@@ -782,7 +787,11 @@ export async function deleteInstanceAction(
   );
 
   if (notices.length > 0) {
-    addClassCancellationNotices(notices);
+    const full = addClassCancellationNotices(notices);
+    const realUserNotices = full.filter((n) => isRealUser(n.studentId));
+    if (realUserNotices.length > 0) {
+      await saveNotificationsToDB(realUserNotices);
+    }
   }
 
   try {

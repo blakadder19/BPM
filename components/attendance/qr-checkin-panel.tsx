@@ -323,9 +323,18 @@ function formatBalance(ent: QrEntitlementDetail): string {
   return "";
 }
 
+const PAYMENT_BADGE: Record<string, { label: string; className: string }> = {
+  pending: { label: "Payment pending", className: "bg-amber-100 text-amber-700" },
+  cancelled: { label: "Payment cancelled", className: "bg-red-100 text-red-700" },
+  refunded: { label: "Refunded", className: "bg-red-100 text-red-700" },
+  waived: { label: "Waived", className: "bg-gray-200 text-gray-600" },
+};
+
 function EntitlementRow({ ent, compact }: { ent: QrEntitlementDetail; compact?: boolean }) {
   const balance = formatBalance(ent);
-  const isPending = ent.paymentStatus === "pending";
+  const badge = ent.paymentStatus !== "paid" && ent.paymentStatus !== "complimentary"
+    ? PAYMENT_BADGE[ent.paymentStatus] ?? null
+    : null;
 
   return (
     <div className={`rounded-lg bg-gray-50 px-3 py-2 text-xs ${compact ? "" : "border border-gray-100"}`}>
@@ -335,9 +344,9 @@ function EntitlementRow({ ent, compact }: { ent: QrEntitlementDetail; compact?: 
           <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
             {ent.productType.replace("_", " ")}
           </span>
-          {isPending && (
-            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-              Payment pending
+          {badge && (
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>
+              {badge.label}
             </span>
           )}
         </div>

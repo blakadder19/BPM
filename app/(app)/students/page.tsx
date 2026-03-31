@@ -14,6 +14,7 @@ import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { AdminStudents } from "@/components/students/admin-students";
 
 export default async function StudentsPage({
@@ -25,6 +26,7 @@ export default async function StudentsPage({
   const params = searchParams ? await searchParams : {};
 
   await ensureOperationalDataHydrated();
+  await lazyExpireSubscriptions();
 
   const [students, subscriptions, walletTransactions, products, terms, danceStyles] = await Promise.all([
     getStudentRepo().getAll(),

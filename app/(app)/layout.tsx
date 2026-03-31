@@ -15,6 +15,8 @@ import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
 import { getNoticesForStudent } from "@/lib/services/class-cancellation-store";
+import { getNotificationsForStudentFromDB } from "@/lib/supabase/notification-persistence";
+import { isRealUser } from "@/lib/utils/is-real-user";
 import { formatTime } from "@/lib/utils";
 
 export default async function AppLayout({
@@ -64,7 +66,9 @@ export default async function AppLayout({
   } else if (user.role === "student") {
     try {
       const studentId = devStudentId ?? user.id;
-      const notices = getNoticesForStudent(studentId);
+      const notices = isRealUser(studentId)
+        ? await getNotificationsForStudentFromDB(studentId)
+        : getNoticesForStudent(studentId);
       alerts = notices.map((n) => ({
         id: n.id,
         severity: "warning" as const,

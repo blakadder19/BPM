@@ -4,6 +4,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { getAccessRule } from "@/config/product-access";
 import { StudentCatalog, type CatalogProduct, type StyleOption, type StyleSelectionMode } from "@/components/catalog/student-catalog";
 import type { MockProduct } from "@/lib/mock-data";
@@ -49,6 +50,7 @@ export default async function CatalogPage() {
   const user = await requireRole(["student"]);
 
   await ensureOperationalDataHydrated();
+  await lazyExpireSubscriptions();
 
   const [products, terms, allSubs] = await Promise.all([
     getProductRepo().getAll(),
@@ -65,6 +67,9 @@ export default async function CatalogPage() {
     (s) => s.studentId === user.id && s.status === "active"
   );
   const activeProductIds = new Set(activeSubs.map((s) => s.productId));
+  const activePaymentByProduct = new Map(
+    activeSubs.map((s) => [s.productId, s.paymentStatus])
+  );
 
   const catalog: CatalogProduct[] = products
     .filter((p) => p.isActive)
@@ -95,6 +100,7 @@ export default async function CatalogPage() {
         spanTerms: p.spanTerms,
         termName,
         alreadyActive: activeProductIds.has(p.id),
+        activePaymentStatus: activePaymentByProduct.get(p.id) ?? null,
         styleSelectionMode: mode,
         selectableStyles: selectable,
         pickCount,

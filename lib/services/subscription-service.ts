@@ -49,6 +49,7 @@ export async function createSubscription(data: {
   selectedStyleName?: string | null;
   selectedStyleIds?: string[] | null;
   selectedStyleNames?: string[] | null;
+  renewedFromId?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const sub = await getSubscriptionRepo().create(data);
@@ -81,6 +82,7 @@ export async function updateSubscription(
     selectedStyleName?: string | null;
     selectedStyleIds?: string[] | null;
     selectedStyleNames?: string[] | null;
+    renewedFromId?: string | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const result = await getSubscriptionRepo().update(id, patch);

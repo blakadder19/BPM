@@ -53,6 +53,7 @@ export function createSubscription(data: {
   selectedStyleName?: string | null;
   selectedStyleIds?: string[] | null;
   selectedStyleNames?: string[] | null;
+  renewedFromId?: string | null;
 }): MockSubscription {
   const list = init();
   const sub: MockSubscription = {
@@ -79,6 +80,7 @@ export function createSubscription(data: {
     autoRenew: data.autoRenew,
     classesUsed: data.classesUsed,
     classesPerTerm: data.classesPerTerm,
+    renewedFromId: data.renewedFromId ?? null,
   };
   list.push(sub);
   return sub;
@@ -104,6 +106,7 @@ export function updateSubscription(
     selectedStyleName?: string | null;
     selectedStyleIds?: string[] | null;
     selectedStyleNames?: string[] | null;
+    renewedFromId?: string | null;
   }
 ): MockSubscription | null {
   const list = init();
@@ -127,6 +130,7 @@ export function updateSubscription(
   if (patch.selectedStyleName !== undefined) sub.selectedStyleName = patch.selectedStyleName;
   if (patch.selectedStyleIds !== undefined) sub.selectedStyleIds = patch.selectedStyleIds;
   if (patch.selectedStyleNames !== undefined) sub.selectedStyleNames = patch.selectedStyleNames;
+  if (patch.renewedFromId !== undefined) sub.renewedFromId = patch.renewedFromId;
 
   return { ...sub };
 }

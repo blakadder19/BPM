@@ -78,6 +78,8 @@ export interface StudentEntitlementSummary {
   validFrom: string;
   validUntil: string | null;
   paymentStatus: string | null;
+  daysUntilExpiry: number | null;
+  isRenewal: boolean;
 }
 
 export interface TodayForYouItem {
@@ -328,9 +330,29 @@ export function StudentDashboard({
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 mt-0.5">
                         <StatusBadge status={e.productType} />
                         <StatusBadge status={e.status} />
-                        {e.paymentStatus === "pending" && (
-                          <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
-                            Payment pending
+                        {e.paymentStatus && e.paymentStatus !== "paid" && e.paymentStatus !== "complimentary" && (
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                            e.paymentStatus === "cancelled" || e.paymentStatus === "refunded"
+                              ? "bg-red-50 text-red-700 ring-red-600/20"
+                              : "bg-amber-50 text-amber-700 ring-amber-600/20"
+                          }`}>
+                            {e.paymentStatus === "pending" && "Payment pending"}
+                            {e.paymentStatus === "waived" && "Payment waived"}
+                            {e.paymentStatus === "cancelled" && "Payment cancelled"}
+                            {e.paymentStatus === "refunded" && "Refunded"}
+                          </span>
+                        )}
+                        {e.daysUntilExpiry !== null && e.daysUntilExpiry <= 7 && e.daysUntilExpiry >= 0 && (
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                            e.daysUntilExpiry <= 2
+                              ? "bg-red-50 text-red-700 ring-red-600/20"
+                              : "bg-amber-50 text-amber-700 ring-amber-600/20"
+                          }`}>
+                            {e.daysUntilExpiry === 0
+                              ? "Expires today"
+                              : e.daysUntilExpiry === 1
+                                ? "Expires tomorrow"
+                                : `Expires in ${e.daysUntilExpiry} days`}
                           </span>
                         )}
                         {e.selectedStyleName && (
@@ -339,6 +361,11 @@ export function StudentDashboard({
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {e.isRenewal && (
+                        <span className="inline-flex items-center rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium text-indigo-700 ring-1 ring-inset ring-indigo-600/20">
+                          Renewal
+                        </span>
+                      )}
                       {e.autoRenew && (
                         <span title="Auto-renew">
                           <RefreshCw className="h-3.5 w-3.5 text-green-500" />

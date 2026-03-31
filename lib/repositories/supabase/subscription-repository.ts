@@ -31,6 +31,7 @@ function toMockSubscription(row: SubRow): MockSubscription {
     autoRenew: row.auto_renew,
     classesUsed: row.classes_used,
     classesPerTerm: row.classes_per_term,
+    renewedFromId: (row as unknown as Record<string, unknown>).renewed_from_id as string | null ?? null,
   };
 }
 

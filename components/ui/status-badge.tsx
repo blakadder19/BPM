@@ -24,6 +24,8 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   exhausted:        { label: "Finished",       variant: "default" },
   finished:         { label: "Finished",       variant: "default" },
   replaced:         { label: "Replaced",       variant: "info" },
+  renewed:          { label: "Renewed",        variant: "success" },
+  renewal:          { label: "Renewal",        variant: "info" },
   membership:       { label: "Membership",     variant: "info" },
   pass:             { label: "Pass",           variant: "info" },
   pack:             { label: "Pack",           variant: "info" },

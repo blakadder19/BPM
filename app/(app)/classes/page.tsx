@@ -17,6 +17,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { isClassInFuture, getTodayStr } from "@/lib/domain/datetime";
 import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
+import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
@@ -28,6 +29,7 @@ export default async function ClassesPage() {
   const user = await requireRole(["admin", "teacher", "student"]);
 
   await ensureOperationalDataHydrated();
+  await lazyExpireSubscriptions();
 
   const danceStyles = getDanceStyles();
 

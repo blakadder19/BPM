@@ -368,6 +368,7 @@ function rowToSubscription(r: Record<string, unknown>): MockSubscription {
     autoRenew: (r.auto_renew as boolean) ?? false,
     classesUsed: (r.classes_used as number) ?? 0,
     classesPerTerm: (r.classes_per_term as number) ?? null,
+    renewedFromId: (r.renewed_from_id as string) ?? null,
   };
 }
 
@@ -396,6 +397,7 @@ function subscriptionToRow(s: MockSubscription) {
     auto_renew: s.autoRenew,
     classes_used: s.classesUsed,
     classes_per_term: s.classesPerTerm,
+    renewed_from_id: s.renewedFromId,
   };
 }
 

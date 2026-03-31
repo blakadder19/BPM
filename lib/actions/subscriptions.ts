@@ -6,8 +6,11 @@ import {
   createSubscription,
   updateSubscription,
 } from "@/lib/services/subscription-service";
-import { getProductRepo, getTermRepo } from "@/lib/repositories";
+import { getProductRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { getBookingService } from "@/lib/services/booking-store";
+import { getTodayStr } from "@/lib/domain/datetime";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
 const VALID_STATUSES = new Set<string>([
@@ -33,6 +36,8 @@ const VALID_PAYMENT_STATUSES = new Set<string>([
   "pending",
   "complimentary",
   "waived",
+  "cancelled",
+  "refunded",
 ]);
 
 function parseCredits(raw: string | null): number | null {
@@ -150,14 +155,25 @@ export async function updateSubscriptionAction(
   const id = formData.get("id") as string;
   const statusRaw = formData.get("status") as string;
   const notes = (formData.get("notes") as string)?.trim() || null;
+  const paymentMethodRaw = (formData.get("paymentMethod") as string)?.trim() || null;
+  const paymentStatusRaw = (formData.get("paymentStatus") as string)?.trim() || null;
 
   if (!id) return { success: false, error: "Missing subscription ID" };
   if (!VALID_STATUSES.has(statusRaw)) return { success: false, error: "Invalid status" };
+  if (paymentMethodRaw && !VALID_PAYMENT_METHODS.has(paymentMethodRaw)) {
+    return { success: false, error: "Invalid payment method" };
+  }
+  if (paymentStatusRaw && !VALID_PAYMENT_STATUSES.has(paymentStatusRaw)) {
+    return { success: false, error: "Invalid payment status" };
+  }
 
   const patch: Parameters<typeof updateSubscription>[1] = {
     status: statusRaw as SubscriptionStatus,
     notes,
   };
+
+  if (paymentMethodRaw) patch.paymentMethod = paymentMethodRaw as PaymentMethod;
+  if (paymentStatusRaw) patch.paymentStatus = paymentStatusRaw as SalePaymentStatus;
 
   const selectedStyleId = formData.get("selectedStyleId") as string | null;
   const selectedStyleName = formData.get("selectedStyleName") as string | null;
@@ -177,6 +193,81 @@ export async function updateSubscriptionAction(
 
   const result = await updateSubscription(id, patch);
 
-  if (result.success) revalidatePath("/students");
+  if (result.success) {
+    revalidatePath("/students");
+    revalidatePath("/dashboard");
+    revalidatePath("/catalog");
+  }
+  return result;
+}
+
+// ── Payment impact check ─────────────────────────────────────
+
+export interface PaymentChangeImpact {
+  futureBookingsCount: number;
+  subscriptionStatus: SubscriptionStatus;
+  productName: string;
+}
+
+/**
+ * Check the impact of cancelling an entitlement linked to this subscription.
+ */
+export async function checkPaymentChangeImpactAction(
+  subscriptionId: string
+): Promise<{ success: boolean; impact?: PaymentChangeImpact; error?: string }> {
+  await requireRole(["admin"]);
+  await ensureOperationalDataHydrated();
+
+  const sub = (await getSubscriptionRepo().getAll()).find((s) => s.id === subscriptionId);
+  if (!sub) return { success: false, error: "Subscription not found" };
+
+  const today = getTodayStr();
+  const svc = getBookingService();
+  const futureBookings = svc.bookings.filter((b) => {
+    if (b.studentId !== sub.studentId) return false;
+    if (b.subscriptionId !== sub.id) return false;
+    if (b.status !== "confirmed" && b.status !== "checked_in") return false;
+    const cls = svc.getClass(b.bookableClassId);
+    return cls ? cls.date >= today : false;
+  });
+
+  return {
+    success: true,
+    impact: {
+      futureBookingsCount: futureBookings.length,
+      subscriptionStatus: sub.status,
+      productName: sub.productName,
+    },
+  };
+}
+
+/**
+ * Apply a sensitive payment status change with optional entitlement cancellation.
+ * Called from the confirmation modal after the admin has chosen what to do.
+ */
+export async function applyPaymentChangeAction(params: {
+  subscriptionId: string;
+  newPaymentStatus: SalePaymentStatus;
+  cancelEntitlement: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  await requireRole(["admin"]);
+
+  const patch: Parameters<typeof updateSubscription>[1] = {
+    paymentStatus: params.newPaymentStatus,
+  };
+
+  if (params.cancelEntitlement) {
+    patch.status = "cancelled";
+  }
+
+  const result = await updateSubscription(params.subscriptionId, patch);
+
+  if (result.success) {
+    revalidatePath("/students");
+    revalidatePath("/dashboard");
+    revalidatePath("/catalog");
+    revalidatePath("/classes");
+    revalidatePath("/bookings");
+  }
   return result;
 }

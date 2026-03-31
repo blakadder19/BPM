@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Star, Trash2, AlertTriangle } from "lucide-react";
+import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFoo
 import { formatDate } from "@/lib/utils";
 import type { MockProduct } from "@/lib/mock-data";
 import { deriveDisplayStatus } from "@/lib/domain/subscription-display-status";
+import { isRenewalEligible } from "@/lib/domain/term-lifecycle";
+import { renewSubscriptionAction } from "@/lib/actions/term-lifecycle";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { AttendanceMark } from "@/types/domain";
@@ -67,12 +69,32 @@ export function StudentDetailPanel({
   onEditSub,
   colSpan,
 }: StudentDetailPanelProps) {
+  const router = useRouter();
   const [removeTarget, setRemoveTarget] = useState<MockSubscription | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MockSubscription | null>(null);
+  const [renewPendingId, setRenewPendingId] = useState<string | null>(null);
+  const [renewTransPending, startRenewTransition] = useTransition();
   const termsById = new Map(terms.map((t) => [t.id, t]));
   const subs = subscriptions.filter((s) => s.studentId === student.id);
   const activeSubs = subs.filter((s) => s.status === "active");
   const inactiveSubs = subs.filter((s) => s.status !== "active");
+
+  const renewEligibleIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const sub of subs) {
+      if (isRenewalEligible(sub, subs, terms)) set.add(sub.id);
+    }
+    return set;
+  }, [subs, terms]);
+
+  function handleRenew(sub: MockSubscription) {
+    setRenewPendingId(sub.id);
+    startRenewTransition(async () => {
+      await renewSubscriptionAction(sub.id);
+      setRenewPendingId(null);
+      router.refresh();
+    });
+  }
 
   const txs = walletTransactions
     .filter((tx) => tx.studentId === student.id)
@@ -170,7 +192,7 @@ export function StudentDetailPanel({
                   </p>
                 )}
                 {activeSubs.map((sub) => (
-                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} />
+                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} renewEligible={renewEligibleIds.has(sub.id)} onRenew={handleRenew} renewPending={renewTransPending && renewPendingId === sub.id} />
                 ))}
                 {inactiveSubs.length > 0 && (
                   <>
@@ -178,7 +200,7 @@ export function StudentDetailPanel({
                       Product History ({inactiveSubs.length})
                     </p>
                     {inactiveSubs.map((sub) => (
-                      <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} />
+                      <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} renewEligible={renewEligibleIds.has(sub.id)} onRenew={handleRenew} renewPending={renewTransPending && renewPendingId === sub.id} />
                     ))}
                   </>
                 )}
@@ -349,6 +371,8 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
   pending: "Pending",
   complimentary: "Comp",
   waived: "Waived",
+  cancelled: "Cancelled",
+  refunded: "Refunded",
 };
 
 function SubCard({
@@ -359,6 +383,9 @@ function SubCard({
   onEdit,
   onRemove,
   onDelete,
+  renewEligible,
+  onRenew,
+  renewPending,
 }: {
   sub: MockSubscription;
   allStudentSubs: MockSubscription[];
@@ -367,11 +394,17 @@ function SubCard({
   onEdit: (sub: MockSubscription) => void;
   onRemove: (sub: MockSubscription) => void;
   onDelete: (sub: MockSubscription) => void;
+  renewEligible?: boolean;
+  onRenew?: (sub: MockSubscription) => void;
+  renewPending?: boolean;
 }) {
   const product = products.find((p) => p.id === sub.productId);
   const term = sub.termId ? termsById.get(sub.termId) : null;
   const isActive = sub.status === "active";
   const displayStatus = deriveDisplayStatus(sub, allStudentSubs);
+  const expiryDays = isActive && sub.validUntil
+    ? Math.round((new Date(sub.validUntil + "T00:00:00Z").getTime() - new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z").getTime()) / 86400000)
+    : null;
 
   return (
     <div
@@ -412,12 +445,25 @@ function SubCard({
       )}
       <Badge variant="default">{PAYMENT_METHOD_LABELS[sub.paymentMethod] ?? sub.paymentMethod}</Badge>
       {sub.paymentStatus && sub.paymentStatus !== "paid" && (
-        <Badge variant="warning">
+        <Badge variant={
+          sub.paymentStatus === "cancelled" || sub.paymentStatus === "refunded"
+            ? "danger"
+            : "warning"
+        }>
           {PAYMENT_STATUS_LABELS[sub.paymentStatus] ?? sub.paymentStatus}
         </Badge>
       )}
       {sub.autoRenew && (
         <span className="text-[10px] text-indigo-600 font-medium">Auto-renew</span>
+      )}
+      {expiryDays !== null && expiryDays <= 7 && expiryDays >= 0 && (
+        <Badge variant={expiryDays <= 2 ? "danger" : "warning"}>
+          {expiryDays === 0
+            ? "Expires today"
+            : expiryDays === 1
+              ? "Expires tomorrow"
+              : `Expires in ${expiryDays}d`}
+        </Badge>
       )}
       {sub.selectedStyleName && (
         <span className="text-gray-500">Style: {sub.selectedStyleName}</span>
@@ -437,10 +483,23 @@ function SubCard({
           {sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}
         </span>
       )}
+      {sub.renewedFromId && (
+        <span className="text-[10px] text-indigo-500 font-medium">Renewal</span>
+      )}
       {sub.notes && (
         <span className="w-full text-xs text-gray-400 italic">{sub.notes}</span>
       )}
       <div className="ml-auto flex items-center gap-1">
+        {renewEligible && onRenew && (
+          <button
+            onClick={() => onRenew(sub)}
+            disabled={renewPending}
+            className="rounded-lg p-1 text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50"
+            title="Renew for next term"
+          >
+            <RotateCw className={`h-3.5 w-3.5 ${renewPending ? "animate-spin" : ""}`} />
+          </button>
+        )}
         <button
           onClick={() => onEdit(sub)}
           className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"

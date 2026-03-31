@@ -13,6 +13,8 @@ import {
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
 import { getTodayStr, isClassEnded, isClassStarted, effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
+import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
+import { daysUntilExpiry } from "@/lib/domain/term-lifecycle";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
@@ -39,6 +41,7 @@ export default async function DashboardPage() {
   await ensureOperationalDataHydrated();
 
   runAttendanceClosure();
+  await lazyExpireSubscriptions();
 
   if (user.role === "student") {
     const isRealUser = !user.id.startsWith("dev-");
@@ -135,6 +138,8 @@ export default async function DashboardPage() {
           validFrom: sub.validFrom,
           validUntil: sub.validUntil,
           paymentStatus: sub.paymentStatus ?? null,
+          daysUntilExpiry: daysUntilExpiry(sub, todayStr),
+          isRenewal: !!sub.renewedFromId,
         };
       })
     );

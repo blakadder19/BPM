@@ -39,14 +39,18 @@ let counter = 0;
 
 export function addClassCancellationNotices(
   notices: Omit<ClassCancellationNotice, "id" | "createdAt">[]
-): void {
+): ClassCancellationNotice[] {
   pruneExpired();
   const store = getStore();
   const now = new Date().toISOString();
+  const result: ClassCancellationNotice[] = [];
   for (const n of notices) {
     counter += 1;
-    store.push({ ...n, id: `ccn-${Date.now()}-${counter}`, createdAt: now });
+    const full: ClassCancellationNotice = { ...n, id: `ccn-${Date.now()}-${counter}`, createdAt: now };
+    store.push(full);
+    result.push(full);
   }
+  return result;
 }
 
 export function getNoticesForStudent(studentId: string): ClassCancellationNotice[] {
