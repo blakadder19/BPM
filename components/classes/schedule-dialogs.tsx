@@ -100,7 +100,7 @@ export function AddInstanceDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader><DialogTitle>Add Class Instance</DialogTitle></DialogHeader>
-        <DialogBody>
+        <DialogBody className="max-h-[70vh] overflow-y-auto">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
@@ -307,7 +307,7 @@ export function EditInstanceDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader><DialogTitle>Edit Instance — {instance.title}</DialogTitle></DialogHeader>
-        <DialogBody>
+        <DialogBody className="max-h-[70vh] overflow-y-auto">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 

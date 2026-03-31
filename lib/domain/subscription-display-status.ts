@@ -23,6 +23,8 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
   finished: "Finished",
   replaced: "Replaced",
+  renewed: "Renewed",
+  renewal: "Renewal",
 };
 
 export type DisplayStatus =
@@ -31,7 +33,9 @@ export type DisplayStatus =
   | "finished"
   | "expired"
   | "cancelled"
-  | "replaced";
+  | "replaced"
+  | "renewed"
+  | "renewal";
 
 /**
  * Given a single subscription and all subscriptions belonging to the same
@@ -43,6 +47,8 @@ export function deriveDisplayStatus(
   sub: MockSubscription,
   allStudentSubs: MockSubscription[]
 ): DisplayStatus {
+  // A subscription that was created as a renewal is tagged
+  if (sub.status === "active" && sub.renewedFromId) return "renewal";
   if (sub.status === "active") return "active";
   if (sub.status === "paused") return "paused";
   if (sub.status === "cancelled") return "cancelled";
@@ -51,8 +57,13 @@ export function deriveDisplayStatus(
     return "finished";
   }
 
-  // status === "expired" — decide between Expired vs Replaced
+  // status === "expired" — decide between Expired, Renewed, or Replaced
   if (sub.status === "expired") {
+    const hasRenewalSuccessor = allStudentSubs.some(
+      (other) => other.renewedFromId === sub.id
+    );
+    if (hasRenewalSuccessor) return "renewed";
+
     const hasActiveReplacement = allStudentSubs.some(
       (other) =>
         other.id !== sub.id &&

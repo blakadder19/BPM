@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useState } from "react";
-import { ChevronDown, ChevronUp, Pencil, Plus, Users, Power, Trash2 } from "lucide-react";
+import { Fragment, useState, useTransition } from "react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Users, Power, Trash2, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
@@ -22,6 +22,7 @@ import {
   AddSubscriptionDialog,
   EditSubscriptionDialog,
 } from "./student-dialogs";
+import { runTermLifecycleAction, getLifecycleRunInfo } from "@/lib/actions/term-lifecycle";
 import type { StudentImpact } from "./student-dialogs";
 import type { StudentListItem } from "@/types/domain";
 import type {
@@ -107,6 +108,9 @@ export function AdminStudents({
   const [showAdd, setShowAdd] = useState(false);
   const [addSubStudentId, setAddSubStudentId] = useState<string | null>(null);
   const [editSub, setEditSub] = useState<MockSubscription | null>(null);
+  const [lifecycleMsg, setLifecycleMsg] = useState<string | null>(null);
+  const [lifecyclePending, startLifecycle] = useTransition();
+  const [lastRunTs, setLastRunTs] = useState<string | null>(null);
 
   const q = search.toLowerCase();
 
@@ -166,11 +170,59 @@ export function AdminStudents({
           title="Students"
           description="Student directory — click a row to expand details, or use the edit button."
         />
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Student
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={lifecyclePending}
+            onClick={() => {
+              setLifecycleMsg(null);
+              startLifecycle(async () => {
+                const res = await runTermLifecycleAction("manual");
+                if (res.success && res.result) {
+                  const r = res.result;
+                  if (r.expired === 0 && r.renewalsPrepared === 0) {
+                    setLifecycleMsg("All subscriptions are up to date.");
+                  } else {
+                    const parts: string[] = [];
+                    if (r.expired > 0) parts.push(`${r.expired} expired`);
+                    if (r.renewalsPrepared > 0) parts.push(`${r.renewalsPrepared} renewal${r.renewalsPrepared !== 1 ? "s" : ""} prepared`);
+                    setLifecycleMsg(parts.join(", ") + ".");
+                  }
+                } else {
+                  setLifecycleMsg(res.error ?? "Lifecycle check failed.");
+                }
+                const info = await getLifecycleRunInfo();
+                setLastRunTs(info.lastRun);
+              });
+            }}
+          >
+            <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${lifecyclePending ? "animate-spin" : ""}`} />
+            {lifecyclePending ? "Checking…" : "Term Lifecycle"}
+          </Button>
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Student
+          </Button>
+        </div>
       </div>
+
+      {lifecycleMsg && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-800">
+          <div className="flex items-center justify-between">
+            <span>{lifecycleMsg}</span>
+            <button onClick={() => setLifecycleMsg(null)} className="text-indigo-400 hover:text-indigo-600 ml-2">
+              ✕
+            </button>
+          </div>
+          {lastRunTs && (
+            <p className="text-xs text-indigo-500 mt-1">
+              Last full run: {new Date(lastRunTs).toLocaleString()} (manual).
+              Lazy expiry also runs on page loads. Scheduled via /api/lifecycle if configured.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
         <div className="w-full sm:max-w-xs">

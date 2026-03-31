@@ -353,6 +353,16 @@ export async function adminCancelBookingAction(
     if (cancelledBooking) await saveBookingToDB(cancelledBooking);
   }
   if (result.promoted) {
+    if (result.promoted.subscriptionId) {
+      const promoSub = await getSubscriptionRepo().getById(result.promoted.subscriptionId);
+      if (promoSub) {
+        if (promoSub.productType === "membership" && promoSub.classesPerTerm !== null) {
+          await repoUpdateSub(promoSub.id, { classesUsed: promoSub.classesUsed + 1 });
+        } else if (promoSub.remainingCredits !== null) {
+          await repoUpdateSub(promoSub.id, { remainingCredits: promoSub.remainingCredits - 1 });
+        }
+      }
+    }
     const promotedEntry = svc.waitlist.find((w) => w.id === result.promoted?.waitlistId);
     if (promotedEntry && isRealUser(promotedEntry.studentId)) {
       await saveWaitlistToDB(promotedEntry);
@@ -446,6 +456,16 @@ export async function adminPromoteWaitlistAction(
   }
 
   if (result.type === "promoted") {
+    if (result.subscriptionId) {
+      const promoSub = await getSubscriptionRepo().getById(result.subscriptionId);
+      if (promoSub) {
+        if (promoSub.productType === "membership" && promoSub.classesPerTerm !== null) {
+          await repoUpdateSub(promoSub.id, { classesUsed: promoSub.classesUsed + 1 });
+        } else if (promoSub.remainingCredits !== null) {
+          await repoUpdateSub(promoSub.id, { remainingCredits: promoSub.remainingCredits - 1 });
+        }
+      }
+    }
     const newBooking = svc.bookings.find((b) => b.id === result.bookingId);
     if (newBooking && isRealUser(newBooking.studentId)) await saveBookingToDB(newBooking);
     const promotedEntry = svc.waitlist.find((w) => w.id === waitlistId);
@@ -453,6 +473,8 @@ export async function adminPromoteWaitlistAction(
   }
 
   revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/classes");
   return { success: true };
 }
 

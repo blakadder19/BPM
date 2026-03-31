@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,9 @@ import {
 import {
   createSubscriptionAction,
   updateSubscriptionAction,
+  checkPaymentChangeImpactAction,
+  applyPaymentChangeAction,
+  type PaymentChangeImpact,
 } from "@/lib/actions/subscriptions";
 import { buildDynamicAccessRulesMap, type StyleAccess } from "@/config/product-access";
 import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
@@ -519,6 +522,8 @@ const PAYMENT_STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
   { value: "complimentary", label: "Complimentary" },
   { value: "waived", label: "Waived" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "refunded", label: "Refunded" },
 ];
 
 function groupProducts(products: MockProduct[]) {
@@ -809,6 +814,8 @@ export function AddSubscriptionDialog({
 
 // ── Edit Subscription Dialog ─────────────────────────────────
 
+const SENSITIVE_PAYMENT_STATUSES = new Set(["refunded", "cancelled"]);
+
 export function EditSubscriptionDialog({
   subscription: sub,
   products,
@@ -832,6 +839,15 @@ export function EditSubscriptionDialog({
   const [selectedStyleIds, setSelectedStyleIds] = useState<string[]>(
     sub.selectedStyleIds ?? []
   );
+  const paidAtRef = useRef<HTMLInputElement>(null);
+  const [paymentStatusValue, setPaymentStatusValue] = useState(sub.paymentStatus);
+
+  // Confirmation flow state
+  const [confirmStep, setConfirmStep] = useState<{
+    formData: FormData;
+    newPaymentStatus: string;
+    impact: PaymentChangeImpact | null;
+  } | null>(null);
 
   function toggleMultiStyle(styleId: string, pickCount: number) {
     setSelectedStyleIds((prev) => {
@@ -841,9 +857,8 @@ export function EditSubscriptionDialog({
     });
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+  function buildFormData(form: HTMLFormElement): FormData {
+    const formData = new FormData(form);
 
     if (styleAccess?.type === "selected_style" && selectedStyleId) {
       formData.set("selectedStyleId", selectedStyleId);
@@ -861,6 +876,29 @@ export function EditSubscriptionDialog({
         .filter(Boolean) as string[];
       formData.set("selectedStyleNames", JSON.stringify(names));
     }
+    return formData;
+  }
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formData = buildFormData(e.currentTarget);
+    const newPaymentStatus = formData.get("paymentStatus") as string;
+    const isSensitive =
+      SENSITIVE_PAYMENT_STATUSES.has(newPaymentStatus) &&
+      !SENSITIVE_PAYMENT_STATUSES.has(sub.paymentStatus) &&
+      sub.status === "active";
+
+    if (isSensitive) {
+      startTransition(async () => {
+        const res = await checkPaymentChangeImpactAction(sub.id);
+        setConfirmStep({
+          formData,
+          newPaymentStatus,
+          impact: res.success && res.impact ? res.impact : null,
+        });
+      });
+      return;
+    }
 
     startTransition(async () => {
       const result = await updateSubscriptionAction(formData);
@@ -871,6 +909,97 @@ export function EditSubscriptionDialog({
         setError(result.error ?? "Failed to save subscription");
       }
     });
+  }
+
+  function handleConfirm(cancelEntitlement: boolean) {
+    if (!confirmStep) return;
+    startTransition(async () => {
+      const result = await applyPaymentChangeAction({
+        subscriptionId: sub.id,
+        newPaymentStatus: confirmStep.newPaymentStatus as import("@/types/domain").SalePaymentStatus,
+        cancelEntitlement,
+      });
+      if (result.success) {
+        router.refresh();
+        onClose();
+      } else {
+        setError(result.error ?? "Failed to apply changes");
+        setConfirmStep(null);
+      }
+    });
+  }
+
+  if (confirmStep) {
+    const label = confirmStep.newPaymentStatus === "refunded" ? "Refunded" : "Cancelled";
+    const futureCount = confirmStep.impact?.futureBookingsCount ?? 0;
+
+    return (
+      <Dialog open onClose={onClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Payment Change</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+              <p className="font-medium text-amber-900">
+                You are marking payment as {label} for:
+              </p>
+              <p className="text-amber-800 mt-1">{sub.productName}</p>
+            </div>
+
+            <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700 space-y-2">
+              <p className="font-medium text-gray-900">Payment status and entitlement are separate.</p>
+              <p>
+                Marking payment as <strong>{label.toLowerCase()}</strong> does not
+                automatically cancel the student&apos;s access to classes.
+              </p>
+              <p>
+                Choose what should happen to the entitlement:
+              </p>
+            </div>
+
+            {futureCount > 0 && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                <p className="font-medium">
+                  This student has {futureCount} upcoming booking{futureCount !== 1 ? "s" : ""} using this entitlement.
+                </p>
+                <p className="mt-1">
+                  Cancelling the entitlement will make those bookings ineligible.
+                </p>
+              </div>
+            )}
+
+            {error && <p className="text-sm text-red-600">{error}</p>}
+          </DialogBody>
+          <DialogFooter className="flex-col gap-2 sm:flex-col">
+            <Button
+              className="w-full justify-center"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => handleConfirm(false)}
+            >
+              {isPending ? "Saving…" : `Mark as ${label} — keep entitlement active`}
+            </Button>
+            <Button
+              className="w-full justify-center"
+              variant="danger"
+              disabled={isPending}
+              onClick={() => handleConfirm(true)}
+            >
+              {isPending ? "Saving…" : `Mark as ${label} — also cancel entitlement`}
+            </Button>
+            <Button
+              className="w-full justify-center"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => setConfirmStep(null)}
+            >
+              Go back
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
   }
 
   return (
@@ -910,6 +1039,101 @@ export function EditSubscriptionDialog({
               onSingleChange={setSelectedStyleId}
               onMultiToggle={toggleMultiStyle}
             />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="es-payment">Payment Method</Label>
+                <select
+                  id="es-payment"
+                  name="paymentMethod"
+                  defaultValue={sub.paymentMethod}
+                  className={SELECT_CLASS}
+                >
+                  {PAYMENT_METHOD_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="es-paymentStatus">Payment Status</Label>
+                <select
+                  id="es-paymentStatus"
+                  name="paymentStatus"
+                  value={paymentStatusValue}
+                  onChange={(e) => setPaymentStatusValue(e.target.value as typeof paymentStatusValue)}
+                  className={SELECT_CLASS}
+                >
+                  {PAYMENT_STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {paymentStatusValue === "paid" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="es-paidAt">Paid At</Label>
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
+                      onClick={() => {
+                        if (paidAtRef.current) {
+                          const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Dublin" }));
+                          const y = now.getFullYear();
+                          const mo = String(now.getMonth() + 1).padStart(2, "0");
+                          const d = String(now.getDate()).padStart(2, "0");
+                          const h = String(now.getHours()).padStart(2, "0");
+                          const mi = String(now.getMinutes()).padStart(2, "0");
+                          paidAtRef.current.value = `${y}-${mo}-${d}T${h}:${mi}`;
+                        }
+                      }}
+                    >
+                      Now
+                    </button>
+                  </div>
+                  <Input
+                    ref={paidAtRef}
+                    id="es-paidAt"
+                    name="paidAt"
+                    type="datetime-local"
+                    defaultValue={sub.paidAt?.slice(0, 16) ?? ""}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="es-collectedBy">Collected By</Label>
+                  <Input
+                    id="es-collectedBy"
+                    name="collectedBy"
+                    defaultValue={sub.collectedBy ?? ""}
+                    placeholder="e.g. Admin, Teacher name"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="es-paymentRef">Payment Reference</Label>
+              <Input
+                id="es-paymentRef"
+                name="paymentReference"
+                defaultValue={sub.paymentReference ?? ""}
+                placeholder="e.g. Revolut txn, receipt #"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="es-paymentNotes">Payment Notes</Label>
+              <textarea
+                id="es-paymentNotes"
+                name="paymentNotes"
+                rows={2}
+                defaultValue={sub.paymentNotes ?? ""}
+                className={SELECT_CLASS}
+                placeholder="e.g. Paid in two instalments"
+              />
+            </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="es-notes">Notes</Label>

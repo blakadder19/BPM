@@ -12,7 +12,7 @@ export function SelectFilter({ value, onChange, options, placeholder = "All" }: 
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+      className="min-h-[40px] flex-1 sm:flex-none rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
     >
       <option value="">{placeholder}</option>
       {options.map((opt) => (

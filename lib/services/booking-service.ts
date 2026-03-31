@@ -54,6 +54,8 @@ export interface StoredWaitlistEntry {
   position: number;
   joinedAt: string;
   promotedAt: string | null;
+  subscriptionId: string | null;
+  subscriptionName: string | null;
 }
 
 export interface ClassSnapshot {
@@ -85,7 +87,7 @@ export type CancelOutcome =
       booking: { id: string; studentId: string; studentName: string; danceRole: DanceRole | null };
       classInfo: { id: string; title: string; date: string; startTime: string; classType: ClassType };
       cancelledAt: string;
-      promoted: { studentName: string; waitlistId: string } | null;
+      promoted: { studentName: string; waitlistId: string; subscriptionId: string | null } | null;
     }
   | { type: "error"; reason: string };
 
@@ -205,6 +207,8 @@ export class BookingService {
         position: nextWaitlistPosition(maxPos || null),
         joinedAt: now,
         promotedAt: null,
+        subscriptionId: params.subscriptionId ?? null,
+        subscriptionName: params.subscriptionName ?? null,
       };
       this.waitlist.push(entry);
 
@@ -309,7 +313,7 @@ export class BookingService {
       capacity
     );
 
-    let promoted: { studentName: string; waitlistId: string } | null = null;
+    let promoted: { studentName: string; waitlistId: string; subscriptionId: string | null } | null = null;
 
     if (result) {
       const entry = this.waitlist.find((w) => w.id === result.promoted.id);
@@ -325,8 +329,8 @@ export class BookingService {
           danceRole: entry.danceRole,
           status: "confirmed",
           source: "waitlist_promotion",
-          subscriptionId: null,
-          subscriptionName: null,
+          subscriptionId: entry.subscriptionId,
+          subscriptionName: entry.subscriptionName,
           adminNote: null,
           bookedAt: new Date().toISOString(),
           cancelledAt: null,
@@ -334,7 +338,7 @@ export class BookingService {
         };
         this.bookings.push(newBooking);
 
-        promoted = { studentName: entry.studentName, waitlistId: entry.id };
+        promoted = { studentName: entry.studentName, waitlistId: entry.id, subscriptionId: entry.subscriptionId };
 
         const remaining = this.waitlist.filter(
           (w) => w.bookableClassId === booking.bookableClassId && w.status === "waiting"
@@ -431,6 +435,8 @@ export class BookingService {
         position: nextWaitlistPosition(maxPos || null),
         joinedAt: now,
         promotedAt: null,
+        subscriptionId: params.subscriptionId ?? null,
+        subscriptionName: params.subscriptionName ?? null,
       };
       this.waitlist.push(entry);
 
@@ -517,7 +523,7 @@ export class BookingService {
       capacity
     );
 
-    let promoted: { studentName: string; waitlistId: string } | null = null;
+    let promoted: { studentName: string; waitlistId: string; subscriptionId: string | null } | null = null;
 
     if (result) {
       const entry = this.waitlist.find((w) => w.id === result.promoted.id);
@@ -533,15 +539,15 @@ export class BookingService {
           danceRole: entry.danceRole,
           status: "confirmed",
           source: "waitlist_promotion",
-          subscriptionId: null,
-          subscriptionName: null,
+          subscriptionId: entry.subscriptionId,
+          subscriptionName: entry.subscriptionName,
           adminNote: null,
           bookedAt: new Date().toISOString(),
           cancelledAt: null,
           checkInToken: generateCheckInToken(),
         };
         this.bookings.push(newBooking);
-        promoted = { studentName: entry.studentName, waitlistId: entry.id };
+        promoted = { studentName: entry.studentName, waitlistId: entry.id, subscriptionId: entry.subscriptionId };
 
         const remaining = this.waitlist.filter(
           (w) => w.bookableClassId === booking.bookableClassId && w.status === "waiting"
@@ -557,7 +563,7 @@ export class BookingService {
     return { type: "cancelled", booking: bookingInfo, classInfo, cancelledAt: now.toISOString(), promoted };
   }
 
-  promoteFromWaitlist(waitlistId: string): { type: "promoted"; bookingId: string } | { type: "error"; reason: string } {
+  promoteFromWaitlist(waitlistId: string): { type: "promoted"; bookingId: string; subscriptionId: string | null } | { type: "error"; reason: string } {
     const entry = this.waitlist.find((w) => w.id === waitlistId && w.status === "waiting");
     if (!entry) return { type: "error", reason: "Waitlist entry not found or already promoted." };
 
@@ -572,8 +578,8 @@ export class BookingService {
       danceRole: entry.danceRole,
       status: "confirmed",
       source: "waitlist_promotion",
-      subscriptionId: null,
-      subscriptionName: null,
+      subscriptionId: entry.subscriptionId,
+      subscriptionName: entry.subscriptionName,
       adminNote: null,
       bookedAt: new Date().toISOString(),
       cancelledAt: null,
@@ -590,7 +596,7 @@ export class BookingService {
       if (original) original.position = r.position;
     }
 
-    return { type: "promoted", bookingId: booking.id };
+    return { type: "promoted", bookingId: booking.id, subscriptionId: entry.subscriptionId };
   }
 
   removeFromWaitlist(waitlistId: string): boolean {
@@ -655,6 +661,8 @@ export class BookingService {
         position: nextWaitlistPosition(maxPos || null),
         joinedAt: new Date().toISOString(),
         promotedAt: null,
+        subscriptionId: booking.subscriptionId,
+        subscriptionName: booking.subscriptionName,
       };
       this.waitlist.push(entry);
 

@@ -68,6 +68,8 @@ function buildWaitlist(): StoredWaitlistEntry[] {
     position: w.position,
     joinedAt: w.joinedAt,
     promotedAt: null,
+    subscriptionId: (w as unknown as { subscriptionId?: string | null }).subscriptionId ?? null,
+    subscriptionName: (w as unknown as { subscriptionName?: string | null }).subscriptionName ?? null,
   }));
 }
 

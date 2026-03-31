@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarPlus, Inbox, XCircle, RotateCcw, QrCode } from "lucide-react";
+import { CalendarPlus, Inbox, XCircle, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -21,7 +21,6 @@ import { checkLateCancelStatusAction } from "@/lib/actions/bookings-admin";
 import { studentCancelBookingAction } from "@/lib/actions/booking-student";
 import { studentRestoreBookingAction, checkRestoreEligibilityAction } from "@/lib/actions/booking-student";
 import { studentLeaveWaitlistAction } from "@/lib/actions/waitlist-student";
-import { CheckInQrDialog } from "./checkin-qr";
 import type { BookingView, StudentWaitlistView } from "@/app/(app)/bookings/page";
 
 export function StudentBookings({
@@ -31,10 +30,10 @@ export function StudentBookings({
   bookings: BookingView[];
   waitlistEntries?: StudentWaitlistView[];
 }) {
-  const isFuture = (date: string, startTime: string) => {
-    if (!date || !startTime) return false;
-    const t = startTime.length <= 5 ? `${startTime}:00` : startTime;
-    return new Date() < new Date(`${date}T${t}`);
+  const isNotEnded = (date: string, endTime: string) => {
+    if (!date || !endTime) return false;
+    const t = endTime.length <= 5 ? `${endTime}:00` : endTime;
+    return new Date() <= new Date(`${date}T${t}`);
   };
 
   const cancelledStatuses = new Set(["cancelled", "late_cancelled"]);
@@ -43,7 +42,7 @@ export function StudentBookings({
   const upcoming = useMemo(
     () =>
       bookings
-        .filter((b) => isFuture(b.date, b.startTime) && !terminalStatuses.has(b.status))
+        .filter((b) => isNotEnded(b.date, b.endTime) && !terminalStatuses.has(b.status) && !b.isOrphaned)
         .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookings]
@@ -52,7 +51,7 @@ export function StudentBookings({
   const restorableCancelled = useMemo(
     () =>
       bookings
-        .filter((b) => isFuture(b.date, b.startTime) && cancelledStatuses.has(b.status))
+        .filter((b) => isNotEnded(b.date, b.endTime) && cancelledStatuses.has(b.status) && !b.isOrphaned && !b.isAcademyCancelled)
         .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookings]
@@ -62,8 +61,12 @@ export function StudentBookings({
     () =>
       bookings
         .filter((b) => {
-          if (isFuture(b.date, b.startTime) && !terminalStatuses.has(b.status)) return false;
-          if (isFuture(b.date, b.startTime) && cancelledStatuses.has(b.status)) return false;
+          // Orphaned bookings with no usable date are already filtered server-side,
+          // but guard here too — never show rows without a date
+          if (!b.date) return false;
+          if (b.isAcademyCancelled) return true;
+          if (isNotEnded(b.date, b.endTime) && !terminalStatuses.has(b.status)) return false;
+          if (isNotEnded(b.date, b.endTime) && cancelledStatuses.has(b.status)) return false;
           return true;
         })
         .sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime)),
@@ -73,7 +76,6 @@ export function StudentBookings({
 
   const [cancelTarget, setCancelTarget] = useState<BookingView | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<BookingView | null>(null);
-  const [qrTarget, setQrTarget] = useState<BookingView | null>(null);
 
   return (
     <div className="space-y-6">
@@ -116,8 +118,6 @@ export function StudentBookings({
                   booking={b}
                   showCancel
                   onCancel={() => setCancelTarget(b)}
-                  showQr={b.status === "confirmed" && !!b.checkInToken}
-                  onShowQr={() => setQrTarget(b)}
                 />
               ))
             )}
@@ -180,16 +180,6 @@ export function StudentBookings({
         />
       )}
 
-      {qrTarget && qrTarget.checkInToken && (
-        <CheckInQrDialog
-          token={qrTarget.checkInToken}
-          classTitle={qrTarget.classTitle}
-          date={qrTarget.date ? formatDate(qrTarget.date) : "—"}
-          startTime={qrTarget.startTime ? formatTime(qrTarget.startTime) : "—"}
-          onClose={() => setQrTarget(null)}
-        />
-      )}
-
     </div>
   );
 }
@@ -200,49 +190,60 @@ function BookingCard({
   onCancel,
   showRestore,
   onRestore,
-  showQr,
-  onShowQr,
 }: {
   booking: BookingView;
   showCancel?: boolean;
   onCancel?: () => void;
   showRestore?: boolean;
   onRestore?: () => void;
-  showQr?: boolean;
-  onShowQr?: () => void;
 }) {
+  const hasActions = (showCancel && onCancel) || (showRestore && onRestore);
+
   return (
-    <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div>
-        <h3 className="font-medium text-gray-900">{b.classTitle}</h3>
-        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-          {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
-          {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
-          {b.location && <span>{b.location}</span>}
+    <div className={`rounded-xl border p-3 sm:p-4 shadow-sm space-y-2 ${
+      b.isAcademyCancelled
+        ? "border-gray-200 bg-gray-50"
+        : "border-gray-200 bg-white"
+    }`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className={`font-medium truncate ${b.isAcademyCancelled ? "text-gray-500" : "text-gray-900"}`}>{b.classTitle}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
+            {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
+            {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
+            {b.location && <span>{b.location}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
           {b.danceRole && <StatusBadge status={b.danceRole} />}
+          {b.isAcademyCancelled ? (
+            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">
+              Cancelled by academy
+            </span>
+          ) : (
+            <StatusBadge status={b.status} />
+          )}
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <StatusBadge status={b.status} />
-        {showQr && onShowQr && (
-          <Button variant="outline" size="sm" onClick={onShowQr}>
-            <QrCode className="h-4 w-4 mr-1" />
-            QR
-          </Button>
-        )}
-        {showCancel && onCancel && (
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            <XCircle className="h-4 w-4 mr-1" />
-            Cancel
-          </Button>
-        )}
-        {showRestore && onRestore && (
-          <Button variant="outline" size="sm" onClick={onRestore}>
-            <RotateCcw className="h-4 w-4 mr-1" />
-            Restore
-          </Button>
-        )}
-      </div>
+      {b.isAcademyCancelled && b.creditReturned && (
+        <p className="text-xs text-green-700">Credit returned</p>
+      )}
+      {hasActions && (
+        <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+          {showCancel && onCancel && (
+            <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 sm:flex-none">
+              <XCircle className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+          )}
+          {showRestore && onRestore && (
+            <Button variant="outline" size="sm" onClick={onRestore} className="flex-1 sm:flex-none">
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Restore
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -261,23 +262,27 @@ function WaitlistCard({ entry: w }: { entry: StudentWaitlistView }) {
   }
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-      <div>
-        <h3 className="font-medium text-gray-900">{w.classTitle}</h3>
-        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-          <span>{formatDate(w.date)}</span>
-          <span>{formatTime(w.startTime)}</span>
-          {w.location && <span>{w.location}</span>}
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4 shadow-sm space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-medium text-gray-900 truncate">{w.classTitle}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
+            <span>{formatDate(w.date)}</span>
+            <span>{formatTime(w.startTime)}</span>
+            {w.location && <span>{w.location}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
           {w.danceRole && <StatusBadge status={w.danceRole} />}
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+            #{w.position}
+          </span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-          #{w.position} in queue
-        </span>
-        <Button variant="ghost" size="sm" onClick={handleLeave} disabled={isPending}>
+      <div className="flex items-center pt-1 border-t border-amber-200/50">
+        <Button variant="ghost" size="sm" onClick={handleLeave} disabled={isPending} className="flex-1 sm:flex-none">
           <XCircle className="h-4 w-4 mr-1" />
-          {isPending ? "Leaving…" : "Leave"}
+          {isPending ? "Leaving…" : "Leave Waitlist"}
         </Button>
       </div>
     </div>

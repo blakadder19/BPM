@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LogOut, Music } from "lucide-react";
+import { LogOut, Music, X } from "lucide-react";
 import { signOut } from "@/lib/actions/auth";
 import { getNavigationForRole } from "@/lib/role-config";
+import { useSidebar } from "@/components/providers/sidebar-provider";
 import type { AuthUser } from "@/lib/auth";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -26,6 +27,7 @@ interface SidebarProps {
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
+  const { mobileOpen, close } = useSidebar();
   const navItems = getNavigationForRole(user.role);
 
   const initials = user.fullName
@@ -35,14 +37,22 @@ export function Sidebar({ user }: SidebarProps) {
     .slice(0, 2)
     .toUpperCase();
 
-  return (
-    <aside className="flex h-full w-64 flex-col border-r border-gray-200 bg-white">
-      <div className="flex h-16 items-center gap-2 border-b border-gray-200 px-6">
-        <Music className="h-7 w-7 text-indigo-600" />
-        <span className="text-lg font-bold text-gray-900">BPM</span>
+  const navContent = (
+    <>
+      <div className="flex h-16 items-center justify-between border-b border-gray-200 px-6">
+        <div className="flex items-center gap-2">
+          <Music className="h-7 w-7 text-indigo-600" />
+          <span className="text-lg font-bold text-gray-900">BPM</span>
+        </div>
+        <button
+          onClick={close}
+          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 md:hidden"
+        >
+          <X className="h-5 w-5" />
+        </button>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 py-4">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
@@ -50,8 +60,9 @@ export function Sidebar({ user }: SidebarProps) {
             <Link
               key={item.name}
               href={item.href}
+              onClick={close}
               className={cn(
-                "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive
                   ? "bg-indigo-50 text-indigo-700"
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
@@ -100,6 +111,28 @@ export function Sidebar({ user }: SidebarProps) {
           </form>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex h-full w-64 shrink-0 flex-col border-r border-gray-200 bg-white">
+        {navContent}
+      </aside>
+
+      {/* Mobile overlay sidebar */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="fixed inset-0 bg-black/40"
+            onClick={close}
+          />
+          <aside className="relative z-10 flex h-full w-72 max-w-[85vw] flex-col bg-white shadow-xl animate-in slide-in-from-left duration-200">
+            {navContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }

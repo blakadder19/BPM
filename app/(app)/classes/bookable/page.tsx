@@ -10,17 +10,25 @@ import { getTermRepo } from "@/lib/repositories";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { AdminSchedule } from "@/components/classes/admin-schedule";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { getBookingService } from "@/lib/services/booking-store";
 
 export default async function BookableClassesPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ search?: string }>;
+  searchParams?: Promise<{ search?: string; date?: string }>;
 }) {
   await requireRole(["admin", "teacher"]);
   await ensureScheduleBootstrapped();
+  await ensureOperationalDataHydrated();
   const params = searchParams ? await searchParams : {};
 
-  const instances = getInstances().map((bc) => ({ ...bc }));
+  const svc = getBookingService();
+  const instances = getInstances().map((bc) => ({
+    ...bc,
+    bookedCount: svc.getConfirmedBookingsForClass(bc.id).length,
+    waitlistCount: svc.waitlist.filter((w) => w.bookableClassId === bc.id && w.status === "waiting").length,
+  }));
   const templates = getTemplates().map((t) => ({ ...t }));
   const teacherAssignments = getAssignments().map((a) => ({ ...a }));
   const teacherRoster = getTeachers().map((t) => ({ ...t }));
@@ -54,6 +62,7 @@ export default async function BookableClassesPage({
       pairPresets={pairPresets}
       isDev={isDev}
       initialSearch={params.search ?? ""}
+      initialDate={params.date ?? ""}
       today={getTodayStr()}
     />
   );

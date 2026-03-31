@@ -15,7 +15,9 @@ import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { getProductRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
-import { isClassInFuture } from "@/lib/domain/datetime";
+import { isClassInFuture, getTodayStr } from "@/lib/domain/datetime";
+import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
+import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
@@ -27,6 +29,7 @@ export default async function ClassesPage() {
   const user = await requireRole(["admin", "teacher", "student"]);
 
   await ensureOperationalDataHydrated();
+  await lazyExpireSubscriptions();
 
   const danceStyles = getDanceStyles();
 
@@ -125,6 +128,7 @@ export default async function ClassesPage() {
         classInstance: classInfo,
         studentState: {
           activeBookingId: activeBooking?.id ?? null,
+          activeBookingStatus: activeBooking?.status ?? null,
           waitlistEntry: waitlistEntry
             ? { id: waitlistEntry.id, position: waitlistEntry.position }
             : null,
@@ -158,7 +162,24 @@ export default async function ClassesPage() {
       };
     });
 
-    return <ClassBrowser classes={classCards} codeOfConductAccepted={cocAccepted} studentPreferredRole={student?.preferredRole ?? null} />;
+    const todayStr = getTodayStr();
+    const currentTerm = getCurrentTerm(terms, todayStr);
+    const nextTerm = getNextTerm(terms, todayStr);
+    const termInfo = currentTerm
+      ? { name: currentTerm.name ?? "Current Term", startDate: currentTerm.startDate, endDate: currentTerm.endDate }
+      : nextTerm
+        ? { name: nextTerm.name ?? "Next Term", startDate: nextTerm.startDate, endDate: nextTerm.endDate }
+        : null;
+
+    return (
+      <ClassBrowser
+        classes={classCards}
+        codeOfConductAccepted={cocAccepted}
+        studentPreferredRole={student?.preferredRole ?? null}
+        today={todayStr}
+        termInfo={termInfo}
+      />
+    );
   }
 
   const templates = getTemplates().map((t) => ({ ...t }));

@@ -73,7 +73,7 @@ export function DialogContent({
   return (
     <div
       className={cn(
-        "rounded-xl border border-gray-200 bg-white shadow-xl animate-in fade-in",
+        "rounded-xl border border-gray-200 bg-white shadow-xl animate-in fade-in max-h-[90vh] flex flex-col [&>form]:flex [&>form]:flex-col [&>form]:min-h-0 [&>form]:flex-1",
         className
       )}
     >
@@ -91,7 +91,7 @@ export function DialogHeader({
 }) {
   const { onClose } = useDialog();
   return (
-    <div className={cn("flex items-center justify-between border-b border-gray-100 px-6 py-4", className)}>
+    <div className={cn("flex items-center justify-between border-b border-gray-100 px-6 py-4 shrink-0", className)}>
       <div>{children}</div>
       <button
         onClick={onClose}
@@ -124,7 +124,7 @@ export function DialogBody({
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={cn("px-6 py-4", className)}>{children}</div>;
+  return <div className={cn("px-6 py-4 overflow-y-auto min-h-0 flex-1", className)}>{children}</div>;
 }
 
 export function DialogFooter({
@@ -137,7 +137,7 @@ export function DialogFooter({
   return (
     <div
       className={cn(
-        "flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4",
+        "flex items-center justify-end gap-3 border-t border-gray-100 px-6 py-4 shrink-0",
         className
       )}
     >

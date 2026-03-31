@@ -31,6 +31,7 @@ import { BulkCreateDialog } from "./bulk-create-dialog";
 import { CopyMonthDialog } from "./copy-month-dialog";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { RescheduleConfirmDialog } from "./reschedule-confirm-dialog";
+import { StudentImpactModal } from "./student-impact-modal";
 
 type ViewMode = "table" | "weekly" | "monthly";
 
@@ -67,6 +68,7 @@ interface AdminScheduleProps {
   pairPresets: PairPreset[];
   isDev?: boolean;
   initialSearch?: string;
+  initialDate?: string;
   today?: string;
 }
 
@@ -83,6 +85,7 @@ export function AdminSchedule({
   pairPresets,
   isDev,
   initialSearch,
+  initialDate,
   today: todayProp,
 }: AdminScheduleProps) {
   const inactiveSet = useMemo(() => new Set(inactiveTeacherIds ?? []), [inactiveTeacherIds]);
@@ -92,7 +95,8 @@ export function AdminSchedule({
   const [statusFilter, setStatusFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [styleFilter, setStyleFilter] = useState("");
-  const [hidePast, setHidePast] = useState(true);
+  const [dateFilter, setDateFilter] = useState(initialDate ?? "");
+  const [hidePast, setHidePast] = useState(!initialDate);
   const today = todayProp ?? new Date().toISOString().slice(0, 10);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -108,8 +112,9 @@ export function AdminSchedule({
   const [clearResult, setClearResult] = useState<string | null>(null);
 
   const [rescheduleTarget, setRescheduleTarget] = useState<{ instance: MockBookableClass; newDate: string } | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<MockBookableClass | null>(null);
-  const [delPending, startDel] = useTransition();
+  const [cancelConfirmTarget, setCancelConfirmTarget] = useState<MockBookableClass | null>(null);
+  const [cancelConfirmAction, setCancelConfirmAction] = useState<"cancel" | "delete">("cancel");
+  const [cancelConfirmPending, startCancelConfirm] = useTransition();
 
   const resolve = (id: string | null | undefined) => (id ? teacherNameMap[id] ?? null : null);
 
@@ -168,7 +173,9 @@ export function AdminSchedule({
     const q = search.toLowerCase();
     return instances
       .filter((bc) => {
-        if (hidePast) {
+        if (dateFilter) {
+          if (bc.date !== dateFilter) return false;
+        } else if (hidePast) {
           if (bc.date < today) return false;
           if (bc.date === today && isClassEnded(bc.date, bc.endTime)) return false;
         }
@@ -187,12 +194,35 @@ export function AdminSchedule({
         const dc = a.date.localeCompare(b.date);
         return dc !== 0 ? dc : a.startTime.localeCompare(b.startTime);
       });
-  }, [instances, search, statusFilter, typeFilter, styleFilter, hidePast, today]);
+  }, [instances, search, statusFilter, typeFilter, styleFilter, dateFilter, hidePast, today]);
 
   function handleStatusChange(id: string, status: string) {
+    if (status === "cancelled") {
+      const inst = instances.find((bc) => bc.id === id);
+      if (inst) {
+        setCancelConfirmTarget(inst);
+        setCancelConfirmAction("cancel");
+        return;
+      }
+    }
     startStatusTransition(async () => {
       const { updateInstanceStatusAction } = await import("@/lib/actions/classes");
       await updateInstanceStatusAction(id, status as "scheduled" | "open" | "closed" | "cancelled");
+      router.refresh();
+    });
+  }
+
+  function confirmImpactAction(inst: MockBookableClass) {
+    startCancelConfirm(async () => {
+      if (cancelConfirmAction === "delete") {
+        const { deleteInstanceAction } = await import("@/lib/actions/classes");
+        await deleteInstanceAction(inst.id);
+      } else {
+        const { updateInstanceStatusAction } = await import("@/lib/actions/classes");
+        await updateInstanceStatusAction(inst.id, "cancelled");
+      }
+      setCancelConfirmTarget(null);
+      setCancelConfirmAction("cancel");
       router.refresh();
     });
   }
@@ -296,20 +326,39 @@ export function AdminSchedule({
             <div className="w-64">
               <SearchInput value={search} onChange={setSearch} placeholder="Search title, style, location…" />
             </div>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => {
+                setDateFilter(e.target.value);
+                if (e.target.value) setHidePast(false);
+              }}
+              className="rounded-md border border-gray-300 px-2.5 py-1.5 text-sm text-gray-700"
+            />
+            {dateFilter && (
+              <button
+                onClick={() => { setDateFilter(""); setHidePast(true); }}
+                className="rounded-md bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+              >
+                Clear date filter
+              </button>
+            )}
             <SelectFilter value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} placeholder="All Statuses" />
             <SelectFilter value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} placeholder="All Types" />
             {styleOptions.length > 1 && (
               <SelectFilter value={styleFilter} onChange={setStyleFilter} options={styleOptions} placeholder="All Styles" />
             )}
-            <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap">
-              <input
-                type="checkbox"
-                checked={hidePast}
-                onChange={(e) => setHidePast(e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              Upcoming only
-            </label>
+            {!dateFilter && (
+              <label className="flex items-center gap-1.5 text-sm text-gray-600 whitespace-nowrap">
+                <input
+                  type="checkbox"
+                  checked={hidePast}
+                  onChange={(e) => setHidePast(e.target.checked)}
+                  className="rounded border-gray-300"
+                />
+                Upcoming only
+              </label>
+            )}
           </div>
         )}
       </div>
@@ -484,7 +533,10 @@ export function AdminSchedule({
                             </button>
                           )}
                           <button
-                            onClick={() => setDeleteTarget(bc)}
+                            onClick={() => {
+                              setCancelConfirmTarget(bc);
+                              setCancelConfirmAction("delete");
+                            }}
                             className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
                             title="Delete instance"
                           >
@@ -577,33 +629,14 @@ export function AdminSchedule({
         />
       )}
 
-      {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold">Delete Schedule Instance</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Permanently delete <strong>{deleteTarget.title}</strong> ({deleteTarget.date})? This cannot be undone.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setDeleteTarget(null)} disabled={delPending}>Cancel</Button>
-              <Button
-                variant="danger"
-                size="sm"
-                disabled={delPending}
-                onClick={() => {
-                  startDel(async () => {
-                    const { deleteInstanceAction } = await import("@/lib/actions/classes");
-                    await deleteInstanceAction(deleteTarget.id);
-                    setDeleteTarget(null);
-                    router.refresh();
-                  });
-                }}
-              >
-                {delPending ? "Deleting…" : "Delete"}
-              </Button>
-            </div>
-          </div>
-        </div>
+      {cancelConfirmTarget && (
+        <StudentImpactModal
+          target={cancelConfirmTarget}
+          isPending={cancelConfirmPending}
+          action={cancelConfirmAction}
+          onConfirm={() => confirmImpactAction(cancelConfirmTarget)}
+          onClose={() => { setCancelConfirmTarget(null); setCancelConfirmAction("cancel"); }}
+        />
       )}
     </div>
   );
@@ -624,3 +657,5 @@ function CapacityCell({ bc }: { bc: MockBookableClass }) {
     </div>
   );
 }
+
+

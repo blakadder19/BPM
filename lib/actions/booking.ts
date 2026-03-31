@@ -139,6 +139,7 @@ export async function createStudentBooking(input: {
     classInstance: classInfo,
     studentState: {
       activeBookingId: activeForClass?.id ?? null,
+      activeBookingStatus: activeForClass?.status ?? null,
       waitlistEntry: waitlistForClass
         ? { id: waitlistForClass.id, position: waitlistForClass.position }
         : null,

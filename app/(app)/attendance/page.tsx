@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth";
 import { getAttendanceRepo, getBookingRepo, getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
-import { getTodayStr } from "@/lib/domain/datetime";
+import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
@@ -28,7 +28,7 @@ export default async function AttendancePage({
   const allInstances = getInstances();
 
   const todaysClasses = allInstances.filter(
-    (bc) => bc.date === today && bc.classType !== "student_practice"
+    (bc) => bc.date === today && bc.classType !== "student_practice" && !isClassEnded(bc.date, bc.endTime)
   ).sort((a, b) => a.startTime.localeCompare(b.startTime));
 
   const todaysClassIds = new Set(todaysClasses.map((bc) => bc.id));

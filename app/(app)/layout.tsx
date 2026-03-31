@@ -5,6 +5,7 @@ import { getStudentRepo, getTermRepo } from "@/lib/repositories";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { UserProvider } from "@/components/providers/user-provider";
+import { SidebarProvider } from "@/components/providers/sidebar-provider";
 import { DevPanelGate } from "@/components/dev/dev-panel-gate";
 import { SessionGuard } from "@/components/layout/session-guard";
 import { computeAdminAlerts, type AdminAlert } from "@/lib/domain/admin-alerts";
@@ -13,6 +14,10 @@ import { getInstances } from "@/lib/services/schedule-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
+import { getNoticesForStudent } from "@/lib/services/class-cancellation-store";
+import { getNotificationsForStudentFromDB } from "@/lib/supabase/notification-persistence";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { formatTime } from "@/lib/utils";
 
 export default async function AppLayout({
   children,
@@ -42,13 +47,13 @@ export default async function AppLayout({
     devStudentId = (await getDevStudentId()) ?? undefined;
   }
 
-  let adminAlerts: AdminAlert[] = [];
+  let alerts: AdminAlert[] = [];
   if (user.role === "admin") {
     try {
       await ensureScheduleBootstrapped();
       const terms = await getTermRepo().getAll();
       const settings = getSettings();
-      adminAlerts = computeAdminAlerts({
+      alerts = computeAdminAlerts({
         terms,
         instances: getInstances(),
         teacherAssignments: getAssignments(),
@@ -58,6 +63,22 @@ export default async function AppLayout({
     } catch {
       // Alert computation is best-effort — never block the layout
     }
+  } else if (user.role === "student") {
+    try {
+      const studentId = devStudentId ?? user.id;
+      const notices = isRealUser(studentId)
+        ? await getNotificationsForStudentFromDB(studentId)
+        : getNoticesForStudent(studentId);
+      alerts = notices.map((n) => ({
+        id: n.id,
+        severity: "warning" as const,
+        title: "Class cancelled",
+        message: `"${n.classTitle}" on ${n.classDate} at ${formatTime(n.startTime)} was cancelled by the academy.${n.creditReverted ? " Your credit has been returned." : ""}`,
+        href: "/bookings",
+      }));
+    } catch {
+      // Best-effort
+    }
   }
 
   const panelStudentId = devStudentId ?? user.id;
@@ -66,27 +87,29 @@ export default async function AppLayout({
     : user.fullName;
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <SessionGuard />
-      <Sidebar user={user} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar
-          user={user}
-          alerts={adminAlerts}
-          devStudents={devStudents}
-          devStudentId={devStudentId}
-        />
-        <main className="flex-1 overflow-y-auto p-6">
-          <UserProvider
-            user={{ role: user.role, fullName: user.fullName, email: user.email }}
-          >
-            {children}
-          </UserProvider>
-        </main>
+    <SidebarProvider>
+      <div className="flex h-screen bg-gray-50">
+        <SessionGuard />
+        <Sidebar user={user} />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <Topbar
+            user={user}
+            alerts={alerts}
+            devStudents={devStudents}
+            devStudentId={devStudentId}
+          />
+          <main className="flex-1 overflow-y-auto px-4 py-4 md:p-6">
+            <UserProvider
+              user={{ role: user.role, fullName: user.fullName, email: user.email }}
+            >
+              {children}
+            </UserProvider>
+          </main>
+        </div>
+        {isDev && (
+          <DevPanelGate studentId={panelStudentId} studentName={panelStudentName} />
+        )}
       </div>
-      {isDev && (
-        <DevPanelGate studentId={panelStudentId} studentName={panelStudentName} />
-      )}
-    </div>
+    </SidebarProvider>
   );
 }

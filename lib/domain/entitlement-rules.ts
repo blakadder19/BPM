@@ -97,17 +97,12 @@ export function isEntitlementValidForClass(
   accessRule: ProductAccessRule | undefined
 ): boolean {
   if (sub.status !== "active") return false;
+  if (sub.validUntil && cls.date > sub.validUntil) return false;
   if (!hasRemainingUsage(sub)) return false;
   if (!accessRule) return false;
   if (!classTypeMatches(accessRule.allowedClassTypes, cls.classType)) return false;
   if (!styleMatches(accessRule.styleAccess, cls, sub)) return false;
   if (!levelMatches(accessRule.allowedLevels, cls.level)) return false;
-
-  // PROVISIONAL: Subscription-to-term matching is disabled for now.
-  // The class-level term gate (bookability step 6) already handles lifecycle
-  // restrictions for term-bound classes. Product-specific term restrictions
-  // (e.g., "this subscription only covers Spring Term") will be re-enabled
-  // in a future phase once the academy's product model is finalised.
 
   return true;
 }
@@ -123,6 +118,73 @@ export function getValidEntitlements(
       isEntitlementValidForClass(sub, cls, terms, accessRulesMap.get(sub.productId))
     )
     .map((sub) => toValidEntitlement(sub));
+}
+
+/**
+ * When getValidEntitlements returns empty, diagnose why.
+ * Returns a student-facing reason explaining the block.
+ */
+export function diagnoseNoEntitlement(
+  subscriptions: MockSubscription[],
+  cls: ClassContext,
+  accessRulesMap: Map<string, ProductAccessRule>
+): string {
+  if (subscriptions.length === 0) {
+    return "You don't have an active membership or pass. Browse the Catalog or visit reception to get started.";
+  }
+
+  let anyExhausted = false;
+  let anyStyleMismatch = false;
+  let anyLevelMismatch = false;
+  let anyTypeMismatch = false;
+  let anyExpired = false;
+  let exhaustedName: string | null = null;
+
+  for (const sub of subscriptions) {
+    const rule = accessRulesMap.get(sub.productId);
+
+    if (!rule) continue;
+    if (sub.validUntil && cls.date > sub.validUntil) {
+      anyExpired = true;
+      continue;
+    }
+    if (!classTypeMatches(rule.allowedClassTypes, cls.classType)) {
+      anyTypeMismatch = true;
+      continue;
+    }
+    if (!styleMatches(rule.styleAccess, cls, sub)) {
+      anyStyleMismatch = true;
+      continue;
+    }
+    if (!levelMatches(rule.allowedLevels, cls.level)) {
+      anyLevelMismatch = true;
+      continue;
+    }
+    if (!hasRemainingUsage(sub)) {
+      anyExhausted = true;
+      exhaustedName = sub.productName;
+      continue;
+    }
+  }
+
+  if (anyExhausted && exhaustedName) {
+    return `${exhaustedName}: all classes/credits used. Upgrade or purchase a top-up.`;
+  }
+  if (anyExpired) {
+    return "Your membership or pass has expired. Visit the Catalog or reception to renew.";
+  }
+  if (anyStyleMismatch) {
+    const styleLabel = cls.styleName ?? "this style";
+    return `Your current plan doesn't cover ${styleLabel} classes.`;
+  }
+  if (anyLevelMismatch) {
+    const levelLabel = cls.level ?? "this level";
+    return `Your current plan doesn't include ${levelLabel} classes.`;
+  }
+  if (anyTypeMismatch) {
+    return "Your current plan doesn't include this type of class.";
+  }
+  return "No matching entitlement for this class.";
 }
 
 export function toValidEntitlement(sub: MockSubscription): ValidEntitlement {
