@@ -2,9 +2,16 @@ import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
 const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback"];
+const API_ROUTES_SELF_AUTH = ["/api/lifecycle"];
 
 function isPublicRoute(pathname: string): boolean {
   return PUBLIC_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(route + "/")
+  );
+}
+
+function isSelfAuthApiRoute(pathname: string): boolean {
+  return API_ROUTES_SELF_AUTH.some(
     (route) => pathname === route || pathname.startsWith(route + "/")
   );
 }
@@ -30,6 +37,11 @@ export async function middleware(request: NextRequest) {
 
   // Public routes: always accessible
   if (isPublicRoute(pathname)) {
+    return supabaseResponse;
+  }
+
+  // API routes with their own auth (e.g. CRON_SECRET): skip session check
+  if (isSelfAuthApiRoute(pathname)) {
     return supabaseResponse;
   }
 
