@@ -64,6 +64,23 @@ export function computeTermLifecycle(
         subscriptionId: sub.id,
         reason: sub.termId ? "term_ended" : "validity_passed",
       });
+
+      // Even though this sub is being expired, check for missed renewal
+      if (sub.termId && sub.productType === "membership" && sub.autoRenew) {
+        const nextTerm = findNextTerm(sortedTerms, sub.termId);
+        if (nextTerm && !renewalSourcesSeen.has(sub.id)) {
+          const alreadyRenewed = hasExistingRenewal(sub, nextTerm, subscriptions);
+          if (!alreadyRenewed) {
+            renewalSourcesSeen.add(sub.id);
+            instructions.push({
+              type: "prepare_renewal",
+              subscriptionId: sub.id,
+              source: sub,
+              nextTerm,
+            });
+          }
+        }
+      }
       continue;
     }
 
@@ -87,6 +104,31 @@ export function computeTermLifecycle(
           }
         }
       }
+    }
+  }
+
+  // Second pass: catch already-expired auto-renew memberships that were missed
+  // (e.g. lifecycle didn't run during the 7-day renewal window)
+  for (const sub of subscriptions) {
+    if (sub.status !== "expired") continue;
+    if (sub.productType !== "membership" || !sub.autoRenew || !sub.termId) continue;
+    if (renewalSourcesSeen.has(sub.id)) continue;
+
+    const nextTerm = findNextTerm(sortedTerms, sub.termId);
+    if (!nextTerm) continue;
+
+    // Only catch up if the next term hasn't also ended
+    if (today > nextTerm.endDate) continue;
+
+    const alreadyRenewed = hasExistingRenewal(sub, nextTerm, subscriptions);
+    if (!alreadyRenewed) {
+      renewalSourcesSeen.add(sub.id);
+      instructions.push({
+        type: "prepare_renewal",
+        subscriptionId: sub.id,
+        source: sub,
+        nextTerm,
+      });
     }
   }
 
