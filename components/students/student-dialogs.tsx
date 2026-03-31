@@ -100,13 +100,38 @@ function StudentFormFields({
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label htmlFor="sf-dob">Date of Birth</Label>
-          <Input
-            id="sf-dob"
-            name="dateOfBirth"
-            type="date"
-            defaultValue={defaults?.dateOfBirth ?? ""}
-          />
+          <Label>Birthday (month &amp; day)</Label>
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              name="dobMonth"
+              aria-label="Birth month"
+              defaultValue={defaults?.dateOfBirth?.split("-")[0] ?? ""}
+              className={SELECT_CLASS}
+            >
+              <option value="">Month</option>
+              {Array.from({ length: 12 }, (_, i) => (
+                <option key={i + 1} value={String(i + 1).padStart(2, "0")}>
+                  {new Date(2000, i).toLocaleString("en", { month: "long" })}
+                </option>
+              ))}
+            </select>
+            <select
+              name="dobDay"
+              aria-label="Birth day"
+              defaultValue={(() => {
+                const parts = defaults?.dateOfBirth?.split("-");
+                return parts && parts.length >= 2 ? parts[parts.length - 1] : "";
+              })()}
+              className={SELECT_CLASS}
+            >
+              <option value="">Day</option>
+              {Array.from({ length: 31 }, (_, i) => (
+                <option key={i + 1} value={String(i + 1).padStart(2, "0")}>
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         {showStatus && (
           <div className="space-y-1.5">

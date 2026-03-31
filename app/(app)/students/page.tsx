@@ -16,6 +16,7 @@ import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { AdminStudents } from "@/components/students/admin-students";
+import { isBirthdayClassUsed, getBirthdayRedemption, type BirthdayRedemption } from "@/lib/services/birthday-benefit-store";
 
 export default async function StudentsPage({
   searchParams,
@@ -109,6 +110,16 @@ export default async function StudentsPage({
     status: a.status,
   }));
 
+  const year = new Date().getFullYear();
+  const birthdayRedemptionMap: Record<string, BirthdayRedemption> = {};
+  await Promise.all(
+    students.map(async (s) => {
+      const r = await getBirthdayRedemption(s.id, year);
+      if (r) birthdayRedemptionMap[s.id] = r;
+    })
+  );
+  const birthdayUsedIds = Object.keys(birthdayRedemptionMap);
+
   return (
     <AdminStudents
       students={students}
@@ -121,6 +132,8 @@ export default async function StudentsPage({
       penalties={penalties}
       attendanceRecords={attendanceRecords}
       initialSearch={params.search ?? ""}
+      birthdayUsedStudentIds={birthdayUsedIds}
+      birthdayRedemptions={birthdayRedemptionMap}
     />
   );
 }

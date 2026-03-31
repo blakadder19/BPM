@@ -166,17 +166,14 @@ async function loadSettingsFromDB(): Promise<Partial<AppSettings> | null> {
   return null;
 }
 
-/**
- * Fire-and-forget upsert of the full settings blob into business_rules.
- */
-function saveSettingsToDB(settings: AppSettings): void {
+async function saveSettingsToDB(settings: AppSettings): Promise<void> {
   const client = getSupabaseClient();
   if (!client) return;
   const academyId = g.__bpm_settingsAcademyId;
   if (!academyId) return;
 
-  Promise.resolve(
-    client
+  try {
+    const { error } = await client
       .from("business_rules")
       .upsert(
         {
@@ -186,14 +183,11 @@ function saveSettingsToDB(settings: AppSettings): void {
           description: "Full app settings blob (managed by Settings page)",
         },
         { onConflict: "academy_id,key" }
-      )
-  )
-    .then(({ error }) => {
-      if (error) console.warn("[settings-store] DB write failed:", error.message);
-    })
-    .catch((e: unknown) => {
-      console.warn("[settings-store] DB write error:", e instanceof Error ? e.message : e);
-    });
+      );
+    if (error) console.warn("[settings-store] DB write failed:", error.message);
+  } catch (e) {
+    console.warn("[settings-store] DB write error:", e instanceof Error ? e.message : e);
+  }
 }
 
 // ── File-based fallback (local dev / memory mode) ────────────
@@ -229,7 +223,7 @@ export function getSettings(): AppSettings {
   return readFromDisk();
 }
 
-export function updateSettings(patch: Partial<AppSettings>): AppSettings {
+export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = getSettings();
   const updated = { ...current, ...patch };
   if (patch.roleBalancedStyleNames) {
@@ -241,7 +235,7 @@ export function updateSettings(patch: Partial<AppSettings>): AppSettings {
 
   if (hasSupabaseConfig()) {
     g.__bpm_settings = updated;
-    saveSettingsToDB(updated);
+    await saveSettingsToDB(updated);
   } else {
     writeToDisk(updated);
   }

@@ -19,7 +19,7 @@ import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { computeMemberBenefits } from "@/lib/domain/member-benefits";
-import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
+import { isBirthdayClassUsed, getBirthdayRedemption } from "@/lib/services/birthday-benefit-store";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -166,12 +166,18 @@ export default async function DashboardPage() {
       CURRENT_CODE_OF_CONDUCT.version
     );
 
+    const year = new Date().getFullYear();
+    const birthdayRedemption = student
+      ? await getBirthdayRedemption(student.id, year)
+      : null;
     const benefits = student
       ? computeMemberBenefits({
           dateOfBirth: student.dateOfBirth,
           referenceDate: todayStr,
           subscriptions: studentSubs,
-          birthdayClassUsed: isBirthdayClassUsed(student.id, new Date().getFullYear()),
+          birthdayClassUsed: !!birthdayRedemption,
+          birthdayClassTitle: birthdayRedemption?.classTitle,
+          birthdayClassDate: birthdayRedemption?.classDate,
         })
       : null;
 
@@ -206,6 +212,19 @@ export default async function DashboardPage() {
 
     const BEGINNER_LEVELS = new Set(["Beginner 1", "Beginner 2"]);
 
+    // Birthday benefit for "Today for you" bookability
+    let dashboardBirthdayBenefit: import("@/lib/domain/bookability").BirthdayBenefitState | undefined;
+    const activeMembership = studentSubs.find(
+      (s) => s.productType === "membership" && s.status === "active"
+    );
+    if (activeMembership && student?.dateOfBirth && benefits?.birthdayWeekEligible && !benefits?.birthdayFreeClassUsed) {
+      dashboardBirthdayBenefit = {
+        eligible: true,
+        alreadyUsed: false,
+        membershipSubscriptionId: activeMembership.id,
+      };
+    }
+
     const todayForYou: TodayForYouItem[] = allInstances
       .filter((c) => c.date === todayStr && !isClassEnded(c.date, c.endTime) && !isClassStarted(c.date, c.startTime))
       .flatMap((c) => {
@@ -239,6 +258,8 @@ export default async function DashboardPage() {
           accessRulesMap,
           studentPreferredRole: student?.preferredRole ?? null,
           codeOfConductAccepted: cocAccepted,
+          birthdayBenefit: dashboardBirthdayBenefit,
+          studentDateOfBirth: student?.dateOfBirth ?? null,
         };
 
         const result = computeBookability(ctx);
@@ -266,6 +287,7 @@ export default async function DashboardPage() {
     return (
       <StudentDashboard
         fullName={user.fullName}
+        dateOfBirth={student?.dateOfBirth ?? null}
         upcomingBookings={upcomingBookings}
         penalties={penalties}
         termInfo={termInfo}

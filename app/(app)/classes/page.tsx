@@ -19,8 +19,10 @@ import { isClassInFuture, getTodayStr } from "@/lib/domain/datetime";
 import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 
-import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
+import { computeBookability, type ClassInstanceInfo, type BookabilityContext, type BirthdayBenefitState } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
+import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
+import { isBirthdayWeek } from "@/lib/domain/member-benefits";
 import { AdminTemplates } from "@/components/classes/admin-templates";
 import { ClassBrowser } from "@/components/booking/class-browser";
 import type { ClassCardData } from "@/components/booking/student-class-card";
@@ -74,6 +76,22 @@ export default async function ClassesPage() {
     const studentWaitlist = svc.getWaitlistForStudent(studentId);
 
     const cocAccepted = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
+
+    let classesBirthdayBenefit: BirthdayBenefitState | undefined;
+    const activeMembership = studentSubs.find(
+      (s) => s.productType === "membership" && s.status === "active"
+    );
+    if (activeMembership && student?.dateOfBirth) {
+      const todayForBirthday = getTodayStr();
+      if (isBirthdayWeek(student.dateOfBirth, todayForBirthday)) {
+        const alreadyUsed = await isBirthdayClassUsed(student.id, new Date().getFullYear());
+        classesBirthdayBenefit = {
+          eligible: true,
+          alreadyUsed,
+          membershipSubscriptionId: activeMembership.id,
+        };
+      }
+    }
 
     const futureInstances = instances
       .filter((c) => isClassInFuture(c.date, c.startTime))
@@ -141,6 +159,8 @@ export default async function ClassesPage() {
         accessRulesMap,
         studentPreferredRole: student?.preferredRole ?? null,
         codeOfConductAccepted: cocAccepted,
+        birthdayBenefit: classesBirthdayBenefit,
+        studentDateOfBirth: student?.dateOfBirth ?? null,
       };
 
       const bookability = computeBookability(ctx);

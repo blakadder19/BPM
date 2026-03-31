@@ -54,6 +54,7 @@ const VALID_SOURCES = new Set<string>([
   "drop_in",
   "admin",
   "waitlist_promotion",
+  "birthday",
 ]);
 
 export async function adminCreateBookingAction(
@@ -306,7 +307,7 @@ export async function adminCancelBookingAction(
     return { success: false, error: result.reason };
   }
 
-  if (booking.subscriptionId) {
+  if (booking.subscriptionId && booking.source !== "birthday") {
     const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
     if (sub) {
       if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {
@@ -315,6 +316,11 @@ export async function adminCancelBookingAction(
         await repoUpdateSub(sub.id, { remainingCredits: sub.remainingCredits + 1 });
       }
     }
+  }
+
+  if (booking.source === "birthday") {
+    const { unmarkBirthdayClassUsed } = await import("@/lib/services/birthday-benefit-store");
+    await unmarkBirthdayClassUsed(booking.studentId, new Date().getFullYear());
   }
 
   let penaltyCreated = false;
@@ -562,19 +568,42 @@ export async function adminRestoreBookingAction(
     return { success: false, error: "Cannot restore — class has ended" };
   }
 
+  const { validateRestoreEntitlement } = await import("@/lib/actions/booking-student");
+  const { getStudentRepo } = await import("@/lib/repositories");
+  const student = await getStudentRepo().getById(booking.studentId);
+  const entitlementCheck = await validateRestoreEntitlement(booking, {
+    classDate: cls?.date,
+    studentDateOfBirth: student?.dateOfBirth ?? null,
+  });
+  if (!entitlementCheck.valid) {
+    return { success: false, error: entitlementCheck.reason };
+  }
+
   const result = svc.restoreBooking(bookingId);
 
   if (result.type === "error") {
     return { success: false, error: result.reason };
   }
 
-  if (result.restoredTo === "confirmed" && booking.subscriptionId) {
-    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
-    if (sub) {
-      if (sub.productType === "membership" && sub.classesPerTerm !== null) {
-        await repoUpdateSub(sub.id, { classesUsed: sub.classesUsed + 1 });
-      } else if (sub.remainingCredits !== null) {
-        await repoUpdateSub(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+  const isBirthday = booking.source === "birthday";
+
+  if (result.restoredTo === "confirmed") {
+    if (isBirthday) {
+      const { markBirthdayClassUsed } = await import("@/lib/services/birthday-benefit-store");
+      await markBirthdayClassUsed(
+        booking.studentId,
+        new Date().getFullYear(),
+        cls?.title,
+        cls?.date
+      );
+    } else if (booking.subscriptionId) {
+      const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
+      if (sub) {
+        if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+          await repoUpdateSub(sub.id, { classesUsed: sub.classesUsed + 1 });
+        } else if (sub.remainingCredits !== null) {
+          await repoUpdateSub(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+        }
       }
     }
   }
@@ -761,7 +790,7 @@ export async function adminDeleteBookingAction(
   const isActive = booking.status === "confirmed" || booking.status === "checked_in";
 
   let refundedCredit = false;
-  if (isActive && booking.subscriptionId) {
+  if (isActive && booking.subscriptionId && booking.source !== "birthday") {
     const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
     if (sub) {
       if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {
@@ -772,6 +801,11 @@ export async function adminDeleteBookingAction(
         refundedCredit = true;
       }
     }
+  }
+
+  if (isActive && booking.source === "birthday") {
+    const { unmarkBirthdayClassUsed } = await import("@/lib/services/birthday-benefit-store");
+    await unmarkBirthdayClassUsed(booking.studentId, new Date().getFullYear());
   }
 
   const attSvc = getAttendanceService();

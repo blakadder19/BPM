@@ -75,7 +75,7 @@ export async function saveSettings(
     provisionalNotes,
   };
 
-  const updated = updateSettings(patch);
+  const updated = await updateSettings(patch);
   revalidatePath("/settings");
   revalidatePath("/penalties");
   return { success: true, settings: updated };

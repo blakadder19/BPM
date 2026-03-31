@@ -19,6 +19,8 @@ import {
   Cake,
   QrCode,
   ArrowRight,
+  User,
+  Pencil,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +33,7 @@ import {
   StudentBookDialog,
   type BookDialogClass,
 } from "@/components/booking/student-book-dialog";
+import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
 import { formatDate, formatCents } from "@/lib/utils";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
@@ -102,6 +105,7 @@ export interface TodayForYouItem {
 
 interface StudentDashboardProps {
   fullName: string;
+  dateOfBirth?: string | null;
   upcomingBookings: StudentBookingSummary[];
   penalties: StudentPenaltySummary[];
   termInfo?: StudentTermInfo | null;
@@ -117,6 +121,7 @@ interface StudentDashboardProps {
 
 export function StudentDashboard({
   fullName,
+  dateOfBirth,
   upcomingBookings,
   penalties,
   termInfo,
@@ -164,6 +169,12 @@ export function StudentDashboard({
       {codeOfConductAccepted === false && (
         <CocBanner />
       )}
+
+      {/* My Profile */}
+      <ProfileCard
+        dateOfBirth={dateOfBirth ?? null}
+        preferredRole={studentPreferredRole ?? null}
+      />
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
@@ -452,12 +463,12 @@ export function StudentDashboard({
                   <p className="text-xs text-gray-500 hidden sm:block">One free class during your birthday week</p>
                 </div>
                 <span className="shrink-0">
-                  {benefits.birthdayWeekEligible ? (
-                    benefits.birthdayFreeClassUsed ? (
-                      <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">Used</span>
-                    ) : (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Available</span>
-                    )
+                  {benefits.birthdayFreeClassUsed ? (
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                      Used{benefits.birthdayClassTitle ? ` · ${benefits.birthdayClassTitle}` : ""}
+                    </span>
+                  ) : benefits.birthdayWeekEligible ? (
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Available</span>
                   ) : (
                     <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">Not yet</span>
                   )}
@@ -647,6 +658,102 @@ function CocBanner() {
         />
       )}
     </>
+  );
+}
+
+function formatBirthday(dob: string): string {
+  const parts = dob.split("-");
+  if (parts.length === 2 && /^\d{2}$/.test(parts[0])) {
+    const m = parseInt(parts[0], 10) - 1;
+    const d = parseInt(parts[1], 10);
+    return `${d} ${new Date(2000, m).toLocaleString("en", { month: "long" })}`;
+  }
+  return dob;
+}
+
+function ProfileCard({
+  dateOfBirth,
+  preferredRole,
+}: {
+  dateOfBirth: string | null;
+  preferredRole: DanceRole | null;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [role, setRole] = useState<string>(preferredRole ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    await updateOwnPreferredRoleAction(role);
+    setSaving(false);
+    setEditing(false);
+  }
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between px-4 sm:px-6">
+        <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+          <User className="h-5 w-5 text-gray-400" />
+          My Profile
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="px-4 sm:px-6 pb-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-500">Birthday</p>
+            <p className="text-sm font-medium text-gray-900">
+              {dateOfBirth ? formatBirthday(dateOfBirth) : "Not set"}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs text-gray-500">Preferred Dance Role</p>
+            {editing ? (
+              <div className="mt-1 flex items-center gap-2">
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="rounded-lg border border-gray-300 px-2.5 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="">No preference</option>
+                  <option value="leader">Leader</option>
+                  <option value="follower">Follower</option>
+                </select>
+                <Button size="sm" onClick={handleSave} disabled={saving}>
+                  {saving ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setRole(preferredRole ?? "");
+                    setEditing(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-sm font-medium text-gray-900">
+                  {preferredRole
+                    ? preferredRole.charAt(0).toUpperCase() + preferredRole.slice(1)
+                    : "Not set"}
+                </p>
+                <button
+                  onClick={() => setEditing(true)}
+                  className="text-gray-400 hover:text-indigo-600 transition-colors"
+                  aria-label="Edit preferred role"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

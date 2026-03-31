@@ -17,6 +17,10 @@ import type { DanceRole } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveWaitlistToDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { isBirthdayClassUsed, markBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
+import { isBirthdayWeek } from "@/lib/domain/member-benefits";
+import { getTodayStr } from "@/lib/domain/datetime";
+import type { BirthdayBenefitState } from "@/lib/domain/bookability";
 
 export interface BookingResult {
   success: boolean;
@@ -33,6 +37,7 @@ export async function createStudentBooking(input: {
   bookableClassId: string;
   subscriptionId: string;
   danceRole: DanceRole | null;
+  useBirthdayBenefit?: boolean;
 }): Promise<BookingResult> {
   const user = await getAuthUser();
   await ensureOperationalDataHydrated();
@@ -135,6 +140,27 @@ export async function createStudentBooking(input: {
     CURRENT_CODE_OF_CONDUCT.version
   );
 
+  // Birthday benefit eligibility: memberships only, birthday week, once per year
+  let birthdayBenefit: BirthdayBenefitState | undefined;
+  const activeMembership = allSubs.find(
+    (s) => s.productType === "membership" && s.status === "active"
+  );
+  if (activeMembership && student.dateOfBirth) {
+    const today = getTodayStr();
+    const inBirthdayWeek = isBirthdayWeek(student.dateOfBirth, today);
+    if (inBirthdayWeek) {
+      const alreadyUsed = await isBirthdayClassUsed(
+        student.id,
+        new Date().getFullYear()
+      );
+      birthdayBenefit = {
+        eligible: true,
+        alreadyUsed,
+        membershipSubscriptionId: activeMembership.id,
+      };
+    }
+  }
+
   const ctx: BookabilityContext = {
     classInstance: classInfo,
     studentState: {
@@ -152,6 +178,8 @@ export async function createStudentBooking(input: {
     accessRulesMap,
     studentPreferredRole: danceRole ?? student.preferredRole,
     codeOfConductAccepted: cocAccepted,
+    birthdayBenefit,
+    studentDateOfBirth: student.dateOfBirth,
   };
 
   if (!ctx.codeOfConductAccepted) {
@@ -178,15 +206,29 @@ export async function createStudentBooking(input: {
   }
 
   const chosenEntitlement = result.entitlements.find(
-    (e) => e.subscriptionId === subscriptionId
+    (e) => e.subscriptionId === subscriptionId && !!e.isBirthdayBenefit === !!(input.useBirthdayBenefit ?? false)
   );
   if (!chosenEntitlement) {
     return { success: false, error: "Selected entitlement is not valid for this class." };
   }
 
+  const isBirthday = !!chosenEntitlement.isBirthdayBenefit;
+
   const sub = allSubs.find((s) => s.id === subscriptionId);
   if (!sub) {
     return { success: false, error: "Subscription not found." };
+  }
+
+  if (isBirthday) {
+    // Verify the class date is actually within the student's birthday week
+    if (!student.dateOfBirth || !isBirthdayWeek(student.dateOfBirth, rawCls.date)) {
+      return { success: false, error: "Birthday benefit can only be used for classes during your birthday week." };
+    }
+    // Double-check birthday redemption hasn't been used since we last checked
+    const alreadyUsed = await isBirthdayClassUsed(student.id, new Date().getFullYear());
+    if (alreadyUsed) {
+      return { success: false, error: "You've already used your birthday free class this year." };
+    }
   }
 
   const outcome = svc.bookClass({
@@ -194,9 +236,9 @@ export async function createStudentBooking(input: {
     studentId: student.id,
     studentName: student.fullName,
     danceRole: danceRole ?? student.preferredRole,
-    source: "subscription",
+    source: isBirthday ? "birthday" : "subscription",
     subscriptionId: sub.id,
-    subscriptionName: sub.productName,
+    subscriptionName: isBirthday ? "Birthday Free Class" : sub.productName,
   });
 
   if (outcome.type === "rejected") {
@@ -204,10 +246,14 @@ export async function createStudentBooking(input: {
   }
 
   if (outcome.type === "confirmed") {
-    if (sub.productType === "membership" && sub.classesPerTerm !== null) {
-      await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
-    } else if (sub.remainingCredits !== null) {
-      await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+    if (isBirthday) {
+      await markBirthdayClassUsed(student.id, new Date().getFullYear(), rawCls.title, rawCls.date);
+    } else {
+      if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+        await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
+      } else if (sub.remainingCredits !== null) {
+        await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+      }
     }
   }
 

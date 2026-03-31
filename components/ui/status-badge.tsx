@@ -47,6 +47,7 @@ const STATUS_MAP: Record<string, { label: string; variant: BadgeVariant }> = {
   admin:            { label: "Admin",          variant: "default" },
   walk_in:          { label: "Walk-in",        variant: "default" },
   waitlist_promotion: { label: "Waitlist Promo", variant: "success" },
+  birthday:         { label: "Birthday",       variant: "success" },
   provisional:      { label: "Provisional",    variant: "warning" },
   bookable:         { label: "Bookable",       variant: "success" },
   already_booked:   { label: "Booked",         variant: "info" },

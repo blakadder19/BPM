@@ -50,6 +50,7 @@ const SOURCE_OPTIONS = [
   { value: "drop_in", label: "Drop-in" },
   { value: "admin", label: "Admin" },
   { value: "waitlist_promotion", label: "Waitlist Promo" },
+  { value: "birthday", label: "Birthday" },
 ];
 
 // ── Props ────────────────────────────────────────────────────

@@ -134,8 +134,20 @@ export function StudentDetailPanel({
             />
             <DL label="Joined" value={formatDate(student.joinedAt)} />
             <DL
-              label="Date of Birth"
-              value={student.dateOfBirth ? formatDate(student.dateOfBirth) : "—"}
+              label="Birthday"
+              value={
+                student.dateOfBirth
+                  ? (() => {
+                      const parts = student.dateOfBirth.split("-");
+                      if (parts.length === 2 && /^\d{2}$/.test(parts[0])) {
+                        const m = parseInt(parts[0], 10) - 1;
+                        const d = parseInt(parts[1], 10);
+                        return `${d} ${new Date(2000, m).toLocaleString("en", { month: "long" })}`;
+                      }
+                      return formatDate(student.dateOfBirth);
+                    })()
+                  : "—"
+              }
             />
             <DL label="Emergency Contact" value={student.emergencyContactName ?? "—"} />
             {student.emergencyContactPhone && (
@@ -153,11 +165,15 @@ export function StudentDetailPanel({
                     ? benefits.birthdayFreeClassUsed
                       ? "bg-gray-100 text-gray-600"
                       : "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-500"
+                    : benefits.birthdayFreeClassUsed
+                      ? "bg-gray-100 text-gray-600"
+                      : "bg-gray-100 text-gray-500"
                 }`}>
-                  Birthday class: {benefits.birthdayWeekEligible
-                    ? benefits.birthdayFreeClassUsed ? "used" : "eligible"
-                    : "not birthday week"}
+                  Birthday class: {benefits.birthdayFreeClassUsed
+                    ? `used${benefits.birthdayClassTitle ? ` (${benefits.birthdayClassTitle}${benefits.birthdayClassDate ? ` · ${benefits.birthdayClassDate}` : ""})` : ""}`
+                    : benefits.birthdayWeekEligible
+                      ? "eligible"
+                      : "not birthday week"}
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
                   Giveaway eligible

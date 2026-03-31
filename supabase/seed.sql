@@ -73,7 +73,7 @@ where id = 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00003';
 
 -- ── Enrich student profiles ─────────────────────────────────
 
-update student_profiles set preferred_role = 'follower', date_of_birth = '1995-03-22' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001';
+update student_profiles set preferred_role = 'follower', date_of_birth = '03-22' where id = 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001';
 
 
 -- ── Terms (Real BPM 2026 — 9 × 4-week blocks) ──────────────

@@ -13,6 +13,9 @@ import type { MockSubscription } from "@/lib/mock-data";
 /**
  * Returns true if `referenceDate` falls within the 7-day birthday window
  * starting on the student's birthday (same month/day in the reference year).
+ *
+ * `dateOfBirth` is stored as "MM-DD" (no year). Legacy "YYYY-MM-DD" values
+ * are also accepted for backward compatibility during migration.
  */
 export function isBirthdayWeek(
   dateOfBirth: string | null,
@@ -20,17 +23,24 @@ export function isBirthdayWeek(
 ): boolean {
   if (!dateOfBirth) return false;
 
-  const dob = new Date(dateOfBirth);
   const ref = new Date(referenceDate);
+  if (isNaN(ref.getTime())) return false;
 
-  if (isNaN(dob.getTime()) || isNaN(ref.getTime())) return false;
+  let month: number;
+  let day: number;
 
-  const birthdayThisYear = new Date(
-    ref.getFullYear(),
-    dob.getMonth(),
-    dob.getDate()
-  );
+  if (/^\d{2}-\d{2}$/.test(dateOfBirth)) {
+    const [mm, dd] = dateOfBirth.split("-").map(Number);
+    month = mm - 1;
+    day = dd;
+  } else {
+    const dob = new Date(dateOfBirth);
+    if (isNaN(dob.getTime())) return false;
+    month = dob.getMonth();
+    day = dob.getDate();
+  }
 
+  const birthdayThisYear = new Date(ref.getFullYear(), month, day);
   const diffMs = ref.getTime() - birthdayThisYear.getTime();
   const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
@@ -65,6 +75,8 @@ export interface MemberBenefitsSummary {
   isMember: boolean;
   birthdayWeekEligible: boolean;
   birthdayFreeClassUsed: boolean;
+  birthdayClassTitle?: string;
+  birthdayClassDate?: string;
   giveawayEligible: boolean;
   freePracticeAccess: boolean;
 }
@@ -77,6 +89,8 @@ export function computeMemberBenefits(opts: {
   referenceDate: string;
   subscriptions: MockSubscription[];
   birthdayClassUsed: boolean;
+  birthdayClassTitle?: string;
+  birthdayClassDate?: string;
 }): MemberBenefitsSummary {
   const isMember = opts.subscriptions.some(
     (s) => s.productType === "membership" && s.status === "active"
@@ -89,6 +103,8 @@ export function computeMemberBenefits(opts: {
     isMember,
     birthdayWeekEligible,
     birthdayFreeClassUsed: opts.birthdayClassUsed,
+    birthdayClassTitle: opts.birthdayClassTitle,
+    birthdayClassDate: opts.birthdayClassDate,
     giveawayEligible: isMember,
     freePracticeAccess: isMember,
   };

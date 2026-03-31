@@ -1,46 +1,165 @@
 /**
- * In-memory tracker for birthday free class redemptions.
- * Tracks which students have already used their birthday-week free class.
- * In production, replace with a database-backed service.
+ * Birthday benefit persistence layer.
+ *
+ * Uses Supabase `birthday_redemptions` table when configured,
+ * falls back to in-memory for local dev / memory mode.
  */
 
-interface BirthdayRedemption {
+import { createClient } from "@supabase/supabase-js";
+
+export interface BirthdayRedemption {
   studentId: string;
   year: number;
   redeemedAt: string;
+  classTitle?: string;
+  classDate?: string;
 }
+
+// ── Supabase helpers ────────────────────────────────────────
+
+function hasSupabaseConfig(): boolean {
+  return !!(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
+
+function getClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+}
+
+// ── In-memory fallback for dev/memory mode ──────────────────
 
 const g = globalThis as unknown as {
   __bpm_birthday_redemptions?: BirthdayRedemption[];
 };
 
-function init(): BirthdayRedemption[] {
-  if (!g.__bpm_birthday_redemptions) {
-    g.__bpm_birthday_redemptions = [];
-  }
+function memoryStore(): BirthdayRedemption[] {
+  if (!g.__bpm_birthday_redemptions) g.__bpm_birthday_redemptions = [];
   return g.__bpm_birthday_redemptions;
 }
 
-export function isBirthdayClassUsed(
+// ── Public API ──────────────────────────────────────────────
+
+export async function isBirthdayClassUsed(
   studentId: string,
   year: number
-): boolean {
-  return init().some((r) => r.studentId === studentId && r.year === year);
+): Promise<boolean> {
+  if (hasSupabaseConfig()) {
+    const client = getClient();
+    if (!client) return false;
+    try {
+      const { data, error } = await client
+        .from("birthday_redemptions")
+        .select("id")
+        .eq("student_id", studentId)
+        .eq("year", year)
+        .limit(1)
+        .maybeSingle();
+      if (error) {
+        console.warn("[birthday-store] check error:", error.message);
+        return false;
+      }
+      return !!data;
+    } catch (e) {
+      console.warn("[birthday-store] check error:", e instanceof Error ? e.message : e);
+      return false;
+    }
+  }
+  return memoryStore().some((r) => r.studentId === studentId && r.year === year);
 }
 
-export function markBirthdayClassUsed(
+export async function markBirthdayClassUsed(
+  studentId: string,
+  year: number,
+  classTitle?: string,
+  classDate?: string
+): Promise<void> {
+  if (hasSupabaseConfig()) {
+    const client = getClient();
+    if (!client) return;
+    try {
+      const { error } = await client
+        .from("birthday_redemptions")
+        .upsert(
+          {
+            student_id: studentId,
+            year,
+            redeemed_at: new Date().toISOString(),
+            class_title: classTitle ?? null,
+            class_date: classDate ?? null,
+          },
+          { onConflict: "student_id,year" }
+        );
+      if (error) console.warn("[birthday-store] save error:", error.message);
+    } catch (e) {
+      console.warn("[birthday-store] save error:", e instanceof Error ? e.message : e);
+    }
+    return;
+  }
+  const store = memoryStore();
+  if (store.some((r) => r.studentId === studentId && r.year === year)) return;
+  store.push({ studentId, year, redeemedAt: new Date().toISOString(), classTitle, classDate });
+}
+
+export async function getBirthdayRedemption(
   studentId: string,
   year: number
-): void {
-  const list = init();
-  if (list.some((r) => r.studentId === studentId && r.year === year)) return;
-  list.push({
-    studentId,
-    year,
-    redeemedAt: new Date().toISOString(),
-  });
+): Promise<BirthdayRedemption | null> {
+  if (hasSupabaseConfig()) {
+    const client = getClient();
+    if (!client) return null;
+    try {
+      const { data, error } = await client
+        .from("birthday_redemptions")
+        .select("*")
+        .eq("student_id", studentId)
+        .eq("year", year)
+        .maybeSingle();
+      if (error || !data) return null;
+      return {
+        studentId: data.student_id as string,
+        year: data.year as number,
+        redeemedAt: data.redeemed_at as string,
+        classTitle: (data.class_title as string) ?? undefined,
+        classDate: (data.class_date as string) ?? undefined,
+      };
+    } catch {
+      return null;
+    }
+  }
+  return memoryStore().find((r) => r.studentId === studentId && r.year === year) ?? null;
+}
+
+export async function unmarkBirthdayClassUsed(
+  studentId: string,
+  year: number
+): Promise<void> {
+  if (hasSupabaseConfig()) {
+    const client = getClient();
+    if (!client) return;
+    try {
+      const { error } = await client
+        .from("birthday_redemptions")
+        .delete()
+        .eq("student_id", studentId)
+        .eq("year", year);
+      if (error) console.warn("[birthday-store] delete error:", error.message);
+    } catch (e) {
+      console.warn("[birthday-store] delete error:", e instanceof Error ? e.message : e);
+    }
+    return;
+  }
+  const store = memoryStore();
+  const idx = store.findIndex((r) => r.studentId === studentId && r.year === year);
+  if (idx !== -1) store.splice(idx, 1);
 }
 
 export function getBirthdayRedemptions(): BirthdayRedemption[] {
-  return [...init()];
+  return [...memoryStore()];
 }

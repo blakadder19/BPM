@@ -86,17 +86,6 @@ export async function saveBookingToDB(b: StoredBooking): Promise<void> {
   }
 }
 
-export async function updateBookingInDB(id: string, patch: Partial<Record<string, unknown>>): Promise<void> {
-  const client = getClient();
-  if (!client) return;
-  try {
-    const { error } = await client.from("op_bookings").update(patch).eq("id", id);
-    if (error) console.warn("[op-persistence] updateBooking:", error.message);
-  } catch (e) {
-    console.warn("[op-persistence] updateBooking error:", e instanceof Error ? e.message : e);
-  }
-}
-
 export async function deleteBookingFromDB(id: string): Promise<void> {
   const client = getClient();
   if (!client) return;

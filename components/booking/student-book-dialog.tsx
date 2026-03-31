@@ -51,6 +51,11 @@ export function StudentBookDialog({
 }: StudentBookDialogProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
+  const birthdayEntitlement = entitlements.find((e) => e.isBirthdayBenefit);
+  const normalEntitlements = entitlements.filter((e) => !e.isBirthdayBenefit);
+
+  const defaultUseBirthday = !!autoSelected?.isBirthdayBenefit;
+  const [useBirthday, setUseBirthday] = useState(defaultUseBirthday);
   const [selectedSubId, setSelectedSubId] = useState<string>(
     autoSelected?.subscriptionId ?? entitlements[0]?.subscriptionId ?? ""
   );
@@ -61,6 +66,10 @@ export function StudentBookDialog({
     className: string;
     position?: number;
   } | null>(null);
+
+  const selectedEntitlement = entitlements.find(
+    (e) => e.subscriptionId === selectedSubId && !!e.isBirthdayBenefit === useBirthday
+  );
 
   function handleSubmit() {
     if (!selectedSubId) {
@@ -78,6 +87,7 @@ export function StudentBookDialog({
         bookableClassId: cls.id,
         subscriptionId: selectedSubId,
         danceRole,
+        useBirthdayBenefit: useBirthday,
       });
       if (res.success) {
         setResult({
@@ -154,46 +164,90 @@ export function StudentBookDialog({
             </div>
           ) : (
             <>
-              {/* Entitlement Selection */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Use entitlement
-                </label>
-                {entitlements.length === 1 ? (
-                  <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-                    {entitlements[0].description}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {entitlements.map((e) => (
-                      <label
-                        key={e.subscriptionId}
-                        className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                          selectedSubId === e.subscriptionId
-                            ? "border-blue-400 bg-blue-50"
-                            : "border-gray-200 hover:border-gray-300"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="entitlement"
-                          value={e.subscriptionId}
-                          checked={selectedSubId === e.subscriptionId}
-                          onChange={() => setSelectedSubId(e.subscriptionId)}
-                          className="accent-blue-600"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900">
-                            {e.productName}
-                          </p>
-                          <p className="text-xs text-gray-500">{e.description}</p>
-                        </div>
-                        <StatusBadge status={e.productType} />
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Birthday benefit option */}
+              {birthdayEntitlement && (
+                <div className="space-y-2">
+                  <label
+                    className={`flex items-center gap-3 rounded-lg border-2 p-3 cursor-pointer transition-colors ${
+                      useBirthday
+                        ? "border-pink-400 bg-pink-50"
+                        : "border-pink-200 hover:border-pink-300 bg-pink-50/30"
+                    }`}
+                    onClick={() => {
+                      setUseBirthday(true);
+                      setSelectedSubId(birthdayEntitlement.subscriptionId);
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="entitlement"
+                      checked={useBirthday}
+                      onChange={() => {
+                        setUseBirthday(true);
+                        setSelectedSubId(birthdayEntitlement.subscriptionId);
+                      }}
+                      className="accent-pink-600"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-pink-900">
+                        Birthday Free Class
+                      </p>
+                      <p className="text-xs text-pink-700">
+                        Use your birthday week benefit — does not consume membership credits
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-pink-200 px-2 py-0.5 text-xs font-semibold text-pink-800">
+                      Free
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Entitlement Selection — only shown when normal entitlements exist */}
+              {normalEntitlements.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    {birthdayEntitlement ? "Or use entitlement" : "Use entitlement"}
+                  </label>
+                  {!birthdayEntitlement && normalEntitlements.length === 1 ? (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                      {normalEntitlements[0].description}
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {normalEntitlements.map((e) => (
+                        <label
+                          key={e.subscriptionId}
+                          className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                            selectedSubId === e.subscriptionId && !useBirthday
+                              ? "border-blue-400 bg-blue-50"
+                              : "border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="entitlement"
+                            value={e.subscriptionId}
+                            checked={selectedSubId === e.subscriptionId && !useBirthday}
+                            onChange={() => {
+                              setUseBirthday(false);
+                              setSelectedSubId(e.subscriptionId);
+                            }}
+                            className="accent-blue-600"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">
+                              {e.productName}
+                            </p>
+                            <p className="text-xs text-gray-500">{e.description}</p>
+                          </div>
+                          <StatusBadge status={e.productType} />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Role Selection — auto-filled from profile, still overridable */}
               {cls.danceStyleRequiresBalance && (

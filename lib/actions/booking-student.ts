@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
 import { getBookingService } from "@/lib/services/booking-store";
-import { getSubscriptionRepo } from "@/lib/repositories";
+import { getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { updateSubscription } from "@/lib/services/subscription-service";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getSettings } from "@/lib/services/settings-store";
@@ -16,6 +16,73 @@ import {
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveWaitlistToDB, savePenaltyToDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { isBirthdayClassUsed, markBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
+
+/**
+ * Validates that the entitlement used by a cancelled booking is still
+ * available for restore. Rejects if:
+ * - birthday benefit was re-consumed by another booking
+ * - birthday class date is outside the student's birthday week
+ * - subscription no longer has capacity (classes or credits)
+ * - subscription is no longer active
+ */
+export async function validateRestoreEntitlement(booking: {
+  source?: string | null;
+  subscriptionId?: string | null;
+  studentId: string;
+}, opts?: {
+  classDate?: string;
+  studentDateOfBirth?: string | null;
+}): Promise<{ valid: boolean; reason?: string }> {
+  if (booking.source === "birthday") {
+    const { isBirthdayWeek } = await import("@/lib/domain/member-benefits");
+    if (opts?.classDate && opts.studentDateOfBirth) {
+      if (!isBirthdayWeek(opts.studentDateOfBirth, opts.classDate)) {
+        return {
+          valid: false,
+          reason: "This class date is outside your birthday week. The birthday benefit cannot be restored.",
+        };
+      }
+    }
+    const year = new Date().getFullYear();
+    const alreadyUsed = await isBirthdayClassUsed(booking.studentId, year);
+    if (alreadyUsed) {
+      return {
+        valid: false,
+        reason: "Your birthday free class has already been used for another booking this year.",
+      };
+    }
+    return { valid: true };
+  }
+
+  if (booking.subscriptionId) {
+    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
+    if (!sub) {
+      return { valid: false, reason: "The entitlement used for this booking no longer exists." };
+    }
+    if (sub.status !== "active") {
+      return {
+        valid: false,
+        reason: `Cannot restore — your ${sub.productName} is ${sub.status}.`,
+      };
+    }
+    if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+      if (sub.classesUsed >= sub.classesPerTerm) {
+        return {
+          valid: false,
+          reason: `Cannot restore — all ${sub.classesPerTerm} classes on ${sub.productName} have been used.`,
+        };
+      }
+    } else if (sub.remainingCredits !== null && sub.remainingCredits <= 0) {
+      return {
+        valid: false,
+        reason: `Cannot restore — no credits remaining on ${sub.productName}.`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
 
 export async function studentCancelBookingAction(
   bookingId: string
@@ -66,7 +133,8 @@ export async function studentCancelBookingAction(
     return { success: false, error: cancelResult.reason };
   }
 
-  if (booking.subscriptionId) {
+  // Return credits — but NOT for birthday bookings (no credits were consumed)
+  if (booking.subscriptionId && booking.source !== "birthday") {
     const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
     if (sub) {
       if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {
@@ -75,6 +143,12 @@ export async function studentCancelBookingAction(
         await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits + 1 });
       }
     }
+  }
+
+  // If this was a birthday booking being cancelled, unreserve the birthday benefit
+  if (booking.source === "birthday") {
+    const { unmarkBirthdayClassUsed } = await import("@/lib/services/birthday-benefit-store");
+    await unmarkBirthdayClassUsed(booking.studentId, new Date().getFullYear());
   }
 
   let penaltyApplied = false;
@@ -121,6 +195,23 @@ export async function studentCancelBookingAction(
   if (isRealUser(user.id)) {
     const updatedBooking = svc.bookings.find((b) => b.id === bookingId);
     if (updatedBooking) await saveBookingToDB(updatedBooking);
+  }
+
+  // Persist promoted waitlist student's new booking + updated waitlist entry
+  if (cancelResult.promoted) {
+    const promotedEntry = svc.waitlist.find(
+      (w) => w.id === cancelResult.promoted!.waitlistId
+    );
+    if (promotedEntry && isRealUser(promotedEntry.studentId)) {
+      await saveWaitlistToDB(promotedEntry);
+      const promotedBooking = svc.bookings.find(
+        (b) =>
+          b.studentId === promotedEntry.studentId &&
+          b.bookableClassId === booking.bookableClassId &&
+          b.source === "waitlist_promotion"
+      );
+      if (promotedBooking) await saveBookingToDB(promotedBooking);
+    }
   }
 
   revalidatePath("/bookings");
@@ -185,6 +276,15 @@ export async function checkRestoreEligibilityAction(
     return { eligible: false, reason: "Too close to class start. Please speak to reception." };
   }
 
+  const student = await getStudentRepo().getById(user.id);
+  const entitlementCheck = await validateRestoreEntitlement(booking, {
+    classDate: cls.date,
+    studentDateOfBirth: student?.dateOfBirth ?? null,
+  });
+  if (!entitlementCheck.valid) {
+    return { eligible: false, reason: entitlementCheck.reason };
+  }
+
   return { eligible: true };
 }
 
@@ -235,19 +335,39 @@ export async function studentRestoreBookingAction(
     return { success: false, error: "Too close to class start. Please speak to reception." };
   }
 
+  const student = await getStudentRepo().getById(user.id);
+  const entitlementCheck = await validateRestoreEntitlement(booking, {
+    classDate: cls.date,
+    studentDateOfBirth: student?.dateOfBirth ?? null,
+  });
+  if (!entitlementCheck.valid) {
+    return { success: false, error: entitlementCheck.reason };
+  }
+
   const result = svc.restoreBooking(bookingId);
 
   if (result.type === "error") {
     return { success: false, error: result.reason };
   }
 
-  if (result.restoredTo === "confirmed" && booking.subscriptionId) {
-    const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
-    if (sub) {
-      if (sub.productType === "membership" && sub.classesPerTerm !== null) {
-        await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
-      } else if (sub.remainingCredits !== null) {
-        await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+  const isBirthday = booking.source === "birthday";
+
+  if (result.restoredTo === "confirmed") {
+    if (isBirthday) {
+      await markBirthdayClassUsed(
+        booking.studentId,
+        new Date().getFullYear(),
+        cls.title,
+        cls.date
+      );
+    } else if (booking.subscriptionId) {
+      const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
+      if (sub) {
+        if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+          await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
+        } else if (sub.remainingCredits !== null) {
+          await updateSubscription(sub.id, { remainingCredits: sub.remainingCredits - 1 });
+        }
       }
     }
   }

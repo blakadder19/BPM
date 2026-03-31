@@ -150,7 +150,11 @@ async function cascadeCancelBookingsForClass(
     booking.adminNote = "academy_cancelled";
 
     let creditReverted = false;
-    if (booking.subscriptionId) {
+    if (booking.source === "birthday") {
+      const { unmarkBirthdayClassUsed } = await import("@/lib/services/birthday-benefit-store");
+      await unmarkBirthdayClassUsed(booking.studentId, new Date().getFullYear());
+      creditReverted = true;
+    } else if (booking.subscriptionId) {
       const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
       if (sub) {
         if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {

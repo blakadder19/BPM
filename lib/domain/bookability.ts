@@ -19,6 +19,7 @@ import {
 } from "./entitlement-rules";
 import { canBook, type BookableClassCapacity } from "./booking-rules";
 import { isClassStarted, getTodayStr } from "./datetime";
+import { isBirthdayWeek } from "./member-benefits";
 
 // ── Result types ────────────────────────────────────────────
 
@@ -63,6 +64,12 @@ export interface StudentBookingState {
   cancelledBooking: { id: string; status: string } | null;
 }
 
+export interface BirthdayBenefitState {
+  eligible: boolean;
+  alreadyUsed: boolean;
+  membershipSubscriptionId: string | null;
+}
+
 export interface BookabilityContext {
   classInstance: ClassInstanceInfo;
   studentState: StudentBookingState;
@@ -71,6 +78,8 @@ export interface BookabilityContext {
   accessRulesMap: Map<string, ProductAccessRule>;
   studentPreferredRole: DanceRole | null;
   codeOfConductAccepted: boolean;
+  birthdayBenefit?: BirthdayBenefitState;
+  studentDateOfBirth?: string | null;
 }
 
 // ── Engine ──────────────────────────────────────────────────
@@ -183,6 +192,33 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
     ctx.terms,
     ctx.accessRulesMap
   );
+
+  // 8b. Birthday benefit — inject only when the class date falls within the birthday week
+  if (
+    ctx.birthdayBenefit?.eligible &&
+    !ctx.birthdayBenefit.alreadyUsed &&
+    ctx.birthdayBenefit.membershipSubscriptionId &&
+    ctx.studentDateOfBirth &&
+    isBirthdayWeek(ctx.studentDateOfBirth, cls.date)
+  ) {
+    const memberSub = ctx.studentSubscriptions.find(
+      (s) => s.id === ctx.birthdayBenefit!.membershipSubscriptionId
+    );
+    if (memberSub) {
+      validEntitlements.push({
+        subscriptionId: memberSub.id,
+        productName: "Birthday Free Class",
+        productType: "membership",
+        description: "Free class — birthday week benefit",
+        classesUsed: 0,
+        classesPerTerm: null,
+        remainingCredits: null,
+        totalCredits: null,
+        isBirthdayBenefit: true,
+      });
+    }
+  }
+
   if (validEntitlements.length === 0) {
     const reason = diagnoseNoEntitlement(
       ctx.studentSubscriptions,

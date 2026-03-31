@@ -29,7 +29,12 @@ export default function SignupPage() {
     const email = (form.get("email") as string)?.trim();
     const password = form.get("password") as string;
     const preferredRole = (form.get("preferredRole") as string) || null;
-    const dateOfBirth = (form.get("dateOfBirth") as string) || null;
+    const dobMonth = form.get("dobMonth") as string;
+    const dobDay = form.get("dobDay") as string;
+    const dateOfBirth =
+      dobMonth && dobDay
+        ? `${dobMonth.padStart(2, "0")}-${dobDay.padStart(2, "0")}`
+        : null;
     const phone = (form.get("phone") as string)?.trim() || null;
 
     if (!firstName || !lastName) {
@@ -210,31 +215,50 @@ export default function SignupPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">
-                  Date of birth
-                  <span className="ml-1 text-xs text-gray-400">(optional)</span>
-                </label>
-                <input
-                  id="dateOfBirth"
-                  name="dateOfBirth"
-                  type="date"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                />
+            <div>
+              <span className="block text-sm font-medium text-gray-700">
+                Birthday (month &amp; day)
+                <span className="ml-1 text-xs text-gray-400">(optional)</span>
+              </span>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <select
+                  name="dobMonth"
+                  aria-label="Birth month"
+                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="">Month</option>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i + 1} value={String(i + 1)}>
+                      {new Date(2000, i).toLocaleString("en", { month: "long" })}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  name="dobDay"
+                  aria-label="Birth day"
+                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="">Day</option>
+                  {Array.from({ length: 31 }, (_, i) => (
+                    <option key={i + 1} value={String(i + 1)}>
+                      {i + 1}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                  Phone
-                  <span className="ml-1 text-xs text-gray-400">(optional)</span>
-                </label>
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                />
-              </div>
+            </div>
+
+            <div>
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                Phone
+                <span className="ml-1 text-xs text-gray-400">(optional)</span>
+              </label>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              />
             </div>
 
             <Button type="submit" className="w-full" disabled={isPending}>

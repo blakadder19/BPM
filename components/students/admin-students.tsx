@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import { computeMemberBenefits } from "@/lib/domain/member-benefits";
-import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
 import { StudentDetailPanel } from "./student-detail-panel";
 import {
   AddStudentDialog,
@@ -80,6 +79,8 @@ interface AdminStudentsProps {
   penalties: MockPenalty[];
   attendanceRecords?: AttendanceSlice[];
   initialSearch?: string;
+  birthdayUsedStudentIds?: string[];
+  birthdayRedemptions?: Record<string, { classTitle?: string; classDate?: string }>;
 }
 
 export function AdminStudents({
@@ -93,7 +94,10 @@ export function AdminStudents({
   penalties,
   attendanceRecords,
   initialSearch,
+  birthdayUsedStudentIds = [],
+  birthdayRedemptions = {},
 }: AdminStudentsProps) {
+  const birthdayUsedSet = new Set(birthdayUsedStudentIds);
   const [search, setSearch] = useState(initialSearch ?? "");
   const [roleFilter, setRoleFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState("");
@@ -330,7 +334,9 @@ export function AdminStudents({
                       dateOfBirth: s.dateOfBirth,
                       referenceDate: new Date().toISOString().slice(0, 10),
                       subscriptions: subscriptions.filter((sub) => sub.studentId === s.id),
-                      birthdayClassUsed: isBirthdayClassUsed(s.id, new Date().getFullYear()),
+                      birthdayClassUsed: birthdayUsedSet.has(s.id),
+                      birthdayClassTitle: birthdayRedemptions[s.id]?.classTitle,
+                      birthdayClassDate: birthdayRedemptions[s.id]?.classDate,
                     })}
                     onAddSub={() => setAddSubStudentId(s.id)}
                     onEditSub={setEditSub}

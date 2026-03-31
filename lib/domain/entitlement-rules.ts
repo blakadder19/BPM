@@ -25,6 +25,7 @@ export interface ValidEntitlement {
   classesPerTerm: number | null;
   remainingCredits: number | null;
   totalCredits: number | null;
+  isBirthdayBenefit?: boolean;
 }
 
 function styleMatches(
@@ -197,6 +198,7 @@ export function toValidEntitlement(sub: MockSubscription): ValidEntitlement {
     classesPerTerm: sub.classesPerTerm,
     remainingCredits: sub.remainingCredits,
     totalCredits: sub.totalCredits,
+    isBirthdayBenefit: false,
   };
 }
 

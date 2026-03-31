@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireAuth, requireRole } from "@/lib/auth";
 import {
   createStudent,
   updateStudent,
@@ -25,7 +25,12 @@ export async function createStudentAction(
   const notes = (formData.get("notes") as string)?.trim() || null;
   const emergencyContactName = (formData.get("emergencyContactName") as string)?.trim() || null;
   const emergencyContactPhone = (formData.get("emergencyContactPhone") as string)?.trim() || null;
-  const dateOfBirth = (formData.get("dateOfBirth") as string)?.trim() || null;
+  const dobMonth = (formData.get("dobMonth") as string)?.trim() || "";
+  const dobDay = (formData.get("dobDay") as string)?.trim() || "";
+  const dateOfBirth =
+    dobMonth && dobDay
+      ? `${dobMonth.padStart(2, "0")}-${dobDay.padStart(2, "0")}`
+      : null;
 
   if (!fullName) return { success: false, error: "Name is required" };
   if (!email || !email.includes("@"))
@@ -58,7 +63,12 @@ export async function updateStudentAction(
   const notes = (formData.get("notes") as string)?.trim() || null;
   const emergencyContactName = (formData.get("emergencyContactName") as string)?.trim() || null;
   const emergencyContactPhone = (formData.get("emergencyContactPhone") as string)?.trim() || null;
-  const dateOfBirth = (formData.get("dateOfBirth") as string)?.trim() || null;
+  const dobMonth = (formData.get("dobMonth") as string)?.trim() || "";
+  const dobDay = (formData.get("dobDay") as string)?.trim() || "";
+  const dateOfBirth =
+    dobMonth && dobDay
+      ? `${dobMonth.padStart(2, "0")}-${dobDay.padStart(2, "0")}`
+      : null;
   const isActiveRaw = formData.get("isActive") as string;
   const isActive = isActiveRaw === "true";
 
@@ -167,6 +177,23 @@ export async function deleteStudentSubscriptionAction(
     revalidatePath("/students");
     revalidatePath("/products");
     revalidatePath("/dashboard");
+  }
+  return result;
+}
+
+export async function updateOwnPreferredRoleAction(
+  role: string
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireAuth();
+  if (user.role !== "student") {
+    return { success: false, error: "Only students can update their own role." };
+  }
+  const preferredRole = parseRole(role || null);
+  const result = await updateStudent(user.id, { preferredRole });
+  if (result.success) {
+    revalidatePath("/dashboard");
+    revalidatePath("/classes");
+    revalidatePath("/bookings");
   }
   return result;
 }
