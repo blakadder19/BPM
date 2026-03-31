@@ -60,6 +60,7 @@ export interface StudentEntitlementSummary {
   productName: string;
   productType: ProductType;
   description: string | null;
+  status: string;
   classesUsed: number;
   classesPerTerm: number | null;
   remainingCredits: number | null;
@@ -67,6 +68,9 @@ export interface StudentEntitlementSummary {
   autoRenew: boolean;
   termName: string | null;
   selectedStyleName: string | null;
+  validFrom: string;
+  validUntil: string | null;
+  paymentStatus: string | null;
 }
 
 interface StudentDashboardProps {
@@ -172,21 +176,19 @@ export function StudentDashboard({
           </Card>
         </Link>
 
-        <Link href="/penalties">
-          <Card className="transition-shadow hover:shadow-md">
-            <CardContent className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-red-50">
-                <AlertTriangle className="h-6 w-6 text-red-500" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-900">
-                  {unresolvedPenalties.length}
-                </p>
-                <p className="text-sm text-gray-500">Open penalties</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
+        <Card>
+          <CardContent className="flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-red-50">
+              <AlertTriangle className="h-6 w-6 text-red-500" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-gray-900">
+                {unresolvedPenalties.length}
+              </p>
+              <p className="text-sm text-gray-500">Open penalties</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Entitlements */}
@@ -201,32 +203,40 @@ export function StudentDashboard({
           <CardContent className="p-0">
             <div className="divide-y divide-gray-100">
               {entitlements.map((e) => (
-                <div
-                  key={e.id}
-                  className="flex items-center justify-between gap-3 px-6 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {e.productName}
-                    </p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <StatusBadge status={e.productType} />
-                      {e.termName && <span>{e.termName}</span>}
-                      {e.selectedStyleName && (
-                        <span className="text-indigo-600">{e.selectedStyleName}</span>
+                <div key={e.id} className="px-6 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {e.productName}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500 mt-0.5">
+                        <StatusBadge status={e.productType} />
+                        <StatusBadge status={e.status} />
+                        {e.paymentStatus === "pending" && (
+                          <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20">
+                            Payment pending
+                          </span>
+                        )}
+                        {e.selectedStyleName && (
+                          <span className="text-indigo-600">{e.selectedStyleName}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {e.autoRenew && (
+                        <span title="Auto-renew">
+                          <RefreshCw className="h-3.5 w-3.5 text-green-500" />
+                        </span>
                       )}
                     </div>
-                    {e.description && (
-                      <p className="text-xs text-gray-400 mt-0.5 truncate">{e.description}</p>
-                    )}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
                     <EntitlementBalance e={e} />
-                    {e.autoRenew && (
-                      <span title="Auto-renew">
-                        <RefreshCw className="h-3.5 w-3.5 text-green-500" />
-                      </span>
-                    )}
+                    {e.termName && <span>Term: {e.termName}</span>}
+                    <span>
+                      {formatDate(e.validFrom)}
+                      {e.validUntil ? ` – ${formatDate(e.validUntil)}` : " – no end date"}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -350,17 +360,11 @@ export function StudentDashboard({
       {/* Penalties summary */}
       {penalties.length > 0 && (
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-gray-400" />
               Penalties
             </CardTitle>
-            <Link
-              href="/penalties"
-              className="text-sm font-medium text-blue-600 hover:text-blue-700"
-            >
-              View all
-            </Link>
           </CardHeader>
           <CardContent className="p-0">
             <div className="divide-y divide-gray-100">
@@ -398,26 +402,27 @@ function EntitlementBalance({ e }: { e: StudentEntitlementSummary }) {
   if (e.classesPerTerm !== null) {
     const left = Math.max(0, e.classesPerTerm - e.classesUsed);
     return (
-      <span className="text-sm font-medium text-gray-700">
-        Used {e.classesUsed} / {e.classesPerTerm} · {left} left
+      <span className="font-medium text-gray-700">
+        {e.classesUsed} / {e.classesPerTerm} classes used · {left} remaining
       </span>
     );
   }
   if (e.remainingCredits !== null && e.totalCredits !== null) {
+    const used = e.totalCredits - e.remainingCredits;
     return (
-      <span className="text-sm font-medium text-gray-700">
-        Used {e.totalCredits - e.remainingCredits} / {e.totalCredits} · {e.remainingCredits} left
+      <span className="font-medium text-gray-700">
+        {used} / {e.totalCredits} credits used · {e.remainingCredits} remaining
       </span>
     );
   }
   if (e.remainingCredits !== null) {
     return (
-      <span className="text-sm font-medium text-gray-700">
-        {e.remainingCredits} credit{e.remainingCredits !== 1 ? "s" : ""} left
+      <span className="font-medium text-gray-700">
+        {e.remainingCredits} credit{e.remainingCredits !== 1 ? "s" : ""} remaining
       </span>
     );
   }
-  return null;
+  return <span className="text-gray-400">Unlimited</span>;
 }
 
 function CocBanner() {

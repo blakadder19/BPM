@@ -293,7 +293,7 @@ export function AddTemplateDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader><DialogTitle>Add Template</DialogTitle></DialogHeader>
-        <DialogBody>
+        <DialogBody className="max-h-[70vh] overflow-y-auto">
           <TemplateForm initial={{}} allStyles={allStyles} allTerms={allTerms} onSubmit={handleSubmit} isPending={isPending} error={error} />
         </DialogBody>
       </DialogContent>
@@ -331,7 +331,7 @@ export function EditTemplateDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader><DialogTitle>Edit Template</DialogTitle></DialogHeader>
-        <DialogBody>
+        <DialogBody className="max-h-[70vh] overflow-y-auto">
           <TemplateForm initial={template} allStyles={allStyles} allTerms={allTerms} onSubmit={handleSubmit} isPending={isPending} error={error} />
         </DialogBody>
       </DialogContent>

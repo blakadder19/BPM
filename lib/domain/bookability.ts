@@ -13,6 +13,7 @@ import type { TermLike } from "./term-rules";
 import { findTermForDate, deriveTermStatus } from "./term-rules";
 import {
   getValidEntitlements,
+  diagnoseNoEntitlement,
   type ClassContext,
   type ValidEntitlement,
 } from "./entitlement-rules";
@@ -178,7 +179,12 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
     ctx.accessRulesMap
   );
   if (validEntitlements.length === 0) {
-    return { status: "blocked", reason: "No valid entitlement" };
+    const reason = diagnoseNoEntitlement(
+      ctx.studentSubscriptions,
+      classCtx,
+      ctx.accessRulesMap
+    );
+    return { status: "blocked", reason };
   }
 
   // 9. Capacity + role-balance

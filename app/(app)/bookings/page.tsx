@@ -8,7 +8,7 @@ import {
   getProductRepo,
 } from "@/lib/repositories";
 import { getInstances } from "@/lib/services/schedule-store";
-import { isClassInFuture, isClassEnded, getTodayStr } from "@/lib/domain/datetime";
+import { isClassEnded, getTodayStr } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -172,7 +172,7 @@ export default async function BookingsPage({
           danceRole: w.danceRole,
         };
       })
-      .filter((w) => isClassInFuture(w.date, w.startTime))
+      .filter((w) => !isClassEnded(w.date, w.endTime))
       .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
 
     return <StudentBookings bookings={mine} waitlistEntries={myWaitlist} />;

@@ -121,7 +121,10 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
         </div>
       </div>
 
-      <div className="border-t border-gray-100 p-4">
+      <div className="border-t border-gray-100 p-4 space-y-2">
+        {(b.status === "bookable" || b.status === "waitlistable") && b.entitlements.length > 0 && (
+          <EntitlementHint entitlements={b.entitlements} autoSelected={b.status === "bookable" ? b.autoSelected : undefined} />
+        )}
         <BookabilityAction
           bookability={b}
           onBook={() => onBook(data)}
@@ -214,4 +217,38 @@ function BookabilityAction({
         <p className="text-center text-sm text-gray-400 py-1">{b.reason}</p>
       );
   }
+}
+
+function EntitlementHint({
+  entitlements,
+  autoSelected,
+}: {
+  entitlements: ValidEntitlement[];
+  autoSelected?: ValidEntitlement;
+}) {
+  const ent = autoSelected ?? entitlements[0];
+  if (!ent) return null;
+
+  let usageLabel: string;
+  if (ent.classesPerTerm !== null) {
+    const left = Math.max(0, ent.classesPerTerm - ent.classesUsed);
+    usageLabel = `${left} of ${ent.classesPerTerm} classes left`;
+  } else if (ent.remainingCredits !== null && ent.totalCredits !== null) {
+    usageLabel = `${ent.remainingCredits} of ${ent.totalCredits} credits left`;
+  } else if (ent.remainingCredits !== null) {
+    usageLabel = `${ent.remainingCredits} credit${ent.remainingCredits !== 1 ? "s" : ""} left`;
+  } else {
+    usageLabel = "Unlimited";
+  }
+
+  return (
+    <div className="text-center text-xs text-gray-500">
+      <span className="font-medium text-gray-700">{ent.productName}</span>
+      <span className="mx-1">·</span>
+      <span>{usageLabel}</span>
+      {entitlements.length > 1 && (
+        <span className="text-gray-400"> (+{entitlements.length - 1} more)</span>
+      )}
+    </div>
+  );
 }

@@ -105,6 +105,18 @@ export async function studentCancelBookingAction(
     }
   }
 
+  // Deduct credits for the promoted waitlist student
+  if (cancelResult.promoted?.subscriptionId) {
+    const promoSub = await getSubscriptionRepo().getById(cancelResult.promoted.subscriptionId);
+    if (promoSub) {
+      if (promoSub.productType === "membership" && promoSub.classesPerTerm !== null) {
+        await updateSubscription(promoSub.id, { classesUsed: promoSub.classesUsed + 1 });
+      } else if (promoSub.remainingCredits !== null) {
+        await updateSubscription(promoSub.id, { remainingCredits: promoSub.remainingCredits - 1 });
+      }
+    }
+  }
+
   // Write-through to Supabase for real users
   if (isRealUser(user.id)) {
     const updatedBooking = svc.bookings.find((b) => b.id === bookingId);

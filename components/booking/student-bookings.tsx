@@ -31,10 +31,10 @@ export function StudentBookings({
   bookings: BookingView[];
   waitlistEntries?: StudentWaitlistView[];
 }) {
-  const isFuture = (date: string, startTime: string) => {
-    if (!date || !startTime) return false;
-    const t = startTime.length <= 5 ? `${startTime}:00` : startTime;
-    return new Date() < new Date(`${date}T${t}`);
+  const isNotEnded = (date: string, endTime: string) => {
+    if (!date || !endTime) return false;
+    const t = endTime.length <= 5 ? `${endTime}:00` : endTime;
+    return new Date() <= new Date(`${date}T${t}`);
   };
 
   const cancelledStatuses = new Set(["cancelled", "late_cancelled"]);
@@ -43,7 +43,7 @@ export function StudentBookings({
   const upcoming = useMemo(
     () =>
       bookings
-        .filter((b) => isFuture(b.date, b.startTime) && !terminalStatuses.has(b.status))
+        .filter((b) => isNotEnded(b.date, b.endTime) && !terminalStatuses.has(b.status))
         .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookings]
@@ -52,7 +52,7 @@ export function StudentBookings({
   const restorableCancelled = useMemo(
     () =>
       bookings
-        .filter((b) => isFuture(b.date, b.startTime) && cancelledStatuses.has(b.status))
+        .filter((b) => isNotEnded(b.date, b.endTime) && cancelledStatuses.has(b.status))
         .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookings]
@@ -62,8 +62,8 @@ export function StudentBookings({
     () =>
       bookings
         .filter((b) => {
-          if (isFuture(b.date, b.startTime) && !terminalStatuses.has(b.status)) return false;
-          if (isFuture(b.date, b.startTime) && cancelledStatuses.has(b.status)) return false;
+          if (isNotEnded(b.date, b.endTime) && !terminalStatuses.has(b.status)) return false;
+          if (isNotEnded(b.date, b.endTime) && cancelledStatuses.has(b.status)) return false;
           return true;
         })
         .sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime)),

@@ -4,10 +4,7 @@ import { getPenaltyRepo, getStudentRepo, getSettingsRepo } from "@/lib/repositor
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getTemplates } from "@/lib/services/class-store";
 import { AdminPenalties } from "@/components/penalties/admin-penalties";
-import {
-  StudentPenalties,
-  type StudentPenaltyView,
-} from "@/components/penalties/student-penalties";
+
 
 export default async function PenaltiesPage({
   searchParams,
@@ -23,19 +20,7 @@ export default async function PenaltiesPage({
   const svc = getPenaltyRepo().getService();
 
   if (user.role === "student") {
-    const mine: StudentPenaltyView[] = svc.penalties
-      .filter((p) => p.studentId === user.id && p.resolution !== "attendance_corrected")
-      .map((p) => ({
-        id: p.id,
-        classTitle: p.classTitle,
-        date: p.classDate,
-        reason: p.reason,
-        amountCents: p.amountCents,
-        resolution: p.resolution,
-        createdAt: p.createdAt,
-      }));
-
-    return <StudentPenalties penalties={mine} />;
+    redirect("/dashboard");
   }
 
   const allPenalties = svc.getAllPenalties();

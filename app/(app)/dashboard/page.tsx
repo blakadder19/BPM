@@ -11,7 +11,7 @@ import {
   getAttendanceRepo,
 } from "@/lib/repositories";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
-import { getTodayStr, isClassInFuture, isClassEnded, effectiveInstanceStatus } from "@/lib/domain/datetime";
+import { getTodayStr, isClassEnded, effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { computeMemberBenefits } from "@/lib/domain/member-benefits";
@@ -61,19 +61,20 @@ export default async function DashboardPage() {
       )
       .map((b) => {
         const cls = bookingSvc.getClass(b.bookableClassId);
+        if (!cls) return null;
         const attRecord = attendanceSvc.getRecord(b.bookableClassId, b.studentId);
         return {
           id: b.id,
-          classTitle: cls?.title ?? "Unknown",
-          date: cls?.date ?? "",
-          startTime: cls?.startTime ?? "",
-          endTime: cls?.endTime ?? "",
-          location: cls?.location ?? "",
+          classTitle: cls.title,
+          date: cls.date,
+          startTime: cls.startTime,
+          endTime: cls.endTime,
+          location: cls.location,
           danceRole: b.danceRole,
           status: resolveStudentVisibleStatus(b.status, attRecord?.status),
         };
       })
-      .filter((b) => isClassInFuture(b.date, b.startTime))
+      .filter((b): b is NonNullable<typeof b> => b !== null && !isClassEnded(b.date, b.endTime))
       .sort(
         (a, b) =>
           a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)
@@ -111,18 +112,25 @@ export default async function DashboardPage() {
     const entitlements: StudentEntitlementSummary[] = await Promise.all(
       studentSubs.map(async (sub) => {
         const product = await getProductRepo().getById(sub.productId);
+        const linkedTerm = sub.termId
+          ? terms.find((t) => t.id === sub.termId) ?? null
+          : null;
         return {
           id: sub.id,
           productName: sub.productName,
           productType: sub.productType,
           description: product?.description ?? null,
+          status: sub.status,
           classesUsed: sub.classesUsed,
           classesPerTerm: sub.classesPerTerm,
           remainingCredits: sub.remainingCredits,
           totalCredits: sub.totalCredits,
           autoRenew: sub.autoRenew,
-          termName: currentTerm?.name ?? null,
+          termName: linkedTerm?.name ?? null,
           selectedStyleName: sub.selectedStyleName ?? sub.selectedStyleNames?.join(", ") ?? null,
+          validFrom: sub.validFrom,
+          validUntil: sub.validUntil,
+          paymentStatus: sub.paymentStatus ?? null,
         };
       })
     );

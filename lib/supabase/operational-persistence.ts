@@ -121,6 +121,8 @@ function rowToWaitlist(r: Record<string, unknown>): StoredWaitlistEntry {
     position: (r.position as number) ?? 0,
     joinedAt: str(r.joined_at, new Date().toISOString()),
     promotedAt: (r.promoted_at as string) ?? null,
+    subscriptionId: (r.subscription_id as string) ?? null,
+    subscriptionName: (r.subscription_name as string) ?? null,
   };
 }
 
@@ -135,6 +137,8 @@ function waitlistToRow(w: StoredWaitlistEntry) {
     position: w.position,
     joined_at: w.joinedAt,
     promoted_at: w.promotedAt,
+    subscription_id: w.subscriptionId,
+    subscription_name: w.subscriptionName,
   };
 }
 

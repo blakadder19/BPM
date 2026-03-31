@@ -125,6 +125,65 @@ export function getValidEntitlements(
     .map((sub) => toValidEntitlement(sub));
 }
 
+/**
+ * When getValidEntitlements returns empty, diagnose why.
+ * Returns a student-facing reason explaining the block.
+ */
+export function diagnoseNoEntitlement(
+  subscriptions: MockSubscription[],
+  cls: ClassContext,
+  accessRulesMap: Map<string, ProductAccessRule>
+): string {
+  if (subscriptions.length === 0) {
+    return "You don't have an active membership or pass. Browse the Catalog or visit reception to get started.";
+  }
+
+  let anyExhausted = false;
+  let anyStyleMismatch = false;
+  let anyLevelMismatch = false;
+  let anyTypeMismatch = false;
+  let exhaustedName: string | null = null;
+
+  for (const sub of subscriptions) {
+    const rule = accessRulesMap.get(sub.productId);
+
+    if (!rule) continue;
+    if (!classTypeMatches(rule.allowedClassTypes, cls.classType)) {
+      anyTypeMismatch = true;
+      continue;
+    }
+    if (!styleMatches(rule.styleAccess, cls, sub)) {
+      anyStyleMismatch = true;
+      continue;
+    }
+    if (!levelMatches(rule.allowedLevels, cls.level)) {
+      anyLevelMismatch = true;
+      continue;
+    }
+    if (!hasRemainingUsage(sub)) {
+      anyExhausted = true;
+      exhaustedName = sub.productName;
+      continue;
+    }
+  }
+
+  if (anyExhausted && exhaustedName) {
+    return `${exhaustedName}: all classes/credits used. Upgrade or purchase a top-up.`;
+  }
+  if (anyStyleMismatch) {
+    const styleLabel = cls.styleName ?? "this style";
+    return `Your current plan doesn't cover ${styleLabel} classes.`;
+  }
+  if (anyLevelMismatch) {
+    const levelLabel = cls.level ?? "this level";
+    return `Your current plan doesn't include ${levelLabel} classes.`;
+  }
+  if (anyTypeMismatch) {
+    return "Your current plan doesn't include this type of class.";
+  }
+  return "No matching entitlement for this class.";
+}
+
 export function toValidEntitlement(sub: MockSubscription): ValidEntitlement {
   return {
     subscriptionId: sub.id,

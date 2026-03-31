@@ -61,9 +61,15 @@ function tzOffsetMs(utcDate: Date): number {
  * Uses a double-check to handle DST transition boundaries correctly.
  */
 function toAcademyDate(dateStr: string, timeStr: string): Date {
+  if (!dateStr || !timeStr) return new Date(NaN);
+
   const [y, mo, d] = dateStr.split("-").map(Number);
   const tp = timeStr.split(":").map(Number);
   const h = tp[0], mi = tp[1], s = tp[2] ?? 0;
+
+  if (isNaN(y) || isNaN(mo) || isNaN(d) || isNaN(h) || isNaN(mi)) {
+    return new Date(NaN);
+  }
 
   // Treat the local components as-if UTC to get an initial guess
   const utcGuess = Date.UTC(y, mo - 1, d, h, mi, s);
