@@ -30,6 +30,10 @@ export interface CreateSubscriptionData {
   selectedStyleIds?: string[] | null;
   selectedStyleNames?: string[] | null;
   renewedFromId?: string | null;
+  paidAt?: string | null;
+  paymentReference?: string | null;
+  paymentNotes?: string | null;
+  collectedBy?: string | null;
 }
 
 export interface SubscriptionPatch {
@@ -51,6 +55,10 @@ export interface SubscriptionPatch {
   selectedStyleIds?: string[] | null;
   selectedStyleNames?: string[] | null;
   renewedFromId?: string | null;
+  paidAt?: string | null;
+  paymentReference?: string | null;
+  paymentNotes?: string | null;
+  collectedBy?: string | null;
 }
 
 export interface ISubscriptionRepository {

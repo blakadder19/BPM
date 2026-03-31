@@ -18,6 +18,7 @@ import {
   Music,
   Cake,
   QrCode,
+  ArrowRight,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -105,6 +106,7 @@ interface StudentDashboardProps {
   penalties: StudentPenaltySummary[];
   termInfo?: StudentTermInfo | null;
   entitlements?: StudentEntitlementSummary[];
+  lastPlan?: StudentEntitlementSummary | null;
   waitlistedCount?: number;
   codeOfConductAccepted?: boolean;
   benefits?: MemberBenefitsSummary | null;
@@ -119,6 +121,7 @@ export function StudentDashboard({
   penalties,
   termInfo,
   entitlements = [],
+  lastPlan,
   waitlistedCount = 0,
   codeOfConductAccepted,
   benefits,
@@ -384,6 +387,49 @@ export function StudentDashboard({
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Last plan — shown when no active entitlements */}
+      {entitlements.length === 0 && lastPlan && (
+        <Card className="border-gray-200">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-gray-600">
+              <CreditCard className="h-5 w-5 text-gray-400" />
+              Your Last Plan
+            </CardTitle>
+            <StatusBadge status={lastPlan.status} />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-gray-900">{lastPlan.productName}</p>
+              <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 mt-0.5">
+                <StatusBadge status={lastPlan.productType} />
+                {lastPlan.selectedStyleName && (
+                  <span className="text-indigo-600">{lastPlan.selectedStyleName}</span>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+              <EntitlementBalance e={lastPlan} />
+              {lastPlan.termName && <span>Term: {lastPlan.termName}</span>}
+              <span>
+                {formatDate(lastPlan.validFrom)}
+                {lastPlan.validUntil ? ` – ${formatDate(lastPlan.validUntil)}` : ""}
+              </span>
+            </div>
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+              <p className="text-xs text-amber-800">
+                You don&apos;t have an active membership or pass. Browse our catalog to get started again.
+              </p>
+            </div>
+            <Link href="/catalog">
+              <Button variant="outline" size="sm" className="w-full gap-1.5">
+                Browse Memberships & Passes
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       )}

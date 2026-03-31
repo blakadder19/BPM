@@ -116,33 +116,46 @@ export default async function DashboardPage() {
       : [];
     const studentSubs = allSubs.filter((s) => s.status === "active");
 
+    async function toSummary(sub: typeof allSubs[number]): Promise<StudentEntitlementSummary> {
+      const product = await getProductRepo().getById(sub.productId);
+      const linkedTerm = sub.termId
+        ? terms.find((t) => t.id === sub.termId) ?? null
+        : null;
+      return {
+        id: sub.id,
+        productName: sub.productName,
+        productType: sub.productType,
+        description: product?.description ?? null,
+        status: sub.status,
+        classesUsed: sub.classesUsed,
+        classesPerTerm: sub.classesPerTerm,
+        remainingCredits: sub.remainingCredits,
+        totalCredits: sub.totalCredits,
+        autoRenew: sub.autoRenew,
+        termName: linkedTerm?.name ?? null,
+        selectedStyleName: sub.selectedStyleName ?? sub.selectedStyleNames?.join(", ") ?? null,
+        validFrom: sub.validFrom,
+        validUntil: sub.validUntil,
+        paymentStatus: sub.paymentStatus ?? null,
+        daysUntilExpiry: daysUntilExpiry(sub, todayStr),
+        isRenewal: !!sub.renewedFromId,
+      };
+    }
+
     const entitlements: StudentEntitlementSummary[] = await Promise.all(
-      studentSubs.map(async (sub) => {
-        const product = await getProductRepo().getById(sub.productId);
-        const linkedTerm = sub.termId
-          ? terms.find((t) => t.id === sub.termId) ?? null
-          : null;
-        return {
-          id: sub.id,
-          productName: sub.productName,
-          productType: sub.productType,
-          description: product?.description ?? null,
-          status: sub.status,
-          classesUsed: sub.classesUsed,
-          classesPerTerm: sub.classesPerTerm,
-          remainingCredits: sub.remainingCredits,
-          totalCredits: sub.totalCredits,
-          autoRenew: sub.autoRenew,
-          termName: linkedTerm?.name ?? null,
-          selectedStyleName: sub.selectedStyleName ?? sub.selectedStyleNames?.join(", ") ?? null,
-          validFrom: sub.validFrom,
-          validUntil: sub.validUntil,
-          paymentStatus: sub.paymentStatus ?? null,
-          daysUntilExpiry: daysUntilExpiry(sub, todayStr),
-          isRenewal: !!sub.renewedFromId,
-        };
-      })
+      studentSubs.map(toSummary)
     );
+
+    let lastPlan: StudentEntitlementSummary | null = null;
+    if (entitlements.length === 0) {
+      const TERMINAL = new Set(["expired", "exhausted", "cancelled"]);
+      const recent = allSubs
+        .filter((s) => TERMINAL.has(s.status))
+        .sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0];
+      if (recent) {
+        lastPlan = await toSummary(recent);
+      }
+    }
 
     const waitlistedCount = student
       ? bookingSvc.getWaitlistForStudent(student.id).length
@@ -257,6 +270,7 @@ export default async function DashboardPage() {
         penalties={penalties}
         termInfo={termInfo}
         entitlements={entitlements}
+        lastPlan={lastPlan}
         waitlistedCount={waitlistedCount}
         codeOfConductAccepted={cocAccepted}
         benefits={benefits}

@@ -4,6 +4,11 @@
  * Determines which subscriptions should expire, and which memberships
  * are eligible for renewal preparation. No side effects — returns
  * transition instructions for the caller to execute.
+ *
+ * IDEMPOTENCY: Both expiry and renewal instructions are safe to re-derive.
+ * - Expiry only targets status==="active" subs past their validUntil.
+ * - Renewal checks all non-active statuses to detect existing renewals.
+ * Callers must still guard against concurrent execution (see term-lifecycle actions).
  */
 
 import type { MockSubscription } from "@/lib/mock-data";
@@ -28,6 +33,8 @@ export type LifecycleInstruction = ExpireInstruction | RenewalInstruction;
 
 const RENEWAL_WINDOW_DAYS = 7;
 
+const RENEWAL_BLOCKING_STATUSES = new Set(["active", "cancelled", "expired", "exhausted", "paused"]);
+
 /**
  * Compute lifecycle transitions for all subscriptions.
  *
@@ -46,10 +53,11 @@ export function computeTermLifecycle(
     a.startDate.localeCompare(b.startDate)
   );
 
+  const renewalSourcesSeen = new Set<string>();
+
   for (const sub of subscriptions) {
     if (sub.status !== "active") continue;
 
-    // 1. Check if the subscription has passed its validity end date
     if (sub.validUntil && today > sub.validUntil) {
       instructions.push({
         type: "expire",
@@ -59,24 +67,16 @@ export function computeTermLifecycle(
       continue;
     }
 
-    // 2. For term-bound subscriptions, check renewal eligibility
     if (sub.termId && sub.validUntil) {
       const daysUntilEnd = daysBetween(today, sub.validUntil);
 
       if (daysUntilEnd <= RENEWAL_WINDOW_DAYS && daysUntilEnd >= 0) {
         if (sub.productType === "membership" && sub.autoRenew) {
           const nextTerm = findNextTerm(sortedTerms, sub.termId);
-          if (nextTerm) {
-            const alreadyRenewed = subscriptions.some(
-              (other) =>
-                other.id !== sub.id &&
-                other.studentId === sub.studentId &&
-                other.productId === sub.productId &&
-                (other.renewedFromId === sub.id ||
-                  (other.termId === nextTerm.id &&
-                    (other.status === "active" || other.status === "cancelled")))
-            );
+          if (nextTerm && !renewalSourcesSeen.has(sub.id)) {
+            const alreadyRenewed = hasExistingRenewal(sub, nextTerm, subscriptions);
             if (!alreadyRenewed) {
+              renewalSourcesSeen.add(sub.id);
               instructions.push({
                 type: "prepare_renewal",
                 subscriptionId: sub.id,
@@ -91,6 +91,25 @@ export function computeTermLifecycle(
   }
 
   return instructions;
+}
+
+/**
+ * Check whether a renewal already exists for this source subscription + target term.
+ * Covers all statuses that block a fresh renewal.
+ */
+function hasExistingRenewal(
+  source: MockSubscription,
+  nextTerm: MockTerm,
+  allSubs: MockSubscription[]
+): boolean {
+  return allSubs.some(
+    (other) =>
+      other.id !== source.id &&
+      other.studentId === source.studentId &&
+      other.productId === source.productId &&
+      (other.renewedFromId === source.id ||
+        (other.termId === nextTerm.id && RENEWAL_BLOCKING_STATUSES.has(other.status)))
+  );
 }
 
 /**
@@ -126,7 +145,8 @@ function daysBetween(from: string, to: string): number {
 
 /**
  * Check if a membership is eligible for manual renewal by admin.
- * Must be: term-bound, membership, active or nearing expiry, with a next term available.
+ * Must be: term-bound, membership, active or nearing expiry, with a next term available,
+ * and no existing renewal for the target term.
  */
 export function isRenewalEligible(
   sub: MockSubscription,
@@ -141,17 +161,7 @@ export function isRenewalEligible(
   const nextTerm = findNextTerm(sortedTerms, sub.termId);
   if (!nextTerm) return false;
 
-  const alreadyRenewed = allSubs.some(
-    (other) =>
-      other.id !== sub.id &&
-      other.studentId === sub.studentId &&
-      other.productId === sub.productId &&
-      (other.renewedFromId === sub.id ||
-        (other.termId === nextTerm.id &&
-          (other.status === "active" || other.status === "cancelled")))
-  );
-
-  return !alreadyRenewed;
+  return !hasExistingRenewal(sub, nextTerm, allSubs);
 }
 
 /**

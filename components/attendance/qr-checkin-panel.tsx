@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { QrScanner } from "./qr-scanner";
-import { formatTime } from "@/lib/utils";
+import { formatTime, formatDate } from "@/lib/utils";
 import {
   lookupStudentByQrAction,
   qrCheckInBookingAction,
@@ -199,6 +199,29 @@ export function QrCheckInPanel() {
                     ))}
                   </div>
                 )}
+
+                {/* Recent expired entitlement when no active */}
+                {!lookupResult.hasActiveEntitlement && lookupResult.recentExpiredEntitlement && (
+                  <div className="space-y-2 border-t border-gray-100 pt-3">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Last Entitlement</p>
+                    <ExpiredEntitlementRow ent={lookupResult.recentExpiredEntitlement} />
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                      <p className="text-xs text-amber-800">
+                        This student has no active entitlement for booking or check-in.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {!lookupResult.hasActiveEntitlement && !lookupResult.recentExpiredEntitlement && (
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                      <p className="text-xs text-amber-800">
+                        This student has no entitlement history. They need to purchase a membership or pass.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Today's bookings */}
@@ -357,6 +380,38 @@ function EntitlementRow({ ent, compact }: { ent: QrEntitlementDetail; compact?: 
           {ent.termName && <span>Term: {ent.termName}</span>}
         </div>
       )}
+    </div>
+  );
+}
+
+const STATUS_LABELS: Record<string, { label: string; className: string }> = {
+  expired: { label: "Expired", className: "bg-red-100 text-red-700" },
+  exhausted: { label: "Exhausted", className: "bg-amber-100 text-amber-700" },
+  cancelled: { label: "Cancelled", className: "bg-gray-200 text-gray-600" },
+};
+
+function ExpiredEntitlementRow({ ent }: { ent: QrEntitlementDetail }) {
+  const balance = formatBalance(ent);
+  const statusBadge = STATUS_LABELS[ent.status] ?? { label: ent.status, className: "bg-gray-200 text-gray-600" };
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-xs space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-gray-800">{ent.productName}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
+            {ent.productType.replace("_", " ")}
+          </span>
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${statusBadge.className}`}>
+            {statusBadge.label}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-gray-500">
+        {balance && <span>{balance}</span>}
+        {ent.termName && <span>Term: {ent.termName}</span>}
+        {ent.validUntil && <span>Ended: {formatDate(ent.validUntil)}</span>}
+      </div>
     </div>
   );
 }

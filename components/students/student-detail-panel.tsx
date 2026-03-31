@@ -486,6 +486,16 @@ function SubCard({
       {sub.renewedFromId && (
         <span className="text-[10px] text-indigo-500 font-medium">Renewal</span>
       )}
+      {(sub.paidAt || sub.collectedBy || sub.paymentReference) && (
+        <span className="w-full text-xs text-gray-400">
+          {sub.paidAt ? `Paid ${formatDate(sub.paidAt)}` : ""}
+          {sub.collectedBy ? ` · Collected by ${sub.collectedBy}` : ""}
+          {sub.paymentReference ? ` · Ref: ${sub.paymentReference}` : ""}
+        </span>
+      )}
+      {sub.paymentNotes && (
+        <span className="w-full text-xs text-gray-400 italic">Payment: {sub.paymentNotes}</span>
+      )}
       {sub.notes && (
         <span className="w-full text-xs text-gray-400 italic">{sub.notes}</span>
       )}

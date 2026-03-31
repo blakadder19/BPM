@@ -22,7 +22,7 @@ import {
   AddSubscriptionDialog,
   EditSubscriptionDialog,
 } from "./student-dialogs";
-import { runTermLifecycleAction } from "@/lib/actions/term-lifecycle";
+import { runTermLifecycleAction, getLifecycleRunInfo } from "@/lib/actions/term-lifecycle";
 import type { StudentImpact } from "./student-dialogs";
 import type { StudentListItem } from "@/types/domain";
 import type {
@@ -110,6 +110,7 @@ export function AdminStudents({
   const [editSub, setEditSub] = useState<MockSubscription | null>(null);
   const [lifecycleMsg, setLifecycleMsg] = useState<string | null>(null);
   const [lifecyclePending, startLifecycle] = useTransition();
+  const [lastRunTs, setLastRunTs] = useState<string | null>(null);
 
   const q = search.toLowerCase();
 
@@ -177,7 +178,7 @@ export function AdminStudents({
             onClick={() => {
               setLifecycleMsg(null);
               startLifecycle(async () => {
-                const res = await runTermLifecycleAction();
+                const res = await runTermLifecycleAction("manual");
                 if (res.success && res.result) {
                   const r = res.result;
                   if (r.expired === 0 && r.renewalsPrepared === 0) {
@@ -191,6 +192,8 @@ export function AdminStudents({
                 } else {
                   setLifecycleMsg(res.error ?? "Lifecycle check failed.");
                 }
+                const info = await getLifecycleRunInfo();
+                setLastRunTs(info.lastRun);
               });
             }}
           >
@@ -205,11 +208,19 @@ export function AdminStudents({
       </div>
 
       {lifecycleMsg && (
-        <div className="flex items-center justify-between rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-800">
-          <span>{lifecycleMsg}</span>
-          <button onClick={() => setLifecycleMsg(null)} className="text-indigo-400 hover:text-indigo-600 ml-2">
-            ✕
-          </button>
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-800">
+          <div className="flex items-center justify-between">
+            <span>{lifecycleMsg}</span>
+            <button onClick={() => setLifecycleMsg(null)} className="text-indigo-400 hover:text-indigo-600 ml-2">
+              ✕
+            </button>
+          </div>
+          {lastRunTs && (
+            <p className="text-xs text-indigo-500 mt-1">
+              Last full run: {new Date(lastRunTs).toLocaleString()} (manual).
+              Lazy expiry also runs on page loads. Scheduled via /api/lifecycle if configured.
+            </p>
+          )}
         </div>
       )}
 

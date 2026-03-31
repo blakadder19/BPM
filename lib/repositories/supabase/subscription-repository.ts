@@ -32,6 +32,10 @@ function toMockSubscription(row: SubRow): MockSubscription {
     classesUsed: row.classes_used,
     classesPerTerm: row.classes_per_term,
     renewedFromId: (row as unknown as Record<string, unknown>).renewed_from_id as string | null ?? null,
+    paidAt: (row as unknown as Record<string, unknown>).paid_at as string | null ?? null,
+    paymentReference: (row as unknown as Record<string, unknown>).payment_reference as string | null ?? null,
+    paymentNotes: (row as unknown as Record<string, unknown>).payment_notes as string | null ?? null,
+    collectedBy: (row as unknown as Record<string, unknown>).collected_by as string | null ?? null,
   };
 }
 
@@ -146,6 +150,10 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
     } else if (patch.selectedStyleName !== undefined) {
       fields.selected_style_names = patch.selectedStyleName ? [patch.selectedStyleName] : null;
     }
+    if (patch.paidAt !== undefined) fields.paid_at = patch.paidAt;
+    if (patch.paymentReference !== undefined) fields.payment_reference = patch.paymentReference;
+    if (patch.paymentNotes !== undefined) fields.payment_notes = patch.paymentNotes;
+    if (patch.collectedBy !== undefined) fields.collected_by = patch.collectedBy;
 
     if (Object.keys(fields).length === 0) return this.getById(id);
 

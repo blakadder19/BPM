@@ -369,6 +369,10 @@ function rowToSubscription(r: Record<string, unknown>): MockSubscription {
     classesUsed: (r.classes_used as number) ?? 0,
     classesPerTerm: (r.classes_per_term as number) ?? null,
     renewedFromId: (r.renewed_from_id as string) ?? null,
+    paidAt: (r.paid_at as string) ?? null,
+    paymentReference: (r.payment_reference as string) ?? null,
+    paymentNotes: (r.payment_notes as string) ?? null,
+    collectedBy: (r.collected_by as string) ?? null,
   };
 }
 
@@ -398,6 +402,10 @@ function subscriptionToRow(s: MockSubscription) {
     classes_used: s.classesUsed,
     classes_per_term: s.classesPerTerm,
     renewed_from_id: s.renewedFromId,
+    paid_at: s.paidAt,
+    payment_reference: s.paymentReference,
+    payment_notes: s.paymentNotes,
+    collected_by: s.collectedBy,
   };
 }
 

@@ -1067,6 +1067,49 @@ export function EditSubscriptionDialog({
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="es-paidAt">Paid At</Label>
+                <Input
+                  id="es-paidAt"
+                  name="paidAt"
+                  type="datetime-local"
+                  defaultValue={sub.paidAt?.slice(0, 16) ?? ""}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="es-collectedBy">Collected By</Label>
+                <Input
+                  id="es-collectedBy"
+                  name="collectedBy"
+                  defaultValue={sub.collectedBy ?? ""}
+                  placeholder="e.g. Admin, Teacher name"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="es-paymentRef">Payment Reference</Label>
+              <Input
+                id="es-paymentRef"
+                name="paymentReference"
+                defaultValue={sub.paymentReference ?? ""}
+                placeholder="e.g. Revolut txn, receipt #"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="es-paymentNotes">Payment Notes</Label>
+              <textarea
+                id="es-paymentNotes"
+                name="paymentNotes"
+                rows={2}
+                defaultValue={sub.paymentNotes ?? ""}
+                className={SELECT_CLASS}
+                placeholder="e.g. Paid in two instalments"
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="es-notes">Notes</Label>
               <textarea

@@ -25,6 +25,7 @@ export interface QrEntitlementDetail {
   termName: string | null;
   paymentStatus: string;
   status: string;
+  validUntil: string | null;
 }
 
 export interface QrStudentBooking {
@@ -52,6 +53,7 @@ export interface QrLookupResult {
   };
   todayBookings?: QrStudentBooking[];
   entitlements?: QrEntitlementDetail[];
+  recentExpiredEntitlement?: QrEntitlementDetail | null;
   paymentPending?: boolean;
   hasActiveEntitlement?: boolean;
 }
@@ -110,6 +112,7 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
       termName: sub.termId ? (termMap.get(sub.termId) ?? null) : null,
       paymentStatus: sub.paymentStatus,
       status: sub.status,
+      validUntil: sub.validUntil,
     };
   }
 
@@ -141,6 +144,17 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
     .filter((s) => s.status === "active")
     .map(buildEntitlementDetail);
 
+  let recentExpiredEntitlement: QrEntitlementDetail | null = null;
+  if (!hasActiveEntitlement) {
+    const TERMINAL = new Set(["expired", "exhausted", "cancelled"]);
+    const recent = studentSubs
+      .filter((s) => TERMINAL.has(s.status))
+      .sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0];
+    if (recent) {
+      recentExpiredEntitlement = buildEntitlementDetail(recent);
+    }
+  }
+
   return {
     success: true,
     student: {
@@ -150,6 +164,7 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
     },
     todayBookings,
     entitlements: activeEntitlements,
+    recentExpiredEntitlement,
     paymentPending,
     hasActiveEntitlement,
   };

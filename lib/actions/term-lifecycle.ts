@@ -17,90 +17,157 @@ import {
 } from "@/lib/domain/term-lifecycle";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 
+// ── Concurrency guard ────────────────────────────────────────
+// Prevents overlapping lifecycle runs in the same server process.
+
+const g = globalThis as unknown as {
+  __bpm_lifecycle_lock?: boolean;
+  __bpm_lifecycle_last_run?: string;
+  __bpm_lazy_last_run?: number;
+};
+
+const LAZY_COOLDOWN_MS = 60_000;
+
+function acquireLock(): boolean {
+  if (g.__bpm_lifecycle_lock) return false;
+  g.__bpm_lifecycle_lock = true;
+  return true;
+}
+
+function releaseLock() {
+  g.__bpm_lifecycle_lock = false;
+}
+
 export interface LifecycleResult {
   expired: number;
   renewalsPrepared: number;
   details: string[];
 }
 
+export type LifecycleTrigger = "manual" | "scheduled" | "lazy";
+
+export interface LifecycleRunInfo {
+  lastRun: string | null;
+}
+
+/** Returns when the last full lifecycle run happened (if tracked). */
+export async function getLifecycleRunInfo(): Promise<LifecycleRunInfo> {
+  return { lastRun: g.__bpm_lifecycle_last_run ?? null };
+}
+
 /**
  * Admin-callable: run full lifecycle check on all subscriptions.
  * Expires overdue subscriptions and prepares renewals for auto-renew memberships.
+ * Guarded against concurrent execution.
  */
-export async function runTermLifecycleAction(): Promise<{
+export async function runTermLifecycleAction(
+  trigger: LifecycleTrigger = "manual"
+): Promise<{
   success: boolean;
   error?: string;
   result?: LifecycleResult;
 }> {
-  await requireRole(["admin"]);
-  await ensureOperationalDataHydrated();
+  if (trigger === "manual") {
+    await requireRole(["admin"]);
+  }
 
-  const [allSubs, allTerms] = await Promise.all([
-    getSubscriptionRepo().getAll(),
-    getTermRepo().getAll(),
-  ]);
+  if (!acquireLock()) {
+    return { success: false, error: "Lifecycle is already running. Try again shortly." };
+  }
 
-  const today = getTodayStr();
-  const instructions = computeTermLifecycle(allSubs, allTerms, today);
+  try {
+    await ensureOperationalDataHydrated();
 
-  const result: LifecycleResult = {
-    expired: 0,
-    renewalsPrepared: 0,
-    details: [],
-  };
+    const [allSubs, allTerms] = await Promise.all([
+      getSubscriptionRepo().getAll(),
+      getTermRepo().getAll(),
+    ]);
 
-  for (const inst of instructions) {
-    if (inst.type === "expire") {
-      const res = await updateSubscription(inst.subscriptionId, {
-        status: "expired",
-      });
-      if (res.success) {
-        result.expired += 1;
-        result.details.push(`Expired subscription ${inst.subscriptionId} (${inst.reason})`);
-      }
-    } else if (inst.type === "prepare_renewal") {
-      const prepared = await prepareRenewal(inst);
-      if (prepared) {
-        result.renewalsPrepared += 1;
-        result.details.push(
-          `Prepared renewal for ${inst.source.productName} → ${inst.nextTerm.name}`
+    const today = getTodayStr();
+    const instructions = computeTermLifecycle(allSubs, allTerms, today);
+
+    const result: LifecycleResult = {
+      expired: 0,
+      renewalsPrepared: 0,
+      details: [],
+    };
+
+    for (const inst of instructions) {
+      if (inst.type === "expire") {
+        const res = await updateSubscription(inst.subscriptionId, {
+          status: "expired",
+        });
+        if (res.success) {
+          result.expired += 1;
+          result.details.push(`Expired subscription ${inst.subscriptionId} (${inst.reason})`);
+        }
+      } else if (inst.type === "prepare_renewal") {
+        const freshSubs = await getSubscriptionRepo().getAll();
+        const alreadyExists = freshSubs.some(
+          (s) => s.renewedFromId === inst.subscriptionId && s.studentId === inst.source.studentId
         );
+        if (!alreadyExists) {
+          const prepared = await prepareRenewal(inst);
+          if (prepared) {
+            result.renewalsPrepared += 1;
+            result.details.push(
+              `Prepared renewal for ${inst.source.productName} → ${inst.nextTerm.name}`
+            );
+          }
+        }
       }
     }
-  }
 
-  if (result.expired > 0 || result.renewalsPrepared > 0) {
-    revalidatePath("/students");
-    revalidatePath("/dashboard");
-    revalidatePath("/catalog");
-  }
+    g.__bpm_lifecycle_last_run = new Date().toISOString();
 
-  return { success: true, result };
+    if (result.expired > 0 || result.renewalsPrepared > 0) {
+      revalidatePath("/students");
+      revalidatePath("/dashboard");
+      revalidatePath("/catalog");
+    }
+
+    return { success: true, result };
+  } finally {
+    releaseLock();
+  }
 }
 
 /**
  * Lightweight lazy expiry check — runs on page load for any role.
  * Only expires overdue subscriptions; does NOT prepare renewals.
+ * Throttled: skips if it ran within LAZY_COOLDOWN_MS.
  * Returns the number of subscriptions expired (for logging/debugging).
  */
 export async function lazyExpireSubscriptions(): Promise<number> {
+  const now = Date.now();
+  if (g.__bpm_lazy_last_run && now - g.__bpm_lazy_last_run < LAZY_COOLDOWN_MS) {
+    return 0;
+  }
+
   const user = await getAuthUser();
   if (!user) return 0;
 
-  await ensureOperationalDataHydrated();
+  if (!acquireLock()) return 0;
 
-  const allSubs = await getSubscriptionRepo().getAll();
-  const today = getTodayStr();
+  try {
+    g.__bpm_lazy_last_run = now;
+    await ensureOperationalDataHydrated();
 
-  let count = 0;
-  for (const sub of allSubs) {
-    if (isSubscriptionExpired(sub, today)) {
-      const res = await updateSubscription(sub.id, { status: "expired" });
-      if (res.success) count += 1;
+    const allSubs = await getSubscriptionRepo().getAll();
+    const today = getTodayStr();
+
+    let count = 0;
+    for (const sub of allSubs) {
+      if (isSubscriptionExpired(sub, today)) {
+        const res = await updateSubscription(sub.id, { status: "expired" });
+        if (res.success) count += 1;
+      }
     }
-  }
 
-  return count;
+    return count;
+  } finally {
+    releaseLock();
+  }
 }
 
 /**

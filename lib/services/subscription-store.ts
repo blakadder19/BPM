@@ -54,6 +54,10 @@ export function createSubscription(data: {
   selectedStyleIds?: string[] | null;
   selectedStyleNames?: string[] | null;
   renewedFromId?: string | null;
+  paidAt?: string | null;
+  paymentReference?: string | null;
+  paymentNotes?: string | null;
+  collectedBy?: string | null;
 }): MockSubscription {
   const list = init();
   const sub: MockSubscription = {
@@ -81,6 +85,10 @@ export function createSubscription(data: {
     classesUsed: data.classesUsed,
     classesPerTerm: data.classesPerTerm,
     renewedFromId: data.renewedFromId ?? null,
+    paidAt: data.paidAt ?? null,
+    paymentReference: data.paymentReference ?? null,
+    paymentNotes: data.paymentNotes ?? null,
+    collectedBy: data.collectedBy ?? null,
   };
   list.push(sub);
   return sub;
@@ -107,6 +115,10 @@ export function updateSubscription(
     selectedStyleIds?: string[] | null;
     selectedStyleNames?: string[] | null;
     renewedFromId?: string | null;
+    paidAt?: string | null;
+    paymentReference?: string | null;
+    paymentNotes?: string | null;
+    collectedBy?: string | null;
   }
 ): MockSubscription | null {
   const list = init();
@@ -131,6 +143,10 @@ export function updateSubscription(
   if (patch.selectedStyleIds !== undefined) sub.selectedStyleIds = patch.selectedStyleIds;
   if (patch.selectedStyleNames !== undefined) sub.selectedStyleNames = patch.selectedStyleNames;
   if (patch.renewedFromId !== undefined) sub.renewedFromId = patch.renewedFromId;
+  if (patch.paidAt !== undefined) sub.paidAt = patch.paidAt;
+  if (patch.paymentReference !== undefined) sub.paymentReference = patch.paymentReference;
+  if (patch.paymentNotes !== undefined) sub.paymentNotes = patch.paymentNotes;
+  if (patch.collectedBy !== undefined) sub.collectedBy = patch.collectedBy;
 
   return { ...sub };
 }

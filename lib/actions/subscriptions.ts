@@ -191,6 +191,15 @@ export async function updateSubscriptionAction(
     try { patch.selectedStyleNames = JSON.parse(rawStyleNames); } catch { /* ignore */ }
   }
 
+  const paidAt = formData.get("paidAt") as string | null;
+  const paymentReference = formData.get("paymentReference") as string | null;
+  const paymentNotes = formData.get("paymentNotes") as string | null;
+  const collectedBy = formData.get("collectedBy") as string | null;
+  if (paidAt !== null) patch.paidAt = paidAt.trim() || null;
+  if (paymentReference !== null) patch.paymentReference = paymentReference.trim() || null;
+  if (paymentNotes !== null) patch.paymentNotes = paymentNotes.trim() || null;
+  if (collectedBy !== null) patch.collectedBy = collectedBy.trim() || null;
+
   const result = await updateSubscription(id, patch);
 
   if (result.success) {
