@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -839,6 +839,8 @@ export function EditSubscriptionDialog({
   const [selectedStyleIds, setSelectedStyleIds] = useState<string[]>(
     sub.selectedStyleIds ?? []
   );
+  const paidAtRef = useRef<HTMLInputElement>(null);
+  const [paymentStatusValue, setPaymentStatusValue] = useState(sub.paymentStatus);
 
   // Confirmation flow state
   const [confirmStep, setConfirmStep] = useState<{
@@ -1057,7 +1059,8 @@ export function EditSubscriptionDialog({
                 <select
                   id="es-paymentStatus"
                   name="paymentStatus"
-                  defaultValue={sub.paymentStatus}
+                  value={paymentStatusValue}
+                  onChange={(e) => setPaymentStatusValue(e.target.value as typeof paymentStatusValue)}
                   className={SELECT_CLASS}
                 >
                   {PAYMENT_STATUS_OPTIONS.map((o) => (
@@ -1067,26 +1070,48 @@ export function EditSubscriptionDialog({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="es-paidAt">Paid At</Label>
-                <Input
-                  id="es-paidAt"
-                  name="paidAt"
-                  type="datetime-local"
-                  defaultValue={sub.paidAt?.slice(0, 16) ?? ""}
-                />
+            {paymentStatusValue === "paid" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="es-paidAt">Paid At</Label>
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
+                      onClick={() => {
+                        if (paidAtRef.current) {
+                          const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Dublin" }));
+                          const y = now.getFullYear();
+                          const mo = String(now.getMonth() + 1).padStart(2, "0");
+                          const d = String(now.getDate()).padStart(2, "0");
+                          const h = String(now.getHours()).padStart(2, "0");
+                          const mi = String(now.getMinutes()).padStart(2, "0");
+                          paidAtRef.current.value = `${y}-${mo}-${d}T${h}:${mi}`;
+                        }
+                      }}
+                    >
+                      Now
+                    </button>
+                  </div>
+                  <Input
+                    ref={paidAtRef}
+                    id="es-paidAt"
+                    name="paidAt"
+                    type="datetime-local"
+                    defaultValue={sub.paidAt?.slice(0, 16) ?? ""}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="es-collectedBy">Collected By</Label>
+                  <Input
+                    id="es-collectedBy"
+                    name="collectedBy"
+                    defaultValue={sub.collectedBy ?? ""}
+                    placeholder="e.g. Admin, Teacher name"
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="es-collectedBy">Collected By</Label>
-                <Input
-                  id="es-collectedBy"
-                  name="collectedBy"
-                  defaultValue={sub.collectedBy ?? ""}
-                  placeholder="e.g. Admin, Teacher name"
-                />
-              </div>
-            </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="es-paymentRef">Payment Reference</Label>

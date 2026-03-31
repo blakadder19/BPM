@@ -444,7 +444,7 @@ function SubCard({
         </span>
       )}
       <Badge variant="default">{PAYMENT_METHOD_LABELS[sub.paymentMethod] ?? sub.paymentMethod}</Badge>
-      {sub.paymentStatus && sub.paymentStatus !== "paid" && (
+      {sub.paymentStatus && sub.paymentStatus !== "paid" && sub.paymentStatus !== "complimentary" && (
         <Badge variant={
           sub.paymentStatus === "cancelled" || sub.paymentStatus === "refunded"
             ? "danger"
@@ -452,6 +452,9 @@ function SubCard({
         }>
           {PAYMENT_STATUS_LABELS[sub.paymentStatus] ?? sub.paymentStatus}
         </Badge>
+      )}
+      {sub.paymentStatus === "complimentary" && (
+        <Badge variant="default">Comp</Badge>
       )}
       {sub.autoRenew && (
         <span className="text-[10px] text-indigo-600 font-medium">Auto-renew</span>
@@ -477,26 +480,30 @@ function SubCard({
         <span className="text-xs text-gray-400">{describeProductScope(product)}</span>
       )}
       {product?.isProvisional && <StatusBadge status="provisional" />}
-      {sub.assignedBy && (
+      {sub.assignedBy ? (
         <span className="text-xs text-gray-400">
           Assigned by {sub.assignedBy}
           {sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}
+        </span>
+      ) : (
+        <span className="text-xs text-gray-400">
+          Self-purchase{sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}
         </span>
       )}
       {sub.renewedFromId && (
         <span className="text-[10px] text-indigo-500 font-medium">Renewal</span>
       )}
-      {(sub.paidAt || sub.collectedBy || sub.paymentReference) && (
+      {sub.paymentStatus === "paid" && (sub.paidAt || sub.collectedBy || sub.paymentReference) && (
         <span className="w-full text-xs text-gray-400">
           {sub.paidAt ? `Paid ${formatDate(sub.paidAt)}` : ""}
           {sub.collectedBy ? ` · Collected by ${sub.collectedBy}` : ""}
           {sub.paymentReference ? ` · Ref: ${sub.paymentReference}` : ""}
         </span>
       )}
-      {sub.paymentNotes && (
+      {sub.paymentStatus === "paid" && sub.paymentNotes && (
         <span className="w-full text-xs text-gray-400 italic">Payment: {sub.paymentNotes}</span>
       )}
-      {sub.notes && (
+      {sub.notes && !(sub.paymentStatus !== "pending" && sub.notes.includes("payment pending")) && (
         <span className="w-full text-xs text-gray-400 italic">{sub.notes}</span>
       )}
       <div className="ml-auto flex items-center gap-1">
