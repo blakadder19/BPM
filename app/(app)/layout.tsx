@@ -14,6 +14,8 @@ import { getInstances } from "@/lib/services/schedule-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
+import { getNoticesForStudent } from "@/lib/services/class-cancellation-store";
+import { formatTime } from "@/lib/utils";
 
 export default async function AppLayout({
   children,
@@ -43,13 +45,13 @@ export default async function AppLayout({
     devStudentId = (await getDevStudentId()) ?? undefined;
   }
 
-  let adminAlerts: AdminAlert[] = [];
+  let alerts: AdminAlert[] = [];
   if (user.role === "admin") {
     try {
       await ensureScheduleBootstrapped();
       const terms = await getTermRepo().getAll();
       const settings = getSettings();
-      adminAlerts = computeAdminAlerts({
+      alerts = computeAdminAlerts({
         terms,
         instances: getInstances(),
         teacherAssignments: getAssignments(),
@@ -58,6 +60,20 @@ export default async function AppLayout({
       });
     } catch {
       // Alert computation is best-effort — never block the layout
+    }
+  } else if (user.role === "student") {
+    try {
+      const studentId = devStudentId ?? user.id;
+      const notices = getNoticesForStudent(studentId);
+      alerts = notices.map((n) => ({
+        id: n.id,
+        severity: "warning" as const,
+        title: "Class cancelled",
+        message: `"${n.classTitle}" on ${n.classDate} at ${formatTime(n.startTime)} was cancelled by the academy.${n.creditReverted ? " Your credit has been returned." : ""}`,
+        href: "/bookings",
+      }));
+    } catch {
+      // Best-effort
     }
   }
 
@@ -74,7 +90,7 @@ export default async function AppLayout({
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Topbar
             user={user}
-            alerts={adminAlerts}
+            alerts={alerts}
             devStudents={devStudents}
             devStudentId={devStudentId}
           />

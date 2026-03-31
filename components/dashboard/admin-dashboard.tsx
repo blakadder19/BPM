@@ -87,7 +87,7 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
           icon={Calendar}
           color="text-indigo-600"
           bg="bg-indigo-50"
-          href="/classes/bookable"
+          href={`/classes/bookable?date=${d.todayStr}`}
         />
         <KpiCard
           label="Upcoming Bookings"

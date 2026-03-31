@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
-import { getStudentRepo, getBookingRepo, getSubscriptionRepo, getAttendanceRepo } from "@/lib/repositories";
+import { getStudentRepo, getSubscriptionRepo, getTermRepo } from "@/lib/repositories";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getInstances } from "@/lib/services/schedule-store";
@@ -14,6 +14,19 @@ import { isRealUser } from "@/lib/utils/is-real-user";
 import { isCheckableStatus } from "@/lib/domain/checkin-rules";
 import type { CheckInMethod } from "@/types/domain";
 
+export interface QrEntitlementDetail {
+  subscriptionId: string;
+  productName: string;
+  productType: string;
+  classesUsed: number;
+  classesPerTerm: number | null;
+  remainingCredits: number | null;
+  totalCredits: number | null;
+  termName: string | null;
+  paymentStatus: string;
+  status: string;
+}
+
 export interface QrStudentBooking {
   bookingId: string;
   classId: string;
@@ -24,6 +37,7 @@ export interface QrStudentBooking {
   bookingStatus: string;
   danceRole: string | null;
   subscriptionName: string | null;
+  entitlement: QrEntitlementDetail | null;
   isCheckedIn: boolean;
   canCheckIn: boolean;
 }
@@ -37,6 +51,7 @@ export interface QrLookupResult {
     email: string;
   };
   todayBookings?: QrStudentBooking[];
+  entitlements?: QrEntitlementDetail[];
   paymentPending?: boolean;
   hasActiveEntitlement?: boolean;
 }
@@ -75,10 +90,34 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
     (b) => b.studentId === student.id && todayInstances.has(b.bookableClassId) && !TERMINAL.has(b.status)
   );
 
+  const allSubs = await getSubscriptionRepo().getAll();
+  const studentSubs = allSubs.filter((s) => s.studentId === student.id);
+
+  const allTerms = await getTermRepo().getAll();
+  const termMap = new Map(allTerms.map((t) => [t.id, t.name]));
+
+  const subMap = new Map(studentSubs.map((s) => [s.id, s]));
+
+  function buildEntitlementDetail(sub: typeof studentSubs[number]): QrEntitlementDetail {
+    return {
+      subscriptionId: sub.id,
+      productName: sub.productName,
+      productType: sub.productType,
+      classesUsed: sub.classesUsed,
+      classesPerTerm: sub.classesPerTerm,
+      remainingCredits: sub.remainingCredits,
+      totalCredits: sub.totalCredits,
+      termName: sub.termId ? (termMap.get(sub.termId) ?? null) : null,
+      paymentStatus: sub.paymentStatus,
+      status: sub.status,
+    };
+  }
+
   const todayBookings: QrStudentBooking[] = studentBookings.map((b) => {
     const cls = todayInstances.get(b.bookableClassId)!;
     const attRecord = attSvc.getRecord(b.bookableClassId, b.studentId);
     const isCheckedIn = b.status === "checked_in" || attRecord?.status === "present" || attRecord?.status === "late";
+    const sub = b.subscriptionId ? subMap.get(b.subscriptionId) : undefined;
     return {
       bookingId: b.id,
       classId: b.bookableClassId,
@@ -89,15 +128,18 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
       bookingStatus: b.status,
       danceRole: b.danceRole,
       subscriptionName: b.subscriptionName,
+      entitlement: sub ? buildEntitlementDetail(sub) : null,
       isCheckedIn: !!isCheckedIn,
       canCheckIn: isCheckableStatus(b.status),
     };
   });
 
-  const allSubs = await getSubscriptionRepo().getAll();
-  const studentSubs = allSubs.filter((s) => s.studentId === student.id);
   const hasActiveEntitlement = studentSubs.some((s) => s.status === "active");
   const paymentPending = studentSubs.some((s) => s.paymentStatus === "pending");
+
+  const activeEntitlements = studentSubs
+    .filter((s) => s.status === "active")
+    .map(buildEntitlementDetail);
 
   return {
     success: true,
@@ -107,6 +149,7 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
       email: student.email,
     },
     todayBookings,
+    entitlements: activeEntitlements,
     paymentPending,
     hasActiveEntitlement,
   };

@@ -43,7 +43,15 @@ import {
   deleteInstanceFromDB,
 } from "@/lib/supabase/schedule-persistence";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
-import { getTermRepo } from "@/lib/repositories";
+import { getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
+import { updateSubscription as repoUpdateSub } from "@/lib/services/subscription-service";
+import { getBookingService } from "@/lib/services/booking-store";
+import { getAttendanceService } from "@/lib/services/attendance-store";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { saveBookingToDB, deleteWaitlistFromDB, deleteAttendanceFromDB } from "@/lib/supabase/operational-persistence";
+import { isRealUser } from "@/lib/utils/is-real-user";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { addClassCancellationNotices, type ClassCancellationNotice } from "@/lib/services/class-cancellation-store";
 import { findTermForDate } from "@/lib/domain/term-rules";
 import { requireRole } from "@/lib/auth";
 import type { ClassType, InstanceStatus } from "@/types/domain";
@@ -82,6 +90,116 @@ function revalidateClasses() {
   revalidatePath("/classes");
   revalidatePath("/classes/bookable");
   revalidatePath("/classes/teachers");
+}
+
+function syncClassMap() {
+  const svc = getBookingService();
+  const instances = getInstances();
+  const styles = getDanceStyles();
+  svc.refreshClasses(
+    instances.map((bc) => {
+      const style = bc.styleName ? styles.find((s) => s.name === bc.styleName) : null;
+      return {
+        id: bc.id,
+        title: bc.title,
+        classType: bc.classType,
+        styleName: bc.styleName,
+        danceStyleRequiresBalance: style?.requiresRoleBalance ?? false,
+        status: bc.status,
+        date: bc.date,
+        startTime: bc.startTime,
+        endTime: bc.endTime,
+        maxCapacity: bc.maxCapacity,
+        leaderCap: bc.leaderCap,
+        followerCap: bc.followerCap,
+        location: bc.location,
+      };
+    })
+  );
+}
+
+/**
+ * Cancel all active bookings/waitlist for a class and revert credits.
+ * Called when admin deletes or cancels a class instance.
+ */
+type CascadeNotice = Omit<ClassCancellationNotice, "id" | "createdAt">;
+
+async function cascadeCancelBookingsForClass(
+  classId: string,
+  classTitle: string,
+  classDate: string,
+  startTime: string
+): Promise<CascadeNotice[]> {
+  await ensureOperationalDataHydrated();
+  syncClassMap();
+
+  const svc = getBookingService();
+  const attSvc = getAttendanceService();
+  const notices: CascadeNotice[] = [];
+
+  const activeBookings = svc.bookings.filter(
+    (b) =>
+      b.bookableClassId === classId &&
+      (b.status === "confirmed" || b.status === "checked_in")
+  );
+
+  for (const booking of activeBookings) {
+    booking.status = "cancelled";
+    booking.cancelledAt = new Date().toISOString();
+    booking.adminNote = "academy_cancelled";
+
+    let creditReverted = false;
+    if (booking.subscriptionId) {
+      const sub = await getSubscriptionRepo().getById(booking.subscriptionId);
+      if (sub) {
+        if (sub.productType === "membership" && sub.classesPerTerm !== null && sub.classesUsed > 0) {
+          await repoUpdateSub(sub.id, { classesUsed: sub.classesUsed - 1 });
+          creditReverted = true;
+        } else if (sub.remainingCredits !== null) {
+          await repoUpdateSub(sub.id, { remainingCredits: sub.remainingCredits + 1 });
+          creditReverted = true;
+        }
+      }
+    }
+
+    if (isRealUser(booking.studentId)) {
+      await saveBookingToDB(booking);
+    }
+
+    notices.push({
+      studentId: booking.studentId,
+      studentName: booking.studentName,
+      classTitle,
+      classDate,
+      startTime,
+      creditReverted,
+    });
+  }
+
+  // Remove waitlist entries
+  const waitlistEntries = svc.waitlist.filter(
+    (w) => w.bookableClassId === classId && w.status === "waiting"
+  );
+  for (const wl of waitlistEntries) {
+    wl.status = "cancelled" as never;
+    if (isRealUser(wl.studentId)) {
+      await deleteWaitlistFromDB(wl.id);
+    }
+  }
+  svc.waitlist = svc.waitlist.filter(
+    (w) => !(w.bookableClassId === classId && w.status === ("cancelled" as never))
+  );
+
+  // Remove attendance records for this class
+  const attRecords = attSvc.records.filter((r) => r.bookableClassId === classId);
+  for (const att of attRecords) {
+    if (isRealUser(att.studentId)) {
+      await deleteAttendanceFromDB(att.id);
+    }
+  }
+  attSvc.records = attSvc.records.filter((r) => r.bookableClassId !== classId);
+
+  return notices;
 }
 
 // ── Template actions ────────────────────────────────────────
@@ -409,7 +527,7 @@ export async function updateInstanceAction(
 export async function updateInstanceStatusAction(
   id: string,
   status: InstanceStatus
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; affectedStudents?: number }> {
   await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing instance ID" };
@@ -417,6 +535,21 @@ export async function updateInstanceStatusAction(
 
   const existing = getInstance(id);
   if (!existing) return { success: false, error: "Instance not found" };
+
+  let affectedStudents = 0;
+
+  if (status === "cancelled" && existing.status !== "cancelled") {
+    const notices = await cascadeCancelBookingsForClass(
+      id,
+      existing.title,
+      existing.date,
+      existing.startTime
+    );
+    affectedStudents = notices.length;
+    if (notices.length > 0) {
+      addClassCancellationNotices(notices);
+    }
+  }
 
   try {
     await updateInstanceStatusInDB(id, status);
@@ -426,7 +559,15 @@ export async function updateInstanceStatusAction(
 
   updateInstanceStatus(id, status);
   revalidateClasses();
-  return { success: true };
+
+  if (status === "cancelled") {
+    revalidatePath("/bookings");
+    revalidatePath("/dashboard");
+    revalidatePath("/attendance");
+    revalidatePath("/students");
+  }
+
+  return { success: true, affectedStudents };
 }
 
 export async function setInstanceTeacherOverrideAction(
@@ -532,12 +673,15 @@ export async function generateScheduleAction(
 
 export interface LinkedInstance {
   id: string;
+  title: string;
   date: string;
   startTime: string;
   endTime: string;
   status: string;
   location: string;
   isPast: boolean;
+  bookedCount: number;
+  waitlistCount: number;
 }
 
 export async function getLinkedInstancesAction(
@@ -545,17 +689,22 @@ export async function getLinkedInstancesAction(
 ): Promise<{ upcoming: LinkedInstance[]; past: LinkedInstance[] }> {
   await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
+  await ensureOperationalDataHydrated();
+  const svc = getBookingService();
   const today = new Date().toISOString().slice(0, 10);
   const all = getInstances()
     .filter((i) => i.classId === templateId)
     .map((i) => ({
       id: i.id,
+      title: i.title,
       date: i.date,
       startTime: i.startTime,
       endTime: i.endTime,
       status: i.status,
       location: i.location ?? "",
       isPast: i.date < today,
+      bookedCount: svc.getConfirmedBookingsForClass(i.id).length,
+      waitlistCount: svc.waitlist.filter((w) => w.bookableClassId === i.id && w.status === "waiting").length,
     }))
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
   return {
@@ -615,13 +764,26 @@ export async function deleteTemplateAction(id: string): Promise<{ success: boole
   return { success: true };
 }
 
-export async function deleteInstanceAction(id: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteInstanceAction(
+  id: string
+): Promise<{ success: boolean; error?: string; affectedStudents?: number }> {
   await requireRole(["admin"]);
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing instance ID" };
 
   const inst = getInstance(id);
   if (!inst) return { success: false, error: "Instance not found" };
+
+  const notices = await cascadeCancelBookingsForClass(
+    id,
+    inst.title,
+    inst.date,
+    inst.startTime
+  );
+
+  if (notices.length > 0) {
+    addClassCancellationNotices(notices);
+  }
 
   try {
     await deleteInstanceFromDB(id);
@@ -632,7 +794,10 @@ export async function deleteInstanceAction(id: string): Promise<{ success: boole
   deleteInstance(id);
   revalidateClasses();
   revalidatePath("/attendance");
-  return { success: true };
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/students");
+  return { success: true, affectedStudents: notices.length };
 }
 
 // ── Teacher roster actions ──────────────────────────────────

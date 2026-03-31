@@ -21,6 +21,7 @@ import {
   qrCheckInBookingAction,
   type QrLookupResult,
   type QrStudentBooking,
+  type QrEntitlementDetail,
 } from "@/lib/actions/qr-checkin";
 import { isValidStudentQrToken } from "@/lib/domain/checkin-token";
 
@@ -189,6 +190,15 @@ export function QrCheckInPanel() {
                     </span>
                   )}
                 </div>
+
+                {/* Entitlement details */}
+                {lookupResult.entitlements && lookupResult.entitlements.length > 0 && (
+                  <div className="space-y-1.5 border-t border-gray-100 pt-3">
+                    {lookupResult.entitlements.map((ent) => (
+                      <EntitlementRow key={ent.subscriptionId} ent={ent} />
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Today's bookings */}
@@ -265,11 +275,13 @@ function BookingCheckInCard({
         </div>
       </div>
 
-      {b.subscriptionName && (
+      {b.entitlement ? (
+        <EntitlementRow ent={b.entitlement} compact />
+      ) : b.subscriptionName ? (
         <p className="text-xs text-gray-500">
           Using: <span className="font-medium text-gray-700">{b.subscriptionName}</span>
         </p>
-      )}
+      ) : null}
 
       {result && !result.success && (
         <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -292,6 +304,49 @@ function BookingCheckInCard({
         >
           {isPending ? "Checking in…" : "Check In"}
         </Button>
+      )}
+    </div>
+  );
+}
+
+function formatBalance(ent: QrEntitlementDetail): string {
+  if (ent.totalCredits != null && ent.remainingCredits != null) {
+    const used = ent.totalCredits - ent.remainingCredits;
+    return `${used} of ${ent.totalCredits} credits used · ${ent.remainingCredits} left`;
+  }
+  if (ent.classesPerTerm != null) {
+    return `${ent.classesUsed} of ${ent.classesPerTerm} used · ${ent.classesPerTerm - ent.classesUsed} left`;
+  }
+  if (ent.remainingCredits != null) {
+    return `${ent.remainingCredits} credits remaining`;
+  }
+  return "";
+}
+
+function EntitlementRow({ ent, compact }: { ent: QrEntitlementDetail; compact?: boolean }) {
+  const balance = formatBalance(ent);
+  const isPending = ent.paymentStatus === "pending";
+
+  return (
+    <div className={`rounded-lg bg-gray-50 px-3 py-2 text-xs ${compact ? "" : "border border-gray-100"}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium text-gray-800">{ent.productName}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
+            {ent.productType.replace("_", " ")}
+          </span>
+          {isPending && (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+              Payment pending
+            </span>
+          )}
+        </div>
+      </div>
+      {(balance || ent.termName) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-gray-500">
+          {balance && <span>{balance}</span>}
+          {ent.termName && <span>Term: {ent.termName}</span>}
+        </div>
       )}
     </div>
   );

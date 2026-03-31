@@ -126,6 +126,7 @@ export default async function ClassesPage() {
         classInstance: classInfo,
         studentState: {
           activeBookingId: activeBooking?.id ?? null,
+          activeBookingStatus: activeBooking?.status ?? null,
           waitlistEntry: waitlistEntry
             ? { id: waitlistEntry.id, position: waitlistEntry.position }
             : null,

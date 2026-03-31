@@ -7,7 +7,7 @@ import { getSubscriptionRepo } from "@/lib/repositories";
 import { updateSubscription } from "@/lib/services/subscription-service";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getSettings } from "@/lib/services/settings-store";
-import { isClassStarted } from "@/lib/domain/datetime";
+import { isClassStarted, minutesUntilStart } from "@/lib/domain/datetime";
 import {
   getCancellationContext,
   penaltiesApplyTo,
@@ -141,6 +141,8 @@ export async function studentCancelBookingAction(
  * Check whether a cancelled booking can be restored by the student.
  * Returns eligibility info for the UI without performing the restore.
  */
+const RESTORE_CUTOFF_MINUTES = 10;
+
 export async function checkRestoreEligibilityAction(
   bookingId: string
 ): Promise<{
@@ -167,11 +169,20 @@ export async function checkRestoreEligibilityAction(
     return { eligible: false, reason: "Only cancelled bookings can be restored" };
   }
 
+  if (booking.adminNote === "academy_cancelled") {
+    return { eligible: false, reason: "This class was cancelled by the academy and cannot be restored." };
+  }
+
   const cls = svc.getClass(booking.bookableClassId);
-  if (!cls) return { eligible: false, reason: "Class not found" };
+  if (!cls) return { eligible: false, reason: "This class is no longer available." };
 
   if (isClassStarted(cls.date, cls.startTime)) {
-    return { eligible: false, reason: "Class has already started" };
+    return { eligible: false, reason: "Class has already started." };
+  }
+
+  const mins = minutesUntilStart(cls.date, cls.startTime);
+  if (mins < RESTORE_CUTOFF_MINUTES) {
+    return { eligible: false, reason: "Too close to class start. Please speak to reception." };
   }
 
   return { eligible: true };
@@ -208,11 +219,20 @@ export async function studentRestoreBookingAction(
     return { success: false, error: "Only cancelled bookings can be restored" };
   }
 
+  if (booking.adminNote === "academy_cancelled") {
+    return { success: false, error: "This class was cancelled by the academy and cannot be restored." };
+  }
+
   const cls = svc.getClass(booking.bookableClassId);
-  if (!cls) return { success: false, error: "Class not found" };
+  if (!cls) return { success: false, error: "This class is no longer available." };
 
   if (isClassStarted(cls.date, cls.startTime)) {
-    return { success: false, error: "Cannot restore — class has already started" };
+    return { success: false, error: "Cannot restore — class has already started." };
+  }
+
+  const mins = minutesUntilStart(cls.date, cls.startTime);
+  if (mins < RESTORE_CUTOFF_MINUTES) {
+    return { success: false, error: "Too close to class start. Please speak to reception." };
   }
 
   const result = svc.restoreBooking(bookingId);

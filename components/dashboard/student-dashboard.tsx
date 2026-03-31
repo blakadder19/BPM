@@ -26,9 +26,14 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { CocAcceptanceDialog } from "@/components/booking/coc-acceptance-dialog";
+import {
+  StudentBookDialog,
+  type BookDialogClass,
+} from "@/components/booking/student-book-dialog";
 import { formatDate, formatCents } from "@/lib/utils";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
-import type { ProductType } from "@/types/domain";
+import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
+import type { DanceRole, ProductType } from "@/types/domain";
 
 export interface StudentBookingSummary {
   id: string;
@@ -75,6 +80,23 @@ export interface StudentEntitlementSummary {
   paymentStatus: string | null;
 }
 
+export interface TodayForYouItem {
+  id: string;
+  title: string;
+  styleName: string | null;
+  level: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  spotsLeft: number | null;
+  danceStyleRequiresBalance: boolean;
+  entitlements: ValidEntitlement[];
+  autoSelected?: ValidEntitlement;
+  isWaitlist: boolean;
+  waitlistReason?: string;
+}
+
 interface StudentDashboardProps {
   fullName: string;
   upcomingBookings: StudentBookingSummary[];
@@ -85,6 +107,8 @@ interface StudentDashboardProps {
   codeOfConductAccepted?: boolean;
   benefits?: MemberBenefitsSummary | null;
   qrToken?: string | null;
+  todayForYou?: TodayForYouItem[];
+  studentPreferredRole?: DanceRole | null;
 }
 
 export function StudentDashboard({
@@ -97,11 +121,15 @@ export function StudentDashboard({
   codeOfConductAccepted,
   benefits,
   qrToken,
+  todayForYou = [],
+  studentPreferredRole,
 }: StudentDashboardProps) {
   const firstName = fullName.split(" ")[0];
   const unresolvedPenalties = penalties.filter(
     (p) => p.resolution === "monetary_pending"
   );
+
+  const [bookTarget, setBookTarget] = useState<TodayForYouItem | null>(null);
 
   return (
     <div className="space-y-6">
@@ -194,6 +222,90 @@ export function StudentDashboard({
           </CardContent>
         </Card>
       </div>
+
+      {/* Today for you */}
+      {todayForYou.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between px-4 sm:px-6">
+            <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+              <Star className="h-5 w-5 text-amber-500" />
+              Today for you
+            </CardTitle>
+            <Link
+              href="/classes"
+              className="text-sm font-medium text-blue-600 hover:text-blue-700 shrink-0"
+            >
+              View all
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-gray-100">
+              {todayForYou.map((c) => (
+                <div key={c.id} className="px-4 sm:px-6 py-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{c.title}</p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500 mt-1">
+                        <span>{c.startTime}–{c.endTime}</span>
+                        <span className="flex items-center gap-0.5">
+                          <MapPin className="h-3 w-3" /> {c.location}
+                        </span>
+                        {c.styleName && (
+                          <span className="rounded-full bg-indigo-50 px-1.5 py-0.5 text-xs font-medium text-indigo-700">
+                            {c.styleName}
+                          </span>
+                        )}
+                        {c.level && (
+                          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+                            {c.level}
+                          </span>
+                        )}
+                        {c.spotsLeft !== null && c.spotsLeft <= 3 && c.spotsLeft > 0 && (
+                          <span className="text-xs font-medium text-amber-600">
+                            {c.spotsLeft} left
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={c.isWaitlist ? "secondary" : "primary"}
+                      className="shrink-0"
+                      onClick={() => setBookTarget(c)}
+                    >
+                      {c.isWaitlist ? "Waitlist" : "Book"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Today-for-you booking dialog */}
+      {bookTarget && (
+        <StudentBookDialog
+          cls={{
+            id: bookTarget.id,
+            title: bookTarget.title,
+            date: bookTarget.date,
+            startTime: bookTarget.startTime,
+            endTime: bookTarget.endTime,
+            location: bookTarget.location,
+            styleName: bookTarget.styleName,
+            level: bookTarget.level,
+            danceStyleRequiresBalance: bookTarget.danceStyleRequiresBalance,
+            spotsLeft: bookTarget.spotsLeft,
+          }}
+          entitlements={bookTarget.entitlements}
+          autoSelected={bookTarget.autoSelected}
+          isWaitlist={bookTarget.isWaitlist}
+          waitlistReason={bookTarget.waitlistReason}
+          defaultDanceRole={studentPreferredRole}
+          onClose={() => setBookTarget(null)}
+        />
+      )}
 
       {/* Entitlements */}
       {entitlements.length > 0 && (

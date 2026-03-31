@@ -19,6 +19,7 @@ import {
   EditTemplateDialog,
   TemplateDetailPanel,
 } from "./template-dialogs";
+import { StudentImpactModal, type ImpactTarget } from "./student-impact-modal";
 
 const DAY_OPTIONS = [
   { value: "1", label: "Mon" },
@@ -334,6 +335,10 @@ function DeleteTemplateModal({
   const [actionPending, startAction] = useTransition();
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [impactTarget, setImpactTarget] = useState<ImpactTarget | null>(null);
+  const [impactAction, setImpactAction] = useState<"cancel" | "delete">("cancel");
+  const [impactIds, setImpactIds] = useState<string[]>([]);
+  const [impactPending, startImpact] = useTransition();
 
   const loadInstances = useCallback(async () => {
     setLoading(true);
@@ -366,7 +371,58 @@ function DeleteTemplateModal({
     }
   }
 
+  function aggregateImpact(ids: string[]): { bookedCount: number; waitlistCount: number } {
+    let bookedCount = 0;
+    let waitlistCount = 0;
+    for (const id of ids) {
+      const inst = upcoming.find((i) => i.id === id);
+      if (inst) {
+        bookedCount += inst.bookedCount;
+        waitlistCount += inst.waitlistCount;
+      }
+    }
+    return { bookedCount, waitlistCount };
+  }
+
   function handleDeleteInstances(ids: string[]) {
+    const impact = aggregateImpact(ids);
+    if (impact.bookedCount > 0 || impact.waitlistCount > 0) {
+      setImpactIds(ids);
+      setImpactAction("delete");
+      setImpactTarget({
+        title: ids.length === 1
+          ? (upcoming.find((i) => i.id === ids[0])?.title ?? template.title)
+          : `${ids.length} instances of ${template.title}`,
+        date: ids.length === 1
+          ? (upcoming.find((i) => i.id === ids[0])?.date ?? "")
+          : "",
+        ...impact,
+      });
+      return;
+    }
+    executeDeleteInstances(ids);
+  }
+
+  function handleCancelInstances(ids: string[]) {
+    const impact = aggregateImpact(ids);
+    if (impact.bookedCount > 0 || impact.waitlistCount > 0) {
+      setImpactIds(ids);
+      setImpactAction("cancel");
+      setImpactTarget({
+        title: ids.length === 1
+          ? (upcoming.find((i) => i.id === ids[0])?.title ?? template.title)
+          : `${ids.length} instances of ${template.title}`,
+        date: ids.length === 1
+          ? (upcoming.find((i) => i.id === ids[0])?.date ?? "")
+          : "",
+        ...impact,
+      });
+      return;
+    }
+    executeCancelInstances(ids);
+  }
+
+  function executeDeleteInstances(ids: string[]) {
     startAction(async () => {
       const { deleteInstanceAction } = await import("@/lib/actions/classes");
       for (const instId of ids) {
@@ -376,7 +432,7 @@ function DeleteTemplateModal({
     });
   }
 
-  function handleCancelInstances(ids: string[]) {
+  function executeCancelInstances(ids: string[]) {
     startAction(async () => {
       const { updateInstanceStatusAction } = await import("@/lib/actions/classes");
       for (const instId of ids) {
@@ -384,6 +440,17 @@ function DeleteTemplateModal({
       }
       await loadInstances();
     });
+  }
+
+  function confirmImpact() {
+    const ids = impactIds;
+    setImpactTarget(null);
+    setImpactIds([]);
+    if (impactAction === "delete") {
+      executeDeleteInstances(ids);
+    } else {
+      executeCancelInstances(ids);
+    }
   }
 
   function handleDeleteTemplate() {
@@ -542,6 +609,16 @@ function DeleteTemplateModal({
           )}
         </div>
       </div>
+
+      {impactTarget && (
+        <StudentImpactModal
+          target={impactTarget}
+          isPending={impactPending}
+          action={impactAction}
+          onConfirm={confirmImpact}
+          onClose={() => { setImpactTarget(null); setImpactIds([]); }}
+        />
+      )}
     </div>
   );
 }

@@ -26,7 +26,7 @@ export type BookabilityResult =
   | { status: "bookable"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
   | { status: "waitlistable"; reason: string; entitlements: ValidEntitlement[] }
   | { status: "blocked"; reason: string }
-  | { status: "already_booked"; bookingId: string }
+  | { status: "already_booked"; bookingId: string; bookingStatus: string }
   | { status: "already_waitlisted"; waitlistId: string; position: number }
   | { status: "restore_available"; bookingId: string; bookingStatus: string }
   | { status: "not_bookable"; reason: string };
@@ -58,6 +58,7 @@ export interface ClassInstanceInfo {
 
 export interface StudentBookingState {
   activeBookingId: string | null;
+  activeBookingStatus: string | null;
   waitlistEntry: { id: string; position: number } | null;
   cancelledBooking: { id: string; status: string } | null;
 }
@@ -104,7 +105,11 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
 
   // 3. Already booked (confirmed / checked_in)
   if (studentState.activeBookingId) {
-    return { status: "already_booked", bookingId: studentState.activeBookingId };
+    return {
+      status: "already_booked",
+      bookingId: studentState.activeBookingId,
+      bookingStatus: studentState.activeBookingStatus ?? "confirmed",
+    };
   }
 
   // 4. Already waitlisted

@@ -3,7 +3,7 @@
 import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarPlus, Inbox, XCircle, RotateCcw, QrCode } from "lucide-react";
+import { CalendarPlus, Inbox, XCircle, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -21,7 +21,6 @@ import { checkLateCancelStatusAction } from "@/lib/actions/bookings-admin";
 import { studentCancelBookingAction } from "@/lib/actions/booking-student";
 import { studentRestoreBookingAction, checkRestoreEligibilityAction } from "@/lib/actions/booking-student";
 import { studentLeaveWaitlistAction } from "@/lib/actions/waitlist-student";
-import { CheckInQrDialog } from "./checkin-qr";
 import type { BookingView, StudentWaitlistView } from "@/app/(app)/bookings/page";
 
 export function StudentBookings({
@@ -43,7 +42,7 @@ export function StudentBookings({
   const upcoming = useMemo(
     () =>
       bookings
-        .filter((b) => isNotEnded(b.date, b.endTime) && !terminalStatuses.has(b.status))
+        .filter((b) => isNotEnded(b.date, b.endTime) && !terminalStatuses.has(b.status) && !b.isOrphaned)
         .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookings]
@@ -52,7 +51,7 @@ export function StudentBookings({
   const restorableCancelled = useMemo(
     () =>
       bookings
-        .filter((b) => isNotEnded(b.date, b.endTime) && cancelledStatuses.has(b.status))
+        .filter((b) => isNotEnded(b.date, b.endTime) && cancelledStatuses.has(b.status) && !b.isOrphaned && !b.isAcademyCancelled)
         .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bookings]
@@ -62,6 +61,10 @@ export function StudentBookings({
     () =>
       bookings
         .filter((b) => {
+          // Orphaned bookings with no usable date are already filtered server-side,
+          // but guard here too — never show rows without a date
+          if (!b.date) return false;
+          if (b.isAcademyCancelled) return true;
           if (isNotEnded(b.date, b.endTime) && !terminalStatuses.has(b.status)) return false;
           if (isNotEnded(b.date, b.endTime) && cancelledStatuses.has(b.status)) return false;
           return true;
@@ -73,7 +76,6 @@ export function StudentBookings({
 
   const [cancelTarget, setCancelTarget] = useState<BookingView | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<BookingView | null>(null);
-  const [qrTarget, setQrTarget] = useState<BookingView | null>(null);
 
   return (
     <div className="space-y-6">
@@ -116,8 +118,6 @@ export function StudentBookings({
                   booking={b}
                   showCancel
                   onCancel={() => setCancelTarget(b)}
-                  showQr={b.status === "confirmed" && !!b.checkInToken}
-                  onShowQr={() => setQrTarget(b)}
                 />
               ))
             )}
@@ -180,16 +180,6 @@ export function StudentBookings({
         />
       )}
 
-      {qrTarget && qrTarget.checkInToken && (
-        <CheckInQrDialog
-          token={qrTarget.checkInToken}
-          classTitle={qrTarget.classTitle}
-          date={qrTarget.date ? formatDate(qrTarget.date) : "—"}
-          startTime={qrTarget.startTime ? formatTime(qrTarget.startTime) : "—"}
-          onClose={() => setQrTarget(null)}
-        />
-      )}
-
     </div>
   );
 }
@@ -200,24 +190,24 @@ function BookingCard({
   onCancel,
   showRestore,
   onRestore,
-  showQr,
-  onShowQr,
 }: {
   booking: BookingView;
   showCancel?: boolean;
   onCancel?: () => void;
   showRestore?: boolean;
   onRestore?: () => void;
-  showQr?: boolean;
-  onShowQr?: () => void;
 }) {
-  const hasActions = (showQr && onShowQr) || (showCancel && onCancel) || (showRestore && onRestore);
+  const hasActions = (showCancel && onCancel) || (showRestore && onRestore);
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm space-y-2">
+    <div className={`rounded-xl border p-3 sm:p-4 shadow-sm space-y-2 ${
+      b.isAcademyCancelled
+        ? "border-gray-200 bg-gray-50"
+        : "border-gray-200 bg-white"
+    }`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="font-medium text-gray-900 truncate">{b.classTitle}</h3>
+          <h3 className={`font-medium truncate ${b.isAcademyCancelled ? "text-gray-500" : "text-gray-900"}`}>{b.classTitle}</h3>
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
             {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
             {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
@@ -226,17 +216,20 @@ function BookingCard({
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           {b.danceRole && <StatusBadge status={b.danceRole} />}
-          <StatusBadge status={b.status} />
+          {b.isAcademyCancelled ? (
+            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">
+              Cancelled by academy
+            </span>
+          ) : (
+            <StatusBadge status={b.status} />
+          )}
         </div>
       </div>
+      {b.isAcademyCancelled && b.creditReturned && (
+        <p className="text-xs text-green-700">Credit returned</p>
+      )}
       {hasActions && (
         <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-          {showQr && onShowQr && (
-            <Button variant="outline" size="sm" onClick={onShowQr} className="flex-1 sm:flex-none">
-              <QrCode className="h-4 w-4 mr-1" />
-              QR
-            </Button>
-          )}
           {showCancel && onCancel && (
             <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 sm:flex-none">
               <XCircle className="h-4 w-4 mr-1" />

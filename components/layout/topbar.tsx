@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { switchDevRole, switchDevStudent } from "@/lib/actions/auth";
+import { dismissStudentNoticeAction } from "@/lib/actions/student-notifications";
 import { useDevUnlock } from "@/lib/hooks/use-dev-unlock";
 import { useSidebar } from "@/components/providers/sidebar-provider";
 import type { AuthUser } from "@/lib/auth";
@@ -46,8 +47,7 @@ interface TopbarProps {
 export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps) {
   const { unlocked: showControls } = useDevUnlock();
   const { open: openSidebar } = useSidebar();
-  const isAdmin = user.role === "admin";
-  const visibleAlerts = isAdmin ? (alerts ?? []) : [];
+  const visibleAlerts = alerts ?? [];
 
   return (
     <header className="flex h-14 md:h-16 items-center justify-between border-b border-gray-200 bg-white px-3 md:px-6">
@@ -76,16 +76,7 @@ export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps)
       </div>
 
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
-        {isAdmin ? (
-          <AlertBell alerts={visibleAlerts} />
-        ) : (
-          <button
-            disabled
-            className="relative rounded-lg p-2 text-gray-300 cursor-not-allowed opacity-50"
-          >
-            <Bell className="h-5 w-5" />
-          </button>
-        )}
+        <AlertBell alerts={visibleAlerts} isStudent={user.role === "student"} />
         <span className="hidden sm:inline text-sm text-gray-600 truncate max-w-[200px]">
           {user.role === "student" && devStudentId
             ? `${user.fullName} (${user.email})`
@@ -116,7 +107,7 @@ const SEVERITY_DOT: Record<AlertSeverity, string> = {
   info: "bg-blue-500",
 };
 
-function AlertBell({ alerts }: { alerts: AdminAlert[] }) {
+function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: boolean }) {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
@@ -178,13 +169,16 @@ function AlertBell({ alerts }: { alerts: AdminAlert[] }) {
         >
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
             <h3 className="text-sm font-semibold text-gray-800">
-              Admin Alerts
+              {isStudent ? "Notifications" : "Admin Alerts"}
             </h3>
             {active.length > 0 && (
               <button
-                onClick={() =>
-                  setDismissed(new Set(alerts.map((a) => a.id)))
-                }
+                onClick={() => {
+                  setDismissed(new Set(alerts.map((a) => a.id)));
+                  if (isStudent) {
+                    for (const a of active) dismissStudentNoticeAction(a.id);
+                  }
+                }}
                 className="text-xs text-gray-400 hover:text-gray-600"
               >
                 Dismiss all
@@ -217,13 +211,14 @@ function AlertBell({ alerts }: { alerts: AdminAlert[] }) {
                             {alert.title}
                           </p>
                           <button
-                            onClick={() =>
+                            onClick={() => {
                               setDismissed((prev) => {
                                 const next = new Set(prev);
                                 next.add(alert.id);
                                 return next;
-                              })
-                            }
+                              });
+                              if (isStudent) dismissStudentNoticeAction(alert.id);
+                            }}
                             className="shrink-0 rounded p-0.5 text-gray-300 opacity-0 transition-opacity hover:text-gray-500 group-hover:opacity-100"
                             title="Dismiss"
                           >

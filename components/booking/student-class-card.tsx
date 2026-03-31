@@ -28,7 +28,7 @@ export type SerializedBookability =
   | { status: "bookable"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
   | { status: "waitlistable"; reason: string; entitlements: ValidEntitlement[] }
   | { status: "blocked"; reason: string }
-  | { status: "already_booked"; bookingId: string }
+  | { status: "already_booked"; bookingId: string; bookingStatus: string }
   | { status: "already_waitlisted"; waitlistId: string; position: number }
   | { status: "restore_available"; bookingId: string; bookingStatus: string }
   | { status: "not_bookable"; reason: string };
@@ -52,13 +52,15 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
       className={`flex flex-col rounded-xl border shadow-sm transition-shadow ${
         isBlocked
           ? "border-gray-200 bg-gray-50 opacity-75"
-          : b.status === "already_booked"
-            ? "border-blue-200 bg-blue-50"
-            : b.status === "already_waitlisted"
-              ? "border-amber-200 bg-amber-50"
-              : b.status === "restore_available"
-                ? "border-orange-200 bg-orange-50"
-                : "border-gray-200 bg-white hover:shadow-md"
+          : b.status === "already_booked" && b.bookingStatus === "checked_in"
+            ? "border-green-200 bg-green-50"
+            : b.status === "already_booked"
+              ? "border-blue-200 bg-blue-50"
+              : b.status === "already_waitlisted"
+                ? "border-amber-200 bg-amber-50"
+                : b.status === "restore_available"
+                  ? "border-orange-200 bg-orange-50"
+                  : "border-gray-200 bg-white hover:shadow-md"
       }`}
     >
       <div className="flex-1 p-4 sm:p-5">
@@ -172,8 +174,10 @@ function BookabilityAction({
     case "already_booked":
       return (
         <div className="flex items-center justify-center gap-2 py-1">
-          <StatusBadge status="confirmed" />
-          <span className="text-sm text-blue-700">You&apos;re booked</span>
+          <StatusBadge status={b.bookingStatus === "checked_in" ? "checked_in" : "confirmed"} />
+          <span className={`text-sm ${b.bookingStatus === "checked_in" ? "text-green-700" : "text-blue-700"}`}>
+            {b.bookingStatus === "checked_in" ? "Checked in" : "You\u2019re booked"}
+          </span>
         </div>
       );
     case "already_waitlisted":

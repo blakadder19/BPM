@@ -11,13 +11,16 @@ import {
   getAttendanceRepo,
 } from "@/lib/repositories";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
-import { getTodayStr, isClassEnded, effectiveInstanceStatus } from "@/lib/domain/datetime";
+import { getTodayStr, isClassEnded, isClassStarted, effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
+import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
+import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { computeMemberBenefits } from "@/lib/domain/member-benefits";
 import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { AdminDashboard, type AdminDashboardData, type DashboardClassSummary, type DashboardDemandItem } from "@/components/dashboard/admin-dashboard";
 import { getInstances } from "@/lib/services/schedule-store";
 import {
@@ -26,6 +29,7 @@ import {
   type StudentPenaltySummary,
   type StudentTermInfo,
   type StudentEntitlementSummary,
+  type TodayForYouItem,
 } from "@/components/dashboard/student-dashboard";
 
 export default async function DashboardPage() {
@@ -153,6 +157,94 @@ export default async function DashboardPage() {
         })
       : null;
 
+    // "Today for you" — bookable classes today
+    const allInstances = getInstances();
+    const danceStyles = getDanceStyles();
+    const allProducts = await getProductRepo().getAll();
+    const accessRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
+    const studentId = student?.id ?? "";
+
+    const studentBookingClassIds = new Set(
+      bookingSvc.bookings
+        .filter((b) => b.studentId === studentId && (b.status === "confirmed" || b.status === "checked_in"))
+        .map((b) => b.bookableClassId)
+    );
+    const studentWaitlistClassIds = new Set(
+      bookingSvc.getWaitlistForStudent(studentId).map((w) => w.bookableClassId)
+    );
+
+    // Determine styles where student has booked/attended above beginner
+    const advancedStyleSet = new Set<string>();
+    const ABOVE_BEGINNER = new Set(["Improvers", "Intermediate", "Open"]);
+    const instanceMap = new Map(allInstances.map((i) => [i.id, i]));
+    for (const b of bookingSvc.bookings) {
+      if (b.studentId !== studentId) continue;
+      if (b.status !== "confirmed" && b.status !== "checked_in") continue;
+      const inst = instanceMap.get(b.bookableClassId);
+      if (inst?.styleName && inst.level && ABOVE_BEGINNER.has(inst.level)) {
+        advancedStyleSet.add(inst.styleName);
+      }
+    }
+
+    const BEGINNER_LEVELS = new Set(["Beginner 1", "Beginner 2"]);
+
+    const todayForYou: TodayForYouItem[] = allInstances
+      .filter((c) => c.date === todayStr && !isClassEnded(c.date, c.endTime) && !isClassStarted(c.date, c.startTime))
+      .flatMap((c) => {
+        if (studentBookingClassIds.has(c.id) || studentWaitlistClassIds.has(c.id)) return [];
+
+        if (c.styleName && c.level && BEGINNER_LEVELS.has(c.level) && advancedStyleSet.has(c.styleName)) {
+          return [];
+        }
+
+        const style = c.styleName ? danceStyles.find((s) => s.name === c.styleName) : null;
+        const confirmedForClass = bookingSvc.getConfirmedBookingsForClass(c.id);
+        const requiresBalance = style?.requiresRoleBalance ?? false;
+        const classInfo: ClassInstanceInfo = {
+          id: c.id, title: c.title, classType: c.classType, styleName: c.styleName,
+          styleId: c.styleId, level: c.level, date: c.date, startTime: c.startTime, endTime: c.endTime,
+          status: c.status, location: c.location, maxCapacity: c.maxCapacity,
+          leaderCap: c.leaderCap, followerCap: c.followerCap,
+          danceStyleRequiresBalance: requiresBalance,
+          currentLeaders: confirmedForClass.filter((b) => b.danceRole === "leader").length,
+          currentFollowers: confirmedForClass.filter((b) => b.danceRole === "follower").length,
+          totalBooked: confirmedForClass.length,
+          termBound: c.termBound ?? false,
+          termId: c.termId ?? null,
+        };
+
+        const ctx: BookabilityContext = {
+          classInstance: classInfo,
+          studentState: { activeBookingId: null, activeBookingStatus: null, waitlistEntry: null, cancelledBooking: null },
+          studentSubscriptions: studentSubs,
+          terms,
+          accessRulesMap,
+          studentPreferredRole: student?.preferredRole ?? null,
+          codeOfConductAccepted: cocAccepted,
+        };
+
+        const result = computeBookability(ctx);
+        if (result.status !== "bookable" && result.status !== "waitlistable") return [];
+
+        return [{
+          id: c.id,
+          title: c.title,
+          styleName: c.styleName,
+          level: c.level,
+          date: c.date,
+          startTime: c.startTime,
+          endTime: c.endTime,
+          location: c.location,
+          spotsLeft: c.maxCapacity != null ? c.maxCapacity - c.bookedCount : null,
+          danceStyleRequiresBalance: requiresBalance,
+          entitlements: result.entitlements,
+          autoSelected: result.status === "bookable" ? result.autoSelected : undefined,
+          isWaitlist: result.status === "waitlistable",
+          waitlistReason: result.status === "waitlistable" ? result.reason : undefined,
+        }];
+      })
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+
     return (
       <StudentDashboard
         fullName={user.fullName}
@@ -164,6 +256,8 @@ export default async function DashboardPage() {
         codeOfConductAccepted={cocAccepted}
         benefits={benefits}
         qrToken={student?.qrToken ?? null}
+        todayForYou={todayForYou}
+        studentPreferredRole={student?.preferredRole ?? null}
       />
     );
   }

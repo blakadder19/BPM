@@ -55,6 +55,8 @@ export interface BookingView {
   waitlistCount: number;
   checkInToken: string | null;
   isOrphaned: boolean;
+  isAcademyCancelled: boolean;
+  creditReturned: boolean;
 }
 
 export default async function BookingsPage({
@@ -100,10 +102,18 @@ export default async function BookingsPage({
 
   const instanceMap = new Map(instances.map((i) => [i.id, i]));
 
-  function enrichBooking(b: (typeof allBookings)[number]): BookingView {
+  function enrichBooking(b: (typeof allBookings)[number]): BookingView | null {
     const cls = svc.getClass(b.bookableClassId);
     const raw = instanceMap.get(b.bookableClassId);
     const classDeleted = !cls && !raw;
+    const isAcademyCancelled = b.adminNote === "academy_cancelled";
+    const classCancelled = raw?.status === "cancelled";
+
+    const resolvedDate = cls?.date ?? raw?.date ?? "";
+
+    // Drop bookings whose class data is completely gone — no title, no date
+    if (classDeleted && !resolvedDate) return null;
+
     const activeForClass = allBookings.filter(
       (x) =>
         x.bookableClassId === b.bookableClassId &&
@@ -113,13 +123,16 @@ export default async function BookingsPage({
       (w) =>
         w.bookableClassId === b.bookableClassId && w.status === "waiting"
     );
+
+    const title = cls?.title ?? raw?.title ?? "Unknown";
+
     return {
       id: b.id,
       studentName: b.studentName,
       studentId: b.studentId,
-      classTitle: classDeleted ? "(Deleted class)" : (cls?.title ?? "Unknown"),
+      classTitle: title,
       classId: b.bookableClassId,
-      date: cls?.date ?? raw?.date ?? "",
+      date: resolvedDate,
       startTime: cls?.startTime ?? raw?.startTime ?? "",
       endTime: cls?.endTime ?? raw?.endTime ?? "",
       danceRole: b.danceRole,
@@ -128,10 +141,10 @@ export default async function BookingsPage({
       subscriptionName: b.subscriptionName ?? null,
       adminNote: b.adminNote ?? null,
       bookedAt: b.bookedAt,
-      styleName: cls?.styleName ?? null,
+      styleName: cls?.styleName ?? raw?.styleName ?? null,
       level: raw?.level ?? null,
-      location: cls?.location ?? null,
-      classType: cls?.classType ?? null,
+      location: cls?.location ?? raw?.location ?? null,
+      classType: cls?.classType ?? raw?.classType ?? null,
       maxCapacity: cls?.maxCapacity ?? null,
       bookedCount: activeForClass.length,
       leaderCap: cls?.leaderCap ?? null,
@@ -141,6 +154,8 @@ export default async function BookingsPage({
       waitlistCount: waitlistForClass.length,
       checkInToken: b.checkInToken ?? null,
       isOrphaned: classDeleted,
+      isAcademyCancelled: isAcademyCancelled || classCancelled,
+      creditReturned: isAcademyCancelled && !!b.subscriptionId,
     };
   }
 
@@ -149,6 +164,7 @@ export default async function BookingsPage({
     const mine = allBookings
       .filter((b) => b.studentId === user.id)
       .map(enrichBooking)
+      .filter((b): b is BookingView => b !== null)
       .map((b) => {
         const attRecord = attSvc.getRecord(b.classId ?? "", b.studentId);
         return {
@@ -178,7 +194,7 @@ export default async function BookingsPage({
     return <StudentBookings bookings={mine} waitlistEntries={myWaitlist} />;
   }
 
-  const enriched = allBookings.map(enrichBooking);
+  const enriched = allBookings.map(enrichBooking).filter((b): b is BookingView => b !== null);
 
   const allStudents = await getStudentRepo().getAll();
   const studentOptions = allStudents.filter((s) => s.isActive).map((s) => ({
