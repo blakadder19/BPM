@@ -49,7 +49,7 @@ function parseCredits(raw: string | null): number | null {
 export async function createSubscriptionAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  const adminUser = await requireRole(["admin"]);
   const studentId = formData.get("studentId") as string;
   const productId = (formData.get("productId") as string)?.trim();
   const termId = (formData.get("termId") as string)?.trim() || null;
@@ -133,7 +133,7 @@ export async function createSubscriptionAction(
     termId,
     paymentMethod: paymentMethodRaw as PaymentMethod,
     paymentStatus: paymentStatusRaw as SalePaymentStatus,
-    assignedBy: null,
+    assignedBy: adminUser.fullName,
     assignedAt: new Date().toISOString(),
     autoRenew,
     classesUsed: 0,
