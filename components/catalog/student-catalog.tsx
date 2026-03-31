@@ -139,7 +139,7 @@ export function StudentCatalog({ products }: StudentCatalogProps) {
             <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
               {label}
             </h2>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {items.map((p) => (
                 <ProductCard key={p.id} product={p} onSelect={setPurchaseTarget} />
               ))}
@@ -148,7 +148,7 @@ export function StudentCatalog({ products }: StudentCatalogProps) {
         ))
       )}
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4 text-xs sm:text-sm text-amber-700">
         <p>
           Online payment is coming soon. For now, your selection will be recorded and
           payment can be completed at reception.
@@ -289,7 +289,7 @@ function ProductCard({
         )}
       </CardContent>
 
-      <div className="border-t border-gray-100 p-4">
+      <div className="border-t border-gray-100 p-3 sm:p-4">
         {p.alreadyActive ? (
           <p className="text-center text-sm font-medium text-green-700">Already active</p>
         ) : (

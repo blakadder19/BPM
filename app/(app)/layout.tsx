@@ -5,6 +5,7 @@ import { getStudentRepo, getTermRepo } from "@/lib/repositories";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { UserProvider } from "@/components/providers/user-provider";
+import { SidebarProvider } from "@/components/providers/sidebar-provider";
 import { DevPanelGate } from "@/components/dev/dev-panel-gate";
 import { SessionGuard } from "@/components/layout/session-guard";
 import { computeAdminAlerts, type AdminAlert } from "@/lib/domain/admin-alerts";
@@ -66,27 +67,29 @@ export default async function AppLayout({
     : user.fullName;
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      <SessionGuard />
-      <Sidebar user={user} />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <Topbar
-          user={user}
-          alerts={adminAlerts}
-          devStudents={devStudents}
-          devStudentId={devStudentId}
-        />
-        <main className="flex-1 overflow-y-auto p-6">
-          <UserProvider
-            user={{ role: user.role, fullName: user.fullName, email: user.email }}
-          >
-            {children}
-          </UserProvider>
-        </main>
+    <SidebarProvider>
+      <div className="flex h-screen bg-gray-50">
+        <SessionGuard />
+        <Sidebar user={user} />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <Topbar
+            user={user}
+            alerts={adminAlerts}
+            devStudents={devStudents}
+            devStudentId={devStudentId}
+          />
+          <main className="flex-1 overflow-y-auto px-4 py-4 md:p-6">
+            <UserProvider
+              user={{ role: user.role, fullName: user.fullName, email: user.email }}
+            >
+              {children}
+            </UserProvider>
+          </main>
+        </div>
+        {isDev && (
+          <DevPanelGate studentId={panelStudentId} studentName={panelStudentName} />
+        )}
       </div>
-      {isDev && (
-        <DevPanelGate studentId={panelStudentId} studentName={panelStudentName} />
-      )}
-    </div>
+    </SidebarProvider>
   );
 }

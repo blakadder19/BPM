@@ -15,6 +15,7 @@ import {
   Plus,
   Trash2,
   QrCode,
+  ScanLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import type { AttendanceMark, ClassType } from "@/types/domain";
 import type { StoredAttendance } from "@/lib/services/attendance-service";
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
 import { checkStudentPracticePayment } from "@/lib/domain/student-practice-rules";
+import { QrCheckInPanel } from "./qr-checkin-panel";
 
 // ── Prop types (serializable slices of mock data) ────────────
 
@@ -143,7 +145,7 @@ export function AttendanceClient({
 }: AttendanceClientProps) {
   const router = useRouter();
   const hasContextFilter = !!(initialClassFilter || initialStudentSearch);
-  const [activeTab, setActiveTab] = useState<"today" | "history">(hasContextFilter ? "history" : "today");
+  const [activeTab, setActiveTab] = useState<"today" | "qr" | "history">(hasContextFilter ? "history" : "today");
   const [showAddAttendance, setShowAddAttendance] = useState(false);
 
   return (
@@ -162,11 +164,17 @@ export function AttendanceClient({
       </div>
 
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex gap-6">
+        <nav className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto">
           <TabButton
             label="Today's Classes"
             active={activeTab === "today"}
             onClick={() => setActiveTab("today")}
+          />
+          <TabButton
+            label="QR Scan"
+            icon={<ScanLine className="h-3.5 w-3.5" />}
+            active={activeTab === "qr"}
+            onClick={() => setActiveTab("qr")}
           />
           <TabButton
             label="History"
@@ -176,16 +184,19 @@ export function AttendanceClient({
         </nav>
       </div>
 
-      <TokenCheckInPanel />
-
-      {activeTab === "today" ? (
-        <TodayView
-          mockToday={mockToday}
-          todaysClasses={todaysClasses}
-          bookings={bookings}
-          attendanceRecords={attendanceRecords}
-          currentUserName={currentUserName}
-        />
+      {activeTab === "qr" ? (
+        <QrCheckInPanel />
+      ) : activeTab === "today" ? (
+        <>
+          <TokenCheckInPanel />
+          <TodayView
+            mockToday={mockToday}
+            todaysClasses={todaysClasses}
+            bookings={bookings}
+            attendanceRecords={attendanceRecords}
+            currentUserName={currentUserName}
+          />
+        </>
       ) : (
         <HistoryView
           attendanceRecords={attendanceRecords}
@@ -212,17 +223,18 @@ export function AttendanceClient({
   );
 }
 
-function TabButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function TabButton({ label, icon, active, onClick }: { label: string; icon?: React.ReactNode; active: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       className={cn(
-        "whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium transition-colors",
+        "whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium transition-colors flex items-center gap-1.5",
         active
           ? "border-blue-600 text-blue-600"
           : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
       )}
     >
+      {icon}
       {label}
     </button>
   );

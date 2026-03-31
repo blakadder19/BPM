@@ -211,38 +211,46 @@ function BookingCard({
   showQr?: boolean;
   onShowQr?: () => void;
 }) {
+  const hasActions = (showQr && onShowQr) || (showCancel && onCancel) || (showRestore && onRestore);
+
   return (
-    <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <div>
-        <h3 className="font-medium text-gray-900">{b.classTitle}</h3>
-        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-          {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
-          {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
-          {b.location && <span>{b.location}</span>}
+    <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-medium text-gray-900 truncate">{b.classTitle}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
+            {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
+            {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
+            {b.location && <span>{b.location}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
           {b.danceRole && <StatusBadge status={b.danceRole} />}
+          <StatusBadge status={b.status} />
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <StatusBadge status={b.status} />
-        {showQr && onShowQr && (
-          <Button variant="outline" size="sm" onClick={onShowQr}>
-            <QrCode className="h-4 w-4 mr-1" />
-            QR
-          </Button>
-        )}
-        {showCancel && onCancel && (
-          <Button variant="ghost" size="sm" onClick={onCancel}>
-            <XCircle className="h-4 w-4 mr-1" />
-            Cancel
-          </Button>
-        )}
-        {showRestore && onRestore && (
-          <Button variant="outline" size="sm" onClick={onRestore}>
-            <RotateCcw className="h-4 w-4 mr-1" />
-            Restore
-          </Button>
-        )}
-      </div>
+      {hasActions && (
+        <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+          {showQr && onShowQr && (
+            <Button variant="outline" size="sm" onClick={onShowQr} className="flex-1 sm:flex-none">
+              <QrCode className="h-4 w-4 mr-1" />
+              QR
+            </Button>
+          )}
+          {showCancel && onCancel && (
+            <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 sm:flex-none">
+              <XCircle className="h-4 w-4 mr-1" />
+              Cancel
+            </Button>
+          )}
+          {showRestore && onRestore && (
+            <Button variant="outline" size="sm" onClick={onRestore} className="flex-1 sm:flex-none">
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Restore
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -261,23 +269,27 @@ function WaitlistCard({ entry: w }: { entry: StudentWaitlistView }) {
   }
 
   return (
-    <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-      <div>
-        <h3 className="font-medium text-gray-900">{w.classTitle}</h3>
-        <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-gray-500">
-          <span>{formatDate(w.date)}</span>
-          <span>{formatTime(w.startTime)}</span>
-          {w.location && <span>{w.location}</span>}
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4 shadow-sm space-y-2">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <h3 className="font-medium text-gray-900 truncate">{w.classTitle}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
+            <span>{formatDate(w.date)}</span>
+            <span>{formatTime(w.startTime)}</span>
+            {w.location && <span>{w.location}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
           {w.danceRole && <StatusBadge status={w.danceRole} />}
+          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+            #{w.position}
+          </span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-          #{w.position} in queue
-        </span>
-        <Button variant="ghost" size="sm" onClick={handleLeave} disabled={isPending}>
+      <div className="flex items-center pt-1 border-t border-amber-200/50">
+        <Button variant="ghost" size="sm" onClick={handleLeave} disabled={isPending} className="flex-1 sm:flex-none">
           <XCircle className="h-4 w-4 mr-1" />
-          {isPending ? "Leaving…" : "Leave"}
+          {isPending ? "Leaving…" : "Leave Waitlist"}
         </Button>
       </div>
     </div>

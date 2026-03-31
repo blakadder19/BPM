@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAcademyId } from "@/lib/supabase/academy";
+import { generateStudentQrToken } from "@/lib/domain/checkin-token";
 import type { MockStudent } from "@/lib/mock-data";
 import type { Database } from "@/types/database";
 import type { DanceRole } from "@/types/domain";
@@ -10,6 +11,7 @@ type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type ProfileRow = Database["public"]["Tables"]["student_profiles"]["Row"];
 
 function toMockStudent(user: UserRow, profile?: ProfileRow | null): MockStudent {
+  const qrRaw = (profile as Record<string, unknown> | null)?.qr_token;
   return {
     id: user.id,
     fullName: user.full_name,
@@ -24,6 +26,7 @@ function toMockStudent(user: UserRow, profile?: ProfileRow | null): MockStudent 
     subscriptionName: null,
     remainingCredits: null,
     joinedAt: user.created_at,
+    qrToken: typeof qrRaw === "string" && qrRaw ? qrRaw : generateStudentQrToken(),
   };
 }
 
@@ -110,6 +113,7 @@ export const supabaseStudentRepo: IStudentRepository = {
       emergency_contact_name: data.emergencyContactName,
       emergency_contact_phone: data.emergencyContactPhone,
       date_of_birth: data.dateOfBirth,
+      qr_token: generateStudentQrToken(),
     } as never, { onConflict: "id" });
     if (profileError) throw new Error(`Student profile upsert failed: ${profileError.message}`);
 

@@ -6,6 +6,7 @@
 
 import { STUDENTS, type MockStudent } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
+import { generateStudentQrToken } from "@/lib/domain/checkin-token";
 import type { DanceRole } from "@/types/domain";
 
 function hasSupabaseConfig(): boolean {
@@ -56,6 +57,7 @@ export function createStudent(data: {
     subscriptionName: null,
     remainingCredits: null,
     joinedAt: new Date().toISOString().slice(0, 10),
+    qrToken: generateStudentQrToken(),
   };
   list.push(student);
   return student;

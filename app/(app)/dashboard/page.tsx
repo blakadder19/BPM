@@ -163,6 +163,7 @@ export default async function DashboardPage() {
         waitlistedCount={waitlistedCount}
         codeOfConductAccepted={cocAccepted}
         benefits={benefits}
+        qrToken={student?.qrToken ?? null}
       />
     );
   }

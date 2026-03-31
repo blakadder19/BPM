@@ -10,10 +10,12 @@ import {
   Info,
   X,
   ChevronRight,
+  Menu,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { switchDevRole, switchDevStudent } from "@/lib/actions/auth";
 import { useDevUnlock } from "@/lib/hooks/use-dev-unlock";
+import { useSidebar } from "@/components/providers/sidebar-provider";
 import type { AuthUser } from "@/lib/auth";
 import type { AdminAlert, AlertSeverity } from "@/lib/domain/admin-alerts";
 
@@ -43,17 +45,25 @@ interface TopbarProps {
 
 export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps) {
   const { unlocked: showControls } = useDevUnlock();
+  const { open: openSidebar } = useSidebar();
   const isAdmin = user.role === "admin";
   const visibleAlerts = isAdmin ? (alerts ?? []) : [];
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
-      <div className="flex items-center gap-3">
+    <header className="flex h-14 md:h-16 items-center justify-between border-b border-gray-200 bg-white px-3 md:px-6">
+      <div className="flex items-center gap-2 md:gap-3 min-w-0">
+        <button
+          onClick={openSidebar}
+          className="md:hidden rounded-lg p-2 text-gray-600 hover:bg-gray-100 shrink-0"
+          aria-label="Open menu"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
         <Badge variant={ROLE_BADGE[user.role] ?? "default"}>
           {ROLE_LABELS[user.role] ?? user.role}
         </Badge>
         {showControls && (
-          <>
+          <div className="hidden sm:flex items-center gap-2">
             <DevRoleSwitcher currentRole={user.role} />
             {devStudents && devStudents.length > 0 && (
               <DevStudentSwitcher
@@ -61,11 +71,11 @@ export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps)
                 currentStudentId={devStudentId ?? null}
               />
             )}
-          </>
+          </div>
         )}
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 md:gap-3 shrink-0">
         {isAdmin ? (
           <AlertBell alerts={visibleAlerts} />
         ) : (
@@ -76,7 +86,7 @@ export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps)
             <Bell className="h-5 w-5" />
           </button>
         )}
-        <span className="text-sm text-gray-600">
+        <span className="hidden sm:inline text-sm text-gray-600 truncate max-w-[200px]">
           {user.role === "student" && devStudentId
             ? `${user.fullName} (${user.email})`
             : user.email}

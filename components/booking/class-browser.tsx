@@ -253,24 +253,24 @@ export function ClassBrowser({
 
       {/* Term banner */}
       {termInfo && (
-        <div className="flex items-center gap-2 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-2.5 text-sm">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-indigo-100 bg-indigo-50 px-3 sm:px-4 py-2 sm:py-2.5 text-sm">
           <CalendarDays className="h-4 w-4 text-indigo-500 shrink-0" />
           <span className="font-medium text-indigo-800">{termInfo.name}</span>
-          <span className="text-indigo-600">
+          <span className="text-indigo-600 text-xs sm:text-sm">
             {formatShortDate(termInfo.startDate)} – {formatShortDate(termInfo.endDate)}
           </span>
         </div>
       )}
 
       {/* Week calendar strip */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm">
         {/* Header: month + navigation */}
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-800">{monthLabel}</h2>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1">
             <button
               onClick={goToday}
-              className="rounded-md px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
+              className="rounded-md px-2 sm:px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
             >
               Today
             </button>
@@ -292,7 +292,7 @@ export function ClassBrowser({
         </div>
 
         {/* Day cells */}
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
           {weekDates.map((d, i) => {
             const isToday = d === todayStr;
             const isSelected = d === selectedDate;
@@ -306,7 +306,7 @@ export function ClassBrowser({
                 key={d}
                 onClick={() => selectDate(d)}
                 className={`
-                  relative flex flex-col items-center rounded-lg py-2 px-1 transition-all text-center
+                  relative flex flex-col items-center rounded-lg py-2 px-0.5 sm:px-1 transition-all text-center min-h-[60px]
                   ${isSelected
                     ? "bg-indigo-600 text-white shadow-md"
                     : isToday
@@ -317,10 +317,10 @@ export function ClassBrowser({
                   }
                 `}
               >
-                <span className="text-[11px] font-medium uppercase tracking-wide">
+                <span className="text-[10px] sm:text-[11px] font-medium uppercase tracking-wide">
                   {DAY_LABELS[i]}
                 </span>
-                <span className={`mt-0.5 text-lg font-semibold leading-tight ${
+                <span className={`mt-0.5 text-base sm:text-lg font-semibold leading-tight ${
                   isSelected ? "text-white" : ""
                 }`}>
                   {getDayNum(d)}
@@ -354,12 +354,12 @@ export function ClassBrowser({
         </div>
 
         {/* Legend */}
-        <div className="mt-2 flex items-center gap-4 text-[11px] text-gray-400 px-1">
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-[11px] text-gray-400 px-1">
           <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> You have bookings
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> Booked
           </span>
           <span className="flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-gray-300" /> Available classes
+            <span className="h-1.5 w-1.5 rounded-full bg-gray-300" /> Available
           </span>
           {termInfo && (
             <span className="flex items-center gap-1">
@@ -370,7 +370,7 @@ export function ClassBrowser({
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="w-full sm:max-w-xs">
           <SearchInput
             value={search}
@@ -378,18 +378,20 @@ export function ClassBrowser({
             placeholder="Search by name, style, or level…"
           />
         </div>
-        <SelectFilter
-          value={styleFilter}
-          onChange={setStyleFilter}
-          options={styleOptions}
-          placeholder="All styles"
-        />
-        <SelectFilter
-          value={levelFilter}
-          onChange={setLevelFilter}
-          options={levelOptions}
-          placeholder="All levels"
-        />
+        <div className="flex gap-2 w-full sm:w-auto">
+          <SelectFilter
+            value={styleFilter}
+            onChange={setStyleFilter}
+            options={styleOptions}
+            placeholder="All styles"
+          />
+          <SelectFilter
+            value={levelFilter}
+            onChange={setLevelFilter}
+            options={levelOptions}
+            placeholder="All levels"
+          />
+        </div>
       </div>
 
       {/* Day header */}
@@ -427,7 +429,7 @@ export function ClassBrowser({
           )}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {dayClasses.map((c) => (
             <StudentClassCard
               key={c.id}
