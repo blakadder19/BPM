@@ -19,7 +19,10 @@ import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { computeMemberBenefits } from "@/lib/domain/member-benefits";
+import { BIRTHDAY_WEEK_DURATION_DAYS } from "@/config/business-rules";
 import { isBirthdayClassUsed, getBirthdayRedemption } from "@/lib/services/birthday-benefit-store";
+import { birthdayBenefitAvailableEvent } from "@/lib/communications/builders";
+import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -180,6 +183,24 @@ export default async function DashboardPage() {
           birthdayClassDate: birthdayRedemption?.classDate,
         })
       : null;
+
+    if (
+      student &&
+      benefits?.birthdayWeekEligible &&
+      !benefits.birthdayFreeClassUsed &&
+      student.dateOfBirth
+    ) {
+      const expiresDate = new Date();
+      expiresDate.setDate(expiresDate.getDate() + BIRTHDAY_WEEK_DURATION_DAYS);
+      dispatchCommEvents([
+        birthdayBenefitAvailableEvent({
+          studentId: student.id,
+          studentName: student.fullName,
+          expiresDate: expiresDate.toISOString().slice(0, 10),
+          year,
+        }),
+      ]).catch(() => {});
+    }
 
     // "Today for you" — bookable classes today
     const allInstances = getInstances();

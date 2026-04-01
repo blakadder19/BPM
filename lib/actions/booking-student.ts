@@ -17,6 +17,8 @@ import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveWaitlistToDB, savePenaltyToDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { isBirthdayClassUsed, markBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
+import { waitlistPromotedEvent } from "@/lib/communications/builders";
+import { dispatchCommEvents } from "@/lib/communications/dispatch";
 
 /**
  * Validates that the entitlement used by a cancelled booking is still
@@ -223,6 +225,18 @@ export async function studentCancelBookingAction(
           b.source === "waitlist_promotion"
       );
       if (promotedBooking) await saveBookingToDB(promotedBooking);
+    }
+    if (promotedEntry) {
+      await dispatchCommEvents([
+        waitlistPromotedEvent({
+          studentId: promotedEntry.studentId,
+          studentName: promotedEntry.studentName,
+          classTitle: cls.title,
+          classDate: cls.date,
+          startTime: cls.startTime,
+          waitlistId: promotedEntry.id,
+        }),
+      ]);
     }
   }
 

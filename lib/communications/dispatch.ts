@@ -4,12 +4,15 @@ import "server-only";
  * Central dispatch for communication events.
  *
  * Channels:
- *   1. In-app notification (Supabase student_notifications) — implemented now
- *   2. Email — future hook point (see sendToEmailChannel placeholder)
+ *   1. In-app notification (Supabase student_notifications)
+ *   2. Email (Resend) — sends when RESEND_API_KEY is configured
+ *   3. In-memory mock store (dev-only, class_cancelled)
  *
  * Idempotency:
  *   Each event may carry an idempotencyKey. If a notification with that key
  *   already exists for the student, the duplicate is silently skipped.
+ *   This covers all channels — if the event was already processed,
+ *   neither in-app nor email is sent again.
  */
 
 import type { CommEvent, CommEventType } from "./events";
@@ -22,6 +25,9 @@ import {
   addClassCancellationNotices,
 } from "@/lib/services/class-cancellation-store";
 import type { ClassCancelledPayload } from "./events";
+import { isEmailEnabled, sendEmail } from "./email-provider";
+import { buildEmailContent } from "./email-templates";
+import { resolveStudentEmail } from "./email-resolver";
 
 /**
  * Dispatch one or more communication events through all active channels.
@@ -80,8 +86,8 @@ async function dispatchSingle(event: CommEvent): Promise<boolean> {
     ]);
   }
 
-  // Channel 3: Email — future integration point
-  // await sendToEmailChannel(event);
+  // Channel 3: Email (Resend)
+  await sendToEmailChannel(event);
 
   return true;
 }
@@ -92,15 +98,30 @@ async function sendToInAppChannel(event: CommEvent): Promise<void> {
 }
 
 /**
- * FUTURE: Email channel hook.
- * When email sending is enabled, this function will:
- *   1. Build subject/body via buildMessage()
- *   2. Resolve the student's email address
- *   3. Send via the configured email provider (Supabase Edge Function, Resend, etc.)
- *
- * This is intentionally a no-op placeholder for now.
+ * Email channel: resolves student email, builds HTML content, sends via Resend.
+ * No-ops gracefully if email is not configured or the address cannot be resolved.
  */
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function sendToEmailChannel(_event: CommEvent): Promise<void> {
-  // No-op — ready for future implementation
+async function sendToEmailChannel(event: CommEvent): Promise<void> {
+  if (!isEmailEnabled()) return;
+
+  const email = await resolveStudentEmail(event.studentId);
+  if (!email) {
+    console.info(
+      `[email] No email address for student ${event.studentId} — skipping.`
+    );
+    return;
+  }
+
+  const { subject, html } = buildEmailContent(
+    event.type,
+    event.studentName,
+    event.payload as Parameters<typeof buildEmailContent>[2]
+  );
+
+  const ok = await sendEmail({ to: email, subject, html });
+  if (ok) {
+    console.info(
+      `[email] Sent ${event.type} to ${email} (event ${event.id})`
+    );
+  }
 }

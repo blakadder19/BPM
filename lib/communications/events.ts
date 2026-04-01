@@ -15,6 +15,9 @@ export const COMM_EVENT_TYPES = [
   "payment_pending",
   "renewal_prepared",
   "renewal_due_soon",
+  "waitlist_promoted",
+  "booking_reminder",
+  "birthday_benefit_available",
 ] as const;
 
 export type CommEventType = (typeof COMM_EVENT_TYPES)[number];
@@ -51,6 +54,26 @@ export interface RenewalDueSoonPayload {
   daysUntilStart: number;
 }
 
+export interface WaitlistPromotedPayload {
+  classTitle: string;
+  classDate: string;
+  startTime: string;
+}
+
+export interface BookingReminderPayload {
+  classTitle: string;
+  classDate: string;
+  startTime: string;
+  hoursUntilStart: number;
+}
+
+export interface BirthdayBenefitAvailablePayload {
+  /** e.g. "Free class during your birthday week" */
+  benefitDescription: string;
+  /** Last day of the birthday window (YYYY-MM-DD) */
+  expiresDate: string;
+}
+
 // ── Discriminated union for all payloads ─────────────────────
 
 export type CommEventPayloadMap = {
@@ -58,6 +81,9 @@ export type CommEventPayloadMap = {
   payment_pending: PaymentPendingPayload;
   renewal_prepared: RenewalPreparedPayload;
   renewal_due_soon: RenewalDueSoonPayload;
+  waitlist_promoted: WaitlistPromotedPayload;
+  booking_reminder: BookingReminderPayload;
+  birthday_benefit_available: BirthdayBenefitAvailablePayload;
 };
 
 // ── The full communication event ─────────────────────────────

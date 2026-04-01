@@ -17,6 +17,9 @@ import type {
   PaymentPendingPayload,
   RenewalPreparedPayload,
   RenewalDueSoonPayload,
+  WaitlistPromotedPayload,
+  BookingReminderPayload,
+  BirthdayBenefitAvailablePayload,
 } from "./events";
 
 export interface CommMessage {
@@ -63,6 +66,30 @@ const buildRenewalDueSoon: MessageBuilder<"renewal_due_soon"> = (
   href: "/catalog",
 });
 
+const buildWaitlistPromoted: MessageBuilder<"waitlist_promoted"> = (
+  p: WaitlistPromotedPayload
+) => ({
+  title: "You're in! Spot confirmed",
+  body: `A spot opened up for "${p.classTitle}" on ${p.classDate} at ${formatTime(p.startTime)}. You've been moved from the waitlist to a confirmed booking.`,
+  href: "/bookings",
+});
+
+const buildBookingReminder: MessageBuilder<"booking_reminder"> = (
+  p: BookingReminderPayload
+) => ({
+  title: "Class reminder",
+  body: `Your class "${p.classTitle}" on ${p.classDate} at ${formatTime(p.startTime)} starts in ${p.hoursUntilStart} hour${p.hoursUntilStart !== 1 ? "s" : ""}.`,
+  href: "/bookings",
+});
+
+const buildBirthdayBenefitAvailable: MessageBuilder<"birthday_benefit_available"> = (
+  p: BirthdayBenefitAvailablePayload
+) => ({
+  title: "Happy birthday! 🎂",
+  body: `${p.benefitDescription}. Book any class before ${p.expiresDate} to use your birthday benefit.`,
+  href: "/classes",
+});
+
 // ── Registry ─────────────────────────────────────────────────
 
 const BUILDERS: {
@@ -72,6 +99,9 @@ const BUILDERS: {
   payment_pending: buildPaymentPending,
   renewal_prepared: buildRenewalPrepared,
   renewal_due_soon: buildRenewalDueSoon,
+  waitlist_promoted: buildWaitlistPromoted,
+  booking_reminder: buildBookingReminder,
+  birthday_benefit_available: buildBirthdayBenefitAvailable,
 };
 
 /**

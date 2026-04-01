@@ -21,6 +21,8 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { requireRole, requireAuth } from "@/lib/auth";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { waitlistPromotedEvent } from "@/lib/communications/builders";
+import { dispatchCommEvents } from "@/lib/communications/dispatch";
 
 function syncClassMap() {
   const svc = getBookingService();
@@ -380,6 +382,18 @@ export async function adminCancelBookingAction(
       );
       if (promotedBooking) await saveBookingToDB(promotedBooking);
     }
+    if (promotedEntry) {
+      await dispatchCommEvents([
+        waitlistPromotedEvent({
+          studentId: promotedEntry.studentId,
+          studentName: promotedEntry.studentName,
+          classTitle: cls.title,
+          classDate: cls.date,
+          startTime: cls.startTime,
+          waitlistId: promotedEntry.id,
+        }),
+      ]);
+    }
   }
 
   revalidatePath("/bookings");
@@ -479,6 +493,22 @@ export async function adminPromoteWaitlistAction(
     if (newBooking && isRealUser(newBooking.studentId)) await saveBookingToDB(newBooking);
     const promotedEntry = svc.waitlist.find((w) => w.id === waitlistId);
     if (promotedEntry) await saveWaitlistToDB(promotedEntry);
+
+    if (promotedEntry) {
+      const cls = svc.getClass(promotedEntry.bookableClassId);
+      if (cls) {
+        await dispatchCommEvents([
+          waitlistPromotedEvent({
+            studentId: promotedEntry.studentId,
+            studentName: promotedEntry.studentName,
+            classTitle: cls.title,
+            classDate: cls.date,
+            startTime: cls.startTime,
+            waitlistId: promotedEntry.id,
+          }),
+        ]);
+      }
+    }
   }
 
   revalidatePath("/bookings");

@@ -122,3 +122,86 @@ export function renewalDueSoonEvent(input: {
     idempotencyKey: `renewal_due_soon:${input.studentId}:${input.subscriptionId}`,
   };
 }
+
+// ── waitlist_promoted ─────────────────────────────────────────
+
+export function waitlistPromotedEvent(input: {
+  studentId: string;
+  studentName: string;
+  classTitle: string;
+  classDate: string;
+  startTime: string;
+  /** Waitlist entry ID — prevents duplicate notices for the same promotion */
+  waitlistId?: string;
+}): CommEvent<"waitlist_promoted"> {
+  return {
+    id: generateId("wlp"),
+    studentId: input.studentId,
+    studentName: input.studentName,
+    type: "waitlist_promoted",
+    payload: {
+      classTitle: input.classTitle,
+      classDate: input.classDate,
+      startTime: input.startTime,
+    },
+    createdAt: new Date().toISOString(),
+    idempotencyKey: input.waitlistId
+      ? `waitlist_promoted:${input.studentId}:${input.waitlistId}`
+      : undefined,
+  };
+}
+
+// ── booking_reminder ──────────────────────────────────────────
+
+export function bookingReminderEvent(input: {
+  studentId: string;
+  studentName: string;
+  classTitle: string;
+  classDate: string;
+  startTime: string;
+  hoursUntilStart: number;
+  /** e.g. bookingId — prevents duplicate reminders for the same booking */
+  bookingId?: string;
+}): CommEvent<"booking_reminder"> {
+  return {
+    id: generateId("brm"),
+    studentId: input.studentId,
+    studentName: input.studentName,
+    type: "booking_reminder",
+    payload: {
+      classTitle: input.classTitle,
+      classDate: input.classDate,
+      startTime: input.startTime,
+      hoursUntilStart: input.hoursUntilStart,
+    },
+    createdAt: new Date().toISOString(),
+    idempotencyKey: input.bookingId
+      ? `booking_reminder:${input.studentId}:${input.bookingId}`
+      : undefined,
+  };
+}
+
+// ── birthday_benefit_available ────────────────────────────────
+
+export function birthdayBenefitAvailableEvent(input: {
+  studentId: string;
+  studentName: string;
+  benefitDescription?: string;
+  expiresDate: string;
+  /** Year — used in idempotency key so the event fires once per birthday window */
+  year: number;
+}): CommEvent<"birthday_benefit_available"> {
+  return {
+    id: generateId("bba"),
+    studentId: input.studentId,
+    studentName: input.studentName,
+    type: "birthday_benefit_available",
+    payload: {
+      benefitDescription:
+        input.benefitDescription ?? "Free class during your birthday week",
+      expiresDate: input.expiresDate,
+    },
+    createdAt: new Date().toISOString(),
+    idempotencyKey: `birthday_benefit:${input.studentId}:${input.year}`,
+  };
+}
