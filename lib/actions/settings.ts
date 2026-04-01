@@ -54,6 +54,7 @@ export async function saveSettings(
     qrCheckInEnabled: formData.get("qrCheckInEnabled") === "on",
     refundCreditOnAbsent: formData.get("refundCreditOnAbsent") === "on",
     allowAdminLateEntryIntoTermBound: formData.get("allowAdminLateEntryIntoTermBound") === "on",
+    studentTermSelectionEnabled: formData.get("studentTermSelectionEnabled") === "on",
   };
 
   // --- Role balanced style names (multi-checkbox) ---

@@ -51,8 +51,9 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { saveBookingToDB, deleteWaitlistFromDB, deleteAttendanceFromDB } from "@/lib/supabase/operational-persistence";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
-import { addClassCancellationNotices, type ClassCancellationNotice } from "@/lib/services/class-cancellation-store";
-import { saveNotificationsToDB } from "@/lib/supabase/notification-persistence";
+import type { ClassCancellationNotice } from "@/lib/services/class-cancellation-store";
+import { classCancelledEvent } from "@/lib/communications/builders";
+import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { findTermForDate } from "@/lib/domain/term-rules";
 import { requireRole } from "@/lib/auth";
 import type { ClassType, InstanceStatus } from "@/types/domain";
@@ -552,11 +553,10 @@ export async function updateInstanceStatusAction(
     );
     affectedStudents = notices.length;
     if (notices.length > 0) {
-      const full = addClassCancellationNotices(notices);
-      const realUserNotices = full.filter((n) => isRealUser(n.studentId));
-      if (realUserNotices.length > 0) {
-        await saveNotificationsToDB(realUserNotices);
-      }
+      const events = notices.map((n) =>
+        classCancelledEvent({ ...n, classInstanceId: id })
+      );
+      await dispatchCommEvents(events);
     }
   }
 
@@ -791,11 +791,10 @@ export async function deleteInstanceAction(
   );
 
   if (notices.length > 0) {
-    const full = addClassCancellationNotices(notices);
-    const realUserNotices = full.filter((n) => isRealUser(n.studentId));
-    if (realUserNotices.length > 0) {
-      await saveNotificationsToDB(realUserNotices);
-    }
+    const events = notices.map((n) =>
+      classCancelledEvent({ ...n, classInstanceId: id })
+    );
+    await dispatchCommEvents(events);
   }
 
   try {

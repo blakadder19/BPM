@@ -346,6 +346,16 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: Set
                 checked={s.allowAdminLateEntryIntoTermBound}
                 onChange={(v) => setBool("allowAdminLateEntryIntoTermBound", v)}
               />
+              <CheckboxField
+                name="studentTermSelectionEnabled"
+                label="Allow students to choose the term when purchasing"
+                checked={s.studentTermSelectionEnabled}
+                onChange={(v) => setBool("studentTermSelectionEnabled", v)}
+              />
+              <p className="text-xs text-gray-400 -mt-1 ml-6">
+                When enabled, students can select which term they are purchasing for when buying term-bound products from the catalog.
+              </p>
+
               <div>
                 <Label htmlFor="adminLateEntryMaxClassNumber" className="text-sm">
                   Latest class number admin can add a student (e.g. 2 = up to week 2)

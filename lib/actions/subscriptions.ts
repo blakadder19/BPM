@@ -6,11 +6,13 @@ import {
   createSubscription,
   updateSubscription,
 } from "@/lib/services/subscription-service";
-import { getProductRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
+import { getProductRepo, getTermRepo, getSubscriptionRepo, getStudentRepo } from "@/lib/repositories";
 import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getTodayStr } from "@/lib/domain/datetime";
+import { paymentPendingEvent } from "@/lib/communications/builders";
+import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
 const VALID_STATUSES = new Set<string>([
@@ -133,7 +135,7 @@ export async function createSubscriptionAction(
     termId,
     paymentMethod: paymentMethodRaw as PaymentMethod,
     paymentStatus: paymentStatusRaw as SalePaymentStatus,
-    assignedBy: adminUser.fullName,
+    assignedBy: adminUser.id,
     assignedAt: new Date().toISOString(),
     autoRenew,
     classesUsed: 0,
@@ -143,6 +145,23 @@ export async function createSubscriptionAction(
     selectedStyleIds,
     selectedStyleNames,
   });
+
+  if (result.success && result.subscriptionId && paymentStatusRaw === "pending") {
+    const student = await getStudentRepo().getById(studentId);
+    if (student) {
+      const term = termId ? await getTermRepo().getById(termId) : null;
+      await dispatchCommEvents([
+        paymentPendingEvent({
+          studentId,
+          studentName: student.fullName,
+          productName: product.name,
+          subscriptionId: result.subscriptionId,
+          termName: term?.name ?? null,
+          amountLabel: product.priceCents != null ? `€${(product.priceCents / 100).toFixed(2)}` : null,
+        }),
+      ]);
+    }
+  }
 
   if (result.success) revalidatePath("/students");
   return result;

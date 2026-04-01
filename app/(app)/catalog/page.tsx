@@ -4,9 +4,10 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { getSettings } from "@/lib/services/settings-store";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { getAccessRule } from "@/config/product-access";
-import { StudentCatalog, type CatalogProduct, type StyleOption, type StyleSelectionMode } from "@/components/catalog/student-catalog";
+import { StudentCatalog, type CatalogProduct, type StyleOption, type StyleSelectionMode, type TermOption } from "@/components/catalog/student-catalog";
 import type { MockProduct } from "@/lib/mock-data";
 
 function describeStyles(p: MockProduct): string {
@@ -63,13 +64,48 @@ export default async function CatalogPage() {
   const currentTerm = getCurrentTerm(terms, todayStr);
   const nextTerm = getNextTerm(terms, todayStr);
 
-  const activeSubs = allSubs.filter(
+  const studentSubs = allSubs.filter(
     (s) => s.studentId === user.id && s.status === "active"
   );
-  const activeProductIds = new Set(activeSubs.map((s) => s.productId));
-  const activePaymentByProduct = new Map(
-    activeSubs.map((s) => [s.productId, s.paymentStatus])
-  );
+
+  const termsById = new Map(terms.map((t) => [t.id, t]));
+
+  const currentSubByProduct = new Map<string, (typeof studentSubs)[number]>();
+  const renewalSubByProduct = new Map<string, (typeof studentSubs)[number]>();
+  const coveredTermsByProduct = new Map<string, Set<string>>();
+
+  for (const s of studentSubs) {
+    if (s.termId) {
+      if (!coveredTermsByProduct.has(s.productId)) {
+        coveredTermsByProduct.set(s.productId, new Set());
+      }
+      const coveredSet = coveredTermsByProduct.get(s.productId)!;
+      coveredSet.add(s.termId);
+
+      if (s.validUntil && s.validUntil > s.validFrom) {
+        for (const t of terms) {
+          if (s.validFrom <= t.endDate && s.validUntil >= t.startDate) {
+            coveredSet.add(t.id);
+          }
+        }
+      }
+    }
+
+    if (s.validFrom > todayStr) {
+      const existing = renewalSubByProduct.get(s.productId);
+      if (!existing || s.validFrom < existing.validFrom) {
+        renewalSubByProduct.set(s.productId, s);
+      }
+    } else if (!s.validUntil || s.validUntil >= todayStr) {
+      currentSubByProduct.set(s.productId, s);
+    }
+  }
+
+  const { studentTermSelectionEnabled } = getSettings();
+
+  const rawEligibleTerms: TermOption[] = [];
+  if (currentTerm) rawEligibleTerms.push({ id: currentTerm.id, name: currentTerm.name, startDate: currentTerm.startDate, isFuture: false });
+  if (nextTerm) rawEligibleTerms.push({ id: nextTerm.id, name: nextTerm.name, startDate: nextTerm.startDate, isFuture: true });
 
   const catalog: CatalogProduct[] = products
     .filter((p) => p.isActive)
@@ -81,6 +117,9 @@ export default async function CatalogPage() {
       }
 
       const { mode, selectable, pickCount } = resolveStyleSelection(p, danceStyles);
+
+      const curSub = currentSubByProduct.get(p.id);
+      const renSub = renewalSubByProduct.get(p.id);
 
       return {
         id: p.id,
@@ -99,11 +138,17 @@ export default async function CatalogPage() {
         recurring: p.recurring,
         spanTerms: p.spanTerms,
         termName,
-        alreadyActive: activeProductIds.has(p.id),
-        activePaymentStatus: activePaymentByProduct.get(p.id) ?? null,
+        currentEntitlement: curSub ? { paymentStatus: curSub.paymentStatus } : null,
+        renewalEntitlement: renSub
+          ? { paymentStatus: renSub.paymentStatus, termName: renSub.termId ? termsById.get(renSub.termId)?.name ?? null : null }
+          : null,
         styleSelectionMode: mode,
         selectableStyles: selectable,
         pickCount,
+        eligibleTerms: studentTermSelectionEnabled && p.termBound && rawEligibleTerms.length > 0
+          ? rawEligibleTerms
+          : null,
+        coveredTermIds: [...(coveredTermsByProduct.get(p.id) ?? [])],
       };
     })
     .sort((a, b) => a.priceCents - b.priceCents);

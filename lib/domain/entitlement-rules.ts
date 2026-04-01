@@ -98,6 +98,7 @@ export function isEntitlementValidForClass(
   accessRule: ProductAccessRule | undefined
 ): boolean {
   if (sub.status !== "active") return false;
+  if (cls.date < sub.validFrom) return false;
   if (sub.validUntil && cls.date > sub.validUntil) return false;
   if (!hasRemainingUsage(sub)) return false;
   if (!accessRule) return false;
@@ -139,16 +140,15 @@ export function diagnoseNoEntitlement(
   let anyLevelMismatch = false;
   let anyTypeMismatch = false;
   let anyExpired = false;
+  let anyClassInFutureTerm = false;
+  let anyNotYetValid = false;
+  let notYetValidName: string | null = null;
   let exhaustedName: string | null = null;
 
   for (const sub of subscriptions) {
     const rule = accessRulesMap.get(sub.productId);
 
     if (!rule) continue;
-    if (sub.validUntil && cls.date > sub.validUntil) {
-      anyExpired = true;
-      continue;
-    }
     if (!classTypeMatches(rule.allowedClassTypes, cls.classType)) {
       anyTypeMismatch = true;
       continue;
@@ -161,6 +161,20 @@ export function diagnoseNoEntitlement(
       anyLevelMismatch = true;
       continue;
     }
+    // Access rules passed — now check date window and usage
+    if (cls.date < sub.validFrom) {
+      anyNotYetValid = true;
+      notYetValidName = sub.productName;
+      continue;
+    }
+    if (sub.validUntil && cls.date > sub.validUntil) {
+      if (sub.termId) {
+        anyClassInFutureTerm = true;
+      } else {
+        anyExpired = true;
+      }
+      continue;
+    }
     if (!hasRemainingUsage(sub)) {
       anyExhausted = true;
       exhaustedName = sub.productName;
@@ -170,6 +184,12 @@ export function diagnoseNoEntitlement(
 
   if (anyExhausted && exhaustedName) {
     return `${exhaustedName}: all classes/credits used. Upgrade or purchase a top-up.`;
+  }
+  if (anyNotYetValid && notYetValidName) {
+    return "This class belongs to an earlier term. Your plan starts in a later term and can't be used for this class.";
+  }
+  if (anyClassInFutureTerm) {
+    return "This class is in a future term. You need a plan for that term to book it.";
   }
   if (anyExpired) {
     return "Your membership or pass has expired. Visit the Catalog or reception to renew.";

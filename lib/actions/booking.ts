@@ -143,7 +143,11 @@ export async function createStudentBooking(input: {
   // Birthday benefit eligibility: memberships only, birthday week, once per year
   let birthdayBenefit: BirthdayBenefitState | undefined;
   const activeMembership = allSubs.find(
-    (s) => s.productType === "membership" && s.status === "active"
+    (s) =>
+      s.productType === "membership" &&
+      s.status === "active" &&
+      s.validFrom <= rawCls.date &&
+      (!s.validUntil || s.validUntil >= rawCls.date)
   );
   if (activeMembership && student.dateOfBirth) {
     const today = getTodayStr();

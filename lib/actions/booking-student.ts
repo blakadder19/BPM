@@ -66,6 +66,18 @@ export async function validateRestoreEntitlement(booking: {
         reason: `Cannot restore — your ${sub.productName} is ${sub.status}.`,
       };
     }
+    if (opts?.classDate && opts.classDate < sub.validFrom) {
+      return {
+        valid: false,
+        reason: `Cannot restore — your ${sub.productName} doesn't start until ${sub.validFrom}.`,
+      };
+    }
+    if (opts?.classDate && sub.validUntil && opts.classDate > sub.validUntil) {
+      return {
+        valid: false,
+        reason: `Cannot restore — your ${sub.productName} expired on ${sub.validUntil}.`,
+      };
+    }
     if (sub.productType === "membership" && sub.classesPerTerm !== null) {
       if (sub.classesUsed >= sub.classesPerTerm) {
         return {

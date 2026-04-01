@@ -2,7 +2,7 @@
 
 import { getAuthUser } from "@/lib/auth";
 import { dismissStudentNotice } from "@/lib/services/class-cancellation-store";
-import { dismissNotificationFromDB } from "@/lib/supabase/notification-persistence";
+import { dismissNotification } from "@/lib/communications/notification-store";
 import { isRealUser } from "@/lib/utils/is-real-user";
 
 export async function dismissStudentNoticeAction(noticeId: string): Promise<{ success: boolean }> {
@@ -10,7 +10,7 @@ export async function dismissStudentNoticeAction(noticeId: string): Promise<{ su
   if (!user || user.role !== "student") return { success: false };
   dismissStudentNotice(noticeId);
   if (isRealUser(user.id)) {
-    await dismissNotificationFromDB(noticeId);
+    await dismissNotification(noticeId);
   }
   return { success: true };
 }

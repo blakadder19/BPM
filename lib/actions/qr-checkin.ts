@@ -137,11 +137,13 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
     };
   });
 
-  const hasActiveEntitlement = studentSubs.some((s) => s.status === "active");
+  const hasActiveEntitlement = studentSubs.some(
+    (s) => s.status === "active" && s.validFrom <= today && (!s.validUntil || s.validUntil >= today)
+  );
   const paymentPending = studentSubs.some((s) => s.paymentStatus === "pending");
 
   const activeEntitlements = studentSubs
-    .filter((s) => s.status === "active")
+    .filter((s) => s.status === "active" && s.validFrom <= today && (!s.validUntil || s.validUntil >= today))
     .map(buildEntitlementDetail);
 
   let recentExpiredEntitlement: QrEntitlementDetail | null = null;

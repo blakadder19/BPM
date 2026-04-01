@@ -7,6 +7,7 @@ import {
   CalendarRange,
   Tag,
   CheckCircle2,
+  Clock,
   Palette,
   GraduationCap,
   Gift,
@@ -36,6 +37,13 @@ export interface StyleOption {
   name: string;
 }
 
+export interface TermOption {
+  id: string;
+  name: string;
+  startDate: string;
+  isFuture: boolean;
+}
+
 export type StyleSelectionMode = "none" | "pick_one" | "pick_many";
 
 export interface CatalogProduct {
@@ -55,11 +63,13 @@ export interface CatalogProduct {
   recurring: boolean;
   spanTerms: number | null;
   termName: string | null;
-  alreadyActive: boolean;
-  activePaymentStatus: string | null;
+  currentEntitlement: { paymentStatus: string } | null;
+  renewalEntitlement: { paymentStatus: string; termName: string | null } | null;
   styleSelectionMode: StyleSelectionMode;
   selectableStyles: StyleOption[];
   pickCount: number;
+  eligibleTerms: TermOption[] | null;
+  coveredTermIds: string[];
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -178,7 +188,11 @@ function ProductCard({
   return (
     <Card
       className={`flex flex-col transition-shadow hover:shadow-md ${
-        p.alreadyActive ? "border-green-200 bg-green-50/30" : ""
+        p.currentEntitlement
+          ? "border-green-200 bg-green-50/30"
+          : p.renewalEntitlement
+            ? "border-amber-200 bg-amber-50/30"
+            : ""
       }`}
     >
       <CardHeader className="pb-2">
@@ -188,12 +202,22 @@ function ProductCard({
           </CardTitle>
           <StatusBadge status={p.productType} />
         </div>
-        {p.alreadyActive && (
+        {p.currentEntitlement && (
           <div className={`flex items-center gap-1.5 text-xs font-medium mt-1 ${
-            p.activePaymentStatus === "pending" ? "text-amber-700" : "text-green-700"
+            p.currentEntitlement.paymentStatus === "pending" ? "text-amber-700" : "text-green-700"
           }`}>
             <CheckCircle2 className="h-3.5 w-3.5" />
-            {p.activePaymentStatus === "pending" ? "Active · Payment pending" : "You have this"}
+            {p.currentEntitlement.paymentStatus === "pending" ? "Active · Payment pending" : "You have this"}
+          </div>
+        )}
+        {p.renewalEntitlement && (
+          <div className={`flex items-center gap-1.5 text-xs font-medium mt-1 ${
+            p.renewalEntitlement.paymentStatus === "pending" ? "text-amber-600" : "text-green-600"
+          }`}>
+            <Clock className="h-3.5 w-3.5" />
+            {p.renewalEntitlement.paymentStatus === "pending"
+              ? `Renewal${p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : ""} · Payment pending`
+              : `Renewed${p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : ""}`}
           </div>
         )}
       </CardHeader>
@@ -293,14 +317,23 @@ function ProductCard({
       </CardContent>
 
       <div className="border-t border-gray-100 p-3 sm:p-4">
-        {p.alreadyActive ? (
-          <p className={`text-center text-sm font-medium ${
-            p.activePaymentStatus === "pending" ? "text-amber-700" : "text-green-700"
-          }`}>
-            {p.activePaymentStatus === "pending"
-              ? "Active · Please complete payment at reception"
-              : "Already active"}
-          </p>
+        {p.currentEntitlement || p.renewalEntitlement ? (
+          <div className="space-y-1 text-center text-sm font-medium">
+            {p.currentEntitlement && (
+              <p className={p.currentEntitlement.paymentStatus === "pending" ? "text-amber-700" : "text-green-700"}>
+                {p.currentEntitlement.paymentStatus === "pending"
+                  ? "Active · Please complete payment at reception"
+                  : "Already active"}
+              </p>
+            )}
+            {p.renewalEntitlement && (
+              <p className={p.renewalEntitlement.paymentStatus === "pending" ? "text-amber-600" : "text-green-600"}>
+                {p.renewalEntitlement.paymentStatus === "pending"
+                  ? `Renewal${p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : ""} · Please complete payment at reception`
+                  : `Renewed${p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : ""}`}
+              </p>
+            )}
+          </div>
         ) : (
           <Button className="w-full" onClick={() => onSelect(p)}>
             Get Started
@@ -325,12 +358,21 @@ function PurchaseDialog({
 
   const [selectedOne, setSelectedOne] = useState<StyleOption | null>(null);
   const [selectedMany, setSelectedMany] = useState<Set<string>>(new Set());
+  const [selectedTerm, setSelectedTerm] = useState<TermOption | null>(() => {
+    if (!p.eligibleTerms?.length) return null;
+    return p.eligibleTerms.find((t) => !t.isFuture && !p.coveredTermIds.includes(t.id))
+      ?? p.eligibleTerms.find((t) => !p.coveredTermIds.includes(t.id))
+      ?? null;
+  });
 
   const needsStylePick = p.styleSelectionMode !== "none";
   const styleValid =
     p.styleSelectionMode === "none" ||
     (p.styleSelectionMode === "pick_one" && selectedOne !== null) ||
     (p.styleSelectionMode === "pick_many" && selectedMany.size === p.pickCount);
+
+  const needsTermPick = p.eligibleTerms !== null && p.eligibleTerms.length > 0;
+  const termValid = !needsTermPick || selectedTerm !== null;
 
   function toggleMany(id: string) {
     setSelectedMany((prev) => {
@@ -370,6 +412,7 @@ function PurchaseDialog({
         selectedStyleName,
         selectedStyleIds,
         selectedStyleNames,
+        selectedTermId: selectedTerm?.id ?? null,
       });
 
       if (res.success) {
@@ -506,6 +549,64 @@ function PurchaseDialog({
             </div>
           )}
 
+          {/* Term selection */}
+          {needsTermPick && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                {p.spanTerms != null && p.spanTerms >= 2
+                  ? "Choose starting term"
+                  : "Choose term"}
+              </label>
+              <p className="text-xs text-gray-400">
+                {p.spanTerms != null && p.spanTerms >= 2
+                  ? "This pass covers the selected term and the following term."
+                  : "This plan will apply only to classes in the selected term."}
+              </p>
+              <div className="space-y-1.5">
+                {p.eligibleTerms!.map((t) => {
+                  const covered = p.coveredTermIds.includes(t.id);
+                  return (
+                    <label
+                      key={t.id}
+                      className={`flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+                        covered
+                          ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
+                          : selectedTerm?.id === t.id
+                            ? "border-blue-400 bg-blue-50 cursor-pointer"
+                            : "border-gray-200 hover:border-gray-300 cursor-pointer"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="term"
+                        checked={selectedTerm?.id === t.id}
+                        onChange={() => !covered && setSelectedTerm(t)}
+                        disabled={covered}
+                        className="accent-blue-600"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-sm font-medium text-gray-900">{t.name}</span>
+                        {t.isFuture && !covered && (
+                          <span className="ml-2 text-xs text-amber-600">(starts {t.startDate})</span>
+                        )}
+                        {covered && (
+                          <span className="ml-2 text-xs text-gray-400">Already active</span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              {selectedTerm?.isFuture && (
+                <p className="text-xs text-amber-700">
+                  {p.spanTerms != null && p.spanTerms >= 2
+                    ? "This is a future term. Your pass will cover this term and the one after it, but won't be usable until that term starts."
+                    : "This is a future term. Your plan will not be usable until that term starts."}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Payment notice */}
           {!success && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -521,8 +622,19 @@ function PurchaseDialog({
 
           {success && (
             <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
-              <strong>{p.name}</strong> has been activated! You can now book classes.
-              Please complete payment at reception.
+              <strong>{p.name}</strong>
+              {selectedTerm
+                ? p.spanTerms != null && p.spanTerms >= 2
+                  ? ` starting from ${selectedTerm.name}`
+                  : ` for ${selectedTerm.name}`
+                : ""} has been activated!
+              {p.spanTerms != null && p.spanTerms >= 2
+                ? " It covers this term and the following term."
+                : ""}
+              {selectedTerm?.isFuture
+                ? " It will become usable once that term starts."
+                : " You can now book classes."}
+              {" "}Please complete payment at reception.
             </div>
           )}
         </DialogBody>
@@ -538,7 +650,7 @@ function PurchaseDialog({
               </Button>
               <Button
                 onClick={handleConfirm}
-                disabled={isPending || (needsStylePick && !styleValid)}
+                disabled={isPending || (needsStylePick && !styleValid) || !termValid}
               >
                 {isPending ? "Processing…" : "Confirm & Activate"}
               </Button>

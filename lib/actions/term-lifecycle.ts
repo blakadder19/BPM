@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole, getAuthUser } from "@/lib/auth";
-import { getSubscriptionRepo, getTermRepo } from "@/lib/repositories";
+import { getSubscriptionRepo, getTermRepo, getStudentRepo } from "@/lib/repositories";
 import {
   createSubscription,
   updateSubscription,
@@ -16,6 +16,9 @@ import {
   type RenewalInstruction,
 } from "@/lib/domain/term-lifecycle";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { renewalPreparedEvent, renewalDueSoonEvent } from "@/lib/communications/builders";
+import { dispatchCommEvents } from "@/lib/communications/dispatch";
+import type { CommEvent } from "@/lib/communications/events";
 
 // ── Concurrency guard ────────────────────────────────────────
 // Prevents overlapping lifecycle runs in the same server process.
@@ -92,6 +95,8 @@ export async function runTermLifecycleAction(
       details: [],
     };
 
+    const commEvents: CommEvent[] = [];
+
     for (const inst of instructions) {
       if (inst.type === "expire") {
         const res = await updateSubscription(inst.subscriptionId, {
@@ -113,9 +118,54 @@ export async function runTermLifecycleAction(
             result.details.push(
               `Prepared renewal for ${inst.source.productName} → ${inst.nextTerm.name}`
             );
+            const student = await getStudentRepo().getById(inst.source.studentId);
+            if (student) {
+              commEvents.push(
+                renewalPreparedEvent({
+                  studentId: inst.source.studentId,
+                  studentName: student.fullName,
+                  productName: inst.source.productName,
+                  subscriptionId: inst.subscriptionId,
+                  termName: inst.nextTerm.name,
+                  validFrom: inst.nextTerm.startDate,
+                  validUntil: inst.nextTerm.endDate,
+                })
+              );
+            }
           }
         }
       }
+    }
+
+    // renewal_due_soon: find pending-payment renewals whose term starts within 7 days
+    const RENEWAL_DUE_SOON_DAYS = 7;
+    const freshSubs = await getSubscriptionRepo().getAll();
+    for (const sub of freshSubs) {
+      if (!sub.renewedFromId) continue;
+      if (sub.status !== "active") continue;
+      if (sub.paymentStatus !== "pending") continue;
+      if (!sub.validFrom) continue;
+      const daysUntil = daysUntilDate(today, sub.validFrom);
+      if (daysUntil >= 0 && daysUntil <= RENEWAL_DUE_SOON_DAYS) {
+        const term = sub.termId ? allTerms.find((t) => t.id === sub.termId) : null;
+        const student = await getStudentRepo().getById(sub.studentId);
+        if (student && term) {
+          commEvents.push(
+            renewalDueSoonEvent({
+              studentId: sub.studentId,
+              studentName: student.fullName,
+              productName: sub.productName,
+              subscriptionId: sub.id,
+              termName: term.name,
+              daysUntilStart: daysUntil,
+            })
+          );
+        }
+      }
+    }
+
+    if (commEvents.length > 0) {
+      await dispatchCommEvents(commEvents);
     }
 
     g.__bpm_lifecycle_last_run = new Date().toISOString();
@@ -177,7 +227,7 @@ export async function lazyExpireSubscriptions(): Promise<number> {
 export async function renewSubscriptionAction(
   subscriptionId: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  const adminUser = await requireRole(["admin"]);
   await ensureOperationalDataHydrated();
 
   const [allSubs, allTerms] = await Promise.all([
@@ -211,7 +261,7 @@ export async function renewSubscriptionAction(
       termId: nextTerm.id,
       paymentMethod: source.paymentMethod,
       paymentStatus: "pending",
-      assignedBy: "admin",
+      assignedBy: adminUser.id,
       assignedAt: new Date().toISOString(),
       autoRenew: source.autoRenew,
       classesUsed: 0,
@@ -223,7 +273,21 @@ export async function renewSubscriptionAction(
       renewedFromId: source.id,
     });
 
-    if (result.success) {
+    if (result.success && result.subscriptionId) {
+      const student = await getStudentRepo().getById(source.studentId);
+      if (student) {
+        await dispatchCommEvents([
+          renewalPreparedEvent({
+            studentId: source.studentId,
+            studentName: student.fullName,
+            productName: source.productName,
+            subscriptionId: result.subscriptionId,
+            termName: nextTerm.name,
+            validFrom: nextTerm.startDate,
+            validUntil: nextTerm.endDate,
+          }),
+        ]);
+      }
       revalidatePath("/students");
       revalidatePath("/dashboard");
       revalidatePath("/catalog");
@@ -276,7 +340,7 @@ async function prepareRenewal(inst: RenewalInstruction): Promise<boolean> {
       termId: nextTerm.id,
       paymentMethod: source.paymentMethod,
       paymentStatus: "pending",
-      assignedBy: "system",
+      assignedBy: null,
       assignedAt: new Date().toISOString(),
       autoRenew: source.autoRenew,
       classesUsed: 0,
@@ -291,4 +355,10 @@ async function prepareRenewal(inst: RenewalInstruction): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+function daysUntilDate(from: string, to: string): number {
+  const f = new Date(from + "T00:00:00Z");
+  const t = new Date(to + "T00:00:00Z");
+  return Math.round((t.getTime() - f.getTime()) / (1000 * 60 * 60 * 24));
 }

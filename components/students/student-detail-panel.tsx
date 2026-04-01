@@ -497,13 +497,15 @@ function SubCard({
       )}
       {product?.isProvisional && <StatusBadge status="provisional" />}
       <span className="text-xs text-gray-400">
-        {sub.assignedBy === "system"
+        {sub.renewedFromId && sub.notes?.includes("Auto-renewal")
           ? `Auto-renewed${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`
-          : sub.assignedBy
-            ? `Assigned by ${sub.assignedBy}${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`
-            : sub.notes?.includes("self-purchase") || sub.notes?.includes("Self-purchase")
-              ? `Self-purchase${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`
-              : `Admin-assigned${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`}
+          : sub.notes?.includes("self-purchase") || sub.notes?.includes("Self-purchase")
+            ? `Self-purchase${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`
+            : sub.assignedBy
+              ? `Admin-assigned${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`
+              : sub.renewedFromId
+                ? `Renewed${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`
+                : `Admin-assigned${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`}
       </span>
       {sub.renewedFromId && (
         <span className="text-[10px] text-indigo-500 font-medium">Renewal</span>

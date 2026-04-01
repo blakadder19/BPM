@@ -47,27 +47,37 @@ export function isBirthdayWeek(
   return diffDays >= 0 && diffDays < BIRTHDAY_WEEK_DURATION_DAYS;
 }
 
-/**
- * Returns true if the student has at least one active membership subscription.
- * All membership tiers qualify for giveaway eligibility.
- */
-export function isMemberGiveawayEligible(
-  subscriptions: MockSubscription[]
-): boolean {
-  return subscriptions.some(
-    (s) => s.productType === "membership" && s.status === "active"
+function isCurrentlyValid(s: MockSubscription, referenceDate: string): boolean {
+  return (
+    s.status === "active" &&
+    s.validFrom <= referenceDate &&
+    (!s.validUntil || s.validUntil >= referenceDate)
   );
 }
 
 /**
- * Returns true if the student has at least one active membership subscription,
+ * Returns true if the student has at least one currently-valid membership.
+ * All membership tiers qualify for giveaway eligibility.
+ */
+export function isMemberGiveawayEligible(
+  subscriptions: MockSubscription[],
+  referenceDate: string
+): boolean {
+  return subscriptions.some(
+    (s) => s.productType === "membership" && isCurrentlyValid(s, referenceDate)
+  );
+}
+
+/**
+ * Returns true if the student has at least one currently-valid membership,
  * granting free access to weekend Student Practice sessions.
  */
 export function hasFreePracticeAccess(
-  subscriptions: MockSubscription[]
+  subscriptions: MockSubscription[],
+  referenceDate: string
 ): boolean {
   return subscriptions.some(
-    (s) => s.productType === "membership" && s.status === "active"
+    (s) => s.productType === "membership" && isCurrentlyValid(s, referenceDate)
   );
 }
 
@@ -93,7 +103,7 @@ export function computeMemberBenefits(opts: {
   birthdayClassDate?: string;
 }): MemberBenefitsSummary {
   const isMember = opts.subscriptions.some(
-    (s) => s.productType === "membership" && s.status === "active"
+    (s) => s.productType === "membership" && isCurrentlyValid(s, opts.referenceDate)
   );
 
   const birthdayWeekEligible =

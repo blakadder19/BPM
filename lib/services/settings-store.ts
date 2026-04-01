@@ -61,6 +61,7 @@ export interface AppSettings {
   // Term-bound policy
   allowAdminLateEntryIntoTermBound: boolean;
   adminLateEntryMaxClassNumber: number;
+  studentTermSelectionEnabled: boolean;
 
   // Admin alert preferences
   disabledAlertIds: string[];
@@ -99,6 +100,7 @@ function defaults(): AppSettings {
 
     allowAdminLateEntryIntoTermBound: true,
     adminLateEntryMaxClassNumber: 2,
+    studentTermSelectionEnabled: true,
 
     disabledAlertIds: [],
 

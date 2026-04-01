@@ -15,7 +15,8 @@ import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
 import { getNoticesForStudent } from "@/lib/services/class-cancellation-store";
-import { getNotificationsForStudentFromDB } from "@/lib/supabase/notification-persistence";
+import { getNotificationsForStudent as getNotificationsFromDB } from "@/lib/communications/notification-store";
+import { buildMessage } from "@/lib/communications/messages";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { formatTime } from "@/lib/utils";
 
@@ -66,16 +67,28 @@ export default async function AppLayout({
   } else if (user.role === "student") {
     try {
       const studentId = devStudentId ?? user.id;
-      const notices = isRealUser(studentId)
-        ? await getNotificationsForStudentFromDB(studentId)
-        : getNoticesForStudent(studentId);
-      alerts = notices.map((n) => ({
-        id: n.id,
-        severity: "warning" as const,
-        title: "Class cancelled",
-        message: `"${n.classTitle}" on ${n.classDate} at ${formatTime(n.startTime)} was cancelled by the academy.${n.creditReverted ? " Your credit has been returned." : ""}`,
-        href: "/bookings",
-      }));
+      if (isRealUser(studentId)) {
+        const stored = await getNotificationsFromDB(studentId);
+        alerts = stored.map((n) => {
+          const msg = buildMessage(n.type, n.payload);
+          return {
+            id: n.id,
+            severity: (n.type === "class_cancelled" ? "warning" : "info") as "warning" | "info",
+            title: msg.title,
+            message: msg.body,
+            href: msg.href,
+          };
+        });
+      } else {
+        const notices = getNoticesForStudent(studentId);
+        alerts = notices.map((n) => ({
+          id: n.id,
+          severity: "warning" as const,
+          title: "Class cancelled",
+          message: `"${n.classTitle}" on ${n.classDate} at ${formatTime(n.startTime)} was cancelled by the academy.${n.creditReverted ? " Your credit has been returned." : ""}`,
+          href: "/bookings",
+        }));
+      }
     } catch {
       // Best-effort
     }

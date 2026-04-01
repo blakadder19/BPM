@@ -54,13 +54,13 @@ export async function createSubscription(data: {
   paymentReference?: string | null;
   paymentNotes?: string | null;
   collectedBy?: string | null;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
   try {
     const sub = await getSubscriptionRepo().create(data);
     if (isRealUser(data.studentId)) {
       await saveSubscriptionToDB(sub);
     }
-    return { success: true };
+    return { success: true, subscriptionId: sub.id };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
   }
