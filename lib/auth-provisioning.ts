@@ -4,6 +4,11 @@
  *
  * Called ONLY from the auth callback after signup confirmation,
  * never from layout/render paths.
+ *
+ * CLAIMING SAFETY: If the user already exists in public.users
+ * (e.g. admin-created student claiming their account via password
+ * reset), we only sync the email and skip full provisioning to
+ * avoid overwriting admin-set data (name, notes, phone, etc.).
  */
 
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
@@ -18,7 +23,33 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
     const admin = createAdminClient();
     const meta = authUser.user_metadata ?? {};
 
-    // Step 1: Find or create academy
+    // Step 1: Check if user already exists (admin-created student claiming account)
+    step = "check existing user";
+    const { data: existingUserRaw } = await admin
+      .from("users")
+      .select("id, role")
+      .eq("id", authUser.id)
+      .maybeSingle();
+
+    if (existingUserRaw) {
+      // User already exists — this is an account claim (password reset) or
+      // repeat callback. Only sync the email in case it changed; do NOT
+      // overwrite full_name, phone, notes, or any other admin-set data.
+      step = "sync email for existing user";
+      const { error: syncErr } = await admin
+        .from("users")
+        .update({ email: authUser.email ?? "" } as never)
+        .eq("id", authUser.id);
+      if (syncErr) {
+        console.warn(`[ensureProfile] email sync: ${syncErr.message}`);
+      }
+      console.log(
+        `[ensureProfile] Existing profile found for ${authUser.email} — skipped full provisioning (claim-safe).`
+      );
+      return { success: true };
+    }
+
+    // Step 2: Find or create academy (new user only)
     step = "query academies";
     const { data: existingAcademyRaw, error: acadQueryErr } = await admin
       .from("academies")
@@ -50,7 +81,7 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       academyId = (newAcademyRaw as { id: string }).id;
     }
 
-    // Step 2: Upsert public.users row
+    // Step 3: Insert public.users row (new user)
     step = "upsert users";
     const role = (meta.role as string) ?? "student";
     const fullName = (meta.full_name as string) ?? authUser.email ?? "New User";
@@ -74,7 +105,7 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       return { success: false, error: msg };
     }
 
-    // Step 3: Upsert student_profiles row if student
+    // Step 4: Insert student_profiles row if student (new user)
     if (role === "student") {
       step = "upsert student_profiles";
       const preferredRole = (meta.preferred_role as string) ?? null;

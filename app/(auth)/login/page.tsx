@@ -131,30 +131,40 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-gray-500">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
-              Sign up
+          <div className="mt-4 flex items-center justify-between text-sm">
+            <Link
+              href="/signup"
+              className="font-medium text-indigo-600 hover:text-indigo-500"
+            >
+              Create account
             </Link>
-          </p>
-
-          <div className="mt-4 border-t border-gray-100 pt-4">
-            <p className="mb-3 text-center text-xs font-medium text-gray-400">
-              DEMO ACCOUNTS (password: password123)
-            </p>
-            <div className="flex gap-2">
-              {DEMO_USERS.map((user) => (
-                <button
-                  key={user.email}
-                  type="button"
-                  onClick={() => fillDemo(user.email)}
-                  className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
-                >
-                  {user.label}
-                </button>
-              ))}
-            </div>
+            <Link
+              href="/reset-password"
+              className="font-medium text-indigo-600 hover:text-indigo-500"
+            >
+              Forgot password?
+            </Link>
           </div>
+
+          {process.env.NODE_ENV === "development" && (
+            <div className="mt-4 border-t border-gray-100 pt-4">
+              <p className="mb-3 text-center text-xs font-medium text-gray-400">
+                DEV ONLY — DEMO ACCOUNTS (password: password123)
+              </p>
+              <div className="flex gap-2">
+                {DEMO_USERS.map((user) => (
+                  <button
+                    key={user.email}
+                    type="button"
+                    onClick={() => fillDemo(user.email)}
+                    className="flex-1 rounded-lg border border-gray-200 px-2 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 hover:text-gray-900"
+                  >
+                    {user.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

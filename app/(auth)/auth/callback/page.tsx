@@ -8,7 +8,7 @@ import { provisionCurrentUser } from "@/lib/actions/auth-provision";
 
 /**
  * Auth callback page — handles Supabase email confirmation, magic links,
- * and OAuth redirects.
+ * OAuth redirects, and password recovery sessions.
  *
  * After establishing a session, calls provisionCurrentUser() to ensure
  * the user has public.users + student_profiles rows (one-time, idempotent).
@@ -23,12 +23,19 @@ export default function AuthCallbackPage() {
     handled.current = true;
 
     const code = searchParams.get("code");
+    const tokenHash = searchParams.get("token_hash");
+    const type = searchParams.get("type");
     const next = searchParams.get("next") ?? "/onboarding";
     const supabase = createClient();
 
     function clearDevCookies() {
       document.cookie = "dev_role=; path=/; max-age=0";
       document.cookie = "dev_student_id=; path=/; max-age=0";
+    }
+
+    function goToRecovery() {
+      router.push("/update-password");
+      router.refresh();
     }
 
     async function goToApp() {
@@ -49,9 +56,17 @@ export default function AuthCallbackPage() {
     }
 
     async function handle() {
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
+      // Handle modern token_hash verification (Supabase email-link format)
+      if (tokenHash && type) {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: type as "recovery" | "email",
+        });
         if (!error) {
+          if (type === "recovery") {
+            goToRecovery();
+            return;
+          }
           await goToApp();
           return;
         }
@@ -59,20 +74,46 @@ export default function AuthCallbackPage() {
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
+      // Handle PKCE code exchange
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!error) {
+          // After code exchange for recovery, Supabase establishes a
+          // recovery session. Check if next points to update-password.
+          if (next === "/update-password") {
+            goToRecovery();
+            return;
+          }
+          await goToApp();
+          return;
+        }
+        goToLogin();
+        return;
+      }
+
+      // Fallback: check for existing session
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session) {
         await goToApp();
         return;
       }
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        (event) => {
-          if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
-            subscription.unsubscribe();
-            goToApp();
-          }
+      // Listen for auth state changes (handles hash-fragment flows)
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((event) => {
+        if (event === "PASSWORD_RECOVERY") {
+          subscription.unsubscribe();
+          goToRecovery();
+          return;
         }
-      );
+        if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+          subscription.unsubscribe();
+          goToApp();
+        }
+      });
 
       setTimeout(() => {
         subscription.unsubscribe();

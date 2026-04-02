@@ -216,15 +216,28 @@ otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
 
-# Use a production-ready SMTP server
+# ── Brevo SMTP for auth emails ─────────────────────────────────
+# Uncomment to route all Supabase auth emails (signup confirmation,
+# password reset, invite) through Brevo instead of the built-in mailer.
+#
+# For local dev you can leave this commented — Inbucket captures emails.
+# For production / preview, configure these same values in:
+#   Supabase Dashboard > Authentication > SMTP Settings
+#
+# Brevo SMTP credentials are under: https://app.brevo.com/settings/keys/smtp
+#   host:  smtp-relay.brevo.com
+#   port:  587
+#   user:  your Brevo SMTP login (usually your account email)
+#   pass:  your Brevo SMTP key (not the same as the API key)
+#
 # [auth.email.smtp]
 # enabled = true
-# host = "smtp.sendgrid.net"
+# host = "smtp-relay.brevo.com"
 # port = 587
-# user = "apikey"
-# pass = "env(SENDGRID_API_KEY)"
-# admin_email = "admin@email.com"
-# sender_name = "Admin"
+# user = "env(BREVO_SMTP_USER)"
+# pass = "env(BREVO_SMTP_PASS)"
+# admin_email = "noreply@bpm.dance"
+# sender_name = "BPM Dance Academy"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]

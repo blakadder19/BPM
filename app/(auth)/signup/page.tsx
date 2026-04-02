@@ -17,6 +17,7 @@ export default function SignupPage() {
   const [confirmationSent, setConfirmationSent] = useState(
     searchParams.get("awaiting") === "1"
   );
+  const [existingEmail, setExistingEmail] = useState(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -79,6 +80,17 @@ export default function SignupPage() {
       return;
     }
 
+    // Detect existing email: Supabase returns a user with empty identities
+    // when the email is already registered (e.g. admin-created student).
+    if (
+      data.user &&
+      (!data.user.identities || data.user.identities.length === 0)
+    ) {
+      setExistingEmail(true);
+      setIsPending(false);
+      return;
+    }
+
     // If Supabase returned a session, the user is auto-confirmed
     if (data.session) {
       await provisionCurrentUser().catch((e) =>
@@ -94,6 +106,37 @@ export default function SignupPage() {
     setConfirmationSent(true);
     setIsPending(false);
     router.replace("/signup?awaiting=1");
+  }
+
+  if (existingEmail) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="flex flex-col items-center py-12">
+            <CheckCircle2 className="h-12 w-12 text-amber-500" />
+            <h2 className="mt-4 text-lg font-semibold text-gray-900">
+              Account already exists
+            </h2>
+            <p className="mt-2 text-center text-sm text-gray-500">
+              An account with this email already exists. If you were added by
+              BPM, you can set your own password to get started.
+            </p>
+            <Link
+              href="/reset-password"
+              className="mt-6 inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+            >
+              Set your password
+            </Link>
+            <Link
+              href="/login"
+              className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-500"
+            >
+              Back to sign in
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   if (confirmationSent) {

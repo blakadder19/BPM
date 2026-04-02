@@ -5,7 +5,7 @@ import "server-only";
  *
  * Channels:
  *   1. In-app notification (Supabase student_notifications)
- *   2. Email (Resend) — sends when RESEND_API_KEY is configured
+ *   2. Email (Brevo transactional API) — sends when BREVO_API_KEY is configured
  *   3. In-memory mock store (dev-only, class_cancelled)
  *
  * Idempotency:
@@ -86,7 +86,7 @@ async function dispatchSingle(event: CommEvent): Promise<boolean> {
     ]);
   }
 
-  // Channel 3: Email (Resend)
+  // Channel 3: Email (Brevo)
   await sendToEmailChannel(event);
 
   return true;
@@ -98,7 +98,7 @@ async function sendToInAppChannel(event: CommEvent): Promise<void> {
 }
 
 /**
- * Email channel: resolves student email, builds HTML content, sends via Resend.
+ * Email channel: resolves student email, builds HTML content, sends via Brevo.
  * No-ops gracefully if email is not configured or the address cannot be resolved.
  */
 async function sendToEmailChannel(event: CommEvent): Promise<void> {
