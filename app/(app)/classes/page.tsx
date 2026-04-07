@@ -42,9 +42,11 @@ export default async function ClassesPage() {
 
     const instances = getInstances();
     const svc = getBookingRepo().getService();
-    const terms = await getTermRepo().getAll();
-    const allSubs = await getSubscriptionRepo().getAll();
-    const allProducts = await getProductRepo().getAll();
+    const [terms, allSubs, allProducts] = await Promise.all([
+      getTermRepo().getAll(),
+      getSubscriptionRepo().getAll(),
+      getProductRepo().getAll(),
+    ]);
     const accessRulesMap = buildDynamicAccessRulesMap(allProducts);
 
     svc.refreshClasses(

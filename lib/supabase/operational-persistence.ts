@@ -11,13 +11,18 @@ import type { StoredPenalty } from "@/lib/services/penalty-service";
 import type { MockSubscription } from "@/lib/mock-data";
 import type { BookingStatus, BookingSource, DanceRole, WaitlistStatus, AttendanceMark, CheckInMethod, PenaltyReason, PenaltyResolution, ProductType, SubscriptionStatus, PaymentMethod, SalePaymentStatus } from "@/types/domain";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _cachedClient: any = null;
+
 function getClient() {
+  if (_cachedClient) return _cachedClient;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key, {
+  _cachedClient = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+  return _cachedClient;
 }
 
 // ── Bookings ───────────────────────────────────────────────

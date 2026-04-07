@@ -36,14 +36,24 @@ function hasSupabaseConfig(): boolean {
   );
 }
 
-async function loadValidUserIds(): Promise<Set<string>> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _adminClient: any = null;
+
+function getAdminClient() {
+  if (_adminClient) return _adminClient;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) return new Set();
+  if (!url || !key) return null;
+  _adminClient = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  return _adminClient;
+}
+
+async function loadValidUserIds(): Promise<Set<string>> {
+  const client = getAdminClient();
+  if (!client) return new Set();
   try {
-    const client = createClient(url, key, {
-      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    });
     const { data, error } = await client.from("users").select("id");
     if (error || !data) return new Set();
     return new Set(data.map((r: { id: string }) => r.id));
@@ -140,7 +150,7 @@ async function refreshClassInstances(): Promise<void> {
 
 let _lastHydratedAt = 0;
 let _hydratePromise: Promise<void> | null = null;
-const HYDRATE_THROTTLE_MS = 2_000;
+const HYDRATE_THROTTLE_MS = 5_000;
 
 /**
  * Hydrate all services from Supabase.

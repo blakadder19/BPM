@@ -201,11 +201,27 @@ export default async function BookingsPage({
 
   const enriched = allBookings.map(enrichBooking).filter((b): b is BookingView => b !== null);
 
-  const allStudents = await getStudentRepo().getAll();
+  const [allStudents, allSubs, allProducts] = await Promise.all([
+    getStudentRepo().getAll(),
+    getSubscriptionRepo().getAll(),
+    getProductRepo().getAll(),
+  ]);
+
   const studentOptions = allStudents.filter((s) => s.isActive).map((s) => ({
     id: s.id,
     fullName: s.fullName,
   }));
+
+  const activeBookingsByClass = new Map<string, typeof allBookings>();
+  for (const b of allBookings) {
+    if (b.status !== "confirmed" && b.status !== "checked_in") continue;
+    let list = activeBookingsByClass.get(b.bookableClassId);
+    if (!list) {
+      list = [];
+      activeBookingsByClass.set(b.bookableClassId, list);
+    }
+    list.push(b);
+  }
 
   const classInstanceOptions = instances
     .filter(
@@ -218,11 +234,7 @@ export default async function BookingsPage({
       const style = c.styleName
         ? danceStyles.find((s) => s.name === c.styleName)
         : null;
-      const activeForClass = allBookings.filter(
-        (b) =>
-          b.bookableClassId === c.id &&
-          (b.status === "confirmed" || b.status === "checked_in")
-      );
+      const activeForClass = activeBookingsByClass.get(c.id) ?? [];
       return {
         id: c.id,
         title: c.title,
@@ -256,7 +268,6 @@ export default async function BookingsPage({
       joinedAt: w.joinedAt,
     }));
 
-  const allSubs = await getSubscriptionRepo().getAll();
   const subscriptionsByStudent: Record<
     string,
     {
@@ -299,7 +310,6 @@ export default async function BookingsPage({
 
   const isDev = process.env.NODE_ENV === "development";
 
-  const allProducts = await getProductRepo().getAll();
   const dynamicRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
   const serializedAccessRules: Record<string, import("@/config/product-access").ProductAccessRule> = {};
   for (const [k, v] of dynamicRulesMap) {

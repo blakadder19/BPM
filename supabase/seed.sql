@@ -66,8 +66,8 @@ set bio = 'Professional Bachata and Salsa instructor with 10+ years of experienc
 where id = 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00002';
 
 update teacher_profiles
-set bio = 'Cuban Salsa and Afro-Cuban specialist. Founder of BPM Dublin.',
-    specialties = '{Cuban,Afro-Cuban,Reggaeton}'
+set bio = 'Cuban Salsa specialist. Founder of BPM Dublin.',
+    specialties = '{Cuban}'
 where id = 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00003';
 
 
@@ -107,10 +107,7 @@ insert into dance_styles (id, name, requires_role_balance, sort_order) values
   ('d0d0d0d0-0000-0000-0000-000000000002', 'Bachata Tradicional',   true,  2),
   ('d0d0d0d0-0000-0000-0000-000000000004', 'Cuban',                 true,  3),
   ('d0d0d0d0-0000-0000-0000-000000000005', 'Salsa Line',            true,  4),
-  ('d0d0d0d0-0000-0000-0000-000000000006', 'Reggaeton',             false, 6),
-  ('d0d0d0d0-0000-0000-0000-000000000007', 'Ladies Styling',        false, 7),
-  ('d0d0d0d0-0000-0000-0000-000000000008', 'Afro-Cuban',            false, 8),
-  ('d0d0d0d0-0000-0000-0000-000000000009', 'Yoga',                  false, 9),
+  ('d0d0d0d0-0000-0000-0000-000000000009', 'Yoga',                  false, 5),
   ('d0d0d0d0-0000-0000-0000-000000000010', 'Kids Hip Hop',          false, 10);
 
 
@@ -121,8 +118,8 @@ insert into dance_styles (id, name, requires_role_balance, sort_order) values
 --
 -- Abbreviations for dance_style_id:
 --   ds01 = Bachata, ds02 = Bachata Tradicional
---   ds04 = Cuban, ds05 = Salsa Line, ds06 = Reggaeton
---   ds07 = Ladies Styling, ds08 = Afro-Cuban, ds09 = Yoga, ds10 = Kids Hip Hop
+--   ds04 = Cuban, ds05 = Salsa Line
+--   ds09 = Yoga, ds10 = Kids Hip Hop
 
 insert into classes (id, academy_id, dance_style_id, title, class_type, level, day_of_week, start_time, end_time, max_capacity, leader_cap, follower_cap, location, term_bound, term_id) values
 
@@ -452,12 +449,12 @@ insert into products (id, academy_id, name, description, long_description, produ
 
   -- ── Bronze Memberships (4 classes/month) ──
   ('f0f0f0f0-0000-0000-0000-000000000001', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   'Bronze Standard Membership', '4 classes per month (excluding Salsa & Bachata classes).',
-   '4 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.',
+   'Bronze Standard Membership', '4 classes per month (Yoga & Kids Hip Hop).',
+   '4 classes per month for Yoga and Kids Hip Hop. Cash or card with auto-renewal.',
    'membership', 6500, null, null, null, null, true, true, 4, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
    'unlimited', false, '{}',
-   ARRAY['d0d0d0d0-0000-0000-0000-000000000006','d0d0d0d0-0000-0000-0000-000000000007','d0d0d0d0-0000-0000-0000-000000000008','d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Afro-Cuban','Kids Hip Hop','Ladies Styling','Reggaeton','Yoga'], 'Excl. Salsa & Bachata', null),
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Kids Hip Hop','Yoga'], 'Yoga & Kids Hip Hop', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000020', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Bronze Bachata Membership', '4 classes per month (Bachata classes only).',
@@ -485,12 +482,12 @@ insert into products (id, academy_id, name, description, long_description, produ
 
   -- ── Silver Memberships (8 classes/month) ──
   ('f0f0f0f0-0000-0000-0000-000000000002', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   'Silver Standard Membership', '8 classes per month (excluding Salsa & Bachata classes).',
-   '8 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.',
+   'Silver Standard Membership', '8 classes per month (Yoga & Kids Hip Hop).',
+   '8 classes per month for Yoga and Kids Hip Hop. Cash or card with auto-renewal.',
    'membership', 12000, null, null, null, null, true, true, 8, true,
    '{"Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
    'unlimited', false, '{}',
-   ARRAY['d0d0d0d0-0000-0000-0000-000000000006','d0d0d0d0-0000-0000-0000-000000000007','d0d0d0d0-0000-0000-0000-000000000008','d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Afro-Cuban','Kids Hip Hop','Ladies Styling','Reggaeton','Yoga'], 'Excl. Salsa & Bachata', null),
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Kids Hip Hop','Yoga'], 'Yoga & Kids Hip Hop', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000023', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Silver Bachata Membership', '8 classes per month (Bachata classes only).',
@@ -518,12 +515,12 @@ insert into products (id, academy_id, name, description, long_description, produ
 
   -- ── Gold Memberships (12 classes/month) ──
   ('f0f0f0f0-0000-0000-0000-000000000003', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   'Gold Standard Membership', '12 classes per month (excluding Salsa & Bachata classes).',
-   '12 classes per month excluding Salsa and Bachata classes. Cash or card with auto-renewal.',
+   'Gold Standard Membership', '12 classes per month (Yoga & Kids Hip Hop).',
+   '12 classes per month for Yoga and Kids Hip Hop. Cash or card with auto-renewal.',
    'membership', 17000, null, null, null, null, true, true, 12, true,
    '{"Earlybird access to studio events","Priority class booking","Exclusive quarterly event for Gold members","Special discounts on merchandise and studio events","Free entry to 1 community event per month or weekend Latin practice hours","Member-exclusive giveaways","Free class of your choice on your birthday week"}',
    'unlimited', false, '{}',
-   ARRAY['d0d0d0d0-0000-0000-0000-000000000006','d0d0d0d0-0000-0000-0000-000000000007','d0d0d0d0-0000-0000-0000-000000000008','d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Afro-Cuban','Kids Hip Hop','Ladies Styling','Reggaeton','Yoga'], 'Excl. Salsa & Bachata', null),
+   ARRAY['d0d0d0d0-0000-0000-0000-000000000009','d0d0d0d0-0000-0000-0000-000000000010']::uuid[], ARRAY['Kids Hip Hop','Yoga'], 'Yoga & Kids Hip Hop', null),
 
   ('f0f0f0f0-0000-0000-0000-000000000026', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
    'Gold Bachata Membership', '12 classes per month (Bachata classes only).',

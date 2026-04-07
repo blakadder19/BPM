@@ -25,11 +25,11 @@ UPDATE products SET
   style_name          = 'Yoga'
 WHERE name IN ('Bronze Yoga Membership', 'Silver Yoga Membership', 'Gold Yoga Membership');
 
--- ── Standard Memberships (excl. Salsa & Bachata) ────────────
+-- ── Standard Memberships (Yoga & Kids Hip Hop) ──────────────
 UPDATE products SET
-  allowed_style_ids   = (SELECT array_agg(id ORDER BY name) FROM dance_styles WHERE name IN ('Afro-Cuban', 'Kids Hip Hop', 'Ladies Styling', 'Reggaeton', 'Yoga')),
-  allowed_style_names = ARRAY['Afro-Cuban', 'Kids Hip Hop', 'Ladies Styling', 'Reggaeton', 'Yoga'],
-  style_name          = 'Excl. Salsa & Bachata'
+  allowed_style_ids   = (SELECT array_agg(id ORDER BY name) FROM dance_styles WHERE name IN ('Kids Hip Hop', 'Yoga')),
+  allowed_style_names = ARRAY['Kids Hip Hop', 'Yoga'],
+  style_name          = 'Yoga & Kids Hip Hop'
 WHERE name IN ('Bronze Standard Membership', 'Silver Standard Membership', 'Gold Standard Membership');
 
 -- ── Yoga Passes ─────────────────────────────────────────────
