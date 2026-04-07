@@ -142,6 +142,7 @@ export default async function DashboardPage() {
         paymentStatus: sub.paymentStatus ?? null,
         daysUntilExpiry: daysUntilExpiry(sub, todayStr),
         isRenewal: !!sub.renewedFromId,
+        isFutureTerm: sub.validFrom > todayStr,
       };
     }
 

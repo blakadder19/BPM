@@ -84,6 +84,7 @@ export interface StudentEntitlementSummary {
   paymentStatus: string | null;
   daysUntilExpiry: number | null;
   isRenewal: boolean;
+  isFutureTerm: boolean;
 }
 
 export interface TodayForYouItem {
@@ -343,7 +344,7 @@ export function StudentDashboard({
                       </p>
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 mt-0.5">
                         <StatusBadge status={e.productType} />
-                        <StatusBadge status={e.status} />
+                        <StatusBadge status={e.isFutureTerm ? "scheduled" : e.status} />
                         {e.paymentStatus && e.paymentStatus !== "paid" && e.paymentStatus !== "complimentary" && (
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
                             e.paymentStatus === "cancelled" || e.paymentStatus === "refunded"
@@ -388,8 +389,17 @@ export function StudentDashboard({
                     </div>
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-                    <EntitlementBalance e={e} />
-                    {e.termName && <span>Term: {e.termName}</span>}
+                    {e.isFutureTerm ? (
+                      <span className="font-medium text-gray-600">
+                        Starts {formatDate(e.validFrom)}
+                        {e.termName ? ` · ${e.termName}` : ""}
+                      </span>
+                    ) : (
+                      <>
+                        <EntitlementBalance e={e} />
+                        {e.termName && <span>Term: {e.termName}</span>}
+                      </>
+                    )}
                     <span>
                       {formatDate(e.validFrom)}
                       {e.validUntil ? ` – ${formatDate(e.validUntil)}` : " – no end date"}

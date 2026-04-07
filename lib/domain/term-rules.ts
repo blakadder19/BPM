@@ -146,3 +146,20 @@ export function getNextConsecutiveTerm<T extends TermLike>(
   if (idx === -1 || idx === sorted.length - 1) return null;
   return sorted[idx + 1];
 }
+
+/**
+ * Whether the current term is still within its purchase window.
+ * Students can only buy into the current term during the first N days
+ * (TERM_PURCHASE_WINDOW_DAYS). After that, only the next term is purchasable.
+ */
+export function isCurrentTermPurchasable(
+  termStartDate: string,
+  todayStr: string,
+  windowDays: number,
+): boolean {
+  const start = new Date(termStartDate);
+  const today = new Date(todayStr);
+  const diffMs = today.getTime() - start.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  return diffDays <= windowDays;
+}

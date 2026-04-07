@@ -1,12 +1,14 @@
 import { requireRole } from "@/lib/auth";
 import { getProductRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
+import { getCurrentTerm, getNextTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { getSettings } from "@/lib/services/settings-store";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { getAccessRule } from "@/config/product-access";
+import { TERM_PURCHASE_WINDOW_DAYS } from "@/config/business-rules";
+import { isStripeEnabled } from "@/lib/stripe";
 import { StudentCatalog, type CatalogProduct, type StyleOption, type StyleSelectionMode, type TermOption } from "@/components/catalog/student-catalog";
 import type { MockProduct } from "@/lib/mock-data";
 
@@ -104,8 +106,12 @@ export default async function CatalogPage() {
   const { studentTermSelectionEnabled } = getSettings();
 
   const rawEligibleTerms: TermOption[] = [];
-  if (currentTerm) rawEligibleTerms.push({ id: currentTerm.id, name: currentTerm.name, startDate: currentTerm.startDate, isFuture: false });
+  if (currentTerm && isCurrentTermPurchasable(currentTerm.startDate, todayStr, TERM_PURCHASE_WINDOW_DAYS)) {
+    rawEligibleTerms.push({ id: currentTerm.id, name: currentTerm.name, startDate: currentTerm.startDate, isFuture: false });
+  }
   if (nextTerm) rawEligibleTerms.push({ id: nextTerm.id, name: nextTerm.name, startDate: nextTerm.startDate, isFuture: true });
+
+  const stripeAvailable = isStripeEnabled();
 
   const catalog: CatalogProduct[] = products
     .filter((p) => p.isActive)
@@ -140,7 +146,7 @@ export default async function CatalogPage() {
         termName,
         currentEntitlement: curSub ? { paymentStatus: curSub.paymentStatus } : null,
         renewalEntitlement: renSub
-          ? { paymentStatus: renSub.paymentStatus, termName: renSub.termId ? termsById.get(renSub.termId)?.name ?? null : null }
+          ? { paymentStatus: renSub.paymentStatus, termName: renSub.termId ? termsById.get(renSub.termId)?.name ?? null : null, isRenewal: !!renSub.renewedFromId }
           : null,
         styleSelectionMode: mode,
         selectableStyles: selectable,
@@ -153,5 +159,5 @@ export default async function CatalogPage() {
     })
     .sort((a, b) => a.priceCents - b.priceCents);
 
-  return <StudentCatalog products={catalog} />;
+  return <StudentCatalog products={catalog} stripeEnabled={stripeAvailable} />;
 }

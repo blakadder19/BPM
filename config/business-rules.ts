@@ -42,6 +42,12 @@ export const WAITLIST_OFFER_EXPIRY_HOURS = 4;
 export const BIRTHDAY_WEEK_DURATION_DAYS = 7;
 
 /**
+ * Number of days into a term during which the current term is still purchasable.
+ * After this window, only the next term can be purchased.
+ */
+export const TERM_PURCHASE_WINDOW_DAYS = 14;
+
+/**
  * Standard membership benefits — all membership tiers include these.
  * Used for display and eligibility checks.
  */

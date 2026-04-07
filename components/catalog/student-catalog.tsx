@@ -30,7 +30,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/utils";
 import { createStudentPurchaseAction } from "@/lib/actions/catalog-purchase";
+import { createStripeCheckoutAction } from "@/lib/actions/stripe-checkout";
 import type { ProductType } from "@/types/domain";
+
+type CheckoutChoice = "online" | "reception";
 
 export interface StyleOption {
   id: string;
@@ -64,7 +67,7 @@ export interface CatalogProduct {
   spanTerms: number | null;
   termName: string | null;
   currentEntitlement: { paymentStatus: string } | null;
-  renewalEntitlement: { paymentStatus: string; termName: string | null } | null;
+  renewalEntitlement: { paymentStatus: string; termName: string | null; isRenewal: boolean } | null;
   styleSelectionMode: StyleSelectionMode;
   selectableStyles: StyleOption[];
   pickCount: number;
@@ -82,9 +85,10 @@ const TYPE_ORDER: ProductType[] = ["membership", "pass", "drop_in"];
 
 interface StudentCatalogProps {
   products: CatalogProduct[];
+  stripeEnabled?: boolean;
 }
 
-export function StudentCatalog({ products }: StudentCatalogProps) {
+export function StudentCatalog({ products, stripeEnabled = false }: StudentCatalogProps) {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [purchaseTarget, setPurchaseTarget] = useState<CatalogProduct | null>(null);
 
@@ -159,16 +163,10 @@ export function StudentCatalog({ products }: StudentCatalogProps) {
         ))
       )}
 
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 sm:p-4 text-xs sm:text-sm text-amber-700">
-        <p>
-          Online payment is coming soon. For now, your selection will be recorded and
-          payment can be completed at reception.
-        </p>
-      </div>
-
       {purchaseTarget && (
         <PurchaseDialog
           product={purchaseTarget}
+          stripeEnabled={stripeEnabled}
           onClose={() => setPurchaseTarget(null)}
         />
       )}
@@ -215,9 +213,13 @@ function ProductCard({
             p.renewalEntitlement.paymentStatus === "pending" ? "text-amber-600" : "text-green-600"
           }`}>
             <Clock className="h-3.5 w-3.5" />
-            {p.renewalEntitlement.paymentStatus === "pending"
-              ? `Renewal${p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : ""} · Payment pending`
-              : `Renewed${p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : ""}`}
+            {(() => {
+              const label = p.renewalEntitlement.isRenewal ? "Renewal" : "Scheduled";
+              const term = p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : "";
+              return p.renewalEntitlement.paymentStatus === "pending"
+                ? `${label}${term} · Payment pending`
+                : `${label}${term}`;
+            })()}
           </div>
         )}
       </CardHeader>
@@ -328,9 +330,13 @@ function ProductCard({
             )}
             {p.renewalEntitlement && (
               <p className={p.renewalEntitlement.paymentStatus === "pending" ? "text-amber-600" : "text-green-600"}>
-                {p.renewalEntitlement.paymentStatus === "pending"
-                  ? `Renewal${p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : ""} · Please complete payment at reception`
-                  : `Renewed${p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : ""}`}
+                {(() => {
+                  const label = p.renewalEntitlement.isRenewal ? "Renewal" : "Scheduled";
+                  const term = p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : "";
+                  return p.renewalEntitlement.paymentStatus === "pending"
+                    ? `${label}${term} · Please complete payment at reception`
+                    : `${label}${term}`;
+                })()}
               </p>
             )}
           </div>
@@ -346,9 +352,11 @@ function ProductCard({
 
 function PurchaseDialog({
   product: p,
+  stripeEnabled,
   onClose,
 }: {
   product: CatalogProduct;
+  stripeEnabled: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -364,6 +372,9 @@ function PurchaseDialog({
       ?? p.eligibleTerms.find((t) => !p.coveredTermIds.includes(t.id))
       ?? null;
   });
+  const [checkoutChoice, setCheckoutChoice] = useState<CheckoutChoice>(
+    stripeEnabled ? "online" : "reception",
+  );
 
   const needsStylePick = p.styleSelectionMode !== "none";
   const styleValid =
@@ -386,35 +397,49 @@ function PurchaseDialog({
     });
   }
 
+  function buildInput() {
+    let selectedStyleId: string | null = null;
+    let selectedStyleName: string | null = null;
+    let selectedStyleIds: string[] | null = null;
+    let selectedStyleNames: string[] | null = null;
+
+    if (p.styleSelectionMode === "pick_one" && selectedOne) {
+      selectedStyleId = selectedOne.id;
+      selectedStyleName = selectedOne.name;
+    }
+    if (p.styleSelectionMode === "pick_many" && selectedMany.size > 0) {
+      selectedStyleIds = [...selectedMany];
+      selectedStyleNames = p.selectableStyles
+        .filter((s) => selectedMany.has(s.id))
+        .map((s) => s.name);
+    }
+
+    return {
+      productId: p.id,
+      selectedStyleId,
+      selectedStyleName,
+      selectedStyleIds,
+      selectedStyleNames,
+      selectedTermId: selectedTerm?.id ?? null,
+    };
+  }
+
   function handleConfirm() {
     startTransition(async () => {
       setError(null);
+      const input = buildInput();
 
-      let selectedStyleId: string | null = null;
-      let selectedStyleName: string | null = null;
-      let selectedStyleIds: string[] | null = null;
-      let selectedStyleNames: string[] | null = null;
-
-      if (p.styleSelectionMode === "pick_one" && selectedOne) {
-        selectedStyleId = selectedOne.id;
-        selectedStyleName = selectedOne.name;
-      }
-      if (p.styleSelectionMode === "pick_many" && selectedMany.size > 0) {
-        selectedStyleIds = [...selectedMany];
-        selectedStyleNames = p.selectableStyles
-          .filter((s) => selectedMany.has(s.id))
-          .map((s) => s.name);
+      if (checkoutChoice === "online") {
+        const res = await createStripeCheckoutAction(input);
+        if (res.success && res.url) {
+          window.location.href = res.url;
+          return;
+        }
+        setError(res.error ?? "Could not start online payment.");
+        return;
       }
 
-      const res = await createStudentPurchaseAction({
-        productId: p.id,
-        selectedStyleId,
-        selectedStyleName,
-        selectedStyleIds,
-        selectedStyleNames,
-        selectedTermId: selectedTerm?.id ?? null,
-      });
-
+      const res = await createStudentPurchaseAction(input);
       if (res.success) {
         setSuccess(true);
         router.refresh();
@@ -428,7 +453,7 @@ function PurchaseDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Review & Activate</DialogTitle>
+          <DialogTitle>Review & Checkout</DialogTitle>
         </DialogHeader>
         <DialogBody className="space-y-4">
           {/* Product summary */}
@@ -607,10 +632,62 @@ function PurchaseDialog({
             </div>
           )}
 
-          {/* Payment notice */}
+          {/* Payment method choice */}
           {!success && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-              Payment will be collected at reception. Online payment coming soon.
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                How would you like to pay?
+              </label>
+              <div className="space-y-1.5">
+                {stripeEnabled && (
+                  <label
+                    className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                      checkoutChoice === "online"
+                        ? "border-indigo-400 bg-indigo-50"
+                        : "border-gray-200 hover:border-gray-300"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="checkout"
+                      checked={checkoutChoice === "online"}
+                      onChange={() => setCheckoutChoice("online")}
+                      className="accent-indigo-600"
+                    />
+                    <div>
+                      <span className="text-sm font-medium text-gray-900">
+                        Pay online (card)
+                      </span>
+                      <p className="text-xs text-gray-500">
+                        Secure payment via Stripe. Your plan activates instantly after payment.
+                      </p>
+                    </div>
+                  </label>
+                )}
+                <label
+                  className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                    checkoutChoice === "reception"
+                      ? "border-indigo-400 bg-indigo-50"
+                      : "border-gray-200 hover:border-gray-300"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="checkout"
+                    checked={checkoutChoice === "reception"}
+                    onChange={() => setCheckoutChoice("reception")}
+                    className="accent-indigo-600"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-gray-900">
+                      Pay at reception
+                    </span>
+                    <p className="text-xs text-gray-500">
+                      Your plan is reserved immediately. Complete payment at the studio (cash or Revolut).
+                    </p>
+                  </div>
+                </label>
+              </div>
             </div>
           )}
 
@@ -621,13 +698,20 @@ function PurchaseDialog({
           )}
 
           {success && (
-            <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
+            <div className={`rounded-lg p-3 text-sm ${
+              selectedTerm?.isFuture
+                ? "bg-blue-50 text-blue-800"
+                : "bg-green-50 text-green-800"
+            }`}>
               <strong>{p.name}</strong>
               {selectedTerm
                 ? p.spanTerms != null && p.spanTerms >= 2
                   ? ` starting from ${selectedTerm.name}`
                   : ` for ${selectedTerm.name}`
-                : ""} has been activated!
+                : ""}
+              {selectedTerm?.isFuture
+                ? " has been scheduled."
+                : " has been activated!"}
               {p.spanTerms != null && p.spanTerms >= 2
                 ? " It covers this term and the following term."
                 : ""}
@@ -652,7 +736,13 @@ function PurchaseDialog({
                 onClick={handleConfirm}
                 disabled={isPending || (needsStylePick && !styleValid) || !termValid}
               >
-                {isPending ? "Processing…" : "Confirm & Activate"}
+                {isPending
+                  ? "Processing…"
+                  : checkoutChoice === "online"
+                    ? "Continue to payment"
+                    : selectedTerm?.isFuture
+                      ? "Confirm & Schedule"
+                      : "Confirm & Activate"}
               </Button>
             </>
           )}
