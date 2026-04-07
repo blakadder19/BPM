@@ -5,13 +5,14 @@ import { Card, CardContent } from "@/components/ui/card";
 /**
  * Stripe Checkout cancel/abandoned redirect page.
  *
- * The student lands here when they cancel or abandon the Stripe Checkout page.
+ * This is a PUBLIC route — no auth required.
+ * Students land here when they cancel or abandon the Stripe Checkout page.
  * No subscription is created — they can try again from the catalog.
  */
 export default function CheckoutCancelPage() {
   return (
-    <div className="mx-auto max-w-md py-16 px-4">
-      <Card>
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
+      <Card className="w-full max-w-md">
         <CardContent className="flex flex-col items-center py-12">
           <XCircle className="h-12 w-12 text-gray-400" />
           <h1 className="mt-4 text-lg font-semibold text-gray-900">
