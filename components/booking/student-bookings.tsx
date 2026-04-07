@@ -200,24 +200,24 @@ function BookingCard({
   const hasActions = (showCancel && onCancel) || (showRestore && onRestore);
 
   return (
-    <div className={`rounded-xl border p-3 sm:p-4 shadow-sm space-y-2 ${
+    <div className={`rounded-xl border p-3 sm:p-4 shadow-sm space-y-2 overflow-hidden ${
       b.isAcademyCancelled
         ? "border-gray-200 bg-gray-50"
         : "border-gray-200 bg-white"
     }`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className={`font-medium truncate ${b.isAcademyCancelled ? "text-gray-500" : "text-gray-900"}`}>{b.classTitle}</h3>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
+          <h3 className={`text-sm font-medium truncate ${b.isAcademyCancelled ? "text-gray-500" : "text-gray-900"}`}>{b.classTitle}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:text-sm text-gray-500">
             {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
             {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
-            {b.location && <span>{b.location}</span>}
+            {b.location && <span className="truncate max-w-[120px] sm:max-w-none">{b.location}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-1 shrink-0 max-w-[40%]">
           {b.danceRole && <StatusBadge status={b.danceRole} />}
           {b.isAcademyCancelled ? (
-            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">
+            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600 whitespace-nowrap">
               Cancelled by academy
             </span>
           ) : (
@@ -262,14 +262,14 @@ function WaitlistCard({ entry: w }: { entry: StudentWaitlistView }) {
   }
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4 shadow-sm space-y-2">
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4 shadow-sm space-y-2 overflow-hidden">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <h3 className="font-medium text-gray-900 truncate">{w.classTitle}</h3>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-gray-500">
+          <h3 className="text-sm font-medium text-gray-900 truncate">{w.classTitle}</h3>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:text-sm text-gray-500">
             <span>{formatDate(w.date)}</span>
             <span>{formatTime(w.startTime)}</span>
-            {w.location && <span>{w.location}</span>}
+            {w.location && <span className="truncate max-w-[120px] sm:max-w-none">{w.location}</span>}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">

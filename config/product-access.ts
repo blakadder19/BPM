@@ -48,10 +48,9 @@ export const ALL_LATIN_STYLE_IDS = [...BACHATA_STYLE_IDS, ...SALSA_STYLE_IDS];
 export const LATIN_COMBO_POOL_STYLE_IDS = ["ds-1", "ds-4", "ds-5"];
 
 /**
- * Standard memberships include everything EXCEPT Salsa & Bachata.
- * Per BPM: Reggaeton, Ladies Styling, Afro-Cuban, Yoga, Kids Hip Hop.
+ * Standard memberships cover Yoga and Kids Hip Hop.
  */
-const STANDARD_MEMBERSHIP_STYLE_IDS = ["ds-6", "ds-7", "ds-8", "ds-9", "ds-10"];
+const STANDARD_MEMBERSHIP_STYLE_IDS = ["ds-9", "ds-10"];
 
 // ── Product access rules ────────────────────────────────────
 
@@ -427,7 +426,7 @@ export function describeAccessParts(
       if (sa.styleIds.length === 0) {
         styles = "No styles (TBD)";
       } else if (isStandardMembershipStyleSet(sa.styleIds)) {
-        styles = "Excl. Salsa & Bachata";
+        styles = "Yoga & Kids Hip Hop";
       } else if (resolveStyleName) {
         const names = sa.styleIds
           .map(resolveStyleName)

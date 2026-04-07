@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 /* eslint-disable @next/next/no-img-element */
@@ -27,6 +27,15 @@ export default function LoginPage() {
       : null
   );
   const [isPending, setIsPending] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        router.replace(next || "/dashboard");
+      }
+    });
+  }, [router, next]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -55,7 +64,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push(next || "/dashboard");
+    router.replace(next || "/dashboard");
   }
 
   function fillDemo(email: string) {

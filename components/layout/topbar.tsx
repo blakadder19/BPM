@@ -186,7 +186,7 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
             )}
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-80 overflow-y-auto overscroll-y-contain">
             {active.length === 0 ? (
               <div className="px-4 py-6 text-center text-sm text-gray-400">
                 No alerts right now.

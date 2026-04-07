@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   BookOpen,
   CalendarPlus,
-  AlertTriangle,
   Calendar,
   MapPin,
   Inbox,
@@ -34,7 +33,7 @@ import {
   type BookDialogClass,
 } from "@/components/booking/student-book-dialog";
 import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
-import { formatDate, formatCents } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
 import type { DanceRole, ProductType } from "@/types/domain";
@@ -136,9 +135,6 @@ export function StudentDashboard({
   studentPreferredRole,
 }: StudentDashboardProps) {
   const firstName = fullName.split(" ")[0];
-  const unresolvedPenalties = penalties.filter(
-    (p) => p.resolution === "monetary_pending"
-  );
 
   const [bookTarget, setBookTarget] = useState<TodayForYouItem | null>(null);
 
@@ -194,7 +190,7 @@ export function StudentDashboard({
       </Link>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4">
         <Link href="/bookings">
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-3 p-3 sm:p-4">
@@ -205,7 +201,7 @@ export function StudentDashboard({
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {upcomingBookings.length}
                 </p>
-                <p className="text-xs sm:text-sm text-gray-500">Upcoming</p>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">Upcoming</p>
               </div>
             </CardContent>
           </Card>
@@ -221,25 +217,11 @@ export function StudentDashboard({
                 <p className="text-xl sm:text-2xl font-bold text-gray-900">
                   {waitlistedCount}
                 </p>
-                <p className="text-xs sm:text-sm text-gray-500">Waitlisted</p>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">Waitlisted</p>
               </div>
             </CardContent>
           </Card>
         </Link>
-
-        <Card>
-          <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-            <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-lg bg-red-50">
-              <AlertTriangle className="h-5 w-5 sm:h-6 sm:w-6 text-red-500" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                {unresolvedPenalties.length}
-              </p>
-              <p className="text-xs sm:text-sm text-gray-500">Penalties</p>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Today for you */}
@@ -384,8 +366,12 @@ export function StudentDashboard({
                         </span>
                       )}
                       {e.autoRenew && (
-                        <span title="Auto-renew">
-                          <RefreshCw className="h-3.5 w-3.5 text-green-500" />
+                        <span
+                          title="Renews at end of term — no automatic charge"
+                          className="inline-flex items-center gap-0.5 text-[10px] font-medium text-green-700"
+                        >
+                          <RefreshCw className="h-3 w-3 text-green-500" />
+                          <span className="hidden sm:inline">Renews (no auto-charge)</span>
                         </span>
                       )}
                     </div>
@@ -572,43 +558,7 @@ export function StudentDashboard({
         </CardContent>
       </Card>
 
-      {/* Penalties summary */}
-      {penalties.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-gray-400" />
-              Penalties
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="divide-y divide-gray-100">
-              {penalties.slice(0, 5).map((p) => (
-                <div
-                  key={p.id}
-                  className="px-4 sm:px-6 py-3"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {p.classTitle}
-                    </p>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-sm font-medium text-gray-700">
-                        {formatCents(p.amountCents)}
-                      </span>
-                      <StatusBadge status={p.resolution} />
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                    <span>{formatDate(p.date)}</span>
-                    <StatusBadge status={p.reason} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Penalties hidden from student view — managed by admin only */}
     </div>
   );
 }

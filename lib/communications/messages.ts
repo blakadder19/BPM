@@ -46,7 +46,7 @@ const buildPaymentPending: MessageBuilder<"payment_pending"> = (
   p: PaymentPendingPayload
 ) => ({
   title: "Payment pending",
-  body: `Your "${p.productName}"${p.termName ? ` (${p.termName})` : ""} is awaiting payment.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Please speak to reception or complete payment to activate your plan.`,
+  body: `Your "${p.productName}"${p.termName ? ` (${p.termName})` : ""} is awaiting payment.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Please speak to reception to complete your payment.`,
   href: "/catalog",
 });
 
