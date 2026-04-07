@@ -57,6 +57,20 @@ function isValidStudentId(id: string, validIds: Set<string>): boolean {
   return validIds.has(id);
 }
 
+let _validIdsCache: Set<string> | null = null;
+let _validIdsCachedAt = 0;
+const VALID_IDS_TTL_MS = 60_000;
+
+async function loadValidUserIdsCached(): Promise<Set<string>> {
+  const now = Date.now();
+  if (_validIdsCache && now - _validIdsCachedAt < VALID_IDS_TTL_MS) {
+    return _validIdsCache;
+  }
+  _validIdsCache = await loadValidUserIds();
+  _validIdsCachedAt = now;
+  return _validIdsCache;
+}
+
 /**
  * Re-read all operational data from Supabase and replace in-memory stores.
  * Called on every request to ensure cross-instance consistency.
@@ -69,7 +83,7 @@ async function refreshOperationalData(): Promise<void> {
     loadPenaltiesFromDB(),
     loadSubscriptionsFromDB(),
     loadStudioHiresFromDB(),
-    loadValidUserIds(),
+    loadValidUserIdsCached(),
   ]);
 
   const bookingSvc = getBookingService();
@@ -124,6 +138,10 @@ async function refreshClassInstances(): Promise<void> {
   }
 }
 
+let _lastHydratedAt = 0;
+let _hydratePromise: Promise<void> | null = null;
+const HYDRATE_THROTTLE_MS = 2_000;
+
 /**
  * Hydrate all services from Supabase.
  *
@@ -131,22 +149,34 @@ async function refreshClassInstances(): Promise<void> {
  * per serverless instance lifecycle.
  *
  * Operational data (bookings, waitlist, attendance, penalties,
- * subscriptions, class instances) is ALWAYS re-read from Supabase
- * to guarantee consistency across Vercel serverless instances.
+ * subscriptions, class instances) is re-read from Supabase, but
+ * throttled to avoid redundant queries within the same request cycle.
  */
 export async function ensureOperationalDataHydrated(): Promise<void> {
   if (!hasSupabaseConfig()) return;
 
-  // 1. Reference data — cached per instance (changes infrequently)
-  await hydrateSettings();
-  await ensureScheduleBootstrapped();
+  const now = Date.now();
+  if (now - _lastHydratedAt < HYDRATE_THROTTLE_MS) return;
 
-  // 2. Operational data — ALWAYS re-read from Supabase.
-  //    Different Vercel instances may have written since our last read.
-  await Promise.all([
-    refreshOperationalData(),
-    refreshClassInstances(),
-  ]);
+  if (_hydratePromise) return _hydratePromise;
+
+  _hydratePromise = (async () => {
+    try {
+      await hydrateSettings();
+      await ensureScheduleBootstrapped();
+
+      await Promise.all([
+        refreshOperationalData(),
+        refreshClassInstances(),
+      ]);
+
+      _lastHydratedAt = Date.now();
+    } finally {
+      _hydratePromise = null;
+    }
+  })();
+
+  return _hydratePromise;
 }
 
 /**

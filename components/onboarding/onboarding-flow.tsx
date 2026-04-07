@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition, useEffect } from "react";
-import { CheckCircle2, Music } from "lucide-react";
+/* eslint-disable @next/next/no-img-element */
+import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { acceptCodeOfConductAction } from "@/lib/actions/code-of-conduct";
@@ -63,9 +64,11 @@ export function OnboardingFlow({ userName, coc }: Props) {
     <Card className="w-full max-w-lg">
       <CardContent className="pt-8 pb-8">
         <div className="mb-6 flex flex-col items-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600">
-            <Music className="h-6 w-6 text-white" />
-          </div>
+          <img
+            src="/branding/bpm-logo-full.jpg"
+            alt="BPM"
+            className="h-14 w-auto object-contain"
+          />
           <h1 className="mt-4 text-xl font-bold text-gray-900">
             Welcome, {userName}!
           </h1>

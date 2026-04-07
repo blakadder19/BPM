@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LogOut, Music, X } from "lucide-react";
+import { LogOut, X } from "lucide-react";
 import { signOut } from "@/lib/actions/auth";
 import { getNavigationForRole } from "@/lib/role-config";
 import { useSidebar } from "@/components/providers/sidebar-provider";
@@ -40,10 +41,16 @@ export function Sidebar({ user }: SidebarProps) {
   const navContent = (
     <>
       <div className="flex h-16 items-center justify-between border-b border-gray-200 px-6">
-        <div className="flex items-center gap-2">
-          <Music className="h-7 w-7 text-indigo-600" />
-          <span className="text-lg font-bold text-gray-900">BPM</span>
-        </div>
+        <Link href="/dashboard" className="flex items-center">
+          <Image
+            src="/branding/bpm-logo-full.jpg"
+            alt="BPM"
+            width={120}
+            height={40}
+            className="h-9 w-auto object-contain"
+            priority
+          />
+        </Link>
         <button
           onClick={close}
           className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 md:hidden"

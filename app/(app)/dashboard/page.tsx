@@ -47,21 +47,22 @@ export default async function DashboardPage() {
   await lazyExpireSubscriptions();
 
   if (user.role === "student") {
-    const isRealUser = !user.id.startsWith("dev-");
-    if (isRealUser) {
-      const cocDone = await getCocRepo().hasAcceptedVersion(
-        user.id,
-        CURRENT_CODE_OF_CONDUCT.version
-      );
-      if (!cocDone) redirect("/onboarding");
-    }
+    const cocAccepted = await getCocRepo().hasAcceptedVersion(
+      user.id,
+      CURRENT_CODE_OF_CONDUCT.version
+    );
+    if (!cocAccepted) redirect("/onboarding");
 
     const bookingSvc = getBookingRepo().getService();
     const penaltySvc = getPenaltyRepo().getService();
-
-    const student = await getStudentRepo().getById(user.id);
-
     const attendanceSvc = getAttendanceRepo().getService();
+
+    const [student, terms] = await Promise.all([
+      getStudentRepo().getById(user.id),
+      getTermRepo().getAll(),
+    ]);
+
+    const todayStr = getTodayStr();
 
     const upcomingBookings: StudentBookingSummary[] = bookingSvc.bookings
       .filter(
@@ -100,9 +101,6 @@ export default async function DashboardPage() {
         amountCents: p.amountCents,
         resolution: p.resolution,
       }));
-
-    const terms = await getTermRepo().getAll();
-    const todayStr = getTodayStr();
     const currentTerm = getCurrentTerm(terms, todayStr);
     let termInfo: StudentTermInfo | null = null;
     if (currentTerm) {
@@ -114,13 +112,17 @@ export default async function DashboardPage() {
       };
     }
 
-    const allSubs = student
-      ? await getSubscriptionRepo().getByStudent(student.id)
-      : [];
+    const year = new Date().getFullYear();
+    const [allSubs, birthdayRedemption, allProducts] = await Promise.all([
+      student ? getSubscriptionRepo().getByStudent(student.id) : Promise.resolve([]),
+      student ? getBirthdayRedemption(student.id, year) : Promise.resolve(null),
+      getProductRepo().getAll(),
+    ]);
+
     const studentSubs = allSubs.filter((s) => s.status === "active");
 
-    async function toSummary(sub: typeof allSubs[number]): Promise<StudentEntitlementSummary> {
-      const product = await getProductRepo().getById(sub.productId);
+    function toSummary(sub: typeof allSubs[number]): StudentEntitlementSummary {
+      const product = allProducts.find((p) => p.id === sub.productId);
       const linkedTerm = sub.termId
         ? terms.find((t) => t.id === sub.termId) ?? null
         : null;
@@ -146,9 +148,7 @@ export default async function DashboardPage() {
       };
     }
 
-    const entitlements: StudentEntitlementSummary[] = await Promise.all(
-      studentSubs.map(toSummary)
-    );
+    const entitlements: StudentEntitlementSummary[] = studentSubs.map(toSummary);
 
     let lastPlan: StudentEntitlementSummary | null = null;
     if (entitlements.length === 0) {
@@ -157,7 +157,7 @@ export default async function DashboardPage() {
         .filter((s) => TERMINAL.has(s.status))
         .sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0];
       if (recent) {
-        lastPlan = await toSummary(recent);
+        lastPlan = toSummary(recent);
       }
     }
 
@@ -165,15 +165,6 @@ export default async function DashboardPage() {
       ? bookingSvc.getWaitlistForStudent(student.id).length
       : 0;
 
-    const cocAccepted = await getCocRepo().hasAcceptedVersion(
-      user.id,
-      CURRENT_CODE_OF_CONDUCT.version
-    );
-
-    const year = new Date().getFullYear();
-    const birthdayRedemption = student
-      ? await getBirthdayRedemption(student.id, year)
-      : null;
     const benefits = student
       ? computeMemberBenefits({
           dateOfBirth: student.dateOfBirth,
@@ -203,10 +194,8 @@ export default async function DashboardPage() {
       ]).catch(() => {});
     }
 
-    // "Today for you" — bookable classes today
     const allInstances = getInstances();
     const danceStyles = getDanceStyles();
-    const allProducts = await getProductRepo().getAll();
     const accessRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
     const studentId = student?.id ?? "";
 

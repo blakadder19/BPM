@@ -1,5 +1,7 @@
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { getProductRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
+import { getProductRepo, getTermRepo, getSubscriptionRepo, getCocRepo } from "@/lib/repositories";
+import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getCurrentTerm, getNextTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
 import { getTodayStr } from "@/lib/domain/datetime";
@@ -53,6 +55,9 @@ export default async function CatalogPage() {
   const user = await requireRole(["student"]);
 
   await ensureOperationalDataHydrated();
+
+  const cocDone = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
+  if (!cocDone) redirect("/onboarding");
   await lazyExpireSubscriptions();
 
   const [products, terms, allSubs] = await Promise.all([

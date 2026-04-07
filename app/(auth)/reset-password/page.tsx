@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Music } from "lucide-react";
+/* eslint-disable @next/next/no-img-element */
+import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
@@ -74,9 +75,11 @@ export default function ResetPasswordPage() {
       <Card className="w-full max-w-sm">
         <CardContent className="pt-8 pb-8">
           <div className="mb-8 flex flex-col items-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600">
-              <Music className="h-6 w-6 text-white" />
-            </div>
+            <img
+              src="/branding/bpm-logo-full.jpg"
+              alt="BPM"
+              className="h-14 w-auto object-contain"
+            />
             <h1 className="mt-4 text-xl font-bold text-gray-900">
               Reset Password
             </h1>

@@ -6,7 +6,9 @@ import {
   getSubscriptionRepo,
   getStudentRepo,
   getProductRepo,
+  getCocRepo,
 } from "@/lib/repositories";
+import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getInstances } from "@/lib/services/schedule-store";
 import { isClassEnded, getTodayStr } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
@@ -160,6 +162,9 @@ export default async function BookingsPage({
   }
 
   if (user.role === "student") {
+    const cocDone = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
+    if (!cocDone) redirect("/onboarding");
+
     const attSvc = getAttendanceRepo().getService();
     const mine = allBookings
       .filter((b) => b.studentId === user.id)

@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { getTemplates } from "@/lib/services/class-store";
 import { getAssignments } from "@/lib/services/teacher-store";
@@ -36,6 +37,9 @@ export default async function ClassesPage() {
   const danceStyles = getDanceStyles();
 
   if (user.role === "student") {
+    const cocDone = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
+    if (!cocDone) redirect("/onboarding");
+
     const instances = getInstances();
     const svc = getBookingRepo().getService();
     const terms = await getTermRepo().getAll();
@@ -75,7 +79,7 @@ export default async function ClassesPage() {
     const studentBookings = svc.getBookingsForStudent(studentId);
     const studentWaitlist = svc.getWaitlistForStudent(studentId);
 
-    const cocAccepted = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
+    const cocAccepted = cocDone;
 
     let classesBirthdayBenefit: BirthdayBenefitState | undefined;
     const activeMembership = studentSubs.find(

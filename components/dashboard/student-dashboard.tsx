@@ -177,8 +177,24 @@ export function StudentDashboard({
         preferredRole={studentPreferredRole ?? null}
       />
 
+      {/* Book a Class — Hero CTA */}
+      <Link href="/classes" className="block">
+        <Card className="border-indigo-200 bg-gradient-to-r from-indigo-600 to-indigo-500 transition-shadow hover:shadow-lg active:shadow-md">
+          <CardContent className="flex items-center gap-4 p-4 sm:p-5">
+            <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl bg-white/20">
+              <CalendarPlus className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-base sm:text-lg font-bold text-white">Book a Class</p>
+              <p className="text-sm text-indigo-100">Browse this week&apos;s schedule and sign up</p>
+            </div>
+            <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 text-white/80 shrink-0" />
+          </CardContent>
+        </Card>
+      </Link>
+
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+      <div className="grid grid-cols-3 gap-3 sm:gap-4">
         <Link href="/bookings">
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-3 p-3 sm:p-4">
@@ -206,20 +222,6 @@ export function StudentDashboard({
                   {waitlistedCount}
                 </p>
                 <p className="text-xs sm:text-sm text-gray-500">Waitlisted</p>
-              </div>
-            </CardContent>
-          </Card>
-        </Link>
-
-        <Link href="/classes">
-          <Card className="transition-shadow hover:shadow-md">
-            <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-              <div className="flex h-10 w-10 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
-                <CalendarPlus className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-600" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-900">Book a Class</p>
-                <p className="text-xs text-gray-500">Browse & sign up</p>
               </div>
             </CardContent>
           </Card>
