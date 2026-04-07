@@ -87,7 +87,7 @@ export function CocAcceptanceDialog({ onClose, onAccepted }: CocAcceptanceDialog
               className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
             />
             <span className="text-sm text-gray-700">
-              I have read and agree to the BPM Code of Conduct
+              I have read and agree to the BPM Studio Policy
             </span>
           </label>
 

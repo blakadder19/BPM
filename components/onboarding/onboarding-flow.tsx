@@ -67,13 +67,13 @@ export function OnboardingFlow({ userName, coc }: Props) {
           <img
             src="/branding/bpm-logo-full.jpg"
             alt="BPM"
-            className="h-14 w-auto object-contain"
+            className="h-20 w-auto object-contain"
           />
           <h1 className="mt-4 text-xl font-bold text-gray-900">
             Welcome, {userName}!
           </h1>
           <p className="mt-1 text-center text-sm text-gray-500">
-            Before you can book classes, please review and accept our Code of Conduct.
+            Before you can book classes, please review and accept our studio policy.
           </p>
         </div>
 
@@ -107,7 +107,7 @@ export function OnboardingFlow({ userName, coc }: Props) {
           className="w-full"
           disabled={isPending}
         >
-          {isPending ? "Accepting…" : "I Accept the Code of Conduct"}
+          {isPending ? "Accepting…" : "I Accept the Studio Policy"}
         </Button>
       </CardContent>
     </Card>

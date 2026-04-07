@@ -173,7 +173,7 @@ export default function SignupPage() {
             <img
               src="/branding/bpm-logo-full.jpg"
               alt="BPM"
-              className="h-14 w-auto object-contain"
+              className="h-20 w-auto object-contain"
             />
             <h1 className="mt-4 text-xl font-bold text-gray-900">
               Create Account

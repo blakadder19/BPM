@@ -45,9 +45,9 @@ export function Sidebar({ user }: SidebarProps) {
           <Image
             src="/branding/bpm-logo-full.jpg"
             alt="BPM"
-            width={120}
-            height={40}
-            className="h-9 w-auto object-contain"
+            width={140}
+            height={48}
+            className="h-11 w-auto object-contain"
             priority
           />
         </Link>

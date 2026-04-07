@@ -73,10 +73,10 @@ export default function LoginPage() {
             <img
               src="/branding/bpm-logo-full.jpg"
               alt="BPM"
-              className="h-14 w-auto object-contain"
+              className="h-20 w-auto object-contain"
             />
             <h1 className="mt-4 text-xl font-bold text-gray-900">
-              BPM Booking
+              Sign in
             </h1>
             <p className="mt-1 text-sm text-gray-500">
               Sign in to manage your dance classes
