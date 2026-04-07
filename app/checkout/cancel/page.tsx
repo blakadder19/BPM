@@ -1,15 +1,21 @@
 import Link from "next/link";
 import { XCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getAuthUser } from "@/lib/auth";
 
 /**
  * Stripe Checkout cancel/abandoned redirect page.
  *
- * This is a PUBLIC route — no auth required.
+ * This is a PUBLIC route — no auth required to render.
  * Students land here when they cancel or abandon the Stripe Checkout page.
  * No subscription is created — they can try again from the catalog.
+ *
+ * The page optionally reads the session to render role-appropriate CTAs.
  */
-export default function CheckoutCancelPage() {
+export default async function CheckoutCancelPage() {
+  const user = await getAuthUser();
+  const isStudent = user?.role === "student";
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
@@ -23,18 +29,29 @@ export default function CheckoutCancelPage() {
             whenever you&apos;re ready, or pay at reception instead.
           </p>
           <div className="mt-6 flex gap-3">
-            <Link
-              href="/catalog"
-              className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-            >
-              Back to catalog
-            </Link>
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
-              Go to dashboard
-            </Link>
+            {isStudent ? (
+              <Link
+                href="/catalog"
+                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                Back to catalog
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                Log in to continue
+              </Link>
+            )}
+            {isStudent && (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Go to dashboard
+              </Link>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -1,16 +1,24 @@
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getAuthUser } from "@/lib/auth";
 
 /**
  * Stripe Checkout success redirect page.
  *
- * This is a PUBLIC route — no auth required.
+ * This is a PUBLIC route — no auth required to render.
  * Students land here after completing a Stripe Checkout payment.
  * Actual subscription activation is handled by the webhook — this page
  * is purely informational.
+ *
+ * The page optionally reads the session to render role-appropriate CTAs.
+ * If no student session is present, the primary CTA sends the user to
+ * /login so they authenticate as the correct account.
  */
-export default function CheckoutSuccessPage() {
+export default async function CheckoutSuccessPage() {
+  const user = await getAuthUser();
+  const isStudent = user?.role === "student";
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <Card className="w-full max-w-md">
@@ -24,17 +32,26 @@ export default function CheckoutSuccessPage() {
             may take a few moments to appear on your dashboard.
           </p>
           <div className="mt-6 flex gap-3">
+            {isStudent ? (
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                Go to dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              >
+                Log in to your dashboard
+              </Link>
+            )}
             <Link
-              href="/dashboard"
-              className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-            >
-              Go to dashboard
-            </Link>
-            <Link
-              href="/catalog"
+              href={isStudent ? "/catalog" : "/login"}
               className="inline-flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
-              Back to catalog
+              {isStudent ? "Back to catalog" : "Back to BPM"}
             </Link>
           </div>
         </CardContent>
