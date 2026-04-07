@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import {
@@ -9,6 +10,25 @@ import {
   type PreparedPurchase,
 } from "./catalog-purchase";
 import { getProductRepo, getSubscriptionRepo } from "@/lib/repositories";
+
+/**
+ * Resolve the app's base URL from the incoming request headers.
+ * This ensures Stripe return URLs always match the domain the student
+ * is currently on — critical for cookie/session continuity after redirect.
+ */
+async function resolveAppUrl(): Promise<string> {
+  try {
+    const h = await headers();
+    const host = h.get("host");
+    if (host) {
+      const proto = h.get("x-forwarded-proto") ?? "https";
+      return `${proto}://${host}`;
+    }
+  } catch {
+    // headers() unavailable outside a request context — fall through
+  }
+  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+}
 
 // ── Create Stripe Checkout Session ───────────────────────────
 
@@ -27,8 +47,7 @@ export async function createStripeCheckoutAction(
 
   const { user, product, termId, assignedTermName, validFrom, validUntil } = prepared;
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = await resolveAppUrl();
 
   try {
     const stripe = getStripe();
