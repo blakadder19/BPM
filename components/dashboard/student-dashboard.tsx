@@ -234,9 +234,22 @@ export function StudentDashboard({
             </Card>
           </button>
         ) : hasOnlyPendingEntitlements ? (
-          <Card className="border-amber-200 bg-gradient-to-r from-amber-600 to-amber-500">
-            <CardContent className="p-4 sm:p-5 space-y-3">
-              <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => {
+              const pending = entitlements.find((e) => e.paymentStatus === "pending");
+              if (!pending) return;
+              const el = document.getElementById(`entitlement-${pending.id}`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                el.classList.add("ring-2", "ring-amber-400", "ring-offset-2");
+                setTimeout(() => el.classList.remove("ring-2", "ring-amber-400", "ring-offset-2"), 4000);
+              }
+            }}
+            className="block w-full text-left"
+          >
+            <Card className="border-amber-200 bg-gradient-to-r from-amber-600 to-amber-500 transition-shadow hover:shadow-lg active:shadow-md cursor-pointer">
+              <CardContent className="flex items-center gap-4 p-4 sm:p-5">
                 <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl bg-white/20">
                   <CreditCard className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
                 </div>
@@ -244,9 +257,10 @@ export function StudentDashboard({
                   <p className="text-base sm:text-lg font-bold text-white">Complete your payment</p>
                   <p className="text-sm text-amber-100">Your product is pending payment — complete it to start booking</p>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+                <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 text-white/80 shrink-0" />
+              </CardContent>
+            </Card>
+          </button>
         ) : (
           <Card className="border-indigo-200 bg-gradient-to-r from-indigo-600 to-indigo-500">
             <CardContent className="p-4 sm:p-5 space-y-3">
