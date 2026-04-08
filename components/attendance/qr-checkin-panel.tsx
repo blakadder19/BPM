@@ -710,6 +710,15 @@ function TodayClassCard({
             {result?.message ?? "Checked in"}
           </span>
         </div>
+      ) : cls.hasEntitlement && cls.paymentStatus === "pending" ? (
+        <Button
+          onClick={onAction}
+          disabled={isPending}
+          className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+        >
+          <Banknote className="h-4 w-4 mr-1.5" />
+          {isPending ? "Processing…" : "Confirm payment and check in"}
+        </Button>
       ) : (
         <Button
           onClick={onAction}

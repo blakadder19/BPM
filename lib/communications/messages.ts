@@ -47,7 +47,7 @@ const buildPaymentPending: MessageBuilder<"payment_pending"> = (
 ) => ({
   title: "Payment pending",
   body: `Your "${p.productName}"${p.termName ? ` (${p.termName})` : ""} is awaiting payment.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Pay online or at reception.`,
-  href: "/dashboard",
+  href: `/dashboard#entitlement-${p.subscriptionId}`,
 });
 
 const buildRenewalPrepared: MessageBuilder<"renewal_prepared"> = (
@@ -112,6 +112,9 @@ export function buildMessage<T extends CommEventType>(
   type: T,
   payload: CommEventPayloadMap[T]
 ): CommMessage {
-  const builder = BUILDERS[type] as MessageBuilder<T>;
+  const builder = BUILDERS[type] as MessageBuilder<T> | undefined;
+  if (!builder) {
+    return { title: "Notification", body: "You have a new notification.", href: "/dashboard" };
+  }
   return builder(payload);
 }

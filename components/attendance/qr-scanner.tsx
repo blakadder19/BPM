@@ -24,7 +24,7 @@ export function QrScanner({ onScan, active }: QrScannerProps) {
   const handleScan = useCallback(
     (decodedText: string) => {
       const now = Date.now();
-      if (decodedText === lastScanned.current && now - lastScanTime.current < 1500) {
+      if (decodedText === lastScanned.current && now - lastScanTime.current < 1000) {
         return;
       }
       lastScanned.current = decodedText;
@@ -84,11 +84,12 @@ export function QrScanner({ onScan, active }: QrScannerProps) {
       await scanner.start(
         { facingMode },
         {
-          fps: 15,
-          qrbox: { width: 220, height: 220 },
+          fps: 20,
+          qrbox: { width: 200, height: 200 },
           aspectRatio: 1,
           disableFlip: false,
-        },
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+        } as Parameters<typeof scanner.start>[1],
         handleScan,
         () => {}
       );

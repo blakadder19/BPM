@@ -23,6 +23,7 @@ import {
   EditSubscriptionDialog,
 } from "./student-dialogs";
 import { runTermLifecycleAction, getLifecycleRunInfo } from "@/lib/actions/term-lifecycle";
+import { qrWalkInCheckInAction } from "@/lib/actions/qr-checkin";
 import type { StudentImpact } from "./student-dialogs";
 import type { StudentListItem } from "@/types/domain";
 import type {
@@ -393,6 +394,13 @@ export function AdminStudents({
           danceStyles={danceStyles}
           onClose={() => setAddSubStudentId(null)}
           recommendedStyleName={searchParams.get("style")}
+          qrClassId={searchParams.get("classId")}
+          onAssignedCheckIn={async (sId, cId, subId) => {
+            const res = await qrWalkInCheckInAction(sId, cId, subId);
+            if (res.success) {
+              window.location.href = "/attendance";
+            }
+          }}
         />
       )}
 

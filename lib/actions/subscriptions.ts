@@ -50,7 +50,7 @@ function parseCredits(raw: string | null): number | null {
 
 export async function createSubscriptionAction(
   formData: FormData
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
   const adminUser = await requireRole(["admin"]);
   const studentId = formData.get("studentId") as string;
   const productId = (formData.get("productId") as string)?.trim();

@@ -15,6 +15,7 @@ import { isCheckableStatus } from "@/lib/domain/checkin-rules";
 import { isEntitlementValidForClass } from "@/lib/domain/entitlement-rules";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { createSubscription, updateSubscription } from "@/lib/services/subscription-service";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
 import type { CheckInMethod, DanceRole } from "@/types/domain";
 
 export interface QrEntitlementDetail {
@@ -181,8 +182,7 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
   }
 
   const allProducts = await getProductRepo().getAll();
-  const danceStylesModule = require("@/lib/services/dance-style-store");
-  const danceStyles: { id: string; name: string }[] = danceStylesModule.getDanceStyles?.() ?? [];
+  const danceStyles = getDanceStyles();
   const accessRulesMap = buildDynamicAccessRulesMap(
     allProducts.map((p) => ({
       id: p.id,

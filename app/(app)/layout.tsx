@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
 import { getDevStudentId } from "@/lib/actions/auth";
-import { getStudentRepo, getTermRepo } from "@/lib/repositories";
+import { getStudentRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { UserProvider } from "@/components/providers/user-provider";
@@ -15,7 +15,7 @@ import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
 import { getNoticesForStudent } from "@/lib/services/class-cancellation-store";
-import { getNotificationsForStudent as getNotificationsFromDB } from "@/lib/communications/notification-store";
+import { getNotificationsForStudent as getNotificationsFromDB, dismissNotification } from "@/lib/communications/notification-store";
 import { buildMessage } from "@/lib/communications/messages";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { formatTime } from "@/lib/utils";
@@ -69,16 +69,44 @@ export default async function AppLayout({
       const studentId = devStudentId ?? user.id;
       if (isRealUser(studentId)) {
         const stored = await getNotificationsFromDB(studentId);
-        alerts = stored.map((n) => {
-          const msg = buildMessage(n.type, n.payload);
-          return {
-            id: n.id,
-            severity: (n.type === "class_cancelled" ? "warning" : "info") as "warning" | "info",
-            title: msg.title,
-            message: msg.body,
-            href: msg.href,
-          };
+        const studentSubs = await getSubscriptionRepo().getByStudent(studentId);
+        const activeSubIds = new Set(studentSubs.map((s) => s.id));
+
+        const staleIds: string[] = [];
+
+        alerts = stored.flatMap((n) => {
+          try {
+            if (n.type === "payment_pending" || n.type === "renewal_prepared" || n.type === "renewal_due_soon") {
+              const subId = (n.payload as { subscriptionId?: string }).subscriptionId;
+              if (subId && !activeSubIds.has(subId)) {
+                staleIds.push(n.id);
+                return [];
+              }
+              if (subId) {
+                const sub = studentSubs.find((s) => s.id === subId);
+                if (sub && sub.paymentStatus === "paid") {
+                  staleIds.push(n.id);
+                  return [];
+                }
+              }
+            }
+
+            const msg = buildMessage(n.type, n.payload);
+            return [{
+              id: n.id,
+              severity: (n.type === "class_cancelled" ? "warning" : "info") as "warning" | "info",
+              title: msg.title,
+              message: msg.body,
+              href: msg.href,
+            }];
+          } catch {
+            return [];
+          }
         });
+
+        for (const id of staleIds) {
+          dismissNotification(id).catch(() => {});
+        }
       } else {
         const notices = getNoticesForStudent(studentId);
         alerts = notices.map((n) => ({

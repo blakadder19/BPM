@@ -565,6 +565,8 @@ export function AddSubscriptionDialog({
   danceStyles,
   onClose,
   recommendedStyleName,
+  qrClassId,
+  onAssignedCheckIn,
 }: {
   studentId: string;
   products: MockProduct[];
@@ -572,6 +574,8 @@ export function AddSubscriptionDialog({
   danceStyles: MockDanceStyle[];
   onClose: () => void;
   recommendedStyleName?: string | null;
+  qrClassId?: string | null;
+  onAssignedCheckIn?: (studentId: string, classId: string, subscriptionId: string) => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -580,15 +584,39 @@ export function AddSubscriptionDialog({
   const [selectedTermId, setSelectedTermId] = useState("");
   const [selectedStyleId, setSelectedStyleId] = useState("");
   const [selectedStyleIds, setSelectedStyleIds] = useState<string[]>([]);
+  const [postAssignPrompt, setPostAssignPrompt] = useState<{ subscriptionId: string } | null>(null);
 
-  const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const accessRulesMapFull = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
+
+  const filteredProducts = useMemo(() => {
+    if (!recommendedStyleName) return products.filter((p) => p.isActive);
+    const matchingStyleId = danceStyles.find((s) => s.name === recommendedStyleName)?.id;
+    return products.filter((p) => {
+      if (!p.isActive) return false;
+      if (p.productType === "drop_in") return true;
+      const rule = accessRulesMapFull.get(p.id);
+      if (!rule) return true;
+      const sa = rule.styleAccess;
+      if (sa.type === "all") return true;
+      if (sa.type === "social_only") return false;
+      if (sa.type === "fixed" && matchingStyleId) return sa.styleIds.includes(matchingStyleId);
+      if (sa.type === "selected_style") {
+        if (!sa.allowedStyleIds) return true;
+        return matchingStyleId ? sa.allowedStyleIds.includes(matchingStyleId) : true;
+      }
+      if (sa.type === "course_group" && matchingStyleId) return sa.poolStyleIds.includes(matchingStyleId);
+      return true;
+    });
+  }, [products, danceStyles, recommendedStyleName, accessRulesMapFull]);
+
+  const selectedProduct = filteredProducts.find((p) => p.id === selectedProductId);
   const selectedTerm = terms.find((t) => t.id === selectedTermId);
-  const groups = groupProducts(products);
+  const groups = groupProducts(filteredProducts);
   const eligibleTerms = terms.filter((t) => t.status === "active" || t.status === "upcoming");
 
   useEffect(() => {
     if (!recommendedStyleName || selectedProductId) return;
-    const dropIn = products.find((p) => p.productType === "drop_in" && p.isActive);
+    const dropIn = filteredProducts.find((p) => p.productType === "drop_in");
     if (dropIn) {
       setSelectedProductId(dropIn.id);
     }
@@ -602,8 +630,7 @@ export function AddSubscriptionDialog({
   }, [isSpanProduct, selectedTermId, terms]);
   const spanTermError = isSpanProduct && selectedTermId && !resolvedNextTerm;
 
-  const accessRulesMap = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
-  const accessRule = selectedProductId ? accessRulesMap.get(selectedProductId) : undefined;
+  const accessRule = selectedProductId ? accessRulesMapFull.get(selectedProductId) : undefined;
   const styleAccess = accessRule?.styleAccess;
 
   function handleProductChange(productId: string) {
@@ -653,11 +680,46 @@ export function AddSubscriptionDialog({
       const result = await createSubscriptionAction(formData);
       if (result.success) {
         router.refresh();
-        onClose();
+        if (qrClassId && onAssignedCheckIn && result.subscriptionId) {
+          setPostAssignPrompt({ subscriptionId: result.subscriptionId });
+        } else {
+          onClose();
+        }
       } else {
         setError(result.error ?? "Failed to assign entitlement");
       }
     });
+  }
+
+  if (postAssignPrompt && qrClassId && onAssignedCheckIn) {
+    return (
+      <Dialog open onClose={onClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Product assigned</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            <p className="text-sm text-gray-700">
+              Do you want to check this student into this class now?
+            </p>
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              No
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                onAssignedCheckIn(studentId, qrClassId, postAssignPrompt.subscriptionId);
+                onClose();
+              }}
+            >
+              Yes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
   }
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -143,6 +143,18 @@ export function StudentDashboard({
   const firstName = fullName.split(" ")[0];
 
   const [bookTarget, setBookTarget] = useState<TodayForYouItem | null>(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash?.startsWith("#entitlement-")) {
+      const el = document.getElementById(hash.slice(1));
+      if (el) {
+        setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+        el.classList.add("ring-2", "ring-amber-400", "ring-offset-2");
+        setTimeout(() => el.classList.remove("ring-2", "ring-amber-400", "ring-offset-2"), 4000);
+      }
+    }
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -326,7 +338,7 @@ export function StudentDashboard({
           <CardContent className="p-0">
             <div className="divide-y divide-gray-100">
               {entitlements.map((e) => (
-                <div key={e.id} className="px-4 sm:px-6 py-3">
+                <div key={e.id} id={`entitlement-${e.id}`} className="px-4 sm:px-6 py-3 transition-all duration-300 rounded-lg">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-900 truncate">
