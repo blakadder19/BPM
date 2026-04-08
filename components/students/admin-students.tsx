@@ -392,6 +392,7 @@ export function AdminStudents({
           terms={terms}
           danceStyles={danceStyles}
           onClose={() => setAddSubStudentId(null)}
+          recommendedStyleName={searchParams.get("style")}
         />
       )}
 

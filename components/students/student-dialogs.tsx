@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -564,12 +564,14 @@ export function AddSubscriptionDialog({
   terms,
   danceStyles,
   onClose,
+  recommendedStyleName,
 }: {
   studentId: string;
   products: MockProduct[];
   terms: MockTerm[];
   danceStyles: MockDanceStyle[];
   onClose: () => void;
+  recommendedStyleName?: string | null;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -583,6 +585,15 @@ export function AddSubscriptionDialog({
   const selectedTerm = terms.find((t) => t.id === selectedTermId);
   const groups = groupProducts(products);
   const eligibleTerms = terms.filter((t) => t.status === "active" || t.status === "upcoming");
+
+  useEffect(() => {
+    if (!recommendedStyleName || selectedProductId) return;
+    const dropIn = products.find((p) => p.productType === "drop_in" && p.isActive);
+    if (dropIn) {
+      setSelectedProductId(dropIn.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recommendedStyleName]);
 
   const isSpanProduct = (selectedProduct?.spanTerms ?? 0) >= 2;
   const resolvedNextTerm = useMemo(() => {
@@ -658,6 +669,14 @@ export function AddSubscriptionDialog({
         <form onSubmit={handleSubmit}>
           <input type="hidden" name="studentId" value={studentId} />
           <DialogBody className="space-y-4">
+            {recommendedStyleName && (
+              <div className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
+                <p className="text-xs text-indigo-800">
+                  From QR check-in — recommended for <span className="font-semibold">{recommendedStyleName}</span> class.
+                  A drop-in has been pre-selected.
+                </p>
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="as-product">Product *</Label>
               <select

@@ -336,8 +336,9 @@ export default async function DashboardPage() {
     (bc) => bc.date === todayStr && bc.classType === "class"
   ).length;
 
+  const ACTIVE_BOOKING_STATUSES = new Set(["confirmed", "checked_in"]);
   const upcomingBookingCount = bookingSvc.bookings.filter((b) => {
-    if (b.status !== "confirmed") return false;
+    if (!ACTIVE_BOOKING_STATUSES.has(b.status)) return false;
     const cls = bookingSvc.getClass(b.bookableClassId);
     if (!cls || cls.date < todayStr) return false;
     return !isClassEnded(cls.date, cls.endTime);

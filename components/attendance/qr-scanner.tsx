@@ -24,7 +24,7 @@ export function QrScanner({ onScan, active }: QrScannerProps) {
   const handleScan = useCallback(
     (decodedText: string) => {
       const now = Date.now();
-      if (decodedText === lastScanned.current && now - lastScanTime.current < 3000) {
+      if (decodedText === lastScanned.current && now - lastScanTime.current < 1500) {
         return;
       }
       lastScanned.current = decodedText;
@@ -84,9 +84,10 @@ export function QrScanner({ onScan, active }: QrScannerProps) {
       await scanner.start(
         { facingMode },
         {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
+          fps: 15,
+          qrbox: { width: 220, height: 220 },
           aspectRatio: 1,
+          disableFlip: false,
         },
         handleScan,
         () => {}
@@ -142,7 +143,11 @@ export function QrScanner({ onScan, active }: QrScannerProps) {
   return (
     <div className="space-y-3">
       <div className="relative mx-auto w-full max-w-[320px] aspect-square overflow-hidden rounded-2xl bg-gray-900">
-        <div id={SCANNER_ELEMENT_ID} />
+        <div
+          id={SCANNER_ELEMENT_ID}
+          className="[&>video]:object-cover [&>video]:w-full [&>video]:h-full [&_img]:mx-auto"
+          style={{ width: "100%", height: "100%" }}
+        />
         {!scanning && !error && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-400">
             <Camera className="h-10 w-10" />

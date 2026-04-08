@@ -46,8 +46,8 @@ const buildPaymentPending: MessageBuilder<"payment_pending"> = (
   p: PaymentPendingPayload
 ) => ({
   title: "Payment pending",
-  body: `Your "${p.productName}"${p.termName ? ` (${p.termName})` : ""} is awaiting payment.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Please speak to reception to complete your payment.`,
-  href: "/catalog",
+  body: `Your "${p.productName}"${p.termName ? ` (${p.termName})` : ""} is awaiting payment.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Pay online or at reception.`,
+  href: "/dashboard",
 });
 
 const buildRenewalPrepared: MessageBuilder<"renewal_prepared"> = (

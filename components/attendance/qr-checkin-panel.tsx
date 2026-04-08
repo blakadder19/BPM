@@ -14,6 +14,9 @@ import {
   ShoppingCart,
   Plus,
   ArrowLeft,
+  X,
+  Banknote,
+  Smartphone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -51,6 +54,25 @@ type NoEntitlementTarget = {
   styleName: string | null;
 };
 
+type PaymentMethod = "cash" | "revolut";
+
+function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+      <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-3 right-3 rounded-full p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+        >
+          <X className="h-5 w-5" />
+        </button>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function QrCheckInPanel() {
   const router = useRouter();
   const [mode, setMode] = useState<InputMode>("camera");
@@ -61,6 +83,7 @@ export function QrCheckInPanel() {
   const [isCheckingIn, startCheckIn] = useTransition();
   const [paymentConfirm, setPaymentConfirm] = useState<PaymentConfirmation | null>(null);
   const [noEntTarget, setNoEntTarget] = useState<NoEntitlementTarget | null>(null);
+  const [selectedPayMethod, setSelectedPayMethod] = useState<PaymentMethod>("cash");
 
   const doLookup = useCallback(
     (token: string) => {
@@ -160,9 +183,15 @@ export function QrCheckInPanel() {
   }
 
   function handleGoToAddProduct() {
-    if (!lookupResult?.student?.id) return;
+    if (!lookupResult?.student?.id || !noEntTarget) return;
+    const params = new URLSearchParams({
+      highlight: lookupResult.student.id,
+      action: "add-subscription",
+    });
+    if (noEntTarget.styleName) params.set("style", noEntTarget.styleName);
+    if (noEntTarget.classId) params.set("classId", noEntTarget.classId);
     setNoEntTarget(null);
-    router.push(`/students?highlight=${lookupResult.student.id}&action=add-subscription`);
+    router.push(`/students?${params.toString()}`);
   }
 
   function doWalkIn(classId: string, studentId: string, subscriptionId: string) {
@@ -184,13 +213,15 @@ export function QrCheckInPanel() {
   function handlePaymentConfirmMarkPaid() {
     if (!paymentConfirm) return;
     const pc = paymentConfirm;
+    const method = selectedPayMethod;
     setPaymentConfirm(null);
+    setSelectedPayMethod("cash");
     startCheckIn(async () => {
       let res;
       if (pc.type === "booking" && pc.bookingId) {
-        res = await qrMarkPaidAndCheckInAction(pc.bookingId, pc.subscriptionId);
+        res = await qrMarkPaidAndCheckInAction(pc.bookingId, pc.subscriptionId, method);
       } else if (pc.type === "walkin" && pc.classId && pc.studentId) {
-        res = await qrMarkPaidAndWalkInAction(pc.studentId, pc.classId, pc.subscriptionId);
+        res = await qrMarkPaidAndWalkInAction(pc.studentId, pc.classId, pc.subscriptionId, method);
       } else {
         return;
       }
@@ -199,7 +230,7 @@ export function QrCheckInPanel() {
         const next = new Map(prev);
         next.set(key, {
           success: res.success,
-          message: res.success ? `Marked as paid and checked in for ${res.classTitle}` : res.error ?? "Failed",
+          message: res.success ? `Paid (${method}) and checked in for ${res.classTitle}` : res.error ?? "Failed",
         });
         return next;
       });
@@ -417,16 +448,16 @@ export function QrCheckInPanel() {
                 </div>
               )}
 
-              {/* No-entitlement fallback modal */}
+              {/* No-entitlement overlay modal */}
               {noEntTarget && (
-                <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 space-y-3 shadow-md">
+                <Overlay onClose={() => setNoEntTarget(null)}>
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
                     <p className="text-sm font-semibold text-red-900">
                       No valid product found
                     </p>
                   </div>
-                  <p className="text-sm text-red-800">
+                  <p className="text-sm text-gray-700">
                     This student has no valid entitlement for{" "}
                     <span className="font-medium">{noEntTarget.classTitle}</span>.
                     {noEntTarget.styleName && (
@@ -459,29 +490,58 @@ export function QrCheckInPanel() {
                       Go back
                     </Button>
                   </div>
-                </div>
+                </Overlay>
               )}
 
-              {/* Payment confirmation dialog */}
+              {/* Payment confirmation overlay modal */}
               {paymentConfirm && (
-                <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 space-y-3 shadow-md">
+                <Overlay onClose={() => setPaymentConfirm(null)}>
                   <div className="flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
                     <p className="text-sm font-semibold text-amber-900">
                       Payment not confirmed
                     </p>
                   </div>
-                  <p className="text-sm text-amber-800">
+                  <p className="text-sm text-gray-700">
                     <span className="font-medium">{paymentConfirm.subscriptionName}</span> is not paid yet.
-                    Please confirm payment status before checking in for <span className="font-medium">{paymentConfirm.classTitle}</span>.
+                    Choose how payment was collected for <span className="font-medium">{paymentConfirm.classTitle}</span>.
                   </p>
-                  <div className="flex flex-col gap-2">
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Payment method</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayMethod("cash")}
+                        className={`flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-3 text-sm font-medium transition-colors ${
+                          selectedPayMethod === "cash"
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                            : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        <Banknote className="h-4 w-4" />
+                        Cash
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPayMethod("revolut")}
+                        className={`flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-3 text-sm font-medium transition-colors ${
+                          selectedPayMethod === "revolut"
+                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                            : "border-gray-200 bg-white text-gray-600 hover:border-gray-300"
+                        }`}
+                      >
+                        <Smartphone className="h-4 w-4" />
+                        Revolut
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 pt-1">
                     <Button
                       onClick={handlePaymentConfirmMarkPaid}
                       disabled={isCheckingIn}
                       className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                     >
-                      {isCheckingIn ? "Processing…" : "Mark as paid and check in"}
+                      {isCheckingIn ? "Processing…" : `Mark as paid (${selectedPayMethod}) and check in`}
                     </Button>
                     <Button
                       variant="outline"
@@ -491,16 +551,8 @@ export function QrCheckInPanel() {
                     >
                       Keep as pending and check in anyway
                     </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => setPaymentConfirm(null)}
-                      disabled={isCheckingIn}
-                      className="w-full text-gray-500"
-                    >
-                      Go back
-                    </Button>
                   </div>
-                </div>
+                </Overlay>
               )}
 
               <Button variant="outline" onClick={resetScan} className="w-full">

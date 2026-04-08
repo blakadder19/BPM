@@ -409,6 +409,7 @@ export async function qrWalkInCheckInAction(
 export async function qrMarkPaidAndCheckInAction(
   bookingId: string,
   subscriptionId: string,
+  paymentMethod: "cash" | "revolut" = "cash",
 ): Promise<QrCheckInResult> {
   const user = await getAuthUser();
   if (!user || (user.role !== "admin" && user.role !== "teacher")) {
@@ -419,9 +420,9 @@ export async function qrMarkPaidAndCheckInAction(
 
   await updateSubscription(subscriptionId, {
     paymentStatus: "paid",
-    paymentMethod: "cash",
+    paymentMethod,
     paidAt: new Date().toISOString(),
-    collectedBy: user.fullName,
+    paymentNotes: `Collected by ${user.fullName} via QR check-in`,
   });
 
   return qrCheckInBookingAction(bookingId);
@@ -431,6 +432,7 @@ export async function qrMarkPaidAndWalkInAction(
   studentId: string,
   classId: string,
   subscriptionId: string,
+  paymentMethod: "cash" | "revolut" = "cash",
 ): Promise<QrCheckInResult> {
   const user = await getAuthUser();
   if (!user || (user.role !== "admin" && user.role !== "teacher")) {
@@ -441,9 +443,9 @@ export async function qrMarkPaidAndWalkInAction(
 
   await updateSubscription(subscriptionId, {
     paymentStatus: "paid",
-    paymentMethod: "cash",
+    paymentMethod,
     paidAt: new Date().toISOString(),
-    collectedBy: user.fullName,
+    paymentNotes: `Collected by ${user.fullName} via QR check-in`,
   });
 
   return qrWalkInCheckInAction(studentId, classId, subscriptionId);
@@ -477,17 +479,17 @@ export async function qrSellDropInAndCheckInAction(
     remainingCredits: dropInProduct.totalCredits ?? 1,
     validFrom: today,
     validUntil: null,
-    notes: "Sold via QR check-in",
+    notes: `Sold via QR check-in by ${user.fullName}`,
     termId: null,
     paymentMethod: "cash" as const,
     paymentStatus: "paid" as const,
-    assignedBy: user.fullName,
+    assignedBy: null,
     assignedAt: new Date().toISOString(),
     autoRenew: false,
     classesUsed: 0,
     classesPerTerm: null,
     paidAt: new Date().toISOString(),
-    collectedBy: user.fullName,
+    paymentNotes: `Collected by ${user.fullName} via QR check-in`,
   });
 
   if (!subResult.success || !subResult.subscriptionId) {
