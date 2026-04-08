@@ -264,23 +264,22 @@ export function StudentDashboard({
         )}
 
         {/* Quick actions row — always visible */}
-        <div className={`grid gap-3 ${qrToken ? "grid-cols-3" : "grid-cols-2"}`}>
+        <div className={`grid gap-2 sm:gap-3 ${qrToken ? "grid-cols-3" : "grid-cols-2"}`}>
           <button
             type="button"
             onClick={() => navigateTo("/catalog")}
             disabled={navTarget === "/catalog"}
-            className="text-left"
           >
             <Card className="border-emerald-200 bg-gradient-to-r from-emerald-600 to-emerald-500 transition-shadow hover:shadow-lg active:shadow-md h-full">
-              <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
-                  <ShoppingBag className="h-5 w-5 text-white" />
+              <CardContent className="flex flex-col items-center gap-1.5 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-4">
+                <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
+                  <ShoppingBag className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-white">
-                    {navTarget === "/catalog" ? "Loading…" : "Browse Products"}
+                <div className="min-w-0 text-center sm:text-left sm:flex-1">
+                  <p className="text-xs sm:text-sm font-bold text-white leading-tight">
+                    {navTarget === "/catalog" ? "Loading…" : "Products"}
                   </p>
-                  <p className="text-xs text-emerald-100 hidden sm:block">Memberships & passes</p>
+                  <p className="text-[10px] sm:text-xs text-emerald-100 hidden sm:block">Memberships & passes</p>
                 </div>
               </CardContent>
             </Card>
@@ -290,33 +289,32 @@ export function StudentDashboard({
             type="button"
             onClick={() => navigateTo("/classes")}
             disabled={navTarget === "/classes"}
-            className="text-left"
           >
             <Card className="border-blue-200 bg-gradient-to-r from-blue-600 to-blue-500 transition-shadow hover:shadow-lg active:shadow-md h-full">
-              <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
-                  <Calendar className="h-5 w-5 text-white" />
+              <CardContent className="flex flex-col items-center gap-1.5 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-4">
+                <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
+                  <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
                 </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-bold text-white">
-                    {navTarget === "/classes" ? "Loading…" : "Browse Classes"}
+                <div className="min-w-0 text-center sm:text-left sm:flex-1">
+                  <p className="text-xs sm:text-sm font-bold text-white leading-tight">
+                    {navTarget === "/classes" ? "Loading…" : "Classes"}
                   </p>
-                  <p className="text-xs text-blue-100 hidden sm:block">This week&apos;s schedule</p>
+                  <p className="text-[10px] sm:text-xs text-blue-100 hidden sm:block">This week&apos;s schedule</p>
                 </div>
               </CardContent>
             </Card>
           </button>
 
           {qrToken && (
-            <button type="button" onClick={() => setShowQr(true)} className="text-left">
+            <button type="button" onClick={() => setShowQr(true)}>
               <Card className="border-gray-200 bg-white transition-shadow hover:shadow-lg active:shadow-md h-full">
-                <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
-                    <QrCode className="h-5 w-5 text-indigo-600" />
+                <CardContent className="flex flex-col items-center gap-1.5 p-3 sm:flex-row sm:items-center sm:gap-3 sm:p-4">
+                  <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
+                    <QrCode className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-600" />
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-gray-900">Show QR</p>
-                    <p className="text-xs text-gray-500 hidden sm:block">Check-in</p>
+                  <div className="min-w-0 text-center sm:text-left sm:flex-1">
+                    <p className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">Show QR</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500 hidden sm:block">Check-in</p>
                   </div>
                 </CardContent>
               </Card>
