@@ -347,6 +347,8 @@ function formatBalance(ent: QrEntitlementDetail): string {
 }
 
 const PAYMENT_BADGE: Record<string, { label: string; className: string }> = {
+  paid: { label: "Paid", className: "bg-green-100 text-green-700" },
+  complimentary: { label: "Complimentary", className: "bg-green-100 text-green-700" },
   pending: { label: "Payment pending", className: "bg-amber-100 text-amber-700" },
   cancelled: { label: "Payment cancelled", className: "bg-red-100 text-red-700" },
   refunded: { label: "Refunded", className: "bg-red-100 text-red-700" },
@@ -355,9 +357,7 @@ const PAYMENT_BADGE: Record<string, { label: string; className: string }> = {
 
 function EntitlementRow({ ent, compact }: { ent: QrEntitlementDetail; compact?: boolean }) {
   const balance = formatBalance(ent);
-  const badge = ent.paymentStatus !== "paid" && ent.paymentStatus !== "complimentary"
-    ? PAYMENT_BADGE[ent.paymentStatus] ?? null
-    : null;
+  const badge = PAYMENT_BADGE[ent.paymentStatus] ?? null;
 
   return (
     <div className={`rounded-lg bg-gray-50 px-3 py-2 text-xs ${compact ? "" : "border border-gray-100"}`}>

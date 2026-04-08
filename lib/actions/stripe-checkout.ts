@@ -79,6 +79,7 @@ export async function createStripeCheckoutAction(
         bpm_valid_from: validFrom,
         bpm_valid_until: validUntil ?? "",
         bpm_assigned_term_name: assignedTermName ?? "",
+        bpm_auto_renew: String(prepared.autoRenew),
         bpm_selected_style_id: prepared.selectedStyleId ?? "",
         bpm_selected_style_name: prepared.selectedStyleName ?? "",
         bpm_selected_style_ids: prepared.selectedStyleIds
@@ -96,6 +97,77 @@ export async function createStripeCheckoutAction(
   } catch (e) {
     console.error(
       "[stripe-checkout] Session creation failed:",
+      e instanceof Error ? e.message : e,
+    );
+    return {
+      success: false,
+      error: "Could not start online payment. Please try again or pay at reception.",
+    };
+  }
+}
+
+// ── Pay existing pending subscription via Stripe ─────────────
+
+export async function payPendingSubscriptionAction(
+  subscriptionId: string,
+): Promise<{ success: boolean; url?: string; error?: string }> {
+  if (!isStripeEnabled()) {
+    return {
+      success: false,
+      error: "Online payment is not yet available. Please pay at reception.",
+    };
+  }
+
+  const { requireRole } = await import("@/lib/auth");
+  const user = await requireRole(["student"]);
+
+  const allSubs = await getSubscriptionRepo().getAll();
+  const sub = allSubs.find((s) => s.id === subscriptionId && s.studentId === user.id);
+  if (!sub) return { success: false, error: "Subscription not found." };
+  if (sub.paymentStatus !== "pending") {
+    return { success: false, error: "This plan is already paid." };
+  }
+
+  const product = await getProductRepo().getById(sub.productId);
+  if (!product) return { success: false, error: "Product not found." };
+
+  const appUrl = await resolveAppUrl();
+
+  try {
+    const stripe = getStripe();
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: user.email || undefined,
+      line_items: [
+        {
+          price_data: {
+            currency: "eur",
+            product_data: {
+              name: product.name,
+              description: sub.termId
+                ? `Payment for existing plan — ${sub.productName}`
+                : sub.productName,
+            },
+            unit_amount: product.priceCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        bpm_mode: "pay_existing",
+        bpm_subscription_id: subscriptionId,
+        bpm_student_id: user.id,
+      },
+      success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/checkout/cancel`,
+    });
+
+    return { success: true, url: session.url ?? undefined };
+  } catch (e) {
+    console.error(
+      "[stripe-checkout] Pay-existing session creation failed:",
       e instanceof Error ? e.message : e,
     );
     return {
@@ -125,6 +197,7 @@ export async function fulfillStripeCheckout(
   const selectedStyleNames = metadata.bpm_selected_style_names
     ? (JSON.parse(metadata.bpm_selected_style_names) as string[])
     : null;
+  const autoRenewMeta = metadata.bpm_auto_renew;
 
   if (!studentId || !productId || !validFrom) {
     return { success: false, error: "Missing required metadata in session." };
@@ -184,6 +257,7 @@ export async function fulfillStripeCheckout(
     selectedStyleName,
     selectedStyleIds,
     selectedStyleNames,
+    autoRenew: autoRenewMeta === "true" ? true : autoRenewMeta === "false" ? false : product.autoRenew,
   };
 
   const result = await createPurchaseSubscription(prepared, {
@@ -192,6 +266,46 @@ export async function fulfillStripeCheckout(
     paidAt: new Date().toISOString(),
     reference: `stripe:${sessionId}`,
     notes: "Paid online via Stripe",
+  });
+
+  if (result.success) {
+    revalidatePath("/catalog");
+    revalidatePath("/dashboard");
+    revalidatePath("/classes");
+    revalidatePath("/bookings");
+  }
+
+  return result;
+}
+
+// ── Pay existing pending subscription fulfillment ─────────────
+
+export async function fulfillExistingSubscriptionPayment(
+  sessionId: string,
+  metadata: Record<string, string>,
+): Promise<{ success: boolean; error?: string }> {
+  const subscriptionId = metadata.bpm_subscription_id;
+  const studentId = metadata.bpm_student_id;
+  if (!subscriptionId || !studentId) {
+    return { success: false, error: "Missing metadata for pay-existing fulfillment." };
+  }
+
+  const { updateSubscription } = await import("@/lib/services/subscription-service");
+
+  const allSubs = await getSubscriptionRepo().getAll();
+  const sub = allSubs.find((s) => s.id === subscriptionId && s.studentId === studentId);
+  if (!sub) return { success: false, error: "Subscription not found." };
+
+  if (sub.paymentStatus === "paid" && sub.paymentReference === `stripe:${sessionId}`) {
+    return { success: true };
+  }
+
+  const result = await updateSubscription(subscriptionId, {
+    paymentStatus: "paid",
+    paymentMethod: "stripe",
+    paidAt: new Date().toISOString(),
+    paymentReference: `stripe:${sessionId}`,
+    paymentNotes: "Paid online via Stripe",
   });
 
   if (result.success) {

@@ -30,12 +30,21 @@ function loadSupabaseRepo(): ITermRepository | null {
   }
 }
 
+const g = globalThis as unknown as { __bpm_terms_cache?: { ts: number; data: Awaited<ReturnType<ITermRepository["getAll"]>> } };
+const CACHE_TTL_MS = 10_000;
+
 export const hybridTermRepo: ITermRepository = {
   async getAll() {
+    const now = Date.now();
+    if (g.__bpm_terms_cache && now - g.__bpm_terms_cache.ts < CACHE_TTL_MS) {
+      return g.__bpm_terms_cache.data;
+    }
     const sbRepo = loadSupabaseRepo();
     if (sbRepo) {
       try {
-        return await sbRepo.getAll();
+        const data = await sbRepo.getAll();
+        g.__bpm_terms_cache = { ts: now, data };
+        return data;
       } catch (err) {
         console.warn("[hybridTermRepo.getAll] Supabase read failed:", err instanceof Error ? err.message : err);
       }
@@ -44,16 +53,8 @@ export const hybridTermRepo: ITermRepository = {
   },
 
   async getById(id) {
-    const sbRepo = loadSupabaseRepo();
-    if (sbRepo) {
-      try {
-        const found = await sbRepo.getById(id);
-        if (found) return found;
-      } catch (err) {
-        console.warn("[hybridTermRepo.getById] Supabase read failed:", err instanceof Error ? err.message : err);
-      }
-    }
-    return memoryTermRepo.getById(id);
+    const all = await this.getAll();
+    return all.find((t) => t.id === id) ?? null;
   },
 
   async create(data: CreateTermData) {

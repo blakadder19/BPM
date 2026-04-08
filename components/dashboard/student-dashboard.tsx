@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -33,6 +33,8 @@ import {
   type BookDialogClass,
 } from "@/components/booking/student-book-dialog";
 import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
+import { toggleAutoRenewAction } from "@/lib/actions/catalog-purchase";
+import { payPendingSubscriptionAction } from "@/lib/actions/stripe-checkout";
 import { formatDate } from "@/lib/utils";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
@@ -76,6 +78,7 @@ export interface StudentEntitlementSummary {
   remainingCredits: number | null;
   totalCredits: number | null;
   autoRenew: boolean;
+  canToggleAutoRenew: boolean;
   termName: string | null;
   selectedStyleName: string | null;
   validFrom: string;
@@ -112,6 +115,7 @@ interface StudentDashboardProps {
   entitlements?: StudentEntitlementSummary[];
   lastPlan?: StudentEntitlementSummary | null;
   waitlistedCount?: number;
+  stripeEnabled?: boolean;
   codeOfConductAccepted?: boolean;
   benefits?: MemberBenefitsSummary | null;
   qrToken?: string | null;
@@ -128,6 +132,7 @@ export function StudentDashboard({
   entitlements = [],
   lastPlan,
   waitlistedCount = 0,
+  stripeEnabled = false,
   codeOfConductAccepted,
   benefits,
   qrToken,
@@ -329,12 +334,16 @@ export function StudentDashboard({
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 mt-0.5">
                         <StatusBadge status={e.productType} />
                         <StatusBadge status={e.isFutureTerm ? "scheduled" : e.status} />
-                        {e.paymentStatus && e.paymentStatus !== "paid" && e.paymentStatus !== "complimentary" && (
+                        {e.paymentStatus && (
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                            e.paymentStatus === "cancelled" || e.paymentStatus === "refunded"
-                              ? "bg-red-50 text-red-700 ring-red-600/20"
-                              : "bg-amber-50 text-amber-700 ring-amber-600/20"
+                            e.paymentStatus === "paid" || e.paymentStatus === "complimentary"
+                              ? "bg-green-50 text-green-700 ring-green-600/20"
+                              : e.paymentStatus === "cancelled" || e.paymentStatus === "refunded"
+                                ? "bg-red-50 text-red-700 ring-red-600/20"
+                                : "bg-amber-50 text-amber-700 ring-amber-600/20"
                           }`}>
+                            {e.paymentStatus === "paid" && "Paid"}
+                            {e.paymentStatus === "complimentary" && "Complimentary"}
                             {e.paymentStatus === "pending" && "Payment pending"}
                             {e.paymentStatus === "waived" && "Payment waived"}
                             {e.paymentStatus === "cancelled" && "Payment cancelled"}
@@ -365,7 +374,9 @@ export function StudentDashboard({
                           Renewal
                         </span>
                       )}
-                      {e.autoRenew && (
+                      {e.canToggleAutoRenew ? (
+                        <AutoRenewToggle subscriptionId={e.id} initial={e.autoRenew} />
+                      ) : e.autoRenew ? (
                         <span
                           title="Renews at end of term — no automatic charge"
                           className="inline-flex items-center gap-0.5 text-[10px] font-medium text-green-700"
@@ -373,7 +384,7 @@ export function StudentDashboard({
                           <RefreshCw className="h-3 w-3 text-green-500" />
                           <span className="hidden sm:inline">Renews (no auto-charge)</span>
                         </span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
@@ -393,6 +404,16 @@ export function StudentDashboard({
                       {e.validUntil ? ` – ${formatDate(e.validUntil)}` : " – no end date"}
                     </span>
                   </div>
+                  {e.paymentStatus === "pending" && (
+                    <div className="mt-2 flex items-center gap-2">
+                      {stripeEnabled && (
+                        <PayRenewalButton subscriptionId={e.id} productName={e.productName} />
+                      )}
+                      <span className="text-xs text-gray-500">
+                        {stripeEnabled ? "or pay at reception" : "Pay at reception"}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -768,5 +789,61 @@ function StudentQrCard({ qrToken }: { qrToken: string }) {
         </div>
       )}
     </Card>
+  );
+}
+
+function AutoRenewToggle({ subscriptionId, initial }: { subscriptionId: string; initial: boolean }) {
+  const [enabled, setEnabled] = useState(initial);
+  const [isPending, startTransition] = useTransition();
+
+  function toggle() {
+    const next = !enabled;
+    setEnabled(next);
+    startTransition(async () => {
+      const res = await toggleAutoRenewAction(subscriptionId, next);
+      if (!res.success) setEnabled(!next);
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={isPending}
+      title={enabled ? "Auto-renew is ON — click to disable" : "Auto-renew is OFF — click to enable"}
+      className={`inline-flex items-center gap-0.5 text-[10px] font-medium transition-colors ${
+        enabled ? "text-green-700" : "text-gray-400"
+      } ${isPending ? "opacity-50" : "hover:opacity-80"}`}
+    >
+      <RefreshCw className={`h-3 w-3 ${enabled ? "text-green-500" : "text-gray-400"}`} />
+      <span className="hidden sm:inline">
+        {enabled ? "Renews (no auto-charge)" : "Auto-renew off"}
+      </span>
+    </button>
+  );
+}
+
+function PayRenewalButton({ subscriptionId, productName }: { subscriptionId: string; productName: string }) {
+  const [isPending, startTransition] = useTransition();
+
+  function handlePay() {
+    startTransition(async () => {
+      const res = await payPendingSubscriptionAction(subscriptionId);
+      if (res.success && res.url) {
+        window.location.href = res.url;
+      }
+    });
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={handlePay}
+      disabled={isPending}
+      className="text-xs"
+    >
+      {isPending ? "Redirecting…" : "Pay online"}
+    </Button>
   );
 }

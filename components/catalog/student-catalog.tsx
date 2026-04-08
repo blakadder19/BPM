@@ -73,6 +73,7 @@ export interface CatalogProduct {
   pickCount: number;
   eligibleTerms: TermOption[] | null;
   coveredTermIds: string[];
+  autoRenew: boolean;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -205,7 +206,11 @@ function ProductCard({
             p.currentEntitlement.paymentStatus === "pending" ? "text-amber-700" : "text-green-700"
           }`}>
             <CheckCircle2 className="h-3.5 w-3.5" />
-            {p.currentEntitlement.paymentStatus === "pending" ? "Active · Payment pending" : "You have this"}
+            {p.currentEntitlement.paymentStatus === "pending"
+              ? "Active · Payment pending"
+              : p.currentEntitlement.paymentStatus === "paid"
+                ? "Active · Paid"
+                : "You have this"}
           </div>
         )}
         {p.renewalEntitlement && (
@@ -375,6 +380,7 @@ function PurchaseDialog({
   const [checkoutChoice, setCheckoutChoice] = useState<CheckoutChoice>(
     stripeEnabled ? "online" : "reception",
   );
+  const [autoRenew, setAutoRenew] = useState(p.autoRenew);
 
   const needsStylePick = p.styleSelectionMode !== "none";
   const styleValid =
@@ -421,6 +427,7 @@ function PurchaseDialog({
       selectedStyleIds,
       selectedStyleNames,
       selectedTermId: selectedTerm?.id ?? null,
+      autoRenew: p.autoRenew ? autoRenew : null,
     };
   }
 
@@ -629,6 +636,28 @@ function PurchaseDialog({
                     : "This is a future term. Your plan will not be usable until that term starts."}
                 </p>
               )}
+            </div>
+          )}
+
+          {/* Auto-renew toggle for renewable products */}
+          {p.autoRenew && !success && (
+            <div className="space-y-1">
+              <label className="flex items-center gap-3 rounded-lg border border-gray-200 p-3 cursor-pointer hover:border-gray-300 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={autoRenew}
+                  onChange={() => setAutoRenew(!autoRenew)}
+                  className="accent-indigo-600"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-900">
+                    Enable auto-renew
+                  </span>
+                  <p className="text-xs text-gray-500">
+                    Automatically prepare a renewal for the next term. You will still need to pay separately — no card is charged automatically.
+                  </p>
+                </div>
+              </label>
             </div>
           )}
 

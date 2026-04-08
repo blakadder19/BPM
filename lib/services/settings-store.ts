@@ -125,13 +125,18 @@ function hasSupabaseConfig(): boolean {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _settingsClient: any = null;
+
 function getSupabaseClient() {
+  if (_settingsClient) return _settingsClient;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key, {
+  _settingsClient = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+  return _settingsClient;
 }
 
 const SETTINGS_KEY = "app_settings";

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import { fulfillStripeCheckout } from "@/lib/actions/stripe-checkout";
+import { fulfillExistingSubscriptionPayment } from "@/lib/actions/stripe-checkout";
 
 /**
  * Stripe webhook endpoint.
@@ -79,7 +80,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true });
     }
 
-    const result = await fulfillStripeCheckout(session.id, metadata);
+    const result = metadata.bpm_mode === "pay_existing"
+      ? await fulfillExistingSubscriptionPayment(session.id, metadata)
+      : await fulfillStripeCheckout(session.id, metadata);
     if (!result.success) {
       console.error(
         `[stripe-webhook] Fulfillment failed for session ${session.id}:`,

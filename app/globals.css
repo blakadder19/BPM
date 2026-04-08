@@ -1,1 +1,7 @@
 @import "tailwindcss";
+
+/* Ensure smooth touch scrolling on mobile */
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+}

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole, type AuthUser } from "@/lib/auth";
 import { getProductRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
-import { createSubscription } from "@/lib/services/subscription-service";
+import { createSubscription, updateSubscription } from "@/lib/services/subscription-service";
 import { getCurrentTerm, getNextTerm, getNextConsecutiveTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
@@ -23,6 +23,7 @@ export interface PurchaseInput {
   selectedStyleIds?: string[] | null;
   selectedStyleNames?: string[] | null;
   selectedTermId?: string | null;
+  autoRenew?: boolean | null;
 }
 
 export interface PreparedPurchase {
@@ -36,6 +37,7 @@ export interface PreparedPurchase {
   selectedStyleName: string | null;
   selectedStyleIds: string[] | null;
   selectedStyleNames: string[] | null;
+  autoRenew: boolean;
 }
 
 // ── Shared validation ────────────────────────────────────────
@@ -167,6 +169,8 @@ export async function validateAndPreparePurchase(
     validUntil = null;
   }
 
+  const autoRenew = input.autoRenew != null ? input.autoRenew : product.autoRenew;
+
   return {
     user,
     product,
@@ -178,6 +182,7 @@ export async function validateAndPreparePurchase(
     selectedStyleName: input.selectedStyleName ?? null,
     selectedStyleIds: input.selectedStyleIds ?? null,
     selectedStyleNames: input.selectedStyleNames ?? null,
+    autoRenew,
   };
 }
 
@@ -211,7 +216,7 @@ export async function createPurchaseSubscription(
     paymentStatus: payment.status,
     assignedBy: null,
     assignedAt: new Date().toISOString(),
-    autoRenew: product.autoRenew,
+    autoRenew: prepared.autoRenew,
     classesUsed: 0,
     classesPerTerm: product.classesPerTerm,
     selectedStyleId: prepared.selectedStyleId,
@@ -258,4 +263,28 @@ export async function createStudentPurchaseAction(
     revalidatePath("/bookings");
   }
   return result;
+}
+
+// ── Student toggle auto-renew ────────────────────────────────
+
+export async function toggleAutoRenewAction(
+  subscriptionId: string,
+  autoRenew: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  const user = await requireRole(["student"]);
+  const allSubs = await getSubscriptionRepo().getAll();
+  const sub = allSubs.find((s) => s.id === subscriptionId && s.studentId === user.id);
+  if (!sub) return { success: false, error: "Subscription not found." };
+  if (sub.status !== "active") return { success: false, error: "Only active plans can change auto-renew." };
+
+  const product = await getProductRepo().getById(sub.productId);
+  if (!product || !product.autoRenew) {
+    return { success: false, error: "This product type does not support auto-renew." };
+  }
+
+  await updateSubscription(subscriptionId, { autoRenew });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/catalog");
+  return { success: true };
 }

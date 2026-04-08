@@ -24,6 +24,7 @@ import { isBirthdayClassUsed, getBirthdayRedemption } from "@/lib/services/birth
 import { birthdayBenefitAvailableEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { isStripeEnabled } from "@/lib/stripe";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { AdminDashboard, type AdminDashboardData, type DashboardClassSummary, type DashboardDemandItem } from "@/components/dashboard/admin-dashboard";
@@ -137,6 +138,7 @@ export default async function DashboardPage() {
         remainingCredits: sub.remainingCredits,
         totalCredits: sub.totalCredits,
         autoRenew: sub.autoRenew,
+        canToggleAutoRenew: sub.status === "active" && !!product?.autoRenew,
         termName: linkedTerm?.name ?? null,
         selectedStyleName: sub.selectedStyleName ?? sub.selectedStyleNames?.join(", ") ?? null,
         validFrom: sub.validFrom,
@@ -305,6 +307,7 @@ export default async function DashboardPage() {
         entitlements={entitlements}
         lastPlan={lastPlan}
         waitlistedCount={waitlistedCount}
+        stripeEnabled={isStripeEnabled()}
         codeOfConductAccepted={cocAccepted}
         benefits={benefits}
         qrToken={student?.qrToken ?? null}

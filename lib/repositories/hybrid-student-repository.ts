@@ -30,12 +30,21 @@ function loadSupabaseRepo(): IStudentRepository | null {
   }
 }
 
+const g = globalThis as unknown as { __bpm_students_cache?: { ts: number; data: Awaited<ReturnType<IStudentRepository["getAll"]>> } };
+const CACHE_TTL_MS = 10_000;
+
 export const hybridStudentRepo: IStudentRepository = {
   async getAll() {
+    const now = Date.now();
+    if (g.__bpm_students_cache && now - g.__bpm_students_cache.ts < CACHE_TTL_MS) {
+      return g.__bpm_students_cache.data;
+    }
     const sbRepo = loadSupabaseRepo();
     if (sbRepo) {
       try {
-        return await sbRepo.getAll();
+        const data = await sbRepo.getAll();
+        g.__bpm_students_cache = { ts: now, data };
+        return data;
       } catch (err) {
         console.warn("[hybridStudentRepo.getAll] Supabase read failed:", err instanceof Error ? err.message : err);
       }
@@ -44,16 +53,8 @@ export const hybridStudentRepo: IStudentRepository = {
   },
 
   async getById(id) {
-    const sbRepo = loadSupabaseRepo();
-    if (sbRepo) {
-      try {
-        const found = await sbRepo.getById(id);
-        if (found) return found;
-      } catch (err) {
-        console.warn("[hybridStudentRepo.getById] Supabase read failed:", err instanceof Error ? err.message : err);
-      }
-    }
-    return memoryStudentRepo.getById(id);
+    const all = await this.getAll();
+    return all.find((s) => s.id === id) ?? null;
   },
 
   async create(data: CreateStudentData) {

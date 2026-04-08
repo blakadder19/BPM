@@ -30,12 +30,22 @@ function loadSupabaseRepo(): IProductRepository | null {
   }
 }
 
+// Per-request cache: avoids repeated Supabase round-trips for the same getAll()
+const g = globalThis as unknown as { __bpm_products_cache?: { ts: number; data: Awaited<ReturnType<IProductRepository["getAll"]>> } };
+const CACHE_TTL_MS = 10_000;
+
 export const hybridProductRepo: IProductRepository = {
   async getAll() {
+    const now = Date.now();
+    if (g.__bpm_products_cache && now - g.__bpm_products_cache.ts < CACHE_TTL_MS) {
+      return g.__bpm_products_cache.data;
+    }
     const sbRepo = loadSupabaseRepo();
     if (sbRepo) {
       try {
-        return await sbRepo.getAll();
+        const data = await sbRepo.getAll();
+        g.__bpm_products_cache = { ts: now, data };
+        return data;
       } catch (err) {
         console.warn("[hybridProductRepo.getAll] Supabase read failed:", err instanceof Error ? err.message : err);
       }
@@ -44,16 +54,8 @@ export const hybridProductRepo: IProductRepository = {
   },
 
   async getById(id) {
-    const sbRepo = loadSupabaseRepo();
-    if (sbRepo) {
-      try {
-        const found = await sbRepo.getById(id);
-        if (found) return found;
-      } catch (err) {
-        console.warn("[hybridProductRepo.getById] Supabase read failed:", err instanceof Error ? err.message : err);
-      }
-    }
-    return memoryProductRepo.getById(id);
+    const all = await this.getAll();
+    return all.find((p) => p.id === id) ?? null;
   },
 
   async create(data: CreateProductData) {

@@ -54,16 +54,16 @@ const buildRenewalPrepared: MessageBuilder<"renewal_prepared"> = (
   p: RenewalPreparedPayload
 ) => ({
   title: "Membership renewed",
-  body: `Your "${p.productName}" has been renewed for ${p.termName} (${p.validFrom}${p.validUntil ? ` – ${p.validUntil}` : ""}). Payment is pending.`,
-  href: "/catalog",
+  body: `Your "${p.productName}" has been renewed for ${p.termName} (${p.validFrom}${p.validUntil ? ` – ${p.validUntil}` : ""}). Payment is due — pay online or at reception.`,
+  href: "/dashboard",
 });
 
 const buildRenewalDueSoon: MessageBuilder<"renewal_due_soon"> = (
   p: RenewalDueSoonPayload
 ) => ({
   title: "Renewal payment due soon",
-  body: `Your "${p.productName}" renewal for ${p.termName} starts in ${p.daysUntilStart} day${p.daysUntilStart !== 1 ? "s" : ""}. Please arrange payment to keep your membership active.`,
-  href: "/catalog",
+  body: `Your "${p.productName}" renewal for ${p.termName} starts in ${p.daysUntilStart} day${p.daysUntilStart !== 1 ? "s" : ""}. Pay online or at reception to keep your membership active.`,
+  href: "/dashboard",
 });
 
 const buildWaitlistPromoted: MessageBuilder<"waitlist_promoted"> = (

@@ -1,8 +1,11 @@
 /**
  * Hybrid subscription repository.
  *
- * When Supabase is configured, reads/writes go to Supabase directly.
- * Memory store is only used as the primary source when Supabase is absent.
+ * Reads: after operational hydration, served from the in-memory store
+ * (already populated by refreshOperationalData()). This avoids redundant
+ * Supabase round-trips on every getAll/getByStudent/getById call.
+ *
+ * Writes: always go to Supabase when configured, with memory fallback.
  */
 
 import { memorySubscriptionRepo } from "./memory/subscription-repository";
@@ -32,39 +35,14 @@ function loadSupabaseRepo(): ISubscriptionRepository | null {
 
 export const hybridSubscriptionRepo: ISubscriptionRepository = {
   async getAll() {
-    const sbRepo = loadSupabaseRepo();
-    if (sbRepo) {
-      try {
-        return await sbRepo.getAll();
-      } catch (err) {
-        console.warn("[hybridSubscriptionRepo.getAll] Supabase read failed:", err instanceof Error ? err.message : err);
-      }
-    }
     return memorySubscriptionRepo.getAll();
   },
 
   async getByStudent(studentId) {
-    const sbRepo = loadSupabaseRepo();
-    if (sbRepo) {
-      try {
-        return await sbRepo.getByStudent(studentId);
-      } catch (err) {
-        console.warn("[hybridSubscriptionRepo.getByStudent] Supabase read failed:", err instanceof Error ? err.message : err);
-      }
-    }
     return memorySubscriptionRepo.getByStudent(studentId);
   },
 
   async getById(id) {
-    const sbRepo = loadSupabaseRepo();
-    if (sbRepo) {
-      try {
-        const found = await sbRepo.getById(id);
-        if (found) return found;
-      } catch (err) {
-        console.warn("[hybridSubscriptionRepo.getById] Supabase read failed:", err instanceof Error ? err.message : err);
-      }
-    }
     return memorySubscriptionRepo.getById(id);
   },
 

@@ -160,6 +160,7 @@ export default async function CatalogPage() {
           ? rawEligibleTerms
           : null,
         coveredTermIds: [...(coveredTermsByProduct.get(p.id) ?? [])],
+        autoRenew: p.autoRenew,
       };
     })
     .sort((a, b) => a.priceCents - b.priceCents);

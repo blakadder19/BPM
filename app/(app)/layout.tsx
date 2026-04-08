@@ -101,7 +101,7 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider>
-      <div className="flex h-screen bg-gray-50">
+      <div className="flex h-[100dvh] bg-gray-50">
         <SessionGuard />
         <Sidebar user={user} />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -111,7 +111,7 @@ export default async function AppLayout({
             devStudents={devStudents}
             devStudentId={devStudentId}
           />
-          <main className="flex-1 overflow-y-auto overscroll-y-contain px-4 py-4 md:p-6">
+          <main className="flex-1 overflow-y-auto overscroll-y-contain [&]:[-webkit-overflow-scrolling:touch] px-4 py-4 md:p-6">
             <UserProvider
               user={{ role: user.role, fullName: user.fullName, email: user.email }}
             >

@@ -460,17 +460,22 @@ function SubCard({
         </span>
       )}
       <Badge variant="default">{PAYMENT_METHOD_LABELS[sub.paymentMethod] ?? sub.paymentMethod}</Badge>
-      {sub.paymentStatus && sub.paymentStatus !== "paid" && sub.paymentStatus !== "complimentary" && (
+      {sub.paymentStatus && (
         <Badge variant={
-          sub.paymentStatus === "cancelled" || sub.paymentStatus === "refunded"
-            ? "danger"
-            : "warning"
+          sub.paymentStatus === "paid"
+            ? "success"
+            : sub.paymentStatus === "complimentary"
+              ? "default"
+              : sub.paymentStatus === "cancelled" || sub.paymentStatus === "refunded"
+                ? "danger"
+                : "warning"
         }>
-          {PAYMENT_STATUS_LABELS[sub.paymentStatus] ?? sub.paymentStatus}
+          {sub.paymentStatus === "paid"
+            ? "Paid"
+            : sub.paymentStatus === "complimentary"
+              ? "Comp"
+              : PAYMENT_STATUS_LABELS[sub.paymentStatus] ?? sub.paymentStatus}
         </Badge>
-      )}
-      {sub.paymentStatus === "complimentary" && (
-        <Badge variant="default">Comp</Badge>
       )}
       {sub.autoRenew && (
         <span className="text-[10px] text-indigo-600 font-medium">Auto-renew</span>

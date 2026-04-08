@@ -197,7 +197,28 @@ export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheck
     return { success: false, error: `Cannot check in a ${booking.status} booking` };
   }
 
-  const cls = svc.getClass(booking.bookableClassId);
+  let cls = svc.getClass(booking.bookableClassId);
+  if (!cls) {
+    const allInstances = getInstances();
+    const inst = allInstances.find((c) => c.id === booking.bookableClassId);
+    if (inst) {
+      cls = {
+        id: inst.id,
+        title: inst.title,
+        classType: inst.classType,
+        styleName: inst.styleName,
+        danceStyleRequiresBalance: false,
+        status: inst.status,
+        date: inst.date,
+        startTime: inst.startTime,
+        endTime: inst.endTime,
+        maxCapacity: inst.maxCapacity,
+        leaderCap: inst.leaderCap,
+        followerCap: inst.followerCap,
+        location: inst.location,
+      };
+    }
+  }
   if (!cls) return { success: false, error: "Class not found" };
 
   const result = svc.checkInBooking(bookingId);
