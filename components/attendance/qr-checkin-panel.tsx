@@ -148,7 +148,7 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) await refreshStudent();
+      if (res.success) refreshStudent().catch(() => {});
     });
   }
 
@@ -190,7 +190,7 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) await refreshStudent();
+      if (res.success) refreshStudent().catch(() => {});
     });
   }
 
@@ -218,7 +218,7 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) await refreshStudent();
+      if (res.success) refreshStudent().catch(() => {});
     });
   }
 
@@ -246,7 +246,7 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) await refreshStudent();
+      if (res.success) refreshStudent().catch(() => {});
     });
   }
 
@@ -264,9 +264,7 @@ export function QrCheckInPanel() {
   function handleEntitlementMarkPaid(subscriptionId: string, method: PaymentMethod) {
     startCheckIn(async () => {
       const res = await qrMarkSubscriptionPaidAction(subscriptionId, method);
-      if (res.success) {
-        await refreshStudent();
-      }
+      if (res.success) refreshStudent().catch(() => {});
     });
   }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   BookOpen,
   CalendarPlus,
@@ -21,6 +22,8 @@ import {
   User,
   Pencil,
   CheckCircle,
+  ShoppingBag,
+  X,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -141,8 +144,22 @@ export function StudentDashboard({
   studentPreferredRole,
 }: StudentDashboardProps) {
   const firstName = fullName.split(" ")[0];
+  const router = useRouter();
 
   const [bookTarget, setBookTarget] = useState<TodayForYouItem | null>(null);
+  const [showQr, setShowQr] = useState(false);
+  const [navTarget, setNavTarget] = useState<string | null>(null);
+
+  const USABLE_PAYMENT = new Set(["paid", "complimentary", "waived"]);
+  const hasUsableEntitlement = entitlements.some(
+    (e) => e.status === "active" && (USABLE_PAYMENT.has(e.paymentStatus ?? "") || !e.paymentStatus)
+  );
+  const hasOnlyPendingEntitlements = entitlements.length > 0 && !hasUsableEntitlement;
+
+  function navigateTo(href: string) {
+    setNavTarget(href);
+    router.push(href);
+  }
 
   useEffect(() => {
     const hash = window.location.hash;
@@ -191,22 +208,123 @@ export function StudentDashboard({
         preferredRole={studentPreferredRole ?? null}
       />
 
-      {/* Hero CTA — adapts based on entitlement state */}
-      {entitlements.length > 0 ? (
-        <Link href="/classes" className="block">
-          <Card className="border-indigo-200 bg-gradient-to-r from-indigo-600 to-indigo-500 transition-shadow hover:shadow-lg active:shadow-md">
-            <CardContent className="flex items-center gap-4 p-4 sm:p-5">
+      {/* Hero CTA area — adapts based on entitlement state */}
+      {hasUsableEntitlement ? (
+        <div className="space-y-3">
+          {/* Primary: Book a Class */}
+          <button
+            type="button"
+            onClick={() => navigateTo("/classes")}
+            disabled={navTarget === "/classes"}
+            className="block w-full text-left"
+          >
+            <Card className="border-indigo-200 bg-gradient-to-r from-indigo-600 to-indigo-500 transition-shadow hover:shadow-lg active:shadow-md">
+              <CardContent className="flex items-center gap-4 p-4 sm:p-5">
+                <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                  <CalendarPlus className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-base sm:text-lg font-bold text-white">
+                    {navTarget === "/classes" ? "Loading…" : "Book a Class"}
+                  </p>
+                  <p className="text-sm text-indigo-100">Browse this week&apos;s schedule and sign up</p>
+                </div>
+                <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 text-white/80 shrink-0" />
+              </CardContent>
+            </Card>
+          </button>
+
+          {/* Secondary row: Buy a Product + Show QR */}
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => navigateTo("/catalog")}
+              disabled={navTarget === "/catalog"}
+              className="text-left"
+            >
+              <Card className="border-emerald-200 bg-gradient-to-r from-emerald-600 to-emerald-500 transition-shadow hover:shadow-lg active:shadow-md h-full">
+                <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
+                    <ShoppingBag className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-white">
+                      {navTarget === "/catalog" ? "Loading…" : "Buy a Product"}
+                    </p>
+                    <p className="text-xs text-emerald-100 hidden sm:block">Memberships & passes</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </button>
+
+            {qrToken ? (
+              <button type="button" onClick={() => setShowQr(true)} className="text-left">
+                <Card className="border-gray-200 bg-white transition-shadow hover:shadow-lg active:shadow-md h-full">
+                  <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50">
+                      <QrCode className="h-5 w-5 text-indigo-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-gray-900">Show QR</p>
+                      <p className="text-xs text-gray-500 hidden sm:block">Check-in at reception</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigateTo("/classes")}
+                disabled={navTarget === "/classes"}
+                className="text-left"
+              >
+                <Card className="border-gray-200 bg-white transition-shadow hover:shadow-lg active:shadow-md h-full">
+                  <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50">
+                      <Calendar className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-gray-900">View Schedule</p>
+                      <p className="text-xs text-gray-500 hidden sm:block">See upcoming classes</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : hasOnlyPendingEntitlements ? (
+        <Card className="border-amber-200 bg-gradient-to-r from-amber-600 to-amber-500">
+          <CardContent className="p-4 sm:p-5 space-y-3">
+            <div className="flex items-center gap-4">
               <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl bg-white/20">
-                <CalendarPlus className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+                <CreditCard className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-base sm:text-lg font-bold text-white">Book a Class</p>
-                <p className="text-sm text-indigo-100">Browse this week&apos;s schedule and sign up</p>
+                <p className="text-base sm:text-lg font-bold text-white">Complete your payment</p>
+                <p className="text-sm text-amber-100">Your product is pending payment — complete it to start booking</p>
               </div>
-              <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 text-white/80 shrink-0" />
-            </CardContent>
-          </Card>
-        </Link>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => navigateTo("/catalog")}
+                disabled={navTarget === "/catalog"}
+                className="w-full rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-amber-700 hover:bg-amber-50 transition-colors"
+              >
+                {navTarget === "/catalog" ? "Loading…" : "Browse products"}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo("/classes")}
+                disabled={navTarget === "/classes"}
+                className="w-full rounded-lg border border-white/40 px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+              >
+                {navTarget === "/classes" ? "Loading…" : "Browse classes"}
+              </button>
+            </div>
+          </CardContent>
+        </Card>
       ) : (
         <Card className="border-indigo-200 bg-gradient-to-r from-indigo-600 to-indigo-500">
           <CardContent className="p-4 sm:p-5 space-y-3">
@@ -220,19 +338,49 @@ export function StudentDashboard({
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <Link href="/catalog">
-                <Button className="w-full bg-white text-indigo-700 hover:bg-indigo-50 font-semibold text-sm">
-                  Browse products
-                </Button>
-              </Link>
-              <Link href="/classes">
-                <Button variant="outline" className="w-full border-white/40 text-white hover:bg-white/10 font-semibold text-sm">
-                  Browse classes
-                </Button>
-              </Link>
+              <button
+                type="button"
+                onClick={() => navigateTo("/catalog")}
+                disabled={navTarget === "/catalog"}
+                className="w-full rounded-lg bg-white px-3 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 transition-colors"
+              >
+                {navTarget === "/catalog" ? "Loading…" : "Browse products"}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo("/classes")}
+                disabled={navTarget === "/classes"}
+                className="w-full rounded-lg border border-white/40 px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+              >
+                {navTarget === "/classes" ? "Loading…" : "Browse classes"}
+              </button>
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* QR modal */}
+      {showQr && qrToken && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowQr(false)}>
+          <div className="relative w-full max-w-xs rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setShowQr(false)}
+              className="absolute top-3 right-3 rounded-full p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex flex-col items-center gap-4">
+              <p className="text-lg font-bold text-gray-900">My Check-in QR</p>
+              <div className="rounded-2xl border-2 border-indigo-100 bg-white p-4 shadow-sm">
+                <QRCodeSVG value={qrToken} size={200} level="M" bgColor="#ffffff" fgColor="#1e1b4b" />
+              </div>
+              <p className="text-xs text-gray-400 text-center max-w-[220px]">
+                Show this at reception when you arrive for class.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Stats */}
@@ -571,9 +719,6 @@ export function StudentDashboard({
         </Card>
       )}
 
-      {/* Student QR Identity */}
-      {qrToken && <StudentQrCard qrToken={qrToken} />}
-
       {/* Upcoming bookings */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between px-4 sm:px-6">
@@ -789,58 +934,6 @@ function ProfileCard({
           </div>
         </div>
       </CardContent>
-    </Card>
-  );
-}
-
-function StudentQrCard({ qrToken }: { qrToken: string }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <Card>
-      <CardContent className="flex items-center gap-4">
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-indigo-50 transition-colors hover:bg-indigo-100"
-          aria-label="Show check-in QR code"
-        >
-          {expanded ? (
-            <QRCodeSVG value={qrToken} size={44} level="M" bgColor="transparent" fgColor="#312e81" />
-          ) : (
-            <QrCode className="h-7 w-7 text-indigo-600" />
-          )}
-        </button>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900">My Check-in QR</p>
-          <p className="text-xs text-gray-500">
-            Show this at reception when you arrive for class.
-          </p>
-        </div>
-        <Button
-          size="sm"
-          variant={expanded ? "ghost" : "outline"}
-          onClick={() => setExpanded(!expanded)}
-        >
-          {expanded ? "Hide" : "Show QR"}
-        </Button>
-      </CardContent>
-
-      {expanded && (
-        <div className="border-t border-gray-100 px-6 py-5 flex flex-col items-center gap-3">
-          <div className="rounded-2xl border-2 border-indigo-100 bg-white p-4 shadow-sm">
-            <QRCodeSVG
-              value={qrToken}
-              size={180}
-              level="M"
-              bgColor="#ffffff"
-              fgColor="#1e1b4b"
-            />
-          </div>
-          <p className="text-[11px] text-gray-400 text-center max-w-[200px]">
-            Staff will scan this to verify your booking and check you in.
-          </p>
-        </div>
-      )}
     </Card>
   );
 }

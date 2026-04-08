@@ -209,6 +209,7 @@ export async function removeStudentSubscriptionAction(
     revalidatePath("/products");
     revalidatePath("/dashboard");
     revalidatePath("/bookings");
+    revalidatePath("/attendance");
   }
   return result;
 }
