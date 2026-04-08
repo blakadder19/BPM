@@ -322,6 +322,7 @@ export function StudentDetailPanel({
           <RemoveSubscriptionDialog
             sub={removeTarget}
             studentName={student.fullName}
+            bookings={bookings}
             onClose={() => setRemoveTarget(null)}
           />
         )}
@@ -571,23 +572,52 @@ function SubCard({
 function RemoveSubscriptionDialog({
   sub,
   studentName,
+  bookings,
   onClose,
 }: {
   sub: MockSubscription;
   studentName: string;
+  bookings: MockBooking[];
   onClose: () => void;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [bookingAction, setBookingAction] = useState<"keep" | "remove_all" | "select">("keep");
+  const [selectedBookingIds, setSelectedBookingIds] = useState<Set<string>>(new Set());
 
   const hasUsage = sub.classesUsed > 0
     || (sub.totalCredits !== null && sub.remainingCredits !== null && sub.remainingCredits < sub.totalCredits);
 
+  const today = new Date().toISOString().slice(0, 10);
+  const relatedBookings = bookings.filter(
+    (b) =>
+      b.subscriptionId === sub.id &&
+      b.studentId === sub.studentId &&
+      (b.status === "confirmed" || b.status === "checked_in") &&
+      b.date >= today
+  );
+
+  function toggleBooking(id: string) {
+    setSelectedBookingIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
   function handleConfirm() {
     startTransition(async () => {
+      let cancelIds: string[] | undefined;
+      if (relatedBookings.length > 0) {
+        if (bookingAction === "remove_all") {
+          cancelIds = relatedBookings.map((b) => b.id);
+        } else if (bookingAction === "select") {
+          cancelIds = [...selectedBookingIds];
+        }
+      }
       const { removeStudentSubscriptionAction } = await import("@/lib/actions/students");
-      const result = await removeStudentSubscriptionAction(sub.id);
+      const result = await removeStudentSubscriptionAction(sub.id, cancelIds);
       if (result.success) {
         onClose();
         router.refresh();
@@ -620,6 +650,64 @@ function RemoveSubscriptionDialog({
               )}
             </ul>
           </div>
+
+          {relatedBookings.length > 0 && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
+              <p className="text-sm font-medium text-blue-800">
+                This product has {relatedBookings.length} upcoming booking{relatedBookings.length !== 1 ? "s" : ""}
+              </p>
+              <div className="space-y-1">
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bookingAction"
+                    checked={bookingAction === "keep"}
+                    onChange={() => setBookingAction("keep")}
+                    className="text-indigo-600"
+                  />
+                  Keep all bookings
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bookingAction"
+                    checked={bookingAction === "remove_all"}
+                    onChange={() => setBookingAction("remove_all")}
+                    className="text-indigo-600"
+                  />
+                  Cancel all related bookings
+                </label>
+                <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="bookingAction"
+                    checked={bookingAction === "select"}
+                    onChange={() => setBookingAction("select")}
+                    className="text-indigo-600"
+                  />
+                  Choose which bookings to cancel
+                </label>
+              </div>
+              {bookingAction === "select" && (
+                <div className="space-y-1.5 border-t border-blue-200 pt-2">
+                  {relatedBookings.map((b) => (
+                    <label key={b.id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedBookingIds.has(b.id)}
+                        onChange={() => toggleBooking(b.id)}
+                        className="text-indigo-600 rounded"
+                      />
+                      <span className="font-medium">{b.classTitle}</span>
+                      <span className="text-gray-500">{formatDate(b.date)}</span>
+                      <StatusBadge status={b.status} />
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {error && (
             <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}

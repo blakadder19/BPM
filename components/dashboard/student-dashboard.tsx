@@ -191,21 +191,49 @@ export function StudentDashboard({
         preferredRole={studentPreferredRole ?? null}
       />
 
-      {/* Book a Class — Hero CTA */}
-      <Link href="/classes" className="block">
-        <Card className="border-indigo-200 bg-gradient-to-r from-indigo-600 to-indigo-500 transition-shadow hover:shadow-lg active:shadow-md">
-          <CardContent className="flex items-center gap-4 p-4 sm:p-5">
-            <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl bg-white/20">
-              <CalendarPlus className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+      {/* Hero CTA — adapts based on entitlement state */}
+      {entitlements.length > 0 ? (
+        <Link href="/classes" className="block">
+          <Card className="border-indigo-200 bg-gradient-to-r from-indigo-600 to-indigo-500 transition-shadow hover:shadow-lg active:shadow-md">
+            <CardContent className="flex items-center gap-4 p-4 sm:p-5">
+              <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <CalendarPlus className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-base sm:text-lg font-bold text-white">Book a Class</p>
+                <p className="text-sm text-indigo-100">Browse this week&apos;s schedule and sign up</p>
+              </div>
+              <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 text-white/80 shrink-0" />
+            </CardContent>
+          </Card>
+        </Link>
+      ) : (
+        <Card className="border-indigo-200 bg-gradient-to-r from-indigo-600 to-indigo-500">
+          <CardContent className="p-4 sm:p-5 space-y-3">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 sm:h-14 sm:w-14 shrink-0 items-center justify-center rounded-xl bg-white/20">
+                <CreditCard className="h-6 w-6 sm:h-7 sm:w-7 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-base sm:text-lg font-bold text-white">Get started</p>
+                <p className="text-sm text-indigo-100">Buy a product to book classes</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-base sm:text-lg font-bold text-white">Book a Class</p>
-              <p className="text-sm text-indigo-100">Browse this week&apos;s schedule and sign up</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Link href="/catalog">
+                <Button className="w-full bg-white text-indigo-700 hover:bg-indigo-50 font-semibold text-sm">
+                  Browse products
+                </Button>
+              </Link>
+              <Link href="/classes">
+                <Button variant="outline" className="w-full border-white/40 text-white hover:bg-white/10 font-semibold text-sm">
+                  Browse classes
+                </Button>
+              </Link>
             </div>
-            <ArrowRight className="h-5 w-5 sm:h-6 sm:w-6 text-white/80 shrink-0" />
           </CardContent>
         </Card>
-      </Link>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4">

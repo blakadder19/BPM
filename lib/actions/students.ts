@@ -128,8 +128,51 @@ export async function deleteStudentAction(
   return result;
 }
 
+export interface RelatedBookingSummary {
+  bookingId: string;
+  classTitle: string;
+  date: string;
+  startTime: string;
+  status: string;
+}
+
+export async function getRelatedBookingsForSubscriptionAction(
+  subscriptionId: string,
+): Promise<{ bookings: RelatedBookingSummary[] }> {
+  await requireRole(["admin"]);
+  const { getBookingService } = await import("@/lib/services/booking-store");
+  const { ensureOperationalDataHydrated } = await import("@/lib/supabase/hydrate-operational");
+  const { getTodayStr } = await import("@/lib/domain/datetime");
+  await ensureOperationalDataHydrated();
+
+  const svc = getBookingService();
+  const today = getTodayStr();
+  const ACTIVE = new Set(["confirmed", "checked_in"]);
+
+  const related = svc.bookings.filter((b) => {
+    if (b.subscriptionId !== subscriptionId) return false;
+    if (!ACTIVE.has(b.status)) return false;
+    const cls = svc.getClass(b.bookableClassId);
+    return cls ? cls.date >= today : false;
+  });
+
+  return {
+    bookings: related.map((b) => {
+      const cls = svc.getClass(b.bookableClassId);
+      return {
+        bookingId: b.id,
+        classTitle: cls?.title ?? "Unknown class",
+        date: cls?.date ?? "",
+        startTime: cls?.startTime ?? "",
+        status: b.status,
+      };
+    }),
+  };
+}
+
 export async function removeStudentSubscriptionAction(
-  subscriptionId: string
+  subscriptionId: string,
+  cancelBookingIds?: string[],
 ): Promise<{ success: boolean; error?: string }> {
   await requireRole(["admin"]);
   if (!subscriptionId) return { success: false, error: "Missing subscription ID" };
@@ -140,6 +183,22 @@ export async function removeStudentSubscriptionAction(
   const sub = await getSubscriptionRepo().getById(subscriptionId);
   if (!sub) return { success: false, error: "Subscription not found" };
 
+  if (cancelBookingIds && cancelBookingIds.length > 0) {
+    const { getBookingService } = await import("@/lib/services/booking-store");
+    const { ensureOperationalDataHydrated } = await import("@/lib/supabase/hydrate-operational");
+    const { isRealUser } = await import("@/lib/utils/is-real-user");
+    const { saveBookingToDB } = await import("@/lib/supabase/operational-persistence");
+    await ensureOperationalDataHydrated();
+    const svc = getBookingService();
+    for (const bid of cancelBookingIds) {
+      svc.cancelBookingAsAdmin(bid, false);
+      if (isRealUser(sub.studentId)) {
+        const updated = svc.bookings.find((b) => b.id === bid);
+        if (updated) await saveBookingToDB(updated);
+      }
+    }
+  }
+
   const result = await updateSubscription(subscriptionId, {
     status: "cancelled",
     autoRenew: false,
@@ -149,6 +208,7 @@ export async function removeStudentSubscriptionAction(
     revalidatePath("/students");
     revalidatePath("/products");
     revalidatePath("/dashboard");
+    revalidatePath("/bookings");
   }
   return result;
 }

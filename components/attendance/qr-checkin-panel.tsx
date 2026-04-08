@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   QrCode,
@@ -85,6 +85,8 @@ export function QrCheckInPanel() {
   const [paymentConfirm, setPaymentConfirm] = useState<PaymentConfirmation | null>(null);
   const [noEntTarget, setNoEntTarget] = useState<NoEntitlementTarget | null>(null);
   const [selectedPayMethod, setSelectedPayMethod] = useState<PaymentMethod>("cash");
+  const [scannerPaused, setScannerPaused] = useState(false);
+  const lastTokenRef = useRef<string | null>(null);
 
   const doLookup = useCallback(
     (token: string) => {
@@ -92,6 +94,8 @@ export function QrCheckInPanel() {
         setLookupResult({ success: false, error: "Not a valid student QR code. Expected a bpm-… code." });
         return;
       }
+      setScannerPaused(true);
+      lastTokenRef.current = token;
       startLookup(async () => {
         const res = await lookupStudentByQrAction(token);
         setLookupResult(res);
@@ -100,6 +104,13 @@ export function QrCheckInPanel() {
     },
     []
   );
+
+  const refreshStudent = useCallback(async () => {
+    const token = lastTokenRef.current;
+    if (!token) return;
+    const res = await lookupStudentByQrAction(token);
+    setLookupResult(res);
+  }, []);
 
   function handleScan(code: string) {
     doLookup(code);
@@ -137,7 +148,7 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) router.refresh();
+      if (res.success) await refreshStudent();
     });
   }
 
@@ -179,7 +190,7 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) router.refresh();
+      if (res.success) await refreshStudent();
     });
   }
 
@@ -207,7 +218,7 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) router.refresh();
+      if (res.success) await refreshStudent();
     });
   }
 
@@ -235,7 +246,7 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) router.refresh();
+      if (res.success) await refreshStudent();
     });
   }
 
@@ -254,25 +265,7 @@ export function QrCheckInPanel() {
     startCheckIn(async () => {
       const res = await qrMarkSubscriptionPaidAction(subscriptionId, method);
       if (res.success) {
-        const token = lookupResult?.student?.id;
-        if (token) router.refresh();
-        setLookupResult((prev) => {
-          if (!prev) return prev;
-          const patchEnt = (e: QrEntitlementDetail): QrEntitlementDetail =>
-            e.subscriptionId === subscriptionId ? { ...e, paymentStatus: "paid" } : e;
-          return {
-            ...prev,
-            entitlements: prev.entitlements?.map(patchEnt),
-            todayBookings: prev.todayBookings?.map((b) => ({
-              ...b,
-              entitlement: b.entitlement ? patchEnt(b.entitlement) : b.entitlement,
-            })),
-            todayClasses: prev.todayClasses?.map((c) =>
-              c.matchingSubscriptionId === subscriptionId ? { ...c, paymentStatus: "paid" } : c
-            ),
-            paymentPending: prev.entitlements?.filter((e) => e.subscriptionId !== subscriptionId).some((e) => e.paymentStatus === "pending") ?? false,
-          };
-        });
+        await refreshStudent();
       }
     });
   }
@@ -283,6 +276,8 @@ export function QrCheckInPanel() {
     setManualToken("");
     setPaymentConfirm(null);
     setNoEntTarget(null);
+    setScannerPaused(false);
+    lastTokenRef.current = null;
   }
 
   return (
@@ -318,10 +313,22 @@ export function QrCheckInPanel() {
       {/* Scanner or manual entry */}
       {mode === "camera" ? (
         <div className="space-y-3">
-          <QrScanner onScan={handleScan} active={mode === "camera" && !lookupResult} />
-          <p className="text-center text-xs text-gray-500">
-            Point camera at student&apos;s QR code
-          </p>
+          <div className="relative">
+            <QrScanner onScan={handleScan} active={mode === "camera" && !lookupResult && !scannerPaused} />
+            {scannerPaused && !lookupResult && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/50">
+                <div className="flex items-center gap-2 rounded-full bg-white/90 px-4 py-2">
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <span className="text-sm font-medium text-gray-800">QR captured</span>
+                </div>
+              </div>
+            )}
+          </div>
+          {!scannerPaused && (
+            <p className="text-center text-xs text-gray-500">
+              Point camera at student&apos;s QR code
+            </p>
+          )}
         </div>
       ) : (
         <form onSubmit={handleManualSubmit} className="space-y-2">
