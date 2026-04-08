@@ -33,6 +33,10 @@ function loadSupabaseRepo(): ITermRepository | null {
 const g = globalThis as unknown as { __bpm_terms_cache?: { ts: number; data: Awaited<ReturnType<ITermRepository["getAll"]>> } };
 const CACHE_TTL_MS = 10_000;
 
+export function invalidateTermCache(): void {
+  g.__bpm_terms_cache = undefined;
+}
+
 export const hybridTermRepo: ITermRepository = {
   async getAll() {
     const now = Date.now();

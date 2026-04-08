@@ -11,6 +11,9 @@ import {
   AlertTriangle,
   CreditCard,
   Keyboard,
+  ShoppingCart,
+  Plus,
+  ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -19,13 +22,34 @@ import { formatTime, formatDate } from "@/lib/utils";
 import {
   lookupStudentByQrAction,
   qrCheckInBookingAction,
+  qrWalkInCheckInAction,
+  qrMarkPaidAndCheckInAction,
+  qrMarkPaidAndWalkInAction,
+  qrSellDropInAndCheckInAction,
   type QrLookupResult,
   type QrStudentBooking,
   type QrEntitlementDetail,
+  type QrTodayClass,
 } from "@/lib/actions/qr-checkin";
 import { isValidStudentQrToken } from "@/lib/domain/checkin-token";
 
 type InputMode = "camera" | "manual";
+
+type PaymentConfirmation = {
+  type: "booking" | "walkin";
+  bookingId?: string;
+  classId?: string;
+  studentId?: string;
+  subscriptionId: string;
+  subscriptionName: string;
+  classTitle: string;
+};
+
+type NoEntitlementTarget = {
+  classId: string;
+  classTitle: string;
+  styleName: string | null;
+};
 
 export function QrCheckInPanel() {
   const router = useRouter();
@@ -35,6 +59,8 @@ export function QrCheckInPanel() {
   const [lookupResult, setLookupResult] = useState<QrLookupResult | null>(null);
   const [checkInResults, setCheckInResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [isCheckingIn, startCheckIn] = useTransition();
+  const [paymentConfirm, setPaymentConfirm] = useState<PaymentConfirmation | null>(null);
+  const [noEntTarget, setNoEntTarget] = useState<NoEntitlementTarget | null>(null);
 
   const doLookup = useCallback(
     (token: string) => {
@@ -62,7 +88,21 @@ export function QrCheckInPanel() {
     }
   }
 
-  function handleCheckIn(bookingId: string) {
+  function handleCheckIn(bookingId: string, entitlementPaymentStatus?: string, subscriptionId?: string, subscriptionName?: string, classTitle?: string) {
+    if (entitlementPaymentStatus === "pending" && subscriptionId) {
+      setPaymentConfirm({
+        type: "booking",
+        bookingId,
+        subscriptionId,
+        subscriptionName: subscriptionName ?? "Unknown plan",
+        classTitle: classTitle ?? "class",
+      });
+      return;
+    }
+    doCheckIn(bookingId);
+  }
+
+  function doCheckIn(bookingId: string) {
     startCheckIn(async () => {
       const res = await qrCheckInBookingAction(bookingId);
       setCheckInResults((prev) => {
@@ -73,16 +113,117 @@ export function QrCheckInPanel() {
         });
         return next;
       });
-      if (res.success) {
-        router.refresh();
-      }
+      if (res.success) router.refresh();
     });
+  }
+
+  function handleWalkIn(cls: QrTodayClass) {
+    if (!cls.hasEntitlement) {
+      setNoEntTarget({
+        classId: cls.classId,
+        classTitle: cls.classTitle,
+        styleName: cls.styleName,
+      });
+      return;
+    }
+    if (cls.paymentStatus === "pending" && cls.matchingSubscriptionId) {
+      setPaymentConfirm({
+        type: "walkin",
+        classId: cls.classId,
+        studentId: lookupResult?.student?.id,
+        subscriptionId: cls.matchingSubscriptionId,
+        subscriptionName: cls.matchingSubscriptionName ?? "Unknown plan",
+        classTitle: cls.classTitle,
+      });
+      return;
+    }
+    doWalkIn(cls.classId, lookupResult?.student?.id ?? "", cls.matchingSubscriptionId ?? "");
+  }
+
+  function handleSellDropInAndCheckIn() {
+    if (!noEntTarget || !lookupResult?.student?.id) return;
+    const target = noEntTarget;
+    setNoEntTarget(null);
+    const key = `walkin-${target.classId}`;
+    startCheckIn(async () => {
+      const res = await qrSellDropInAndCheckInAction(lookupResult.student!.id, target.classId);
+      setCheckInResults((prev) => {
+        const next = new Map(prev);
+        next.set(key, {
+          success: res.success,
+          message: res.success ? `Drop-in sold and checked in for ${res.classTitle}` : res.error ?? "Failed",
+        });
+        return next;
+      });
+      if (res.success) router.refresh();
+    });
+  }
+
+  function handleGoToAddProduct() {
+    if (!lookupResult?.student?.id) return;
+    setNoEntTarget(null);
+    router.push(`/students?highlight=${lookupResult.student.id}&action=add-subscription`);
+  }
+
+  function doWalkIn(classId: string, studentId: string, subscriptionId: string) {
+    const key = `walkin-${classId}`;
+    startCheckIn(async () => {
+      const res = await qrWalkInCheckInAction(studentId, classId, subscriptionId);
+      setCheckInResults((prev) => {
+        const next = new Map(prev);
+        next.set(key, {
+          success: res.success,
+          message: res.success ? `Checked in for ${res.classTitle}` : res.error ?? "Check-in failed",
+        });
+        return next;
+      });
+      if (res.success) router.refresh();
+    });
+  }
+
+  function handlePaymentConfirmMarkPaid() {
+    if (!paymentConfirm) return;
+    const pc = paymentConfirm;
+    setPaymentConfirm(null);
+    startCheckIn(async () => {
+      let res;
+      if (pc.type === "booking" && pc.bookingId) {
+        res = await qrMarkPaidAndCheckInAction(pc.bookingId, pc.subscriptionId);
+      } else if (pc.type === "walkin" && pc.classId && pc.studentId) {
+        res = await qrMarkPaidAndWalkInAction(pc.studentId, pc.classId, pc.subscriptionId);
+      } else {
+        return;
+      }
+      const key = pc.type === "booking" ? pc.bookingId! : `walkin-${pc.classId}`;
+      setCheckInResults((prev) => {
+        const next = new Map(prev);
+        next.set(key, {
+          success: res.success,
+          message: res.success ? `Marked as paid and checked in for ${res.classTitle}` : res.error ?? "Failed",
+        });
+        return next;
+      });
+      if (res.success) router.refresh();
+    });
+  }
+
+  function handlePaymentConfirmKeepPending() {
+    if (!paymentConfirm) return;
+    const pc = paymentConfirm;
+    setPaymentConfirm(null);
+    if (pc.type === "booking" && pc.bookingId) {
+      doCheckIn(pc.bookingId);
+    } else if (pc.type === "walkin" && pc.classId && pc.studentId) {
+      doWalkIn(pc.classId, pc.studentId, pc.subscriptionId);
+    }
   }
 
   function resetScan() {
     setLookupResult(null);
     setCheckInResults(new Map());
     setManualToken("");
+    setPaymentConfirm(null);
+    setNoEntTarget(null);
   }
 
   return (
@@ -240,12 +381,127 @@ export function QrCheckInPanel() {
                       key={b.bookingId}
                       booking={b}
                       result={checkInResults.get(b.bookingId)}
-                      onCheckIn={() => handleCheckIn(b.bookingId)}
+                      onCheckIn={() => handleCheckIn(
+                        b.bookingId,
+                        b.entitlement?.paymentStatus,
+                        b.entitlement?.subscriptionId,
+                        b.entitlement?.productName,
+                        b.classTitle,
+                      )}
                       isPending={isCheckingIn}
                     />
                   ))
                 )}
               </div>
+
+              {/* Today's classes (walk-in / no-entitlement) */}
+              {lookupResult.todayClasses && lookupResult.todayClasses.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-gray-700">
+                    Today&apos;s Classes ({lookupResult.todayClasses.length})
+                  </h3>
+                  {lookupResult.todayBookings!.length === 0 && (
+                    <p className="text-xs text-gray-500">
+                      No bookings found. Select a class for walk-in check-in.
+                    </p>
+                  )}
+                  {lookupResult.todayClasses.map((cls) => (
+                    <TodayClassCard
+                      key={cls.classId}
+                      cls={cls}
+                      result={checkInResults.get(`walkin-${cls.classId}`)}
+                      onAction={() => handleWalkIn(cls)}
+                      isPending={isCheckingIn}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* No-entitlement fallback modal */}
+              {noEntTarget && (
+                <div className="rounded-xl border-2 border-red-300 bg-red-50 p-4 space-y-3 shadow-md">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+                    <p className="text-sm font-semibold text-red-900">
+                      No valid product found
+                    </p>
+                  </div>
+                  <p className="text-sm text-red-800">
+                    This student has no valid entitlement for{" "}
+                    <span className="font-medium">{noEntTarget.classTitle}</span>.
+                    {noEntTarget.styleName && (
+                      <> Style: <span className="font-medium">{noEntTarget.styleName}</span>.</>
+                    )}
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      onClick={handleSellDropInAndCheckIn}
+                      disabled={isCheckingIn}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+                    >
+                      <ShoppingCart className="h-4 w-4 mr-1.5" />
+                      {isCheckingIn ? "Processing…" : "Sell a drop-in and check in"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handleGoToAddProduct}
+                      className="w-full"
+                    >
+                      <Plus className="h-4 w-4 mr-1.5" />
+                      Add another product
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setNoEntTarget(null)}
+                      className="w-full text-gray-500"
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-1.5" />
+                      Go back
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Payment confirmation dialog */}
+              {paymentConfirm && (
+                <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 space-y-3 shadow-md">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+                    <p className="text-sm font-semibold text-amber-900">
+                      Payment not confirmed
+                    </p>
+                  </div>
+                  <p className="text-sm text-amber-800">
+                    <span className="font-medium">{paymentConfirm.subscriptionName}</span> is not paid yet.
+                    Please confirm payment status before checking in for <span className="font-medium">{paymentConfirm.classTitle}</span>.
+                  </p>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      onClick={handlePaymentConfirmMarkPaid}
+                      disabled={isCheckingIn}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      {isCheckingIn ? "Processing…" : "Mark as paid and check in"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={handlePaymentConfirmKeepPending}
+                      disabled={isCheckingIn}
+                      className="w-full"
+                    >
+                      Keep as pending and check in anyway
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setPaymentConfirm(null)}
+                      disabled={isCheckingIn}
+                      className="w-full text-gray-500"
+                    >
+                      Go back
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <Button variant="outline" onClick={resetScan} className="w-full">
                 Scan Next Student
@@ -326,6 +582,94 @@ function BookingCheckInCard({
           className="w-full"
         >
           {isPending ? "Checking in…" : "Check In"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function TodayClassCard({
+  cls,
+  result,
+  onAction,
+  isPending,
+}: {
+  cls: QrTodayClass;
+  result?: { success: boolean; message: string };
+  onAction: () => void;
+  isPending: boolean;
+}) {
+  const done = result?.success;
+  return (
+    <div
+      className={`rounded-xl border p-3 shadow-sm space-y-2 ${
+        done
+          ? "border-green-200 bg-green-50"
+          : cls.hasEntitlement
+            ? "border-gray-200 bg-white"
+            : "border-dashed border-gray-300 bg-gray-50"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-gray-900">{cls.classTitle}</p>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500 mt-0.5">
+            <span className="flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" />
+              {formatTime(cls.startTime)} – {formatTime(cls.endTime)}
+            </span>
+            <span className="flex items-center gap-1">
+              <MapPin className="h-3.5 w-3.5" />
+              {cls.location}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {cls.hasEntitlement ? (
+            cls.paymentStatus === "pending" ? (
+              <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700">
+                Payment pending
+              </span>
+            ) : null
+          ) : (
+            <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700">
+              No product
+            </span>
+          )}
+        </div>
+      </div>
+
+      {cls.hasEntitlement && cls.matchingSubscriptionName && (
+        <p className="text-xs text-gray-500">
+          Using: <span className="font-medium text-gray-700">{cls.matchingSubscriptionName}</span>
+        </p>
+      )}
+
+      {result && !result.success && (
+        <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
+          {result.message}
+        </div>
+      )}
+
+      {done ? (
+        <div className="flex items-center gap-2 rounded-lg bg-green-100 px-3 py-2">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <span className="text-sm font-medium text-green-800">
+            {result?.message ?? "Checked in"}
+          </span>
+        </div>
+      ) : (
+        <Button
+          onClick={onAction}
+          disabled={isPending}
+          variant={cls.hasEntitlement ? "primary" : "outline"}
+          className="w-full"
+        >
+          {isPending
+            ? "Processing…"
+            : cls.hasEntitlement
+              ? "Walk-in Check In"
+              : "Check In (no product)…"}
         </Button>
       )}
     </div>

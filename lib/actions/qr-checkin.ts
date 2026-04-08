@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
-import { getStudentRepo, getSubscriptionRepo, getTermRepo } from "@/lib/repositories";
+import { getStudentRepo, getSubscriptionRepo, getTermRepo, getProductRepo } from "@/lib/repositories";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getInstances } from "@/lib/services/schedule-store";
@@ -12,7 +12,10 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { saveBookingToDB, saveAttendanceToDB } from "@/lib/supabase/operational-persistence";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { isCheckableStatus } from "@/lib/domain/checkin-rules";
-import type { CheckInMethod } from "@/types/domain";
+import { isEntitlementValidForClass } from "@/lib/domain/entitlement-rules";
+import { buildDynamicAccessRulesMap } from "@/config/product-access";
+import { createSubscription, updateSubscription } from "@/lib/services/subscription-service";
+import type { CheckInMethod, DanceRole } from "@/types/domain";
 
 export interface QrEntitlementDetail {
   subscriptionId: string;
@@ -43,6 +46,23 @@ export interface QrStudentBooking {
   canCheckIn: boolean;
 }
 
+export interface QrTodayClass {
+  classId: string;
+  classTitle: string;
+  startTime: string;
+  endTime: string;
+  location: string;
+  styleName: string | null;
+  /** null when no valid entitlement covers this class */
+  matchingSubscriptionId: string | null;
+  matchingSubscriptionName: string | null;
+  paymentStatus: string | null;
+  hasEntitlement: boolean;
+}
+
+/** @deprecated kept temporarily — use QrTodayClass instead */
+export type QrCompatibleClass = QrTodayClass;
+
 export interface QrLookupResult {
   success: boolean;
   error?: string;
@@ -52,6 +72,9 @@ export interface QrLookupResult {
     email: string;
   };
   todayBookings?: QrStudentBooking[];
+  todayClasses?: QrTodayClass[];
+  /** @deprecated use todayClasses */
+  compatibleClasses?: QrTodayClass[];
   entitlements?: QrEntitlementDetail[];
   recentExpiredEntitlement?: QrEntitlementDetail | null;
   paymentPending?: boolean;
@@ -148,13 +171,65 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
 
   let recentExpiredEntitlement: QrEntitlementDetail | null = null;
   if (!hasActiveEntitlement) {
-    const TERMINAL = new Set(["expired", "exhausted", "cancelled"]);
+    const TERMINAL_STATUSES = new Set(["expired", "exhausted", "cancelled"]);
     const recent = studentSubs
-      .filter((s) => TERMINAL.has(s.status))
+      .filter((s) => TERMINAL_STATUSES.has(s.status))
       .sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0];
     if (recent) {
       recentExpiredEntitlement = buildEntitlementDetail(recent);
     }
+  }
+
+  const allProducts = await getProductRepo().getAll();
+  const danceStylesModule = require("@/lib/services/dance-style-store");
+  const danceStyles: { id: string; name: string }[] = danceStylesModule.getDanceStyles?.() ?? [];
+  const accessRulesMap = buildDynamicAccessRulesMap(
+    allProducts.map((p) => ({
+      id: p.id,
+      name: p.name,
+      productType: p.productType,
+      allowedLevels: p.allowedLevels ?? null,
+      allowedStyleIds: p.allowedStyleIds ?? null,
+    })),
+    danceStyles,
+  );
+
+  const todayClasses: QrTodayClass[] = [];
+  const bookedClassIds = new Set(studentBookings.map((b) => b.bookableClassId));
+  for (const [classId, cls] of todayInstances) {
+    if (bookedClassIds.has(classId)) continue;
+    if (cls.status === "cancelled") continue;
+
+    const classCtx = {
+      classType: cls.classType,
+      styleName: cls.styleName ?? null,
+      styleId: cls.styleId ?? null,
+      level: cls.level ?? null,
+      date: cls.date,
+    };
+
+    let matchedSub: typeof studentSubs[number] | null = null;
+    for (const sub of studentSubs) {
+      if (sub.status !== "active") continue;
+      const rule = accessRulesMap.get(sub.productId);
+      if (isEntitlementValidForClass(sub, classCtx, allTerms, rule)) {
+        matchedSub = sub;
+        break;
+      }
+    }
+
+    todayClasses.push({
+      classId: cls.id,
+      classTitle: cls.title,
+      startTime: cls.startTime,
+      endTime: cls.endTime,
+      location: cls.location,
+      styleName: cls.styleName ?? null,
+      matchingSubscriptionId: matchedSub?.id ?? null,
+      matchingSubscriptionName: matchedSub?.productName ?? null,
+      paymentStatus: matchedSub?.paymentStatus ?? null,
+      hasEntitlement: !!matchedSub,
+    });
   }
 
   return {
@@ -165,6 +240,8 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
       email: student.email,
     },
     todayBookings,
+    todayClasses,
+    compatibleClasses: todayClasses,
     entitlements: activeEntitlements,
     recentExpiredEntitlement,
     paymentPending,
@@ -251,4 +328,171 @@ export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheck
   revalidatePath("/dashboard");
 
   return { success: true, classTitle: cls.title };
+}
+
+export async function qrWalkInCheckInAction(
+  studentId: string,
+  classId: string,
+  subscriptionId: string,
+): Promise<QrCheckInResult> {
+  const user = await getAuthUser();
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  await ensureOperationalDataHydrated();
+
+  const allInstances = getInstances();
+  const cls = allInstances.find((c) => c.id === classId);
+  if (!cls) return { success: false, error: "Class not found" };
+
+  const today = getTodayStr();
+  if (cls.date !== today) return { success: false, error: "Class is not today" };
+
+  const allStudents = await getStudentRepo().getAll();
+  const student = allStudents.find((s) => s.id === studentId);
+  if (!student) return { success: false, error: "Student not found" };
+
+  const svc = getBookingService();
+  const existing = svc.bookings.find(
+    (b) => b.studentId === studentId && b.bookableClassId === classId && b.status !== "cancelled" && b.status !== "late_cancelled"
+  );
+  if (existing) {
+    return { success: false, error: "Student already has a booking for this class. Use the booking check-in instead." };
+  }
+
+  const bookingId = `walk-in-${studentId}-${classId}-${Date.now()}`;
+  const newBooking = {
+    id: bookingId,
+    studentId,
+    studentName: student.fullName,
+    bookableClassId: classId,
+    subscriptionId,
+    subscriptionName: null as string | null,
+    status: "checked_in" as const,
+    danceRole: null as DanceRole | null,
+    source: "admin" as const,
+    adminNote: "Walk-in check-in via QR scan",
+    bookedAt: new Date().toISOString(),
+    cancelledAt: null,
+    checkInToken: null,
+  };
+
+  svc.bookings.push(newBooking);
+
+  const attSvc = getAttendanceService();
+  attSvc.markAttendance({
+    bookableClassId: classId,
+    studentId,
+    studentName: student.fullName,
+    bookingId,
+    classTitle: cls.title,
+    date: cls.date,
+    status: "present",
+    checkInMethod: "qr" as CheckInMethod,
+    markedBy: user.fullName,
+  });
+
+  if (isRealUser(studentId)) {
+    await saveBookingToDB(newBooking);
+    const attRecord = attSvc.getRecord(classId, studentId);
+    if (attRecord) await saveAttendanceToDB(attRecord);
+  }
+
+  revalidatePath("/attendance");
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+
+  return { success: true, classTitle: cls.title };
+}
+
+export async function qrMarkPaidAndCheckInAction(
+  bookingId: string,
+  subscriptionId: string,
+): Promise<QrCheckInResult> {
+  const user = await getAuthUser();
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  await ensureOperationalDataHydrated();
+
+  await updateSubscription(subscriptionId, {
+    paymentStatus: "paid",
+    paymentMethod: "cash",
+    paidAt: new Date().toISOString(),
+    collectedBy: user.fullName,
+  });
+
+  return qrCheckInBookingAction(bookingId);
+}
+
+export async function qrMarkPaidAndWalkInAction(
+  studentId: string,
+  classId: string,
+  subscriptionId: string,
+): Promise<QrCheckInResult> {
+  const user = await getAuthUser();
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  await ensureOperationalDataHydrated();
+
+  await updateSubscription(subscriptionId, {
+    paymentStatus: "paid",
+    paymentMethod: "cash",
+    paidAt: new Date().toISOString(),
+    collectedBy: user.fullName,
+  });
+
+  return qrWalkInCheckInAction(studentId, classId, subscriptionId);
+}
+
+export async function qrSellDropInAndCheckInAction(
+  studentId: string,
+  classId: string,
+): Promise<QrCheckInResult> {
+  const user = await getAuthUser();
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  await ensureOperationalDataHydrated();
+
+  const allProducts = await getProductRepo().getAll();
+  const dropInProduct = allProducts.find((p) => p.productType === "drop_in" && p.isActive);
+  if (!dropInProduct) {
+    return { success: false, error: "No active drop-in product found. Create one in Settings first." };
+  }
+
+  const today = getTodayStr();
+  const subResult = await createSubscription({
+    studentId,
+    productId: dropInProduct.id,
+    productName: dropInProduct.name,
+    productType: "drop_in" as const,
+    status: "active" as const,
+    totalCredits: dropInProduct.totalCredits ?? 1,
+    remainingCredits: dropInProduct.totalCredits ?? 1,
+    validFrom: today,
+    validUntil: null,
+    notes: "Sold via QR check-in",
+    termId: null,
+    paymentMethod: "cash" as const,
+    paymentStatus: "paid" as const,
+    assignedBy: user.fullName,
+    assignedAt: new Date().toISOString(),
+    autoRenew: false,
+    classesUsed: 0,
+    classesPerTerm: null,
+    paidAt: new Date().toISOString(),
+    collectedBy: user.fullName,
+  });
+
+  if (!subResult.success || !subResult.subscriptionId) {
+    return { success: false, error: subResult.error ?? "Failed to create drop-in subscription" };
+  }
+
+  return qrWalkInCheckInAction(studentId, classId, subResult.subscriptionId);
 }

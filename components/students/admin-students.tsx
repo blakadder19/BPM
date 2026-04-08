@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useState, useTransition, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, Pencil, Plus, Users, Power, Trash2, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
@@ -97,6 +98,7 @@ export function AdminStudents({
   birthdayUsedStudentIds = [],
   birthdayRedemptions = {},
 }: AdminStudentsProps) {
+  const searchParams = useSearchParams();
   const birthdayUsedSet = new Set(birthdayUsedStudentIds);
   const [search, setSearch] = useState(initialSearch ?? "");
   const [roleFilter, setRoleFilter] = useState("");
@@ -115,6 +117,18 @@ export function AdminStudents({
   const [lifecycleMsg, setLifecycleMsg] = useState<string | null>(null);
   const [lifecyclePending, startLifecycle] = useTransition();
   const [lastRunTs, setLastRunTs] = useState<string | null>(null);
+
+  useEffect(() => {
+    const highlightId = searchParams.get("highlight");
+    const action = searchParams.get("action");
+    if (highlightId && action === "add-subscription") {
+      const exists = students.some((s) => s.id === highlightId);
+      if (exists) {
+        setExpandedId(highlightId);
+        setAddSubStudentId(highlightId);
+      }
+    }
+  }, [searchParams, students]);
 
   const q = search.toLowerCase();
 

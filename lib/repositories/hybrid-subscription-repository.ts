@@ -33,6 +33,10 @@ function loadSupabaseRepo(): ISubscriptionRepository | null {
   }
 }
 
+export function invalidateSubscriptionCache(): void {
+  /* no-op — reads come from the memory store which is refreshed by hydration */
+}
+
 export const hybridSubscriptionRepo: ISubscriptionRepository = {
   async getAll() {
     return memorySubscriptionRepo.getAll();

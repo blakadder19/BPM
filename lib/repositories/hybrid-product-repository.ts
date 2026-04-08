@@ -34,6 +34,10 @@ function loadSupabaseRepo(): IProductRepository | null {
 const g = globalThis as unknown as { __bpm_products_cache?: { ts: number; data: Awaited<ReturnType<IProductRepository["getAll"]>> } };
 const CACHE_TTL_MS = 10_000;
 
+export function invalidateProductCache(): void {
+  g.__bpm_products_cache = undefined;
+}
+
 export const hybridProductRepo: IProductRepository = {
   async getAll() {
     const now = Date.now();

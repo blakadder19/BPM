@@ -150,7 +150,7 @@ async function refreshClassInstances(): Promise<void> {
 
 let _lastHydratedAt = 0;
 let _hydratePromise: Promise<void> | null = null;
-const HYDRATE_THROTTLE_MS = 5_000;
+const HYDRATE_THROTTLE_MS = 2_000;
 
 /**
  * Hydrate all services from Supabase.
@@ -187,6 +187,14 @@ export async function ensureOperationalDataHydrated(): Promise<void> {
   })();
 
   return _hydratePromise;
+}
+
+/**
+ * Invalidate hydration timestamp so the next request triggers a full re-read.
+ * Call after any admin mutation that should be visible to other roles immediately.
+ */
+export function invalidateHydration(): void {
+  _lastHydratedAt = 0;
 }
 
 /**

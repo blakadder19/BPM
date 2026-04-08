@@ -163,7 +163,13 @@ export async function createSubscriptionAction(
     }
   }
 
-  if (result.success) revalidatePath("/students");
+  if (result.success) {
+    revalidatePath("/students");
+    revalidatePath("/dashboard");
+    revalidatePath("/catalog");
+    revalidatePath("/classes");
+    revalidatePath("/bookings");
+  }
   return result;
 }
 

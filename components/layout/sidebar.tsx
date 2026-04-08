@@ -40,14 +40,14 @@ export function Sidebar({ user }: SidebarProps) {
 
   const navContent = (
     <>
-      <div className="flex h-16 items-center justify-between border-b border-gray-200 px-6">
+      <div className="flex h-20 items-center justify-between border-b border-gray-200 px-6">
         <Link href="/dashboard" className="flex items-center">
           <Image
             src="/branding/bpm-logo-full.jpg"
             alt="BPM"
-            width={140}
-            height={48}
-            className="h-11 w-auto object-contain"
+            width={180}
+            height={60}
+            className="h-14 w-auto object-contain"
             priority
           />
         </Link>

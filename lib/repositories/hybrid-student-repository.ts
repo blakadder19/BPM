@@ -33,6 +33,10 @@ function loadSupabaseRepo(): IStudentRepository | null {
 const g = globalThis as unknown as { __bpm_students_cache?: { ts: number; data: Awaited<ReturnType<IStudentRepository["getAll"]>> } };
 const CACHE_TTL_MS = 10_000;
 
+export function invalidateStudentCache(): void {
+  g.__bpm_students_cache = undefined;
+}
+
 export const hybridStudentRepo: IStudentRepository = {
   async getAll() {
     const now = Date.now();

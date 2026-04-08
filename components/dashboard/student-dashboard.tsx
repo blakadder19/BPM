@@ -20,6 +20,7 @@ import {
   ArrowRight,
   User,
   Pencil,
+  CheckCircle,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -334,16 +335,23 @@ export function StudentDashboard({
                       <div className="flex flex-wrap items-center gap-1.5 text-xs text-gray-500 mt-0.5">
                         <StatusBadge status={e.productType} />
                         <StatusBadge status={e.isFutureTerm ? "scheduled" : e.status} />
-                        {e.paymentStatus && (
+                        {e.paymentStatus === "paid" && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                            <CheckCircle className="h-3 w-3" />
+                            Paid
+                          </span>
+                        )}
+                        {e.paymentStatus === "complimentary" && (
+                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                            Complimentary
+                          </span>
+                        )}
+                        {e.paymentStatus && e.paymentStatus !== "paid" && e.paymentStatus !== "complimentary" && (
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                            e.paymentStatus === "paid" || e.paymentStatus === "complimentary"
-                              ? "bg-green-50 text-green-700 ring-green-600/20"
-                              : e.paymentStatus === "cancelled" || e.paymentStatus === "refunded"
-                                ? "bg-red-50 text-red-700 ring-red-600/20"
-                                : "bg-amber-50 text-amber-700 ring-amber-600/20"
+                            e.paymentStatus === "cancelled" || e.paymentStatus === "refunded"
+                              ? "bg-red-50 text-red-700 ring-red-600/20"
+                              : "bg-amber-50 text-amber-700 ring-amber-600/20"
                           }`}>
-                            {e.paymentStatus === "paid" && "Paid"}
-                            {e.paymentStatus === "complimentary" && "Complimentary"}
                             {e.paymentStatus === "pending" && "Payment pending"}
                             {e.paymentStatus === "waived" && "Payment waived"}
                             {e.paymentStatus === "cancelled" && "Payment cancelled"}
@@ -379,10 +387,10 @@ export function StudentDashboard({
                       ) : e.autoRenew ? (
                         <span
                           title="Renews at end of term — no automatic charge"
-                          className="inline-flex items-center gap-0.5 text-[10px] font-medium text-green-700"
+                          className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-[10px] font-medium text-green-700 ring-1 ring-inset ring-green-600/20"
                         >
                           <RefreshCw className="h-3 w-3 text-green-500" />
-                          <span className="hidden sm:inline">Renews (no auto-charge)</span>
+                          Auto-renew on
                         </span>
                       ) : null}
                     </div>
@@ -405,13 +413,18 @@ export function StudentDashboard({
                     </span>
                   </div>
                   {e.paymentStatus === "pending" && (
-                    <div className="mt-2 flex items-center gap-2">
-                      {stripeEnabled && (
-                        <PayRenewalButton subscriptionId={e.id} productName={e.productName} />
-                      )}
-                      <span className="text-xs text-gray-500">
-                        {stripeEnabled ? "or pay at reception" : "Pay at reception"}
-                      </span>
+                    <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
+                      <p className="text-xs font-medium text-amber-800">
+                        Payment is due for this plan.
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {stripeEnabled && (
+                          <PayRenewalButton subscriptionId={e.id} productName={e.productName} />
+                        )}
+                        <span className="text-xs text-gray-600">
+                          {stripeEnabled ? "or pay at reception (cash / Revolut)" : "Please pay at reception (cash / Revolut)"}
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -810,15 +823,17 @@ function AutoRenewToggle({ subscriptionId, initial }: { subscriptionId: string; 
       type="button"
       onClick={toggle}
       disabled={isPending}
-      title={enabled ? "Auto-renew is ON — click to disable" : "Auto-renew is OFF — click to enable"}
-      className={`inline-flex items-center gap-0.5 text-[10px] font-medium transition-colors ${
-        enabled ? "text-green-700" : "text-gray-400"
-      } ${isPending ? "opacity-50" : "hover:opacity-80"}`}
+      title={enabled
+        ? "Auto-renew is ON — your plan will be renewed for the next term (no automatic charge). Click to turn off."
+        : "Auto-renew is OFF — click to enable renewal for the next term."}
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ring-inset transition-colors ${
+        enabled
+          ? "bg-green-50 text-green-700 ring-green-600/20"
+          : "bg-gray-50 text-gray-500 ring-gray-300"
+      } ${isPending ? "opacity-50" : "hover:opacity-80 cursor-pointer"}`}
     >
       <RefreshCw className={`h-3 w-3 ${enabled ? "text-green-500" : "text-gray-400"}`} />
-      <span className="hidden sm:inline">
-        {enabled ? "Renews (no auto-charge)" : "Auto-renew off"}
-      </span>
+      {enabled ? "Auto-renew on" : "Auto-renew off"}
     </button>
   );
 }

@@ -6,6 +6,7 @@ import { getSubscriptionRepo } from "@/lib/repositories";
 import { getSubscription as mockGetOne } from "@/lib/services/subscription-store";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveSubscriptionToDB } from "@/lib/supabase/operational-persistence";
+import { invalidateHydration } from "@/lib/supabase/hydrate-operational";
 import type { MockSubscription } from "@/lib/mock-data";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
@@ -60,6 +61,7 @@ export async function createSubscription(data: {
     if (isRealUser(data.studentId)) {
       await saveSubscriptionToDB(sub);
     }
+    invalidateHydration();
     return { success: true, subscriptionId: sub.id };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Unknown error" };
@@ -98,6 +100,7 @@ export async function updateSubscription(
   if (isRealUser(result.studentId)) {
     await saveSubscriptionToDB(result);
   }
+  invalidateHydration();
   return { success: true };
 }
 
