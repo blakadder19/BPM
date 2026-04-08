@@ -174,6 +174,10 @@ export async function deleteStudentSubscriptionAction(
   const result = await deleteSubscription(subscriptionId);
 
   if (result.success) {
+    try {
+      const { dismissNotificationsForSubscription } = await import("@/lib/communications/notification-store");
+      await dismissNotificationsForSubscription(sub.studentId, subscriptionId);
+    } catch { /* best-effort */ }
     revalidatePath("/students");
     revalidatePath("/products");
     revalidatePath("/dashboard");

@@ -164,6 +164,8 @@ export async function deleteProductAction(
   if (result.success) {
     revalidatePath("/products");
     revalidatePath("/dashboard");
+    revalidatePath("/catalog");
+    revalidatePath("/students");
   }
   return result;
 }

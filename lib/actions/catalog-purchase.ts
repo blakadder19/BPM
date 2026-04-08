@@ -271,20 +271,25 @@ export async function toggleAutoRenewAction(
   subscriptionId: string,
   autoRenew: boolean,
 ): Promise<{ success: boolean; error?: string }> {
-  const user = await requireRole(["student"]);
-  const allSubs = await getSubscriptionRepo().getAll();
-  const sub = allSubs.find((s) => s.id === subscriptionId && s.studentId === user.id);
-  if (!sub) return { success: false, error: "Subscription not found." };
-  if (sub.status !== "active") return { success: false, error: "Only active plans can change auto-renew." };
+  try {
+    const user = await requireRole(["student"]);
+    const sub = await getSubscriptionRepo().getById(subscriptionId);
+    if (!sub || sub.studentId !== user.id) return { success: false, error: "Subscription not found." };
+    if (sub.status !== "active") return { success: false, error: "Only active plans can change auto-renew." };
 
-  const product = await getProductRepo().getById(sub.productId);
-  if (!product || !product.autoRenew) {
-    return { success: false, error: "This product type does not support auto-renew." };
+    const product = await getProductRepo().getById(sub.productId);
+    if (!product || !product.autoRenew) {
+      return { success: false, error: "This product type does not support auto-renew." };
+    }
+
+    const result = await updateSubscription(subscriptionId, { autoRenew });
+    if (!result.success) return { success: false, error: result.error ?? "Failed to update." };
+
+    revalidatePath("/dashboard");
+    revalidatePath("/catalog");
+    return { success: true };
+  } catch (e: unknown) {
+    if (e && typeof e === "object" && "digest" in e) throw e;
+    return { success: false, error: e instanceof Error ? e.message : "Unexpected error" };
   }
-
-  await updateSubscription(subscriptionId, { autoRenew });
-
-  revalidatePath("/dashboard");
-  revalidatePath("/catalog");
-  return { success: true };
 }

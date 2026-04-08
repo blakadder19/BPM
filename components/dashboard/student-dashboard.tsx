@@ -820,13 +820,23 @@ function StudentQrCard({ qrToken }: { qrToken: string }) {
 function AutoRenewToggle({ subscriptionId, initial }: { subscriptionId: string; initial: boolean }) {
   const [enabled, setEnabled] = useState(initial);
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function toggle() {
     const next = !enabled;
     setEnabled(next);
+    setError(null);
     startTransition(async () => {
-      const res = await toggleAutoRenewAction(subscriptionId, next);
-      if (!res.success) setEnabled(!next);
+      try {
+        const res = await toggleAutoRenewAction(subscriptionId, next);
+        if (!res.success) {
+          setEnabled(!next);
+          setError(res.error ?? "Failed to update");
+        }
+      } catch {
+        setEnabled(!next);
+        setError("Failed to update");
+      }
     });
   }
 
@@ -846,6 +856,7 @@ function AutoRenewToggle({ subscriptionId, initial }: { subscriptionId: string; 
     >
       <RefreshCw className={`h-3 w-3 ${enabled ? "text-green-500" : "text-gray-400"}`} />
       {enabled ? "Auto-renew on" : "Auto-renew off"}
+      {error && <span className="sr-only">{error}</span>}
     </button>
   );
 }

@@ -18,6 +18,21 @@ import { createSubscription, updateSubscription } from "@/lib/services/subscript
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import type { CheckInMethod, DanceRole } from "@/types/domain";
 
+async function consumeCredit(subscriptionId: string): Promise<void> {
+  if (!subscriptionId) return;
+  const sub = await getSubscriptionRepo().getById(subscriptionId);
+  if (!sub) return;
+  if (sub.productType === "membership" && sub.classesPerTerm !== null) {
+    await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });
+  } else if (sub.remainingCredits !== null) {
+    const next = Math.max(0, sub.remainingCredits - 1);
+    await updateSubscription(sub.id, {
+      remainingCredits: next,
+      ...(next === 0 ? { status: "exhausted" as const } : {}),
+    });
+  }
+}
+
 export interface QrEntitlementDetail {
   subscriptionId: string;
   productName: string;
@@ -316,6 +331,10 @@ export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheck
     markedBy: user.fullName,
   });
 
+  if (booking.subscriptionId) {
+    await consumeCredit(booking.subscriptionId);
+  }
+
   if (isRealUser(booking.studentId)) {
     const checkedIn = svc.bookings.find((b) => b.id === bookingId);
     if (checkedIn) await saveBookingToDB(checkedIn);
@@ -326,6 +345,7 @@ export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheck
   revalidatePath("/attendance");
   revalidatePath("/bookings");
   revalidatePath("/dashboard");
+  revalidatePath("/students");
 
   return { success: true, classTitle: cls.title };
 }
@@ -380,6 +400,10 @@ export async function qrWalkInCheckInAction(
 
   svc.bookings.push(newBooking);
 
+  if (subscriptionId) {
+    await consumeCredit(subscriptionId);
+  }
+
   const attSvc = getAttendanceService();
   attSvc.markAttendance({
     bookableClassId: classId,
@@ -402,6 +426,7 @@ export async function qrWalkInCheckInAction(
   revalidatePath("/attendance");
   revalidatePath("/bookings");
   revalidatePath("/dashboard");
+  revalidatePath("/students");
 
   return { success: true, classTitle: cls.title };
 }
@@ -424,6 +449,14 @@ export async function qrMarkPaidAndCheckInAction(
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
   });
+
+  try {
+    const sub = await getSubscriptionRepo().getById(subscriptionId);
+    if (sub) {
+      const { dismissNotificationsForSubscription } = await import("@/lib/communications/notification-store");
+      await dismissNotificationsForSubscription(sub.studentId, subscriptionId);
+    }
+  } catch { /* best-effort */ }
 
   return qrCheckInBookingAction(bookingId);
 }
@@ -448,7 +481,46 @@ export async function qrMarkPaidAndWalkInAction(
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
   });
 
+  try {
+    const { dismissNotificationsForSubscription } = await import("@/lib/communications/notification-store");
+    await dismissNotificationsForSubscription(studentId, subscriptionId);
+  } catch { /* best-effort */ }
+
   return qrWalkInCheckInAction(studentId, classId, subscriptionId);
+}
+
+export async function qrMarkSubscriptionPaidAction(
+  subscriptionId: string,
+  paymentMethod: "cash" | "revolut" = "cash",
+): Promise<{ success: boolean; error?: string }> {
+  const user = await getAuthUser();
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  await ensureOperationalDataHydrated();
+
+  const result = await updateSubscription(subscriptionId, {
+    paymentStatus: "paid",
+    paymentMethod,
+    paidAt: new Date().toISOString(),
+    paymentNotes: `Collected by ${user.fullName} via QR check-in`,
+  });
+
+  if (result.success) {
+    try {
+      const sub = await getSubscriptionRepo().getById(subscriptionId);
+      if (sub) {
+        const { dismissNotificationsForSubscription } = await import("@/lib/communications/notification-store");
+        await dismissNotificationsForSubscription(sub.studentId, subscriptionId);
+      }
+    } catch { /* best-effort */ }
+    revalidatePath("/attendance");
+    revalidatePath("/dashboard");
+    revalidatePath("/students");
+  }
+
+  return result;
 }
 
 export async function qrSellDropInAndCheckInAction(

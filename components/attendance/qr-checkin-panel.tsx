@@ -29,6 +29,7 @@ import {
   qrMarkPaidAndCheckInAction,
   qrMarkPaidAndWalkInAction,
   qrSellDropInAndCheckInAction,
+  qrMarkSubscriptionPaidAction,
   type QrLookupResult,
   type QrStudentBooking,
   type QrEntitlementDetail,
@@ -249,6 +250,33 @@ export function QrCheckInPanel() {
     }
   }
 
+  function handleEntitlementMarkPaid(subscriptionId: string, method: PaymentMethod) {
+    startCheckIn(async () => {
+      const res = await qrMarkSubscriptionPaidAction(subscriptionId, method);
+      if (res.success) {
+        const token = lookupResult?.student?.id;
+        if (token) router.refresh();
+        setLookupResult((prev) => {
+          if (!prev) return prev;
+          const patchEnt = (e: QrEntitlementDetail): QrEntitlementDetail =>
+            e.subscriptionId === subscriptionId ? { ...e, paymentStatus: "paid" } : e;
+          return {
+            ...prev,
+            entitlements: prev.entitlements?.map(patchEnt),
+            todayBookings: prev.todayBookings?.map((b) => ({
+              ...b,
+              entitlement: b.entitlement ? patchEnt(b.entitlement) : b.entitlement,
+            })),
+            todayClasses: prev.todayClasses?.map((c) =>
+              c.matchingSubscriptionId === subscriptionId ? { ...c, paymentStatus: "paid" } : c
+            ),
+            paymentPending: prev.entitlements?.filter((e) => e.subscriptionId !== subscriptionId).some((e) => e.paymentStatus === "pending") ?? false,
+          };
+        });
+      }
+    });
+  }
+
   function resetScan() {
     setLookupResult(null);
     setCheckInResults(new Map());
@@ -367,7 +395,11 @@ export function QrCheckInPanel() {
                 {lookupResult.entitlements && lookupResult.entitlements.length > 0 && (
                   <div className="space-y-1.5 border-t border-gray-100 pt-3">
                     {lookupResult.entitlements.map((ent) => (
-                      <EntitlementRow key={ent.subscriptionId} ent={ent} />
+                      <EntitlementRow
+                        key={ent.subscriptionId}
+                        ent={ent}
+                        onMarkPaid={handleEntitlementMarkPaid}
+                      />
                     ))}
                   </div>
                 )}
@@ -760,7 +792,17 @@ const PAYMENT_BADGE: Record<string, { label: string; className: string }> = {
   waived: { label: "Waived", className: "bg-gray-200 text-gray-600" },
 };
 
-function EntitlementRow({ ent, compact }: { ent: QrEntitlementDetail; compact?: boolean }) {
+function EntitlementRow({
+  ent,
+  compact,
+  onMarkPaid,
+}: {
+  ent: QrEntitlementDetail;
+  compact?: boolean;
+  onMarkPaid?: (subscriptionId: string, method: PaymentMethod) => void;
+}) {
+  const [showPay, setShowPay] = useState(false);
+  const [method, setMethod] = useState<PaymentMethod>("cash");
   const balance = formatBalance(ent);
   const badge = PAYMENT_BADGE[ent.paymentStatus] ?? null;
 
@@ -783,6 +825,63 @@ function EntitlementRow({ ent, compact }: { ent: QrEntitlementDetail; compact?: 
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-gray-500">
           {balance && <span>{balance}</span>}
           {ent.termName && <span>Term: {ent.termName}</span>}
+        </div>
+      )}
+      {ent.paymentStatus === "pending" && onMarkPaid && !showPay && (
+        <button
+          type="button"
+          onClick={() => setShowPay(true)}
+          className="mt-1.5 inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-amber-700 transition-colors"
+        >
+          <Banknote className="h-3 w-3" />
+          Mark as paid
+        </button>
+      )}
+      {showPay && onMarkPaid && (
+        <div className="mt-2 space-y-2 border-t border-gray-200 pt-2">
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => setMethod("cash")}
+              className={`flex items-center justify-center gap-1 rounded border-2 px-2 py-1.5 text-[10px] font-medium transition-colors ${
+                method === "cash"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                  : "border-gray-200 text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              <Banknote className="h-3 w-3" /> Cash
+            </button>
+            <button
+              type="button"
+              onClick={() => setMethod("revolut")}
+              className={`flex items-center justify-center gap-1 rounded border-2 px-2 py-1.5 text-[10px] font-medium transition-colors ${
+                method === "revolut"
+                  ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                  : "border-gray-200 text-gray-600 hover:border-gray-300"
+              }`}
+            >
+              <Smartphone className="h-3 w-3" /> Revolut
+            </button>
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                onMarkPaid(ent.subscriptionId, method);
+                setShowPay(false);
+              }}
+              className="flex-1 rounded bg-emerald-600 px-2 py-1.5 text-[10px] font-medium text-white hover:bg-emerald-700 transition-colors"
+            >
+              Confirm ({method})
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowPay(false)}
+              className="rounded px-2 py-1.5 text-[10px] font-medium text-gray-500 hover:bg-gray-100 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
     </div>

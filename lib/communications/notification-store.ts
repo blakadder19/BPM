@@ -191,6 +191,30 @@ export async function dismissNotification(
   }
 }
 
+export async function dismissNotificationsForSubscription(
+  studentId: string,
+  subscriptionId: string,
+): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { data, error: fetchErr } = await client
+      .from(TABLE)
+      .select("id, payload")
+      .eq("student_id", studentId);
+    if (fetchErr || !data) return;
+    const toDelete = data.filter((r: { id: string; payload: unknown }) => {
+      const p = r.payload as Record<string, unknown> | null;
+      return p?.subscriptionId === subscriptionId;
+    });
+    for (const row of toDelete) {
+      await client.from(TABLE).delete().eq("id", row.id);
+    }
+  } catch (e) {
+    console.warn("[notification-store] dismiss-by-sub:", e instanceof Error ? e.message : e);
+  }
+}
+
 export async function dismissAllNotificationsForStudent(
   studentId: string
 ): Promise<void> {

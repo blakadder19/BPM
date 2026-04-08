@@ -108,6 +108,7 @@ const SEVERITY_DOT: Record<AlertSeverity, string> = {
 };
 
 function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: boolean }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const panelRef = useRef<HTMLDivElement>(null);
@@ -229,14 +230,31 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
                           {alert.message}
                         </p>
                         {alert.href && (
-                          <Link
-                            href={alert.href}
-                            onClick={() => setOpen(false)}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setOpen(false);
+                              const target = alert.href!;
+                              if (target.includes("#") && window.location.pathname === target.split("#")[0]) {
+                                const hash = target.split("#")[1];
+                                window.location.hash = `#${hash}`;
+                                const el = document.getElementById(hash);
+                                if (el) {
+                                  setTimeout(() => {
+                                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                                    el.classList.add("ring-2", "ring-amber-400", "ring-offset-2");
+                                    setTimeout(() => el.classList.remove("ring-2", "ring-amber-400", "ring-offset-2"), 4000);
+                                  }, 100);
+                                }
+                              } else {
+                                router.push(target);
+                              }
+                            }}
                             className="mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-700"
                           >
                             View
                             <ChevronRight className="h-3 w-3" />
-                          </Link>
+                          </button>
                         )}
                       </div>
                     </div>

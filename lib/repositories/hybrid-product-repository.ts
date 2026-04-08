@@ -64,47 +64,64 @@ export const hybridProductRepo: IProductRepository = {
 
   async create(data: CreateProductData) {
     const sbRepo = loadSupabaseRepo();
+    let result;
     if (sbRepo) {
-      return await sbRepo.create(data);
+      result = await sbRepo.create(data);
+    } else {
+      result = memoryProductRepo.create(data);
     }
-    return memoryProductRepo.create(data);
+    invalidateProductCache();
+    return result;
   },
 
   async update(id, patch: ProductPatch) {
     const sbRepo = loadSupabaseRepo();
+    let result = null;
     if (sbRepo) {
       try {
-        const sbResult = await sbRepo.update(id, patch);
-        if (sbResult) return sbResult;
+        result = await sbRepo.update(id, patch);
       } catch (err) {
         console.warn("[hybridProductRepo.update] Supabase write failed:", err instanceof Error ? err.message : err);
       }
     }
-    return memoryProductRepo.update(id, patch);
+    if (!result) {
+      result = await memoryProductRepo.update(id, patch);
+    }
+    if (result) invalidateProductCache();
+    return result;
   },
 
   async toggleActive(id) {
     const sbRepo = loadSupabaseRepo();
+    let result = null;
     if (sbRepo) {
       try {
-        const sbResult = await sbRepo.toggleActive(id);
-        if (sbResult) return sbResult;
+        result = await sbRepo.toggleActive(id);
       } catch (err) {
         console.warn("[hybridProductRepo.toggleActive] Supabase write failed:", err instanceof Error ? err.message : err);
       }
     }
-    return memoryProductRepo.toggleActive(id);
+    if (!result) {
+      result = await memoryProductRepo.toggleActive(id);
+    }
+    if (result) invalidateProductCache();
+    return result;
   },
 
   async delete(id) {
     const sbRepo = loadSupabaseRepo();
+    let result = false;
     if (sbRepo) {
       try {
-        return await sbRepo.delete(id);
+        result = await sbRepo.delete(id);
       } catch (err) {
         console.warn("[hybridProductRepo.delete] Supabase delete failed:", err instanceof Error ? err.message : err);
       }
     }
-    return memoryProductRepo.delete(id);
+    if (!result) {
+      result = await memoryProductRepo.delete(id);
+    }
+    if (result) invalidateProductCache();
+    return result;
   },
 };

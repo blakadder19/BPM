@@ -234,6 +234,15 @@ export async function updateSubscriptionAction(
   const result = await updateSubscription(id, patch);
 
   if (result.success) {
+    if (paymentStatusRaw === "paid") {
+      try {
+        const sub = await getSubscriptionRepo().getById(id);
+        if (sub) {
+          const { dismissNotificationsForSubscription } = await import("@/lib/communications/notification-store");
+          await dismissNotificationsForSubscription(sub.studentId, id);
+        }
+      } catch { /* best-effort */ }
+    }
     revalidatePath("/students");
     revalidatePath("/dashboard");
     revalidatePath("/catalog");
