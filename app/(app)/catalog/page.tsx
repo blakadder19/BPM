@@ -54,9 +54,9 @@ function resolveStyleSelection(
 export default async function CatalogPage() {
   const user = await requireRole(["student"]);
 
-  await ensureOperationalDataHydrated();
-
-  const [cocDone, products, terms, allStudentSubs] = await Promise.all([
+  // Run hydration AND direct-DB queries in parallel
+  const [, cocDone, products, terms, allStudentSubs] = await Promise.all([
+    ensureOperationalDataHydrated(),
     cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
     cachedGetProducts(),
     cachedGetTerms(),

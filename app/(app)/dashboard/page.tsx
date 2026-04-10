@@ -39,22 +39,15 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
   const _tAuth = performance.now();
 
-  await ensureOperationalDataHydrated();
-  const _tHydrate = performance.now();
-
-  runAttendanceClosure();
-  lazyExpireSubscriptions().catch(() => {});
-  const _tLazy = performance.now();
-
   if (user.role === "student") {
-    const bookingSvc = getBookingRepo().getService();
-    const penaltySvc = getPenaltyRepo().getService();
-    const attendanceSvc = getAttendanceRepo().getService();
-
     const year = new Date().getFullYear();
     const todayStr = getTodayStr();
 
-    const [cocAccepted, student, terms, allProducts, allSubs, birthdayRedemption] = await Promise.all([
+    // Run hydration AND direct-DB queries in parallel — the cachedGetXxx
+    // calls go straight to Supabase and don't need hydration to complete.
+    // Hydration only needs to finish before in-memory store reads below.
+    const [, cocAccepted, student, terms, allProducts, allSubs, birthdayRedemption] = await Promise.all([
+      ensureOperationalDataHydrated(),
       cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
       cachedGetStudentById(user.id),
       cachedGetTerms(),
@@ -62,8 +55,17 @@ export default async function DashboardPage() {
       cachedGetStudentSubs(user.id),
       getBirthdayRedemption(user.id, year),
     ]);
-    const _tDb = performance.now();
+    const _tHydrate = performance.now();
+
+    runAttendanceClosure();
+    lazyExpireSubscriptions().catch(() => {});
+
     if (!cocAccepted) redirect("/onboarding");
+
+    const bookingSvc = getBookingRepo().getService();
+    const penaltySvc = getPenaltyRepo().getService();
+    const attendanceSvc = getAttendanceRepo().getService();
+    const _tDb = performance.now();
 
     const upcomingBookings: StudentBookingSummary[] = bookingSvc.bookings
       .filter(
@@ -304,7 +306,7 @@ export default async function DashboardPage() {
       })
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
     const _tEnd = performance.now();
-    console.info(`[perf /dashboard] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms lazy=${(_tLazy-_tHydrate).toFixed(0)}ms db=${(_tDb-_tLazy).toFixed(0)}ms prep+todayForYou=${(_tEnd-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+    console.info(`[perf /dashboard] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tHydrate-_tAuth).toFixed(0)}ms prep+todayForYou=${(_tEnd-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
     return (
       <StudentDashboard
@@ -325,6 +327,10 @@ export default async function DashboardPage() {
       />
     );
   }
+
+  await ensureOperationalDataHydrated();
+  runAttendanceClosure();
+  lazyExpireSubscriptions().catch(() => {});
 
   const _tAdmin0 = performance.now();
   const todayStr = getTodayStr();

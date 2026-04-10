@@ -288,31 +288,33 @@ export function StudentDashboard({
           </div>
         )}
 
-        {/* Quick actions row */}
-        <div className={`grid gap-2 ${qrToken ? "grid-cols-3" : "grid-cols-2"}`}>
-          <button
-            type="button"
-            onClick={() => navigateTo("/catalog", "quick-products")}
-            disabled={loadingId === "quick-products"}
-            className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-emerald-700 active:bg-emerald-800"
-          >
-            <ShoppingBag className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
-            <span className="text-sm sm:text-xs font-bold text-white truncate">
-              {loadingId === "quick-products" ? "…" : "Buy a product"}
-            </span>
-          </button>
+        {/* Quick actions — 2-col top row, optional full-width QR below */}
+        <div className="flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => navigateTo("/catalog", "quick-products")}
+              disabled={loadingId === "quick-products"}
+              className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-emerald-700 active:bg-emerald-800"
+            >
+              <ShoppingBag className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
+              <span className="text-sm sm:text-xs font-bold text-white">
+                {loadingId === "quick-products" ? "…" : "Buy a product"}
+              </span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => navigateTo("/classes", "quick-classes")}
-            disabled={loadingId === "quick-classes"}
-            className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-blue-700 active:bg-blue-800"
-          >
-            <Calendar className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
-            <span className="text-sm sm:text-xs font-bold text-white truncate">
-              {loadingId === "quick-classes" ? "…" : "Book a class"}
-            </span>
-          </button>
+            <button
+              type="button"
+              onClick={() => navigateTo("/classes", "quick-classes")}
+              disabled={loadingId === "quick-classes"}
+              className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-blue-700 active:bg-blue-800"
+            >
+              <Calendar className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
+              <span className="text-sm sm:text-xs font-bold text-white">
+                {loadingId === "quick-classes" ? "…" : "Book a class"}
+              </span>
+            </button>
+          </div>
 
           {qrToken && (
             <button
@@ -322,7 +324,7 @@ export function StudentDashboard({
               className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-gray-50 active:bg-gray-100"
             >
               <QrCode className="h-5 w-5 sm:h-4 sm:w-4 text-indigo-600 shrink-0" />
-              <span className="text-sm sm:text-xs font-bold text-gray-900 truncate">Show QR code</span>
+              <span className="text-sm sm:text-xs font-bold text-gray-900">Show QR code</span>
             </button>
           )}
         </div>

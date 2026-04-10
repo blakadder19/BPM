@@ -89,10 +89,12 @@ export default async function BookingsPage({
   if (!user) redirect("/login");
   const _tAuth = performance.now();
 
-  await ensureOperationalDataHydrated();
+  // Overlap hydration with searchParams resolution
+  const [, params] = await Promise.all([
+    ensureOperationalDataHydrated(),
+    searchParams ? searchParams : Promise.resolve({} as AdminBookingsFilterParams),
+  ]);
   const _tHydrate = performance.now();
-
-  const params = searchParams ? await searchParams : {};
   const svc = getBookingRepo().getService();
 
   const instances = getInstances();

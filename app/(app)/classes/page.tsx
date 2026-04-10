@@ -29,18 +29,10 @@ export default async function ClassesPage() {
   const user = await requireRole(["admin", "teacher", "student"]);
   const _tAuth = performance.now();
 
-  await ensureOperationalDataHydrated();
-  const _tHydrate = performance.now();
-  lazyExpireSubscriptions().catch(() => {});
-  const _tLazy = performance.now();
-
-  const danceStyles = getDanceStyles();
-
   if (user.role === "student") {
-    const instances = getInstances();
-    const svc = getBookingRepo().getService();
-
-    const [cocDone, terms, allStudentSubs, allProducts, student, bdayUsed] = await Promise.all([
+    // Run hydration AND direct-DB queries in parallel
+    const [, cocDone, terms, allStudentSubs, allProducts, student, bdayUsed] = await Promise.all([
+      ensureOperationalDataHydrated(),
       cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
       cachedGetTerms(),
       cachedGetStudentSubs(user.id),
@@ -49,6 +41,12 @@ export default async function ClassesPage() {
       isBirthdayClassUsed(user.id, new Date().getFullYear()),
     ]);
     const _tDb = performance.now();
+
+    lazyExpireSubscriptions().catch(() => {});
+
+    const danceStyles = getDanceStyles();
+    const instances = getInstances();
+    const svc = getBookingRepo().getService();
     if (!cocDone) redirect("/onboarding");
 
     const accessRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
@@ -214,7 +212,7 @@ export default async function ClassesPage() {
         : null;
 
     const _tEnd = performance.now();
-    console.info(`[perf /classes] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms lazy=${(_tLazy-_tHydrate).toFixed(0)}ms db=${(_tDb-_tLazy).toFixed(0)}ms prep=${(_tPrep-_tDb).toFixed(0)}ms loop(${futureInstances.length}cls)=${(_tLoop-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+    console.info(`[perf /classes] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tDb-_tAuth).toFixed(0)}ms prep=${(_tPrep-_tDb).toFixed(0)}ms loop(${futureInstances.length}cls)=${(_tLoop-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
     return (
       <ClassBrowser
@@ -227,6 +225,10 @@ export default async function ClassesPage() {
     );
   }
 
+  await ensureOperationalDataHydrated();
+  lazyExpireSubscriptions().catch(() => {});
+
+  const danceStyles = getDanceStyles();
   const templates = getTemplates().map((t) => ({ ...t }));
   const teacherAssignments = getAssignments().map((a) => ({ ...a }));
   const allStyles = danceStyles.map((s) => ({ id: s.id, name: s.name }));
