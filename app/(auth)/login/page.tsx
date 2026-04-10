@@ -27,6 +27,7 @@ export default function LoginPage() {
       : null
   );
   const [isPending, setIsPending] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -67,7 +68,8 @@ export default function LoginPage() {
     }
 
     console.info(`[perf login] signIn=${(t1-t0).toFixed(0)}ms — navigating to ${next || "/dashboard"}`);
-    router.replace(next || "/dashboard");
+    setIsNavigating(true);
+    router.push(next || "/dashboard");
   }
 
   function fillDemo(email: string) {
@@ -75,6 +77,15 @@ export default function LoginPage() {
     const passwordInput = document.getElementById("password") as HTMLInputElement;
     if (emailInput) emailInput.value = email;
     if (passwordInput) passwordInput.value = "password123";
+  }
+
+  if (isNavigating) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 gap-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
+        <p className="text-sm font-medium text-gray-600">Signing you in…</p>
+      </div>
+    );
   }
 
   return (
@@ -119,9 +130,10 @@ export default function LoginPage() {
                 id="email"
                 name="email"
                 type="email"
+                autoComplete="email"
                 required
                 placeholder="you@example.com"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>
             <div>
@@ -135,9 +147,10 @@ export default function LoginPage() {
                 id="password"
                 name="password"
                 type="password"
+                autoComplete="current-password"
                 required
                 placeholder="••••••••"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isPending}>

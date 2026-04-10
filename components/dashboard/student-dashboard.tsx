@@ -222,13 +222,13 @@ export function StudentDashboard({
             type="button"
             onClick={() => navigateTo("/classes", "hero")}
             disabled={loadingId === "hero"}
-            className="flex w-full items-center gap-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 p-3 sm:p-4 text-left transition-shadow hover:shadow-lg active:shadow-md"
+            className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 p-4 text-left transition-shadow hover:shadow-lg active:shadow-md"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
-              <CalendarPlus className="h-5 w-5 text-white" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/20">
+              <CalendarPlus className="h-6 w-6 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm sm:text-base font-bold text-white">
+              <p className="text-base font-bold text-white">
                 {loadingId === "hero" ? "Loading…" : "Book a Class"}
               </p>
               <p className="text-xs text-indigo-100">Browse schedule and sign up</p>
@@ -248,13 +248,13 @@ export function StudentDashboard({
                 setTimeout(() => el.classList.remove("ring-2", "ring-amber-400", "ring-offset-2"), 4000);
               }
             }}
-            className="flex w-full items-center gap-3 rounded-lg bg-gradient-to-r from-amber-600 to-amber-500 p-3 sm:p-4 text-left transition-shadow hover:shadow-lg active:shadow-md cursor-pointer"
+            className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-amber-600 to-amber-500 p-4 text-left transition-shadow hover:shadow-lg active:shadow-md cursor-pointer"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
-              <CreditCard className="h-5 w-5 text-white" />
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/20">
+              <CreditCard className="h-6 w-6 text-white" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm sm:text-base font-bold text-white">Complete your payment</p>
+              <p className="text-base font-bold text-white">Complete your payment</p>
               <p className="text-xs text-amber-100">Pending payment — complete to start booking</p>
             </div>
             <ArrowRight className="h-4 w-4 text-white/70 shrink-0" />
@@ -265,13 +265,13 @@ export function StudentDashboard({
               type="button"
               onClick={() => navigateTo("/catalog", "hero-getstarted")}
               disabled={loadingId === "hero-getstarted"}
-              className="flex w-full items-center gap-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-500 p-3 sm:p-4 text-left transition-shadow hover:shadow-lg active:shadow-md cursor-pointer"
+              className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 p-4 text-left transition-shadow hover:shadow-lg active:shadow-md cursor-pointer"
             >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/20">
-                <CreditCard className="h-5 w-5 text-white" />
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/20">
+                <CreditCard className="h-6 w-6 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm sm:text-base font-bold text-white">
+                <p className="text-base font-bold text-white">
                   {loadingId === "hero-getstarted" ? "Loading…" : "Get started"}
                 </p>
                 <p className="text-xs text-indigo-100">Buy a product to book classes</p>
@@ -289,15 +289,15 @@ export function StudentDashboard({
         )}
 
         {/* Quick actions row */}
-        <div className={`grid gap-1.5 ${qrToken ? "grid-cols-3" : "grid-cols-2"}`}>
+        <div className={`grid gap-2 ${qrToken ? "grid-cols-3" : "grid-cols-2"}`}>
           <button
             type="button"
             onClick={() => navigateTo("/catalog", "quick-products")}
             disabled={loadingId === "quick-products"}
-            className="flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2.5 text-left transition-colors hover:bg-emerald-700 active:bg-emerald-800"
+            className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-emerald-700 active:bg-emerald-800"
           >
-            <ShoppingBag className="h-4 w-4 text-white/80 shrink-0" />
-            <span className="text-xs font-bold text-white truncate">
+            <ShoppingBag className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
+            <span className="text-sm sm:text-xs font-bold text-white truncate">
               {loadingId === "quick-products" ? "…" : "Products"}
             </span>
           </button>
@@ -306,10 +306,10 @@ export function StudentDashboard({
             type="button"
             onClick={() => navigateTo("/classes", "quick-classes")}
             disabled={loadingId === "quick-classes"}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2.5 text-left transition-colors hover:bg-blue-700 active:bg-blue-800"
+            className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-blue-700 active:bg-blue-800"
           >
-            <Calendar className="h-4 w-4 text-white/80 shrink-0" />
-            <span className="text-xs font-bold text-white truncate">
+            <Calendar className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
+            <span className="text-sm sm:text-xs font-bold text-white truncate">
               {loadingId === "quick-classes" ? "…" : "Classes"}
             </span>
           </button>
@@ -319,10 +319,10 @@ export function StudentDashboard({
               type="button"
               onClick={() => setShowQr(true)}
               data-tour="qr-button"
-              className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2.5 text-left transition-colors hover:bg-gray-50 active:bg-gray-100"
+              className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-gray-50 active:bg-gray-100"
             >
-              <QrCode className="h-4 w-4 text-indigo-600 shrink-0" />
-              <span className="text-xs font-bold text-gray-900 truncate">QR Code</span>
+              <QrCode className="h-5 w-5 sm:h-4 sm:w-4 text-indigo-600 shrink-0" />
+              <span className="text-sm sm:text-xs font-bold text-gray-900 truncate">QR Code</span>
             </button>
           )}
         </div>
