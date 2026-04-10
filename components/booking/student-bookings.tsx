@@ -3,9 +3,8 @@
 import { useState, useMemo, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarPlus, Inbox, XCircle, RotateCcw } from "lucide-react";
+import { CalendarPlus, Inbox, XCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +16,14 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatDate, formatTime, formatCents } from "@/lib/utils";
+import {
+  RowMeta,
+  StatusPill,
+  ActionPill,
+  InlineBadge,
+  BookingListItem,
+  SectionLabel,
+} from "@/components/student/primitives";
 import { checkLateCancelStatusAction } from "@/lib/actions/bookings-admin";
 import { studentCancelBookingAction } from "@/lib/actions/booking-student";
 import { studentRestoreBookingAction, checkRestoreEligibilityAction } from "@/lib/actions/booking-student";
@@ -78,19 +85,21 @@ export function StudentBookings({
   const [restoreTarget, setRestoreTarget] = useState<BookingView | null>(null);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <PageHeader
         title="My Bookings"
         description="Your upcoming and past class bookings."
         actions={
           <Link href="/classes">
-            <Button>
-              <CalendarPlus className="mr-2 h-4 w-4" />
+            <Button size="sm">
+              <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
               Book a class
             </Button>
           </Link>
         }
       />
+
+      <div data-tour="bookings-list" />
 
       {bookings.length === 0 ? (
         <EmptyState
@@ -99,18 +108,16 @@ export function StudentBookings({
           description="Browse available classes and book your first one!"
           action={
             <Link href="/classes">
-              <Button>Browse classes</Button>
+              <Button size="sm">Browse classes</Button>
             </Link>
           }
         />
       ) : (
         <>
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-              Upcoming ({upcoming.length})
-            </h2>
+          <section data-tour="booking-cancel" className="space-y-1.5">
+            <SectionLabel>Upcoming ({upcoming.length})</SectionLabel>
             {upcoming.length === 0 ? (
-              <p className="text-sm italic text-gray-400">No upcoming bookings.</p>
+              <p className="text-xs italic text-gray-400 px-1">No upcoming bookings.</p>
             ) : (
               upcoming.map((b) => (
                 <BookingCard
@@ -124,10 +131,8 @@ export function StudentBookings({
           </section>
 
           {waitlistEntries.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-                Waitlisted ({waitlistEntries.length})
-              </h2>
+            <section className="space-y-1.5">
+              <SectionLabel>Waitlisted ({waitlistEntries.length})</SectionLabel>
               {waitlistEntries.map((w) => (
                 <WaitlistCard key={w.id} entry={w} />
               ))}
@@ -135,13 +140,8 @@ export function StudentBookings({
           )}
 
           {restorableCancelled.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-                Recently Cancelled ({restorableCancelled.length})
-              </h2>
-              <p className="text-xs text-gray-400">
-                These bookings were cancelled for classes that have not started yet. You may be able to restore them.
-              </p>
+            <section className="space-y-1.5">
+              <SectionLabel>Recently Cancelled ({restorableCancelled.length})</SectionLabel>
               {restorableCancelled.map((b) => (
                 <BookingCard
                   key={b.id}
@@ -154,14 +154,7 @@ export function StudentBookings({
           )}
 
           {past.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-                Past & Completed ({past.length})
-              </h2>
-              {past.map((b) => (
-                <BookingCard key={b.id} booking={b} />
-              ))}
-            </section>
+            <PastBookingsSection bookings={past} />
           )}
         </>
       )}
@@ -184,6 +177,51 @@ export function StudentBookings({
   );
 }
 
+const PAST_PAGE_SIZE = 10;
+
+function PastBookingsSection({ bookings }: { bookings: BookingView[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(PAST_PAGE_SIZE);
+
+  const visibleBookings = expanded ? bookings.slice(0, visibleCount) : [];
+  const hasMore = visibleCount < bookings.length;
+
+  return (
+    <section className="space-y-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between rounded-md px-1 py-1 text-left hover:bg-gray-50 transition-colors"
+      >
+        <SectionLabel>Past &amp; Completed ({bookings.length})</SectionLabel>
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+        )}
+      </button>
+      {expanded && (
+        <>
+          {visibleBookings.map((b) => (
+            <BookingCard key={b.id} booking={b} />
+          ))}
+          {hasMore && (
+            <div className="flex justify-center pt-1">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((c) => c + PAST_PAGE_SIZE)}
+                className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+              >
+                Show more ({bookings.length - visibleCount} remaining)
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 function BookingCard({
   booking: b,
   showCancel,
@@ -197,54 +235,55 @@ function BookingCard({
   showRestore?: boolean;
   onRestore?: () => void;
 }) {
-  const hasActions = (showCancel && onCancel) || (showRestore && onRestore);
+  const borderColor = b.isAcademyCancelled
+    ? "border-gray-200"
+    : b.status === "confirmed"
+      ? "border-green-200"
+      : b.status === "checked_in"
+        ? "border-green-200"
+        : "border-gray-200";
 
   return (
-    <div className={`rounded-xl border p-3 sm:p-4 shadow-sm space-y-2 overflow-hidden ${
-      b.isAcademyCancelled
-        ? "border-gray-200 bg-gray-50"
-        : "border-gray-200 bg-white"
-    }`}>
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h3 className={`text-sm font-medium truncate ${b.isAcademyCancelled ? "text-gray-500" : "text-gray-900"}`}>{b.classTitle}</h3>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:text-sm text-gray-500">
-            {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
-            {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
-            {b.location && <span className="truncate max-w-[120px] sm:max-w-none">{b.location}</span>}
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-1 shrink-0 max-w-[40%]">
-          {b.danceRole && <StatusBadge status={b.danceRole} />}
-          {b.isAcademyCancelled ? (
-            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600 whitespace-nowrap">
-              Cancelled by academy
-            </span>
-          ) : (
-            <StatusBadge status={b.status} />
-          )}
-        </div>
-      </div>
-      {b.isAcademyCancelled && b.creditReturned && (
-        <p className="text-xs text-green-700">Credit returned</p>
-      )}
-      {hasActions && (
-        <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+    <BookingListItem
+      border={borderColor}
+      bg={b.isAcademyCancelled ? "bg-gray-50/80" : "bg-white"}
+      name={b.classTitle}
+      muted={b.isAcademyCancelled}
+      badge={b.danceRole ? <InlineBadge className="bg-gray-100 text-gray-600">{b.danceRole}</InlineBadge> : undefined}
+      meta={
+        <RowMeta>
+          {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
+          {b.startTime ? <span>{formatTime(b.startTime)}</span> : null}
+          {b.location && <span className="truncate max-w-[120px] sm:max-w-none">{b.location}</span>}
+        </RowMeta>
+      }
+      status={
+        b.isAcademyCancelled
+          ? <InlineBadge className="bg-gray-200 text-gray-600">Academy</InlineBadge>
+          : <StatusPill status={b.status} />
+      }
+      action={
+        <>
           {showCancel && onCancel && (
-            <Button variant="ghost" size="sm" onClick={onCancel} className="flex-1 sm:flex-none">
-              <XCircle className="h-4 w-4 mr-1" />
-              Cancel
-            </Button>
+            <button
+              onClick={onCancel}
+              className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition-colors"
+              title="Cancel booking"
+            >
+              <XCircle className="h-3.5 w-3.5" />
+            </button>
           )}
           {showRestore && onRestore && (
-            <Button variant="outline" size="sm" onClick={onRestore} className="flex-1 sm:flex-none">
-              <RotateCcw className="h-4 w-4 mr-1" />
-              Restore
-            </Button>
+            <ActionPill variant="restore" onClick={onRestore}>Restore</ActionPill>
           )}
-        </div>
-      )}
-    </div>
+        </>
+      }
+      extra={
+        b.isAcademyCancelled && b.creditReturned
+          ? <p className="mt-0.5 text-[10px] text-green-700">Credit returned</p>
+          : undefined
+      }
+    />
   );
 }
 
@@ -262,30 +301,34 @@ function WaitlistCard({ entry: w }: { entry: StudentWaitlistView }) {
   }
 
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 sm:p-4 shadow-sm space-y-2 overflow-hidden">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <h3 className="text-sm font-medium text-gray-900 truncate">{w.classTitle}</h3>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs sm:text-sm text-gray-500">
-            <span>{formatDate(w.date)}</span>
-            <span>{formatTime(w.startTime)}</span>
-            {w.location && <span className="truncate max-w-[120px] sm:max-w-none">{w.location}</span>}
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {w.danceRole && <StatusBadge status={w.danceRole} />}
-          <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-            #{w.position}
-          </span>
-        </div>
-      </div>
-      <div className="flex items-center pt-1 border-t border-amber-200/50">
-        <Button variant="ghost" size="sm" onClick={handleLeave} disabled={isPending} className="flex-1 sm:flex-none">
-          <XCircle className="h-4 w-4 mr-1" />
-          {isPending ? "Leaving…" : "Leave Waitlist"}
-        </Button>
-      </div>
-    </div>
+    <BookingListItem
+      border="border-amber-200"
+      bg="bg-amber-50/60"
+      name={w.classTitle}
+      badge={
+        <>
+          {w.danceRole && <InlineBadge className="bg-amber-100 text-amber-700">{w.danceRole}</InlineBadge>}
+          <InlineBadge className="bg-amber-100 text-amber-800">#{w.position}</InlineBadge>
+        </>
+      }
+      meta={
+        <RowMeta>
+          <span>{formatDate(w.date)}</span>
+          <span>{formatTime(w.startTime)}</span>
+          {w.location && <span className="truncate max-w-[120px] sm:max-w-none">{w.location}</span>}
+        </RowMeta>
+      }
+      action={
+        <button
+          onClick={handleLeave}
+          disabled={isPending}
+          className="rounded-md p-1.5 text-amber-600 hover:bg-amber-100 hover:text-amber-800 transition-colors disabled:opacity-50"
+          title="Leave waitlist"
+        >
+          <XCircle className="h-3.5 w-3.5" />
+        </button>
+      }
+    />
   );
 }
 
@@ -493,7 +536,7 @@ function StudentRestoreDialog({
             )}
             {booking.location && <p>{booking.location}</p>}
             <div className="mt-1">
-              <StatusBadge status={booking.status} />
+              <StatusPill status={booking.status} />
             </div>
           </div>
 

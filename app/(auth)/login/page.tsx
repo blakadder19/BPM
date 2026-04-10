@@ -52,11 +52,13 @@ export default function LoginPage() {
       return;
     }
 
+    const t0 = performance.now();
     const supabase = createClient();
     const { error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    const t1 = performance.now();
 
     if (authError) {
       setError(authError.message);
@@ -64,6 +66,7 @@ export default function LoginPage() {
       return;
     }
 
+    console.info(`[perf login] signIn=${(t1-t0).toFixed(0)}ms — navigating to ${next || "/dashboard"}`);
     router.replace(next || "/dashboard");
   }
 

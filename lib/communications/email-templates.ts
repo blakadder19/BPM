@@ -226,7 +226,7 @@ function birthdayBenefitAvailable(
         ${infoRow("Available until", p.expiresDate)}
       </table>
       <p style="margin:16px 0 0;color:#52525b;font-size:14px;">
-        Book any class before the date above and select "Birthday Free Class" as your
+        Book any class by the date above and select "Birthday Free Class" as your
         entitlement to redeem this benefit. Enjoy your special week!
       </p>`
     ),

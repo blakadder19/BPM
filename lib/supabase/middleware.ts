@@ -18,6 +18,8 @@ export async function updateSession(request: NextRequest) {
     return { supabaseResponse, user: null };
   }
 
+  const _m0 = Date.now();
+
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
@@ -38,6 +40,9 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const _m1 = Date.now();
+  console.info(`[perf middleware] getUser=${_m1 - _m0}ms path=${request.nextUrl.pathname}`);
 
   return { supabaseResponse, user };
 }

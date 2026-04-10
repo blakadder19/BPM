@@ -1,14 +1,16 @@
 import { requireRole } from "@/lib/auth";
 import {
-  getStudentRepo,
-  getSubscriptionRepo,
-  getProductRepo,
-  getTermRepo,
   getBookingRepo,
   getPenaltyRepo,
   getAttendanceRepo,
-  getDanceStyleRepo,
 } from "@/lib/repositories";
+import {
+  cachedGetTerms,
+  cachedGetProducts,
+  cachedGetAllStudents,
+  cachedGetAllSubs,
+  cachedGetAllDanceStyles,
+} from "@/lib/server/cached-queries";
 import { getWalletTransactions } from "@/lib/services/wallet-service";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -16,37 +18,41 @@ import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { AdminStudents } from "@/components/students/admin-students";
-import { isBirthdayClassUsed, getBirthdayRedemption, type BirthdayRedemption } from "@/lib/services/birthday-benefit-store";
+import { getAllRedemptionsForYear, type BirthdayRedemption } from "@/lib/services/birthday-benefit-store";
 
 export default async function StudentsPage({
   searchParams,
 }: {
   searchParams?: Promise<{ search?: string }>;
 }) {
+  const _t0 = performance.now();
   await requireRole(["admin"]);
   const params = searchParams ? await searchParams : {};
 
   await ensureOperationalDataHydrated();
-  await lazyExpireSubscriptions();
+  lazyExpireSubscriptions().catch(() => {});
+  const _tHydrate = performance.now();
 
-  const [students, subscriptions, walletTransactions, products, terms, danceStyles] = await Promise.all([
-    getStudentRepo().getAll(),
-    getSubscriptionRepo().getAll(),
+  const year = new Date().getFullYear();
+  const [students, subscriptions, walletTransactions, products, terms, danceStyles, birthdayMap] = await Promise.all([
+    cachedGetAllStudents(),
+    cachedGetAllSubs(),
     getWalletTransactions(),
-    getProductRepo().getAll(),
-    getTermRepo().getAll(),
-    getDanceStyleRepo().getAll(),
+    cachedGetProducts(),
+    cachedGetTerms(),
+    cachedGetAllDanceStyles(),
+    getAllRedemptionsForYear(year),
   ]);
+  const _tDb = performance.now();
 
   const bookingSvc = getBookingRepo().getService();
 
   const instances = getInstances();
   const allDanceStyles = getDanceStyles();
+  const styleByName = new Map(allDanceStyles.map((s) => [s.name, s]));
   bookingSvc.refreshClasses(
     instances.map((bc) => {
-      const style = bc.styleName
-        ? allDanceStyles.find((s) => s.name === bc.styleName)
-        : null;
+      const style = bc.styleName ? styleByName.get(bc.styleName) : null;
       return {
         id: bc.id,
         title: bc.title,
@@ -110,15 +116,14 @@ export default async function StudentsPage({
     status: a.status,
   }));
 
-  const year = new Date().getFullYear();
   const birthdayRedemptionMap: Record<string, BirthdayRedemption> = {};
-  await Promise.all(
-    students.map(async (s) => {
-      const r = await getBirthdayRedemption(s.id, year);
-      if (r) birthdayRedemptionMap[s.id] = r;
-    })
-  );
+  for (const [sid, r] of birthdayMap) {
+    birthdayRedemptionMap[sid] = r;
+  }
   const birthdayUsedIds = Object.keys(birthdayRedemptionMap);
+
+  const _tEnd = performance.now();
+  console.info(`[perf /students] hydrate=${(_tHydrate-_t0).toFixed(0)}ms db=${(_tDb-_tHydrate).toFixed(0)}ms enrich=${(_tEnd-_tDb).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
   return (
     <AdminStudents

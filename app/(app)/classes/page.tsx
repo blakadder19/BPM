@@ -7,53 +7,57 @@ import { getSettings } from "@/lib/services/settings-store";
 import { getInstances } from "@/lib/services/schedule-store";
 import {
   getBookingRepo,
-  getSubscriptionRepo,
-  getTermRepo,
-  getStudentRepo,
-  getCocRepo,
 } from "@/lib/repositories";
+import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentById, cachedGetStudentSubs } from "@/lib/server/cached-queries";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
-import { getProductRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { isClassInFuture, getTodayStr } from "@/lib/domain/datetime";
 import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 
-import { computeBookability, type ClassInstanceInfo, type BookabilityContext, type BirthdayBenefitState } from "@/lib/domain/bookability";
+import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
-import { isBirthdayWeek } from "@/lib/domain/member-benefits";
+import { checkBirthdayBenefitEligibility } from "@/lib/domain/member-benefits";
 import { AdminTemplates } from "@/components/classes/admin-templates";
 import { ClassBrowser } from "@/components/booking/class-browser";
 import type { ClassCardData } from "@/components/booking/student-class-card";
 
 export default async function ClassesPage() {
+  const _t0 = performance.now();
   const user = await requireRole(["admin", "teacher", "student"]);
+  const _tAuth = performance.now();
 
   await ensureOperationalDataHydrated();
-  await lazyExpireSubscriptions();
+  const _tHydrate = performance.now();
+  lazyExpireSubscriptions().catch(() => {});
+  const _tLazy = performance.now();
 
   const danceStyles = getDanceStyles();
 
   if (user.role === "student") {
-    const cocDone = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
-    if (!cocDone) redirect("/onboarding");
-
     const instances = getInstances();
     const svc = getBookingRepo().getService();
-    const [terms, allSubs, allProducts] = await Promise.all([
-      getTermRepo().getAll(),
-      getSubscriptionRepo().getAll(),
-      getProductRepo().getAll(),
+
+    const [cocDone, terms, allStudentSubs, allProducts, student] = await Promise.all([
+      cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
+      cachedGetTerms(),
+      cachedGetStudentSubs(user.id),
+      cachedGetProducts(),
+      cachedGetStudentById(user.id),
     ]);
-    const accessRulesMap = buildDynamicAccessRulesMap(allProducts);
+    const _tDb = performance.now();
+    if (!cocDone) redirect("/onboarding");
+
+    const accessRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
+
+    // Pre-index dance styles by name for O(1) lookup instead of per-class .find()
+    const styleByName = new Map(danceStyles.map((s) => [s.name, s]));
 
     svc.refreshClasses(
       instances.map((bc) => {
-        const style = bc.styleName
-          ? danceStyles.find((s) => s.name === bc.styleName)
-          : null;
+        const style = bc.styleName ? styleByName.get(bc.styleName) : null;
         return {
           id: bc.id,
           title: bc.title,
@@ -72,43 +76,62 @@ export default async function ClassesPage() {
       })
     );
 
-    const student = await getStudentRepo().getById(user.id);
-
     const studentId = student?.id ?? "";
-    const studentSubs = allSubs.filter(
-      (s) => s.studentId === studentId && s.status === "active"
-    );
+    const studentSubs = allStudentSubs.filter((s) => s.status === "active");
     const studentBookings = svc.getBookingsForStudent(studentId);
     const studentWaitlist = svc.getWaitlistForStudent(studentId);
 
+    // Pre-index student bookings and waitlist by classId for O(1) lookups
+    const bookingsByClass = new Map<string, typeof studentBookings>();
+    for (const b of studentBookings) {
+      let list = bookingsByClass.get(b.bookableClassId);
+      if (!list) { list = []; bookingsByClass.set(b.bookableClassId, list); }
+      list.push(b);
+    }
+    const waitlistByClass = new Map<string, (typeof studentWaitlist)[number]>();
+    for (const w of studentWaitlist) {
+      waitlistByClass.set(w.bookableClassId, w);
+    }
+
+    // Pre-compute confirmed bookings per class to avoid full-scan per class
+    const confirmedByClass = new Map<string, { total: number; leaders: number; followers: number }>();
+    for (const b of svc.bookings) {
+      if (b.status !== "confirmed" && b.status !== "checked_in") continue;
+      let entry = confirmedByClass.get(b.bookableClassId);
+      if (!entry) { entry = { total: 0, leaders: 0, followers: 0 }; confirmedByClass.set(b.bookableClassId, entry); }
+      entry.total++;
+      if (b.danceRole === "leader") entry.leaders++;
+      else if (b.danceRole === "follower") entry.followers++;
+    }
+
     const cocAccepted = cocDone;
 
-    let classesBirthdayBenefit: BirthdayBenefitState | undefined;
-    const activeMembership = studentSubs.find(
-      (s) => s.productType === "membership" && s.status === "active"
-    );
-    if (activeMembership && student?.dateOfBirth) {
-      const todayForBirthday = getTodayStr();
-      if (isBirthdayWeek(student.dateOfBirth, todayForBirthday)) {
-        const alreadyUsed = await isBirthdayClassUsed(student.id, new Date().getFullYear());
-        classesBirthdayBenefit = {
-          eligible: true,
-          alreadyUsed,
-          membershipSubscriptionId: activeMembership.id,
-        };
-      }
-    }
+    const bdayUsed = student?.dateOfBirth
+      ? await isBirthdayClassUsed(student.id, new Date().getFullYear())
+      : false;
+    const bdayEligibility = checkBirthdayBenefitEligibility({
+      subscriptions: studentSubs,
+      dateOfBirth: student?.dateOfBirth ?? null,
+      referenceDate: getTodayStr(),
+      alreadyUsedThisYear: bdayUsed,
+    });
+    const classesBirthdayBenefit = bdayEligibility.potentiallyEligible
+      ? {
+          eligible: true as const,
+          alreadyUsed: bdayEligibility.alreadyUsed,
+          membershipSubscriptionId: bdayEligibility.membershipSubscriptionId!,
+        }
+      : undefined;
+    const _tPrep = performance.now();
 
     const futureInstances = instances
       .filter((c) => isClassInFuture(c.date, c.startTime))
       .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
 
     const classCards: ClassCardData[] = futureInstances.map((rawCls) => {
-      const style = rawCls.styleName
-        ? danceStyles.find((s) => s.name === rawCls.styleName)
-        : null;
+      const style = rawCls.styleName ? styleByName.get(rawCls.styleName) : null;
 
-      const confirmedForClass = svc.getConfirmedBookingsForClass(rawCls.id);
+      const stats = confirmedByClass.get(rawCls.id);
       const classInfo: ClassInstanceInfo = {
         id: rawCls.id,
         title: rawCls.title,
@@ -125,26 +148,21 @@ export default async function ClassesPage() {
         leaderCap: rawCls.leaderCap,
         followerCap: rawCls.followerCap,
         danceStyleRequiresBalance: style?.requiresRoleBalance ?? false,
-        currentLeaders: confirmedForClass.filter((b) => b.danceRole === "leader").length,
-        currentFollowers: confirmedForClass.filter((b) => b.danceRole === "follower").length,
-        totalBooked: confirmedForClass.length,
+        currentLeaders: stats?.leaders ?? 0,
+        currentFollowers: stats?.followers ?? 0,
+        totalBooked: stats?.total ?? 0,
         termBound: rawCls.termBound ?? false,
         termId: rawCls.termId ?? null,
       };
 
-      const activeBooking = studentBookings.find(
-        (b) =>
-          b.bookableClassId === rawCls.id &&
-          (b.status === "confirmed" || b.status === "checked_in")
+      const classBookings = bookingsByClass.get(rawCls.id);
+      const activeBooking = classBookings?.find(
+        (b) => b.status === "confirmed" || b.status === "checked_in"
       );
-      const waitlistEntry = studentWaitlist.find(
-        (w) => w.bookableClassId === rawCls.id
-      );
+      const waitlistEntry = waitlistByClass.get(rawCls.id);
       const cancelledBooking = !activeBooking
-        ? studentBookings.find(
-            (b) =>
-              b.bookableClassId === rawCls.id &&
-              (b.status === "cancelled" || b.status === "late_cancelled")
+        ? classBookings?.find(
+            (b) => b.status === "cancelled" || b.status === "late_cancelled"
           )
         : undefined;
 
@@ -182,11 +200,12 @@ export default async function ClassesPage() {
         endTime: rawCls.endTime,
         location: rawCls.location,
         maxCapacity: rawCls.maxCapacity,
-        totalBooked: confirmedForClass.length,
+        totalBooked: stats?.total ?? 0,
         danceStyleRequiresBalance: style?.requiresRoleBalance ?? false,
         bookability,
       };
     });
+    const _tLoop = performance.now();
 
     const todayStr = getTodayStr();
     const currentTerm = getCurrentTerm(terms, todayStr);
@@ -196,6 +215,9 @@ export default async function ClassesPage() {
       : nextTerm
         ? { name: nextTerm.name ?? "Next Term", startDate: nextTerm.startDate, endDate: nextTerm.endDate }
         : null;
+
+    const _tEnd = performance.now();
+    console.info(`[perf /classes] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms lazy=${(_tLazy-_tHydrate).toFixed(0)}ms db=${(_tDb-_tLazy).toFixed(0)}ms prep=${(_tPrep-_tDb).toFixed(0)}ms loop(${futureInstances.length}cls)=${(_tLoop-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
     return (
       <ClassBrowser
@@ -211,7 +233,7 @@ export default async function ClassesPage() {
   const templates = getTemplates().map((t) => ({ ...t }));
   const teacherAssignments = getAssignments().map((a) => ({ ...a }));
   const allStyles = danceStyles.map((s) => ({ id: s.id, name: s.name }));
-  const terms = await getTermRepo().getAll();
+  const terms = await cachedGetTerms();
   const allTerms = terms.map((t) => ({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate }));
   const settings = getSettings();
   const nameMap = buildTeacherNameMap();

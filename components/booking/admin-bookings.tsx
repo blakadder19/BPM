@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useTransition, useCallback } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Plus, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
@@ -55,6 +55,28 @@ const SOURCE_OPTIONS = [
 
 // ── Props ────────────────────────────────────────────────────
 
+interface PaginationMeta {
+  currentPage: number;
+  totalPages: number;
+  totalCount: number;
+  pageSize: number;
+}
+
+interface ServerFilters {
+  status: string;
+  role: string;
+  source: string;
+  type: string;
+  location: string;
+  upcomingOnly: boolean;
+  waitlistOnly: boolean;
+}
+
+interface FilterOption {
+  value: string;
+  label: string;
+}
+
 interface AdminBookingsProps {
   bookings: BookingView[];
   students: StudentOption[];
@@ -65,6 +87,10 @@ interface AdminBookingsProps {
   initialSearch?: string;
   isDev?: boolean;
   today?: string;
+  pagination?: PaginationMeta;
+  serverFilters?: ServerFilters;
+  typeOptions?: FilterOption[];
+  locationOptions?: FilterOption[];
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -79,18 +105,17 @@ export function AdminBookings({
   initialSearch,
   isDev,
   today: todayProp,
+  pagination,
+  serverFilters,
+  typeOptions: typeOptionsProp,
+  locationOptions: locationOptionsProp,
 }: AdminBookingsProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const currentParams = useSearchParams();
   const [, startTransition] = useTransition();
 
-  const [search, setSearch] = useState(initialSearch ?? "");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [locationFilter, setLocationFilter] = useState("");
-  const [upcomingOnly, setUpcomingOnly] = useState(true);
-  const [waitlistOnly, setWaitlistOnly] = useState(false);
+  const isServerPaginated = !!pagination;
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -98,74 +123,45 @@ export function AdminBookings({
   const [deleteTarget, setDeleteTarget] = useState<BookingView | null>(null);
   const [waitlistClassId, setWaitlistClassId] = useState<string | null>(null);
 
+  const pushParams = useCallback(
+    (updates: Record<string, string>) => {
+      const sp = new URLSearchParams(currentParams.toString());
+      for (const [k, v] of Object.entries(updates)) {
+        if (v) sp.set(k, v);
+        else sp.delete(k);
+      }
+      sp.delete("page");
+      router.push(`${pathname}?${sp.toString()}`);
+    },
+    [router, pathname, currentParams]
+  );
+
+  const pushPage = useCallback(
+    (page: number) => {
+      const sp = new URLSearchParams(currentParams.toString());
+      if (page <= 1) sp.delete("page");
+      else sp.set("page", String(page));
+      router.push(`${pathname}?${sp.toString()}`);
+    },
+    [router, pathname, currentParams]
+  );
+
+  const search = serverFilters ? (currentParams.get("q") ?? initialSearch ?? "") : (initialSearch ?? "");
+  const statusFilter = serverFilters?.status ?? "";
+  const roleFilter = serverFilters?.role ?? "";
+  const sourceFilter = serverFilters?.source ?? "";
+  const typeFilter = serverFilters?.type ?? "";
+  const locationFilter = serverFilters?.location ?? "";
+  const upcomingOnly = serverFilters?.upcomingOnly ?? true;
+  const waitlistOnly = serverFilters?.waitlistOnly ?? false;
+
+  const typeOptions = typeOptionsProp ?? [];
+  const locationOptions = locationOptionsProp ?? [];
+
   const today = todayProp ?? new Date().toISOString().slice(0, 10);
 
-  const typeOptions = useMemo(() => {
-    const types = new Set(bookings.map((b) => b.classType).filter(Boolean));
-    return Array.from(types).map((t) => ({ value: t!, label: t! }));
-  }, [bookings]);
-
-  const locationOptions = useMemo(() => {
-    const locs = new Set(bookings.map((b) => b.location).filter(Boolean));
-    return Array.from(locs).map((l) => ({ value: l!, label: l! }));
-  }, [bookings]);
-
-  const q = search.toLowerCase();
-
-  const filtered = useMemo(() => {
-    const result = bookings.filter((b) => {
-      if (
-        q &&
-        !b.studentName.toLowerCase().includes(q) &&
-        !b.classTitle.toLowerCase().includes(q)
-      )
-        return false;
-      if (statusFilter && b.status !== statusFilter) return false;
-      if (roleFilter === "none" && b.danceRole !== null) return false;
-      if (roleFilter && roleFilter !== "none" && b.danceRole !== roleFilter)
-        return false;
-      if (sourceFilter && b.source !== sourceFilter) return false;
-      if (typeFilter && b.classType !== typeFilter) return false;
-      if (locationFilter && b.location !== locationFilter) return false;
-      if (upcomingOnly) {
-        if (b.date < today) return false;
-        if (b.date === today && b.endTime && isClassEnded(b.date, b.endTime)) return false;
-      }
-      if (waitlistOnly) {
-        const hasWaitlist = waitlistEntries.some(
-          (w) => w.classId === b.classId
-        );
-        if (!hasWaitlist) return false;
-      }
-      return true;
-    });
-    if (upcomingOnly) {
-      result.sort((a, b) => {
-        const cmp = a.date.localeCompare(b.date);
-        if (cmp !== 0) return cmp;
-        return a.startTime.localeCompare(b.startTime);
-      });
-    } else {
-      result.sort((a, b) => {
-        const cmp = b.date.localeCompare(a.date);
-        if (cmp !== 0) return cmp;
-        return b.bookedAt.localeCompare(a.bookedAt);
-      });
-    }
-    return result;
-  }, [
-    bookings,
-    q,
-    statusFilter,
-    roleFilter,
-    sourceFilter,
-    typeFilter,
-    locationFilter,
-    upcomingOnly,
-    waitlistOnly,
-    today,
-    waitlistEntries,
-  ]);
+  const displayBookings = bookings;
+  const totalCount = pagination?.totalCount ?? bookings.length;
 
   const [restoreFlash, setRestoreFlash] = useState<string | null>(null);
 
@@ -220,6 +216,13 @@ export function AdminBookings({
     "Actions",
   ];
 
+  const [searchDraft, setSearchDraft] = useState(search);
+
+  function commitSearch(value: string) {
+    setSearchDraft(value);
+    pushParams({ q: value });
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -238,33 +241,44 @@ export function AdminBookings({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
           <div className="w-full sm:max-w-xs">
             <SearchInput
-              value={search}
-              onChange={setSearch}
+              value={searchDraft}
+              onChange={(v) => {
+                setSearchDraft(v);
+                if (isServerPaginated) {
+                  if (v === "") commitSearch("");
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && isServerPaginated) commitSearch(searchDraft);
+              }}
+              onBlur={() => {
+                if (isServerPaginated && searchDraft !== search) commitSearch(searchDraft);
+              }}
               placeholder="Search by student or class…"
             />
           </div>
           <SelectFilter
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={(v) => pushParams({ status: v })}
             options={STATUS_OPTIONS}
             placeholder="All statuses"
           />
           <SelectFilter
             value={roleFilter}
-            onChange={setRoleFilter}
+            onChange={(v) => pushParams({ role: v })}
             options={ROLE_OPTIONS}
             placeholder="All roles"
           />
           <SelectFilter
             value={sourceFilter}
-            onChange={setSourceFilter}
+            onChange={(v) => pushParams({ source: v })}
             options={SOURCE_OPTIONS}
             placeholder="All sources"
           />
           {typeOptions.length > 1 && (
             <SelectFilter
               value={typeFilter}
-              onChange={setTypeFilter}
+              onChange={(v) => pushParams({ type: v })}
               options={typeOptions}
               placeholder="All types"
             />
@@ -272,7 +286,7 @@ export function AdminBookings({
           {locationOptions.length > 1 && (
             <SelectFilter
               value={locationFilter}
-              onChange={setLocationFilter}
+              onChange={(v) => pushParams({ location: v })}
               options={locationOptions}
               placeholder="All locations"
             />
@@ -284,7 +298,7 @@ export function AdminBookings({
             <input
               type="checkbox"
               checked={upcomingOnly}
-              onChange={(e) => setUpcomingOnly(e.target.checked)}
+              onChange={(e) => pushParams({ upcoming: e.target.checked ? "" : "false" })}
               className="rounded border-gray-300"
             />
             Upcoming only
@@ -293,7 +307,7 @@ export function AdminBookings({
             <input
               type="checkbox"
               checked={waitlistOnly}
-              onChange={(e) => setWaitlistOnly(e.target.checked)}
+              onChange={(e) => pushParams({ waitlist: e.target.checked ? "true" : "" })}
               className="rounded border-gray-300"
             />
             Has waitlist
@@ -308,8 +322,8 @@ export function AdminBookings({
       )}
 
       {/* Table */}
-      <AdminTable headers={HEADERS} count={filtered.length}>
-        {filtered.map((b) => {
+      <AdminTable headers={HEADERS} count={totalCount}>
+        {displayBookings.map((b) => {
           const isExpanded = expandedId === b.id;
           const isActive =
             b.status === "confirmed" || b.status === "checked_in";
@@ -429,6 +443,38 @@ export function AdminBookings({
           );
         })}
       </AdminTable>
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+          <p className="text-sm text-gray-500">
+            Showing {(pagination.currentPage - 1) * pagination.pageSize + 1}–
+            {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalCount)} of{" "}
+            {pagination.totalCount} bookings
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pagination.currentPage <= 1}
+              onClick={() => pushPage(pagination.currentPage - 1)}
+            >
+              Previous
+            </Button>
+            <span className="text-sm text-gray-600">
+              Page {pagination.currentPage} of {pagination.totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pagination.currentPage >= pagination.totalPages}
+              onClick={() => pushPage(pagination.currentPage + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Dialogs */}
       {showAdd && (

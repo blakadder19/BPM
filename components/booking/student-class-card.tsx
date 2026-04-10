@@ -1,11 +1,16 @@
 "use client";
 
-import { CalendarDays, Clock, MapPin, Users } from "lucide-react";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { Button } from "@/components/ui/button";
-import { formatDate, formatTime } from "@/lib/utils";
+import { Users } from "lucide-react";
+import { formatTime } from "@/lib/utils";
 import { getClassLevelDescription } from "@/config/class-levels";
-import type { BookabilityResult } from "@/lib/domain/bookability";
+import {
+  RowMeta,
+  MetaTime,
+  MetaLocation,
+  ActionPill,
+  InlineBadge,
+  ClassListItem,
+} from "@/components/student/primitives";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
 
 export interface ClassCardData {
@@ -47,104 +52,95 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
 
   const isBlocked = b.status === "blocked" || b.status === "not_bookable";
 
+  const borderColor = isBlocked
+    ? "border-gray-200"
+    : b.status === "already_booked" && b.bookingStatus === "checked_in"
+      ? "border-green-200"
+      : b.status === "already_booked"
+        ? "border-blue-200"
+        : b.status === "already_waitlisted"
+          ? "border-amber-200"
+          : b.status === "restore_available"
+            ? "border-orange-200"
+            : "border-gray-200";
+
+  const bgColor = isBlocked
+    ? "bg-gray-50/80"
+    : b.status === "already_booked" && b.bookingStatus === "checked_in"
+      ? "bg-green-50/50"
+      : b.status === "already_booked"
+        ? "bg-blue-50/50"
+        : b.status === "already_waitlisted"
+          ? "bg-amber-50/50"
+          : b.status === "restore_available"
+            ? "bg-orange-50/50"
+            : "bg-white";
+
   return (
-    <div
-      className={`flex flex-col rounded-xl border shadow-sm transition-shadow ${
-        isBlocked
-          ? "border-gray-200 bg-gray-50 opacity-75"
-          : b.status === "already_booked" && b.bookingStatus === "checked_in"
-            ? "border-green-200 bg-green-50"
-            : b.status === "already_booked"
-              ? "border-blue-200 bg-blue-50"
-              : b.status === "already_waitlisted"
-                ? "border-amber-200 bg-amber-50"
-                : b.status === "restore_available"
-                  ? "border-orange-200 bg-orange-50"
-                  : "border-gray-200 bg-white hover:shadow-md"
-      }`}
-    >
-      <div className="flex-1 p-4 sm:p-5">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="text-base font-semibold text-gray-900">{data.title}</h3>
-          {data.danceStyleRequiresBalance && (
-            <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-              Role required
-            </span>
-          )}
-        </div>
-
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {data.styleName && (
-            <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
-              {data.styleName}
-            </span>
-          )}
-          {data.level && (
-            <span
-              className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
-              title={getClassLevelDescription(data.level) ?? undefined}
-            >
-              {data.level}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-3 space-y-1.5 text-sm text-gray-600">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4 shrink-0 text-gray-400" />
-            {formatDate(data.date)}
-          </div>
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 shrink-0 text-gray-400" />
-            {formatTime(data.startTime)} – {formatTime(data.endTime)}
-          </div>
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 shrink-0 text-gray-400" />
-            {data.location}
-          </div>
-          {spotsLeft !== null && (
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 shrink-0 text-gray-400" />
-              <span
-                className={
-                  spotsLeft <= 3 && spotsLeft > 0
-                    ? "font-medium text-amber-600"
-                    : spotsLeft === 0
-                      ? "font-medium text-red-500"
-                      : ""
-                }
-              >
-                {spotsLeft === 0
-                  ? "Full"
-                  : `${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""} left`}
+    <ClassListItem border={borderColor} bg={bgColor} className={isBlocked ? "opacity-70" : ""}
+      name={data.title}
+      badges={
+          <>
+            {data.styleName && <InlineBadge>{data.styleName}</InlineBadge>}
+            {data.level && <InlineBadge className="bg-gray-100 text-gray-600">{data.level}</InlineBadge>}
+            {data.danceStyleRequiresBalance && <InlineBadge className="bg-violet-50 text-violet-600">Role</InlineBadge>}
+          </>
+        }
+        meta={
+          <RowMeta>
+            <MetaTime>{formatTime(data.startTime)} – {formatTime(data.endTime)}</MetaTime>
+            <MetaLocation>{data.location}</MetaLocation>
+            {spotsLeft !== null && (
+              <span className={`inline-flex items-center gap-1 ${
+                spotsLeft <= 3 && spotsLeft > 0
+                  ? "text-amber-600 font-medium"
+                  : spotsLeft === 0
+                    ? "text-red-500 font-medium"
+                    : ""
+              }`}>
+                <Users className="h-3 w-3" />
+                {spotsLeft === 0 ? "Full" : `${spotsLeft} spot${spotsLeft !== 1 ? "s" : ""}`}
               </span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="border-t border-gray-100 p-4 space-y-2">
-        {(b.status === "bookable" || b.status === "waitlistable") && b.entitlements.length > 0 && (
-          <EntitlementHint entitlements={b.entitlements} autoSelected={b.status === "bookable" ? b.autoSelected : undefined} />
-        )}
-        <BookabilityAction
-          bookability={b}
-          onBook={() => onBook(data)}
-          onRestore={
-            b.status === "restore_available" && onRestore
-              ? () => onRestore(b.bookingId)
-              : undefined
-          }
-          onAcceptCoc={onAcceptCoc}
-        />
-      </div>
-    </div>
+            )}
+          </RowMeta>
+        }
+        action={
+          <CompactActionEl
+            bookability={b}
+            onBook={() => onBook(data)}
+            onRestore={
+              b.status === "restore_available" && onRestore
+                ? () => onRestore(b.bookingId)
+                : undefined
+            }
+            onAcceptCoc={onAcceptCoc}
+          />
+        }
+        extra={
+          <>
+            {(b.status === "bookable" || b.status === "waitlistable") && b.entitlements.length > 0 && (
+              <div className="mt-1.5">
+                <EntitlementHint entitlements={b.entitlements} autoSelected={b.status === "bookable" ? b.autoSelected : undefined} />
+              </div>
+            )}
+            {b.status === "waitlistable" && (
+              <p className="mt-1 text-[10px] text-amber-600">{b.reason}</p>
+            )}
+            {isBlocked && (
+              <p className="mt-1.5 text-[11px] text-gray-500">{b.reason}</p>
+            )}
+            {b.status === "restore_available" && (
+              <p className="mt-1 text-[10px] text-orange-600">Cancelled — tap Restore to rebook</p>
+            )}
+          </>
+        }
+    />
   );
 }
 
 const COC_REASON_MATCH = /code of conduct/i;
 
-function BookabilityAction({
+function CompactActionEl({
   bookability: b,
   onBook,
   onRestore,
@@ -157,69 +153,30 @@ function BookabilityAction({
 }) {
   switch (b.status) {
     case "bookable":
-      return (
-        <Button className="w-full" onClick={onBook}>
-          Book
-        </Button>
-      );
+      return <ActionPill variant="primary" onClick={onBook}>Book</ActionPill>;
     case "waitlistable":
-      return (
-        <div className="space-y-2">
-          <p className="text-xs text-amber-700 text-center">{b.reason}</p>
-          <Button variant="secondary" className="w-full" onClick={onBook}>
-            Join Waitlist
-          </Button>
-        </div>
-      );
+      return <ActionPill variant="waitlist" onClick={onBook}>Waitlist</ActionPill>;
     case "already_booked":
       return (
-        <div className="flex items-center justify-center gap-2 py-1">
-          <StatusBadge status={b.bookingStatus === "checked_in" ? "checked_in" : "confirmed"} />
-          <span className={`text-sm ${b.bookingStatus === "checked_in" ? "text-green-700" : "text-blue-700"}`}>
-            {b.bookingStatus === "checked_in" ? "Checked in" : "You\u2019re booked"}
-          </span>
-        </div>
+        <InlineBadge className={
+          b.bookingStatus === "checked_in"
+            ? "bg-green-100 text-green-700"
+            : "bg-blue-100 text-blue-700"
+        }>
+          {b.bookingStatus === "checked_in" ? "Checked in" : "Booked"}
+        </InlineBadge>
       );
     case "already_waitlisted":
-      return (
-        <div className="flex items-center justify-center gap-2 py-1">
-          <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-            #{b.position} in queue
-          </span>
-          <span className="text-sm text-amber-700">Waitlisted</span>
-        </div>
-      );
+      return <InlineBadge className="bg-amber-100 text-amber-700">#{b.position} queued</InlineBadge>;
     case "restore_available":
-      return (
-        <div className="space-y-2">
-          <p className="text-center text-xs text-orange-700">
-            Cancelled — can be restored
-          </p>
-          {onRestore && (
-            <Button variant="outline" className="w-full" onClick={onRestore}>
-              Restore Booking
-            </Button>
-          )}
-        </div>
-      );
+      return onRestore ? <ActionPill variant="restore" onClick={onRestore}>Restore</ActionPill> : null;
     case "blocked":
       if (onAcceptCoc && COC_REASON_MATCH.test(b.reason)) {
-        return (
-          <div className="space-y-2">
-            <p className="text-center text-xs text-amber-700">{b.reason}</p>
-            <Button variant="secondary" className="w-full" onClick={onAcceptCoc}>
-              Accept Code of Conduct
-            </Button>
-          </div>
-        );
+        return <ActionPill variant="coc" onClick={onAcceptCoc}>Accept CoC</ActionPill>;
       }
-      return (
-        <p className="text-center text-sm text-gray-500 py-1">{b.reason}</p>
-      );
+      return <InlineBadge className="bg-gray-100 text-gray-500">Blocked</InlineBadge>;
     case "not_bookable":
-      return (
-        <p className="text-center text-sm text-gray-400 py-1">{b.reason}</p>
-      );
+      return <InlineBadge className="bg-gray-100 text-gray-400">N/A</InlineBadge>;
   }
 }
 
@@ -236,9 +193,9 @@ function EntitlementHint({
   let usageLabel: string;
   if (ent.classesPerTerm !== null) {
     const left = Math.max(0, ent.classesPerTerm - ent.classesUsed);
-    usageLabel = `${left} of ${ent.classesPerTerm} classes left`;
+    usageLabel = `${left}/${ent.classesPerTerm} left`;
   } else if (ent.remainingCredits !== null && ent.totalCredits !== null) {
-    usageLabel = `${ent.remainingCredits} of ${ent.totalCredits} credits left`;
+    usageLabel = `${ent.remainingCredits}/${ent.totalCredits} left`;
   } else if (ent.remainingCredits !== null) {
     usageLabel = `${ent.remainingCredits} credit${ent.remainingCredits !== 1 ? "s" : ""} left`;
   } else {
@@ -246,13 +203,13 @@ function EntitlementHint({
   }
 
   return (
-    <div className="text-center text-xs text-gray-500">
-      <span className="font-medium text-gray-700">{ent.productName}</span>
-      <span className="mx-1">·</span>
+    <p className="text-[10px] text-gray-500">
+      <span className="font-medium text-gray-600">{ent.productName}</span>
+      <span className="mx-0.5">·</span>
       <span>{usageLabel}</span>
       {entitlements.length > 1 && (
-        <span className="text-gray-400"> (+{entitlements.length - 1} more)</span>
+        <span className="text-gray-400"> (+{entitlements.length - 1})</span>
       )}
-    </div>
+    </p>
   );
 }

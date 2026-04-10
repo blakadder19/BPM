@@ -5,9 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   CreditCard,
   CalendarRange,
-  Tag,
-  CheckCircle2,
-  Clock,
   Palette,
   GraduationCap,
   Gift,
@@ -15,7 +12,7 @@ import {
   Layers,
   Inbox,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PricePill, InlineBadge, ProductListItem, SectionLabel } from "@/components/student/primitives";
 import {
   Dialog,
   DialogContent,
@@ -119,13 +116,13 @@ export function StudentCatalog({ products, stripeEnabled = false }: StudentCatal
   }, [products]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <PageHeader
-        title="Memberships & Passes"
-        description="Browse our available plans and activate your membership or pass."
+        title="Products"
+        description="Browse available memberships, passes, and drop-ins."
       />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-1.5">
         <FilterChip
           label="All"
           count={products.length}
@@ -143,26 +140,26 @@ export function StudentCatalog({ products, stripeEnabled = false }: StudentCatal
         ))}
       </div>
 
-      {grouped.length === 0 ? (
-        <EmptyState
-          icon={Inbox}
-          title="No products found"
-          description="Try a different filter or check back later."
-        />
-      ) : (
-        grouped.map(({ type, label, items }) => (
-          <section key={type}>
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
-              {label}
-            </h2>
-            <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {items.map((p) => (
-                <ProductCard key={p.id} product={p} onSelect={setPurchaseTarget} />
-              ))}
-            </div>
-          </section>
-        ))
-      )}
+      <div data-tour="catalog-products" className="space-y-3">
+        {grouped.length === 0 ? (
+          <EmptyState
+            icon={Inbox}
+            title="No products found"
+            description="Try a different filter or check back later."
+          />
+        ) : (
+          grouped.map(({ type, label, items }) => (
+            <section key={type} className="space-y-1.5">
+              <SectionLabel>{label}</SectionLabel>
+              <div className="space-y-1.5">
+                {items.map((p) => (
+                  <ProductCard key={p.id} product={p} onSelect={setPurchaseTarget} />
+                ))}
+              </div>
+            </section>
+          ))
+        )}
+      </div>
 
       {purchaseTarget && (
         <PurchaseDialog
@@ -183,175 +180,150 @@ function ProductCard({
   onSelect: (p: CatalogProduct) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const hasOwnership = !!(p.currentEntitlement || p.renewalEntitlement);
+
+  const summaryParts: string[] = [];
+  if (p.classesPerTerm != null) summaryParts.push(`${p.classesPerTerm} classes/term`);
+  else if (p.totalCredits != null) summaryParts.push(`${p.totalCredits} class${p.totalCredits !== 1 ? "es" : ""}`);
+  summaryParts.push(p.styles);
+  if (p.levels !== "All levels") summaryParts.push(p.levels);
+
+  const priceLabel = p.recurring ? `${formatCents(p.priceCents)}/term` : formatCents(p.priceCents);
 
   return (
-    <Card
-      className={`flex flex-col transition-shadow hover:shadow-md ${
+    <ProductListItem
+      name={p.name}
+      desc={summaryParts.join(" · ")}
+      price={<PricePill accent={!hasOwnership} muted={hasOwnership}>{priceLabel}</PricePill>}
+      badge={
+        <>
+          {p.currentEntitlement && (
+            <InlineBadge className={
+              p.currentEntitlement.paymentStatus === "pending"
+                ? "bg-amber-100 text-amber-700"
+                : "bg-green-100 text-green-700"
+            }>
+              {p.currentEntitlement.paymentStatus === "pending" ? "Pending" : "Active"}
+            </InlineBadge>
+          )}
+          {p.renewalEntitlement && !p.currentEntitlement && (
+            <InlineBadge className={
+              p.renewalEntitlement.paymentStatus === "pending"
+                ? "bg-amber-100 text-amber-600"
+                : "bg-green-100 text-green-600"
+            }>
+              {p.renewalEntitlement.isRenewal ? "Renewal" : "Scheduled"}
+            </InlineBadge>
+          )}
+        </>
+      }
+      border={
         p.currentEntitlement
-          ? "border-green-200 bg-green-50/30"
+          ? "border-emerald-200"
           : p.renewalEntitlement
-            ? "border-amber-200 bg-amber-50/30"
-            : ""
-      }`}
-    >
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base font-semibold text-gray-900">
-            {p.name}
-          </CardTitle>
-          <StatusBadge status={p.productType} />
-        </div>
-        {p.currentEntitlement && (
-          <div className={`flex items-center gap-1.5 text-xs font-medium mt-1 ${
-            p.currentEntitlement.paymentStatus === "pending" ? "text-amber-700" : "text-green-700"
-          }`}>
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            {p.currentEntitlement.paymentStatus === "pending"
-              ? "Active · Payment pending"
-              : p.currentEntitlement.paymentStatus === "paid"
-                ? "Active · Paid"
-                : "You have this"}
-          </div>
-        )}
-        {p.renewalEntitlement && (
-          <div className={`flex items-center gap-1.5 text-xs font-medium mt-1 ${
-            p.renewalEntitlement.paymentStatus === "pending" ? "text-amber-600" : "text-green-600"
-          }`}>
-            <Clock className="h-3.5 w-3.5" />
-            {(() => {
-              const label = p.renewalEntitlement.isRenewal ? "Renewal" : "Scheduled";
-              const term = p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : "";
-              return p.renewalEntitlement.paymentStatus === "pending"
-                ? `${label}${term} · Payment pending`
-                : `${label}${term}`;
-            })()}
-          </div>
-        )}
-      </CardHeader>
+            ? "border-amber-200"
+            : "border-gray-200"
+      }
+      bg={
+        p.currentEntitlement
+          ? "bg-emerald-50/60"
+          : p.renewalEntitlement
+            ? "bg-amber-50/40"
+            : "bg-white"
+      }
+      chevron
+      expanded={expanded}
+      onClick={() => setExpanded(!expanded)}
+      expandContent={
+        expanded ? (
+          <div className="border-t border-gray-100 px-3 pb-3 pt-2.5 space-y-3">
+            <p className="text-xs text-gray-600 leading-relaxed">{p.description}</p>
 
-      <CardContent className="flex-1 space-y-3 pt-0">
-        <p className="text-sm text-gray-600">{p.description}</p>
-
-        {/* Price */}
-        <div className="flex items-center gap-2">
-          <Tag className="h-4 w-4 text-gray-400" />
-          <span className="text-lg font-bold text-gray-900">
-            {formatCents(p.priceCents)}
-          </span>
-          {p.recurring && (
-            <span className="text-xs text-gray-400">/ term</span>
-          )}
-          {!p.recurring && p.validityDescription && (
-            <span className="text-xs text-gray-400">{p.validityDescription}</span>
-          )}
-        </div>
-
-        {/* Key details */}
-        <div className="space-y-1.5 text-xs text-gray-500">
-          {p.classesPerTerm != null && (
-            <div className="flex items-center gap-2">
-              <CreditCard className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-              {p.classesPerTerm} classes per term
-            </div>
-          )}
-          {p.totalCredits != null && p.classesPerTerm == null && (
-            <div className="flex items-center gap-2">
-              <Layers className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-              {p.totalCredits} class{p.totalCredits !== 1 ? "es" : ""}
-            </div>
-          )}
-
-          <div className="flex items-center gap-2">
-            <Palette className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-            {p.styles}
-          </div>
-
-          {p.levels !== "All levels" && (
-            <div className="flex items-center gap-2">
-              <GraduationCap className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-              {p.levels}
-            </div>
-          )}
-
-          {p.termBound && (
-            <div className="flex items-center gap-2">
-              <CalendarRange className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-              {p.termName ?? "Term-linked"}
-              {p.spanTerms != null && p.spanTerms > 1 && (
-                <span className="text-gray-400">({p.spanTerms} terms)</span>
+            <div className="space-y-1.5 text-xs text-gray-500">
+              {p.classesPerTerm != null && (
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  {p.classesPerTerm} classes per term
+                </div>
+              )}
+              {p.totalCredits != null && p.classesPerTerm == null && (
+                <div className="flex items-center gap-2">
+                  <Layers className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  {p.totalCredits} class{p.totalCredits !== 1 ? "es" : ""}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Palette className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                {p.styles}
+              </div>
+              {p.levels !== "All levels" && (
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  {p.levels}
+                </div>
+              )}
+              {p.termBound && (
+                <div className="flex items-center gap-2">
+                  <CalendarRange className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  {p.termName ?? "Term-linked"}
+                  {p.spanTerms != null && p.spanTerms > 1 && (
+                    <span className="text-gray-400">({p.spanTerms} terms)</span>
+                  )}
+                </div>
+              )}
+              {p.recurring && (
+                <div className="flex items-center gap-2">
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                  Auto-renewing
+                </div>
               )}
             </div>
-          )}
 
-          {p.recurring && (
-            <div className="flex items-center gap-2">
-              <RefreshCw className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-              Auto-renewing
-            </div>
-          )}
-        </div>
+            {p.benefits && p.benefits.length > 0 && (
+              <ul className="space-y-1">
+                {p.benefits.map((b, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-gray-600">
+                    <Gift className="h-3.5 w-3.5 shrink-0 text-indigo-400 mt-0.5" />
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            )}
 
-        {(p.benefits?.length || p.longDescription) && (
-          <div>
-            <button
-              type="button"
-              className="text-xs font-medium text-blue-600 hover:text-blue-700"
-              onClick={() => setExpanded(!expanded)}
-            >
-              {expanded ? "Show less" : "What's included"}
-            </button>
-            {expanded && (
-              <div className="mt-2 space-y-2">
-                {p.longDescription && (
-                  <p className="text-xs text-gray-500 leading-relaxed">
-                    {p.longDescription}
+            {p.longDescription && (
+              <p className="text-xs text-gray-500 leading-relaxed">{p.longDescription}</p>
+            )}
+
+            {p.currentEntitlement || p.renewalEntitlement ? (
+              <div className="space-y-1 text-center text-xs font-medium pt-1">
+                {p.currentEntitlement && (
+                  <p className={p.currentEntitlement.paymentStatus === "pending" ? "text-amber-700" : "text-green-700"}>
+                    {p.currentEntitlement.paymentStatus === "pending"
+                      ? "Active · Complete payment at reception"
+                      : "Already active"}
                   </p>
                 )}
-                {p.benefits && p.benefits.length > 0 && (
-                  <ul className="space-y-1">
-                    {p.benefits.map((b, i) => (
-                      <li key={i} className="flex items-start gap-2 text-xs text-gray-600">
-                        <Gift className="h-3.5 w-3.5 shrink-0 text-indigo-400 mt-0.5" />
-                        {b}
-                      </li>
-                    ))}
-                  </ul>
+                {p.renewalEntitlement && (
+                  <p className={p.renewalEntitlement.paymentStatus === "pending" ? "text-amber-600" : "text-green-600"}>
+                    {(() => {
+                      const label = p.renewalEntitlement.isRenewal ? "Renewal" : "Scheduled";
+                      const term = p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : "";
+                      return p.renewalEntitlement.paymentStatus === "pending"
+                        ? `${label}${term} · Complete payment`
+                        : `${label}${term}`;
+                    })()}
+                  </p>
                 )}
               </div>
+            ) : (
+              <Button className="w-full" size="sm" onClick={(e) => { e.stopPropagation(); onSelect(p); }}>
+                Get Started
+              </Button>
             )}
           </div>
-        )}
-      </CardContent>
-
-      <div className="border-t border-gray-100 p-3 sm:p-4">
-        {p.currentEntitlement || p.renewalEntitlement ? (
-          <div className="space-y-1 text-center text-sm font-medium">
-            {p.currentEntitlement && (
-              <p className={p.currentEntitlement.paymentStatus === "pending" ? "text-amber-700" : "text-green-700"}>
-                {p.currentEntitlement.paymentStatus === "pending"
-                  ? "Active · Please complete payment at reception"
-                  : "Already active"}
-              </p>
-            )}
-            {p.renewalEntitlement && (
-              <p className={p.renewalEntitlement.paymentStatus === "pending" ? "text-amber-600" : "text-green-600"}>
-                {(() => {
-                  const label = p.renewalEntitlement.isRenewal ? "Renewal" : "Scheduled";
-                  const term = p.renewalEntitlement.termName ? ` for ${p.renewalEntitlement.termName}` : "";
-                  return p.renewalEntitlement.paymentStatus === "pending"
-                    ? `${label}${term} · Please complete payment at reception`
-                    : `${label}${term}`;
-                })()}
-              </p>
-            )}
-          </div>
-        ) : (
-          <Button className="w-full" onClick={() => onSelect(p)}>
-            Get Started
-          </Button>
-        )}
-      </div>
-    </Card>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -464,7 +436,7 @@ function PurchaseDialog({
         </DialogHeader>
         <DialogBody className="space-y-4">
           {/* Product summary */}
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2">
+          <div className="rounded-md border border-gray-200 bg-gray-50 p-3 space-y-2">
             <div className="flex items-center justify-between">
               <p className="font-semibold text-gray-900">{p.name}</p>
               <StatusBadge status={p.productType} />
@@ -796,7 +768,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
         active
           ? "bg-gray-900 text-white"
           : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -804,7 +776,7 @@ function FilterChip({
     >
       {label}
       <span
-        className={`rounded-full px-1.5 py-0.5 text-[10px] leading-none ${
+        className={`rounded-full px-1 py-px text-[9px] leading-none ${
           active ? "bg-white/20 text-white" : "bg-gray-200 text-gray-500"
         }`}
       >

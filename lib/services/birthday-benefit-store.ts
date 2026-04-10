@@ -24,13 +24,18 @@ function hasSupabaseConfig(): boolean {
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _cachedClient: any = null;
+
 function getClient() {
+  if (_cachedClient) return _cachedClient;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key, {
+  _cachedClient = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
+  return _cachedClient;
 }
 
 // ── In-memory fallback for dev/memory mode ──────────────────
@@ -162,4 +167,41 @@ export async function unmarkBirthdayClassUsed(
 
 export function getBirthdayRedemptions(): BirthdayRedemption[] {
   return [...memoryStore()];
+}
+
+/**
+ * Batch-load all birthday redemptions for a given year in a single query.
+ * Returns a Map keyed by studentId for O(1) lookups.
+ */
+export async function getAllRedemptionsForYear(
+  year: number
+): Promise<Map<string, BirthdayRedemption>> {
+  const map = new Map<string, BirthdayRedemption>();
+  if (hasSupabaseConfig()) {
+    const client = getClient();
+    if (!client) return map;
+    try {
+      const { data, error } = await client
+        .from("birthday_redemptions")
+        .select("*")
+        .eq("year", year);
+      if (error || !data) return map;
+      for (const row of data) {
+        map.set(row.student_id as string, {
+          studentId: row.student_id as string,
+          year: row.year as number,
+          redeemedAt: row.redeemed_at as string,
+          classTitle: (row.class_title as string) ?? undefined,
+          classDate: (row.class_date as string) ?? undefined,
+        });
+      }
+    } catch {
+      // best-effort
+    }
+    return map;
+  }
+  for (const r of memoryStore()) {
+    if (r.year === year) map.set(r.studentId, r);
+  }
+  return map;
 }
