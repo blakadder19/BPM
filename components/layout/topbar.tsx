@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { switchDevRole, switchDevStudent } from "@/lib/actions/auth";
 import { dismissStudentNoticeAction } from "@/lib/actions/student-notifications";
+import { fetchStudentAlerts } from "@/lib/actions/student-alerts";
 import { useDevUnlock } from "@/lib/hooks/use-dev-unlock";
 import { useSidebar } from "@/components/providers/sidebar-provider";
 import type { AuthUser } from "@/lib/auth";
@@ -47,7 +48,19 @@ interface TopbarProps {
 export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps) {
   const { unlocked: showControls } = useDevUnlock();
   const { open: openSidebar } = useSidebar();
-  const visibleAlerts = alerts ?? [];
+
+  const [studentAlerts, setStudentAlerts] = useState<AdminAlert[]>([]);
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (user.role !== "student" || fetchedRef.current) return;
+    fetchedRef.current = true;
+    fetchStudentAlerts()
+      .then(setStudentAlerts)
+      .catch(() => {});
+  }, [user.role]);
+
+  const visibleAlerts = user.role === "student" ? studentAlerts : (alerts ?? []);
 
   return (
     <header className="flex h-14 md:h-16 items-center justify-between border-b border-gray-200 bg-white px-3 md:px-6">

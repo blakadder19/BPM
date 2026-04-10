@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
 import { getDevStudentId } from "@/lib/actions/auth";
-import { cachedGetTerms, cachedGetStudentSubs, cachedGetNotifications, cachedGetAllStudents, cachedGetStudentById } from "@/lib/server/cached-queries";
+import { cachedGetTerms, cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { UserProvider } from "@/components/providers/user-provider";
@@ -15,14 +15,6 @@ import { getInstances } from "@/lib/services/schedule-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
-import { getNoticesForStudent } from "@/lib/services/class-cancellation-store";
-import { dismissNotification, saveGenericNotificationToDB } from "@/lib/communications/notification-store";
-import { buildMessage } from "@/lib/communications/messages";
-import { checkBirthdayBenefitEligibility } from "@/lib/domain/member-benefits";
-import { birthdayBenefitAvailableEvent } from "@/lib/communications/builders";
-import { isBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
-import { isRealUser } from "@/lib/utils/is-real-user";
-import { formatTime } from "@/lib/utils";
 
 export default async function AppLayout({
   children,
@@ -60,6 +52,9 @@ export default async function AppLayout({
     ? cachedGetAllStudents().then((ss) => ss.map((s) => ({ id: s.id, fullName: s.fullName })))
     : Promise.resolve(undefined);
 
+  // Student alerts are fetched client-side in the Topbar to avoid blocking
+  // the layout render (~200ms of Supabase queries per navigation).
+  // Admin alerts are fast (local computation), so they stay server-side.
   const alertsPromise = (async (): Promise<AdminAlert[]> => {
     if (user.role === "admin") {
       try {
@@ -73,126 +68,6 @@ export default async function AppLayout({
           today: getTodayStr(),
           disabledAlertIds: settings.disabledAlertIds,
         });
-      } catch {
-        return [];
-      }
-    }
-
-    if (user.role === "student") {
-      try {
-        const studentId = devStudentId ?? user.id;
-        if (isRealUser(studentId)) {
-          const todayStr = getTodayStr();
-          const year = new Date().getFullYear();
-
-          const [stored, studentSubs, studentProfile, bdayUsed] = await Promise.all([
-            cachedGetNotifications(studentId),
-            cachedGetStudentSubs(studentId),
-            cachedGetStudentById(studentId),
-            isBirthdayClassUsed(studentId, year),
-          ]);
-          const activeSubIds = new Set(studentSubs.map((s) => s.id));
-
-          const bdayEligibility = checkBirthdayBenefitEligibility({
-            subscriptions: studentSubs,
-            dateOfBirth: studentProfile?.dateOfBirth ?? null,
-            referenceDate: todayStr,
-            alreadyUsedThisYear: bdayUsed,
-          });
-
-          const staleIds: string[] = [];
-          let birthdayNotifFound = false;
-
-          const result = stored.flatMap((n) => {
-            try {
-              if (n.type === "payment_pending" || n.type === "renewal_prepared" || n.type === "renewal_due_soon") {
-                const subId = (n.payload as { subscriptionId?: string }).subscriptionId;
-                if (subId && !activeSubIds.has(subId)) {
-                  staleIds.push(n.id);
-                  return [];
-                }
-                if (subId) {
-                  const sub = studentSubs.find((s) => s.id === subId);
-                  if (sub && sub.paymentStatus === "paid") {
-                    staleIds.push(n.id);
-                    return [];
-                  }
-                }
-              }
-
-              if (n.type === "birthday_benefit_available") {
-                birthdayNotifFound = true;
-                if (!bdayEligibility.currentlyActive) {
-                  return [];
-                }
-                const correctExpires = bdayEligibility.weekRange?.sunday ?? todayStr;
-                const bp = n.payload as { expiresDate?: string; benefitDescription?: string };
-                const effectivePayload = {
-                  benefitDescription: bp.benefitDescription ?? "Free class during your birthday week",
-                  expiresDate: correctExpires,
-                };
-                const msg = buildMessage("birthday_benefit_available", effectivePayload);
-                return [{
-                  id: n.id,
-                  severity: "info" as const,
-                  title: msg.title,
-                  message: msg.body,
-                  href: msg.href,
-                }];
-              }
-
-              // birthday_benefit_available is handled above; remaining types are safe
-              const msg = buildMessage(
-                n.type as Exclude<typeof n.type, "birthday_benefit_available">,
-                n.payload as never
-              );
-              return [{
-                id: n.id,
-                severity: (n.type === "class_cancelled" ? "warning" : "info") as "warning" | "info",
-                title: msg.title,
-                message: msg.body,
-                href: msg.href,
-              }];
-            } catch {
-              return [];
-            }
-          });
-
-          // If eligible but no birthday notification exists in DB, create one
-          // (DB-only, no email — email was sent on initial dispatch via dashboard)
-          if (bdayEligibility.currentlyActive && !birthdayNotifFound) {
-            const expiresDate = bdayEligibility.weekRange?.sunday ?? todayStr;
-            const event = birthdayBenefitAvailableEvent({
-              studentId,
-              studentName: studentProfile?.fullName ?? "",
-              expiresDate,
-              year,
-            });
-            saveGenericNotificationToDB(event).catch(() => {});
-            const msg = buildMessage("birthday_benefit_available", event.payload);
-            result.push({
-              id: event.id,
-              severity: "info" as const,
-              title: msg.title,
-              message: msg.body,
-              href: msg.href,
-            });
-          }
-
-          for (const id of staleIds) {
-            dismissNotification(id).catch(() => {});
-          }
-          return result;
-        } else {
-          const notices = getNoticesForStudent(studentId);
-          return notices.map((n) => ({
-            id: n.id,
-            severity: "warning" as const,
-            title: "Class cancelled",
-            message: `"${n.classTitle}" on ${n.classDate} at ${formatTime(n.startTime)} was cancelled by the academy.${n.creditReverted ? " Your credit has been returned." : ""}`,
-            href: "/bookings",
-          }));
-        }
       } catch {
         return [];
       }

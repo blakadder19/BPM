@@ -40,12 +40,13 @@ export default async function ClassesPage() {
     const instances = getInstances();
     const svc = getBookingRepo().getService();
 
-    const [cocDone, terms, allStudentSubs, allProducts, student] = await Promise.all([
+    const [cocDone, terms, allStudentSubs, allProducts, student, bdayUsed] = await Promise.all([
       cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
       cachedGetTerms(),
       cachedGetStudentSubs(user.id),
       cachedGetProducts(),
       cachedGetStudentById(user.id),
+      isBirthdayClassUsed(user.id, new Date().getFullYear()),
     ]);
     const _tDb = performance.now();
     if (!cocDone) redirect("/onboarding");
@@ -105,10 +106,6 @@ export default async function ClassesPage() {
     }
 
     const cocAccepted = cocDone;
-
-    const bdayUsed = student?.dateOfBirth
-      ? await isBirthdayClassUsed(student.id, new Date().getFullYear())
-      : false;
     const bdayEligibility = checkBirthdayBenefitEligibility({
       subscriptions: studentSubs,
       dateOfBirth: student?.dateOfBirth ?? null,

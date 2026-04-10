@@ -298,7 +298,7 @@ export function StudentDashboard({
           >
             <ShoppingBag className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
             <span className="text-sm sm:text-xs font-bold text-white truncate">
-              {loadingId === "quick-products" ? "…" : "Products"}
+              {loadingId === "quick-products" ? "…" : "Buy a product"}
             </span>
           </button>
 
@@ -310,7 +310,7 @@ export function StudentDashboard({
           >
             <Calendar className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
             <span className="text-sm sm:text-xs font-bold text-white truncate">
-              {loadingId === "quick-classes" ? "…" : "Classes"}
+              {loadingId === "quick-classes" ? "…" : "Book a class"}
             </span>
           </button>
 
@@ -322,7 +322,7 @@ export function StudentDashboard({
               className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-gray-50 active:bg-gray-100"
             >
               <QrCode className="h-5 w-5 sm:h-4 sm:w-4 text-indigo-600 shrink-0" />
-              <span className="text-sm sm:text-xs font-bold text-gray-900 truncate">QR Code</span>
+              <span className="text-sm sm:text-xs font-bold text-gray-900 truncate">Show QR code</span>
             </button>
           )}
         </div>
