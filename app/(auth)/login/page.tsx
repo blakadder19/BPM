@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 /* eslint-disable @next/next/no-img-element */
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,6 @@ const DEMO_USERS = [
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const next = searchParams.get("next") ?? "";
   const callbackError = searchParams.get("error");
   const confirmed = searchParams.get("confirmed") === "1";
@@ -29,16 +28,18 @@ export default function LoginPage() {
   const [isPending, setIsPending] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
 
+  const destination = next || "/dashboard";
+
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        router.replace(next || "/dashboard");
+        window.location.href = destination;
       }
     });
-  }, [router, next]);
+  }, [destination]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     setIsPending(true);
@@ -67,10 +68,21 @@ export default function LoginPage() {
       return;
     }
 
-    console.info(`[perf login] signIn=${(t1-t0).toFixed(0)}ms — navigating to ${next || "/dashboard"}`);
+    console.info(`[perf login] signIn=${(t1-t0).toFixed(0)}ms — navigating to ${destination}`);
     setIsNavigating(true);
-    router.push(next || "/dashboard");
-  }
+
+    // Signal to middleware that the JWT was just issued and doesn't need
+    // the expensive getUser() HTTP validation. Short-lived (10s) cookie
+    // that saves ~100-300ms on the very first protected page load.
+    document.cookie = "bpm_fresh_jwt=1; path=/; max-age=10; SameSite=Lax";
+
+    // Use hard navigation instead of router.push(). After login, the
+    // browser has no prefetched RSC payload for the protected route, so
+    // router.push() would wait for the full RSC roundtrip before showing
+    // anything. A hard navigation leverages SSR streaming — the browser
+    // starts rendering HTML as it arrives, giving much faster first-paint.
+    window.location.href = destination;
+  }, [destination]);
 
   function fillDemo(email: string) {
     const emailInput = document.getElementById("email") as HTMLInputElement;

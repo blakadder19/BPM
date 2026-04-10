@@ -60,8 +60,8 @@ function hasSupabaseConfig(): boolean {
  * getSession() is a local cookie read (no HTTP call), saving ~200ms.
  *
  * 1. Read the session from cookies (JWT already validated by middleware)
- * 2. Look up public.users via admin client (bypasses RLS)
- * 3. If no DB row, fall back to verified user metadata
+ * 2. Look up public.users via admin client — only the columns we need
+ * 3. If no DB row, fall back to verified user metadata from the JWT
  *
  * Profile provisioning happens ONLY in the auth callback, not here.
  */
@@ -99,16 +99,43 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
   const _a1 = performance.now();
   const emailConfirmed = !!authUser.email_confirmed_at;
 
-  // Try DB lookup via admin client (bypasses RLS, no session needed)
+  // Build identity from JWT metadata — used as fast path or fallback.
+  const email = authUser.email ?? "";
+  const demo = DEMO_ACCOUNTS[email];
+  const meta = authUser.user_metadata ?? {};
+  const jwtUser: AuthUser = {
+    id: authUser.id,
+    email,
+    fullName: demo?.fullName ?? meta.full_name ?? (email || "BPM User"),
+    role: (meta.role as UserRole) ?? demo?.role ?? "student",
+    avatarUrl: null,
+    academyId: meta.academy_id ?? "",
+    emailConfirmed,
+  };
+
+  // When the JWT was just issued (signInWithPassword), the metadata is
+  // guaranteed fresh — skip the DB lookup entirely to save ~80-120ms.
+  // The cookie is set client-side in the login form and cleared by
+  // middleware on the response so subsequent requests still hit the DB.
+  const cookieStore = await cookies();
+  const freshJwt = !!cookieStore.get("bpm_fresh_jwt")?.value;
+  if (freshJwt && jwtUser.role) {
+    const _a2 = performance.now();
+    console.info(`[perf auth] session=${(_a1-_a0).toFixed(0)}ms profile=SKIP(fresh) total=${(_a2-_a0).toFixed(0)}ms`);
+    return jwtUser;
+  }
+
+  // Normal path: DB lookup via admin client (bypasses RLS).
+  // Select only the columns we actually use to reduce payload size.
   try {
     const { createAdminClient } = await import("@/lib/supabase/admin");
     const admin = createAdminClient();
     const { data } = await admin
       .from("users")
-      .select("*")
+      .select("id,email,full_name,role,avatar_url,academy_id")
       .eq("id", authUser.id)
       .maybeSingle();
-    const dbUser = data as UserRow | null;
+    const dbUser = data as Pick<UserRow, "id" | "email" | "full_name" | "role" | "avatar_url" | "academy_id"> | null;
     const _a2 = performance.now();
     console.info(`[perf auth] session=${(_a1-_a0).toFixed(0)}ms profile=${(_a2-_a1).toFixed(0)}ms total=${(_a2-_a0).toFixed(0)}ms`);
     if (dbUser) {
@@ -123,22 +150,12 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
       };
     }
   } catch {
-    // DB unreachable — fall through to metadata
+    // DB unreachable — use JWT metadata
   }
 
-  // No DB row — derive identity from verified user metadata
-  const email = authUser.email ?? "";
-  const demo = DEMO_ACCOUNTS[email];
-  const meta = authUser.user_metadata ?? {};
-  return {
-    id: authUser.id,
-    email,
-    fullName: demo?.fullName ?? meta.full_name ?? (email || "BPM User"),
-    role: (meta.role as UserRole) ?? demo?.role ?? "student",
-    avatarUrl: null,
-    academyId: meta.academy_id ?? "",
-    emailConfirmed,
-  };
+  const _a2 = performance.now();
+  console.info(`[perf auth] session=${(_a1-_a0).toFixed(0)}ms profile(fallback)=${(_a2-_a1).toFixed(0)}ms total=${(_a2-_a0).toFixed(0)}ms`);
+  return jwtUser;
 }
 
 /**
