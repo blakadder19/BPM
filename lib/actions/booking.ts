@@ -18,9 +18,8 @@ import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveWaitlistToDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { isBirthdayClassUsed, markBirthdayClassUsed } from "@/lib/services/birthday-benefit-store";
-import { isBirthdayWeek } from "@/lib/domain/member-benefits";
-import { getTodayStr } from "@/lib/domain/datetime";
-import type { BirthdayBenefitState } from "@/lib/domain/bookability";
+import { isBirthdayWeek, checkBirthdayBenefitEligibility } from "@/lib/domain/member-benefits";
+import { dismissNotificationsByType } from "@/lib/communications/notification-store";
 
 export interface BookingResult {
   success: boolean;
@@ -140,30 +139,22 @@ export async function createStudentBooking(input: {
     CURRENT_CODE_OF_CONDUCT.version
   );
 
-  // Birthday benefit eligibility: memberships only, birthday week, once per year
-  let birthdayBenefit: BirthdayBenefitState | undefined;
-  const activeMembership = allSubs.find(
-    (s) =>
-      s.productType === "membership" &&
-      s.status === "active" &&
-      s.validFrom <= rawCls.date &&
-      (!s.validUntil || s.validUntil >= rawCls.date)
-  );
-  if (activeMembership && student.dateOfBirth) {
-    const today = getTodayStr();
-    const inBirthdayWeek = isBirthdayWeek(student.dateOfBirth, today);
-    if (inBirthdayWeek) {
-      const alreadyUsed = await isBirthdayClassUsed(
-        student.id,
-        new Date().getFullYear()
-      );
-      birthdayBenefit = {
-        eligible: true,
-        alreadyUsed,
-        membershipSubscriptionId: activeMembership.id,
-      };
-    }
-  }
+  const bdayUsed = student.dateOfBirth
+    ? await isBirthdayClassUsed(student.id, new Date().getFullYear())
+    : false;
+  const bdayEligibility = checkBirthdayBenefitEligibility({
+    subscriptions: allSubs,
+    dateOfBirth: student.dateOfBirth,
+    referenceDate: rawCls.date,
+    alreadyUsedThisYear: bdayUsed,
+  });
+  const birthdayBenefit = bdayEligibility.potentiallyEligible
+    ? {
+        eligible: true as const,
+        alreadyUsed: bdayEligibility.alreadyUsed,
+        membershipSubscriptionId: bdayEligibility.membershipSubscriptionId!,
+      }
+    : undefined;
 
   const ctx: BookabilityContext = {
     classInstance: classInfo,
@@ -252,6 +243,9 @@ export async function createStudentBooking(input: {
   if (outcome.type === "confirmed") {
     if (isBirthday) {
       await markBirthdayClassUsed(student.id, new Date().getFullYear(), rawCls.title, rawCls.date);
+      if (isRealUser(student.id)) {
+        dismissNotificationsByType(student.id, "birthday_benefit_available").catch(() => {});
+      }
     } else {
       if (sub.productType === "membership" && sub.classesPerTerm !== null) {
         await updateSubscription(sub.id, { classesUsed: sub.classesUsed + 1 });

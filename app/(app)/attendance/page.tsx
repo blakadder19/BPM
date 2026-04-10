@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth";
-import { getAttendanceRepo, getBookingRepo, getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
+import { getAttendanceRepo, getBookingRepo } from "@/lib/repositories";
+import { cachedGetAllStudents, cachedGetAllSubs } from "@/lib/server/cached-queries";
 import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -13,10 +14,12 @@ export default async function AttendancePage({
 }: {
   searchParams?: Promise<{ classTitle?: string; date?: string; student?: string }>;
 }) {
+  const _t0 = performance.now();
   const user = await requireRole(["admin", "teacher"]);
   const params = searchParams ? await searchParams : {};
 
   await ensureOperationalDataHydrated();
+  const _tHydrate = performance.now();
 
   runAttendanceClosure();
 
@@ -54,10 +57,12 @@ export default async function AttendancePage({
 
   const isDev = process.env.NODE_ENV === "development";
 
-  const allStudents = await getStudentRepo().getAll();
+  const [allStudents, allSubs] = await Promise.all([
+    cachedGetAllStudents(),
+    cachedGetAllSubs(),
+  ]);
   const studentOptions = allStudents.map((s) => ({ id: s.id, fullName: s.fullName }));
 
-  const allSubs = await getSubscriptionRepo().getAll();
   const activeSubOptions = allSubs
     .filter((s) => s.status === "active")
     .map((s) => ({
@@ -69,6 +74,9 @@ export default async function AttendancePage({
       classesUsed: s.classesUsed,
       classesPerTerm: s.classesPerTerm,
     }));
+
+  const _tEnd = performance.now();
+  console.info(`[perf /attendance] hydrate=${(_tHydrate-_t0).toFixed(0)}ms rest=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
   return (
     <AttendanceClient

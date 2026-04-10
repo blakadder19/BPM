@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
 import { getDevStudentId } from "@/lib/actions/auth";
-import { getStudentRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
+import { cachedGetTerms, cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { UserProvider } from "@/components/providers/user-provider";
@@ -10,118 +10,75 @@ import { DevPanelGate } from "@/components/dev/dev-panel-gate";
 import { SessionGuard } from "@/components/layout/session-guard";
 import { computeAdminAlerts, type AdminAlert } from "@/lib/domain/admin-alerts";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
-import { getNoticesForStudent } from "@/lib/services/class-cancellation-store";
-import { getNotificationsForStudent as getNotificationsFromDB, dismissNotification } from "@/lib/communications/notification-store";
-import { buildMessage } from "@/lib/communications/messages";
-import { isRealUser } from "@/lib/utils/is-real-user";
-import { formatTime } from "@/lib/utils";
 
 export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const _lt0 = performance.now();
   const user = await getAuthUser();
 
   if (!user) {
     redirect("/login");
   }
+  const _ltAuth = performance.now();
 
   // Hard-guard: unconfirmed email → send back to confirmation waiting screen.
   if (!user.emailConfirmed) {
     redirect("/signup?awaiting=1");
   }
 
+  // Kick off hydration immediately — pages that await it will join the
+  // already-running promise instead of starting a new one.  This moves
+  // the cold-start cost earlier so it overlaps with alert/notification work.
+  void ensureOperationalDataHydrated();
+
   const isDev = process.env.NODE_ENV === "development";
 
-  // Prepare dev data only in development (cheap data prep — actual visibility
-  // is gated client-side by the useDevUnlock hook in Topbar and DevPanelGate).
-  let devStudents: { id: string; fullName: string }[] | undefined;
+  // Get dev student ID early (just a cookie read, <1ms) so alert fetch can start sooner
   let devStudentId: string | undefined;
   if (isDev) {
-    const allStudents = await getStudentRepo().getAll();
-    devStudents = allStudents.map((s) => ({ id: s.id, fullName: s.fullName }));
     devStudentId = (await getDevStudentId()) ?? undefined;
   }
 
-  let alerts: AdminAlert[] = [];
-  if (user.role === "admin") {
-    try {
-      await ensureScheduleBootstrapped();
-      const terms = await getTermRepo().getAll();
-      const settings = getSettings();
-      alerts = computeAdminAlerts({
-        terms,
-        instances: getInstances(),
-        teacherAssignments: getAssignments(),
-        today: getTodayStr(),
-        disabledAlertIds: settings.disabledAlertIds,
-      });
-    } catch {
-      // Alert computation is best-effort — never block the layout
-    }
-  } else if (user.role === "student") {
-    try {
-      const studentId = devStudentId ?? user.id;
-      if (isRealUser(studentId)) {
-        const stored = await getNotificationsFromDB(studentId);
-        const studentSubs = await getSubscriptionRepo().getByStudent(studentId);
-        const activeSubIds = new Set(studentSubs.map((s) => s.id));
+  // Run dev student list loading AND role-specific alerts in parallel
+  const devStudentsPromise = isDev
+    ? cachedGetAllStudents().then((ss) => ss.map((s) => ({ id: s.id, fullName: s.fullName })))
+    : Promise.resolve(undefined);
 
-        const staleIds: string[] = [];
-
-        alerts = stored.flatMap((n) => {
-          try {
-            if (n.type === "payment_pending" || n.type === "renewal_prepared" || n.type === "renewal_due_soon") {
-              const subId = (n.payload as { subscriptionId?: string }).subscriptionId;
-              if (subId && !activeSubIds.has(subId)) {
-                staleIds.push(n.id);
-                return [];
-              }
-              if (subId) {
-                const sub = studentSubs.find((s) => s.id === subId);
-                if (sub && sub.paymentStatus === "paid") {
-                  staleIds.push(n.id);
-                  return [];
-                }
-              }
-            }
-
-            const msg = buildMessage(n.type, n.payload);
-            return [{
-              id: n.id,
-              severity: (n.type === "class_cancelled" ? "warning" : "info") as "warning" | "info",
-              title: msg.title,
-              message: msg.body,
-              href: msg.href,
-            }];
-          } catch {
-            return [];
-          }
+  // Student alerts are fetched client-side in the Topbar to avoid blocking
+  // the layout render (~200ms of Supabase queries per navigation).
+  // Admin alerts are fast (local computation), so they stay server-side.
+  const alertsPromise = (async (): Promise<AdminAlert[]> => {
+    if (user.role === "admin") {
+      try {
+        await ensureScheduleBootstrapped();
+        const terms = await cachedGetTerms();
+        const settings = getSettings();
+        return computeAdminAlerts({
+          terms,
+          instances: getInstances(),
+          teacherAssignments: getAssignments(),
+          today: getTodayStr(),
+          disabledAlertIds: settings.disabledAlertIds,
         });
-
-        for (const id of staleIds) {
-          dismissNotification(id).catch(() => {});
-        }
-      } else {
-        const notices = getNoticesForStudent(studentId);
-        alerts = notices.map((n) => ({
-          id: n.id,
-          severity: "warning" as const,
-          title: "Class cancelled",
-          message: `"${n.classTitle}" on ${n.classDate} at ${formatTime(n.startTime)} was cancelled by the academy.${n.creditReverted ? " Your credit has been returned." : ""}`,
-          href: "/bookings",
-        }));
+      } catch {
+        return [];
       }
-    } catch {
-      // Best-effort
     }
-  }
+    return [];
+  })();
 
+  const [devStudents, alerts] = await Promise.all([devStudentsPromise, alertsPromise]);
+
+  const _ltEnd = performance.now();
+  console.info(`[perf layout] auth=${(_ltAuth-_lt0).toFixed(0)}ms alerts=${(_ltEnd-_ltAuth).toFixed(0)}ms total=${(_ltEnd-_lt0).toFixed(0)}ms`);
   const panelStudentId = devStudentId ?? user.id;
   const panelStudentName = devStudentId
     ? devStudents?.find((s) => s.id === devStudentId)?.fullName ?? user.fullName

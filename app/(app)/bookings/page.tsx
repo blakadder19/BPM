@@ -3,11 +3,13 @@ import { getAuthUser } from "@/lib/auth";
 import {
   getBookingRepo,
   getAttendanceRepo,
-  getSubscriptionRepo,
-  getStudentRepo,
-  getProductRepo,
-  getCocRepo,
 } from "@/lib/repositories";
+import {
+  cachedCocCheck,
+  cachedGetAllStudents,
+  cachedGetAllSubs,
+  cachedGetProducts,
+} from "@/lib/server/cached-queries";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getInstances } from "@/lib/services/schedule-store";
 import { isClassEnded, getTodayStr } from "@/lib/domain/datetime";
@@ -61,26 +63,46 @@ export interface BookingView {
   creditReturned: boolean;
 }
 
+export interface AdminBookingsFilterParams {
+  q?: string;
+  status?: string;
+  role?: string;
+  source?: string;
+  type?: string;
+  location?: string;
+  upcoming?: string;
+  waitlist?: string;
+  page?: string;
+  classTitle?: string;
+  date?: string;
+}
+
+const ADMIN_PAGE_SIZE = 50;
+
 export default async function BookingsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ classTitle?: string; date?: string }>;
+  searchParams?: Promise<AdminBookingsFilterParams>;
 }) {
+  const _t0 = performance.now();
   const user = await getAuthUser();
   if (!user) redirect("/login");
+  const _tAuth = performance.now();
 
-  await ensureOperationalDataHydrated();
-
-  const params = searchParams ? await searchParams : {};
+  // Overlap hydration with searchParams resolution
+  const [, params] = await Promise.all([
+    ensureOperationalDataHydrated(),
+    searchParams ? searchParams : Promise.resolve({} as AdminBookingsFilterParams),
+  ]);
+  const _tHydrate = performance.now();
   const svc = getBookingRepo().getService();
 
   const instances = getInstances();
   const danceStyles = getDanceStyles();
+  const styleByName = new Map(danceStyles.map((s) => [s.name, s]));
   svc.refreshClasses(
     instances.map((bc) => {
-      const style = bc.styleName
-        ? danceStyles.find((s) => s.name === bc.styleName)
-        : null;
+      const style = bc.styleName ? styleByName.get(bc.styleName) : null;
       return {
         id: bc.id,
         title: bc.title,
@@ -104,6 +126,22 @@ export default async function BookingsPage({
 
   const instanceMap = new Map(instances.map((i) => [i.id, i]));
 
+  // Pre-compute per-class stats to avoid O(n²) scanning inside enrichBooking
+  const activeByClass = new Map<string, { total: number; leaders: number; followers: number }>();
+  for (const x of allBookings) {
+    if (x.status !== "confirmed" && x.status !== "checked_in") continue;
+    let entry = activeByClass.get(x.bookableClassId);
+    if (!entry) { entry = { total: 0, leaders: 0, followers: 0 }; activeByClass.set(x.bookableClassId, entry); }
+    entry.total++;
+    if (x.danceRole === "leader") entry.leaders++;
+    else if (x.danceRole === "follower") entry.followers++;
+  }
+  const waitlistByClass = new Map<string, number>();
+  for (const w of allWaitlist) {
+    if (w.status !== "waiting") continue;
+    waitlistByClass.set(w.bookableClassId, (waitlistByClass.get(w.bookableClassId) ?? 0) + 1);
+  }
+
   function enrichBooking(b: (typeof allBookings)[number]): BookingView | null {
     const cls = svc.getClass(b.bookableClassId);
     const raw = instanceMap.get(b.bookableClassId);
@@ -111,21 +149,11 @@ export default async function BookingsPage({
     const isAcademyCancelled = b.adminNote === "academy_cancelled";
     const classCancelled = raw?.status === "cancelled";
 
-    const resolvedDate = cls?.date ?? raw?.date ?? "";
+    const resolvedDate = cls?.date ?? raw?.date ?? b.bookedAt?.split("T")[0] ?? "";
 
-    // Drop bookings whose class data is completely gone — no title, no date
     if (classDeleted && !resolvedDate) return null;
 
-    const activeForClass = allBookings.filter(
-      (x) =>
-        x.bookableClassId === b.bookableClassId &&
-        (x.status === "confirmed" || x.status === "checked_in")
-    );
-    const waitlistForClass = allWaitlist.filter(
-      (w) =>
-        w.bookableClassId === b.bookableClassId && w.status === "waiting"
-    );
-
+    const stats = activeByClass.get(b.bookableClassId);
     const title = cls?.title ?? raw?.title ?? "Unknown";
 
     return {
@@ -148,12 +176,12 @@ export default async function BookingsPage({
       location: cls?.location ?? raw?.location ?? null,
       classType: cls?.classType ?? raw?.classType ?? null,
       maxCapacity: cls?.maxCapacity ?? null,
-      bookedCount: activeForClass.length,
+      bookedCount: stats?.total ?? 0,
       leaderCap: cls?.leaderCap ?? null,
       followerCap: cls?.followerCap ?? null,
-      leaderCount: activeForClass.filter((x) => x.danceRole === "leader").length,
-      followerCount: activeForClass.filter((x) => x.danceRole === "follower").length,
-      waitlistCount: waitlistForClass.length,
+      leaderCount: stats?.leaders ?? 0,
+      followerCount: stats?.followers ?? 0,
+      waitlistCount: waitlistByClass.get(b.bookableClassId) ?? 0,
       checkInToken: b.checkInToken ?? null,
       isOrphaned: classDeleted,
       isAcademyCancelled: isAcademyCancelled || classCancelled,
@@ -162,7 +190,7 @@ export default async function BookingsPage({
   }
 
   if (user.role === "student") {
-    const cocDone = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
+    const cocDone = await cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version);
     if (!cocDone) redirect("/onboarding");
 
     const attSvc = getAttendanceRepo().getService();
@@ -196,15 +224,65 @@ export default async function BookingsPage({
       .filter((w) => !isClassEnded(w.date, w.endTime))
       .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
 
+    const _tEnd = performance.now();
+    console.info(`[perf /bookings] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms enrich+render=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
     return <StudentBookings bookings={mine} waitlistEntries={myWaitlist} />;
   }
 
   const enriched = allBookings.map(enrichBooking).filter((b): b is BookingView => b !== null);
 
+  // ── Server-side filtering & pagination ──
+  const today = getTodayStr();
+  const filterQ = (params.q ?? params.classTitle ?? "").toLowerCase();
+  const filterStatus = params.status ?? "";
+  const filterRole = params.role ?? "";
+  const filterSource = params.source ?? "";
+  const filterType = params.type ?? "";
+  const filterLocation = params.location ?? "";
+  const upcomingOnly = params.upcoming !== "false";
+  const waitlistOnly = params.waitlist === "true";
+  const currentPage = Math.max(1, parseInt(params.page ?? "1", 10) || 1);
+
+  const waitlistClassIds = new Set(
+    allWaitlist.filter((w) => w.status === "waiting").map((w) => w.bookableClassId)
+  );
+
+  const filtered = enriched.filter((b) => {
+    if (filterQ && !b.studentName.toLowerCase().includes(filterQ) && !b.classTitle.toLowerCase().includes(filterQ)) return false;
+    if (filterStatus && b.status !== filterStatus) return false;
+    if (filterRole === "none" && b.danceRole !== null) return false;
+    if (filterRole && filterRole !== "none" && b.danceRole !== filterRole) return false;
+    if (filterSource && b.source !== filterSource) return false;
+    if (filterType && b.classType !== filterType) return false;
+    if (filterLocation && b.location !== filterLocation) return false;
+    if (upcomingOnly) {
+      if (b.date < today) return false;
+      if (b.date === today && b.endTime && isClassEnded(b.date, b.endTime)) return false;
+    }
+    if (waitlistOnly && !waitlistClassIds.has(b.classId ?? "")) return false;
+    return true;
+  });
+
+  if (upcomingOnly) {
+    filtered.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  } else {
+    filtered.sort((a, b) => b.date.localeCompare(a.date) || b.bookedAt.localeCompare(a.bookedAt));
+  }
+
+  const totalCount = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / ADMIN_PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const pageBookings = filtered.slice((safePage - 1) * ADMIN_PAGE_SIZE, safePage * ADMIN_PAGE_SIZE);
+
+  // Derive filter options from full dataset (not just filtered page)
+  const typeOptions = Array.from(new Set(enriched.map((b) => b.classType).filter(Boolean))).map((t) => ({ value: t!, label: t! }));
+  const locationOptions = Array.from(new Set(enriched.map((b) => b.location).filter(Boolean))).map((l) => ({ value: l!, label: l! }));
+
+  // ── Supporting data for dialogs ──
   const [allStudents, allSubs, allProducts] = await Promise.all([
-    getStudentRepo().getAll(),
-    getSubscriptionRepo().getAll(),
-    getProductRepo().getAll(),
+    cachedGetAllStudents(),
+    cachedGetAllSubs(),
+    cachedGetProducts(),
   ]);
 
   const studentOptions = allStudents.filter((s) => s.isActive).map((s) => ({
@@ -231,9 +309,7 @@ export default async function BookingsPage({
     )
     .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
     .map((c) => {
-      const style = c.styleName
-        ? danceStyles.find((s) => s.name === c.styleName)
-        : null;
+      const style = c.styleName ? styleByName.get(c.styleName) : null;
       const activeForClass = activeBookingsByClass.get(c.id) ?? [];
       return {
         id: c.id,
@@ -316,17 +392,37 @@ export default async function BookingsPage({
     serializedAccessRules[k] = v;
   }
 
+  const _tEnd = performance.now();
+  console.info(`[perf /bookings admin] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms enrich+filter=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+
   return (
     <AdminBookings
-      bookings={enriched}
+      bookings={pageBookings}
       students={studentOptions}
       classInstances={classInstanceOptions}
       waitlistEntries={waitlistEntryViews}
       subscriptionsByStudent={subscriptionsByStudent}
       accessRulesMap={serializedAccessRules}
-      initialSearch={params.classTitle ?? ""}
+      initialSearch={filterQ}
       isDev={isDev}
-      today={getTodayStr()}
+      today={today}
+      pagination={{
+        currentPage: safePage,
+        totalPages,
+        totalCount,
+        pageSize: ADMIN_PAGE_SIZE,
+      }}
+      serverFilters={{
+        status: filterStatus,
+        role: filterRole,
+        source: filterSource,
+        type: filterType,
+        location: filterLocation,
+        upcomingOnly,
+        waitlistOnly,
+      }}
+      typeOptions={typeOptions}
+      locationOptions={locationOptions}
     />
   );
 }

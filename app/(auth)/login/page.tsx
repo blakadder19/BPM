@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 /* eslint-disable @next/next/no-img-element */
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,6 @@ const DEMO_USERS = [
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const next = searchParams.get("next") ?? "";
   const callbackError = searchParams.get("error");
   const confirmed = searchParams.get("confirmed") === "1";
@@ -27,17 +26,20 @@ export default function LoginPage() {
       : null
   );
   const [isPending, setIsPending] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  const destination = next || "/dashboard";
 
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        router.replace(next || "/dashboard");
+        window.location.href = destination;
       }
     });
-  }, [router, next]);
+  }, [destination]);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
     setIsPending(true);
@@ -52,11 +54,13 @@ export default function LoginPage() {
       return;
     }
 
+    const t0 = performance.now();
     const supabase = createClient();
     const { error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    const t1 = performance.now();
 
     if (authError) {
       setError(authError.message);
@@ -64,14 +68,36 @@ export default function LoginPage() {
       return;
     }
 
-    router.replace(next || "/dashboard");
-  }
+    console.info(`[perf login] signIn=${(t1-t0).toFixed(0)}ms — navigating to ${destination}`);
+    setIsNavigating(true);
+
+    // Signal to middleware that the JWT was just issued and doesn't need
+    // the expensive getUser() HTTP validation. Short-lived (10s) cookie
+    // that saves ~100-300ms on the very first protected page load.
+    document.cookie = "bpm_fresh_jwt=1; path=/; max-age=10; SameSite=Lax";
+
+    // Use hard navigation instead of router.push(). After login, the
+    // browser has no prefetched RSC payload for the protected route, so
+    // router.push() would wait for the full RSC roundtrip before showing
+    // anything. A hard navigation leverages SSR streaming — the browser
+    // starts rendering HTML as it arrives, giving much faster first-paint.
+    window.location.href = destination;
+  }, [destination]);
 
   function fillDemo(email: string) {
     const emailInput = document.getElementById("email") as HTMLInputElement;
     const passwordInput = document.getElementById("password") as HTMLInputElement;
     if (emailInput) emailInput.value = email;
     if (passwordInput) passwordInput.value = "password123";
+  }
+
+  if (isNavigating) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 gap-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
+        <p className="text-sm font-medium text-gray-600">Signing you in…</p>
+      </div>
+    );
   }
 
   return (
@@ -116,9 +142,10 @@ export default function LoginPage() {
                 id="email"
                 name="email"
                 type="email"
+                autoComplete="email"
                 required
                 placeholder="you@example.com"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>
             <div>
@@ -132,9 +159,10 @@ export default function LoginPage() {
                 id="password"
                 name="password"
                 type="password"
+                autoComplete="current-password"
                 required
                 placeholder="••••••••"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isPending}>

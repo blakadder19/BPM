@@ -33,12 +33,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  const { supabaseResponse, user } = await updateSession(request);
-
-  // Public routes: always accessible
+  // Public routes: skip the expensive getUser() call entirely —
+  // no auth validation needed for login/signup/callback pages.
   if (isPublicRoute(pathname)) {
-    return supabaseResponse;
+    return NextResponse.next({ request });
   }
+
+  const { supabaseResponse, user } = await updateSession(request);
 
   // API routes with their own auth (e.g. CRON_SECRET): skip session check
   if (isSelfAuthApiRoute(pathname)) {

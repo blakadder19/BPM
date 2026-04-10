@@ -1,5 +1,9 @@
 import { requireRole } from "@/lib/auth";
-import { getProductRepo, getSubscriptionRepo, getStudentRepo } from "@/lib/repositories";
+import {
+  cachedGetProducts,
+  cachedGetAllSubs,
+  cachedGetAllStudents,
+} from "@/lib/server/cached-queries";
 import { AdminProducts } from "@/components/products/admin-products";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -19,14 +23,17 @@ function describeProductScope(p: MockProduct): { styles: string; levels: string 
 }
 
 export default async function ProductsPage() {
+  const _t0 = performance.now();
   await requireRole(["admin"]);
   await ensureOperationalDataHydrated();
+  const _tHydrate = performance.now();
 
   const [products, subscriptions, students] = await Promise.all([
-    getProductRepo().getAll(),
-    getSubscriptionRepo().getAll(),
-    getStudentRepo().getAll(),
+    cachedGetProducts(),
+    cachedGetAllSubs(),
+    cachedGetAllStudents(),
   ]);
+  const _tDb = performance.now();
 
   const danceStyles = getDanceStyles().map((s) => ({ id: s.id, name: s.name }));
 
@@ -39,6 +46,9 @@ export default async function ProductsPage() {
   for (const s of students) {
     studentNameMap[s.id] = s.fullName;
   }
+
+  const _tEnd = performance.now();
+  console.info(`[perf /products] hydrate=${(_tHydrate-_t0).toFixed(0)}ms db=${(_tDb-_tHydrate).toFixed(0)}ms enrich=${(_tEnd-_tDb).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
   return (
     <AdminProducts

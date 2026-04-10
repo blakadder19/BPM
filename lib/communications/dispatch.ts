@@ -19,6 +19,7 @@ import type { CommEvent, CommEventType } from "./events";
 import {
   saveGenericNotificationToDB,
   hasNotificationWithKey,
+  updateNotificationPayloadByKey,
 } from "./notification-store";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import {
@@ -59,13 +60,31 @@ export async function dispatchCommEvents(
   return { sent, skipped };
 }
 
+/**
+ * Event types whose stored payload should be refreshed when the event
+ * is dispatched again with updated data. Prevents stale persisted
+ * notifications after business-rule corrections.
+ */
+const REFRESHABLE_EVENT_TYPES = new Set<CommEventType>([
+  "birthday_benefit_available",
+]);
+
 async function dispatchSingle(event: CommEvent): Promise<boolean> {
   if (event.idempotencyKey) {
     const exists = await hasNotificationWithKey(
       event.studentId,
       event.idempotencyKey
     );
-    if (exists) return false;
+    if (exists) {
+      if (REFRESHABLE_EVENT_TYPES.has(event.type) && isRealUser(event.studentId)) {
+        await updateNotificationPayloadByKey(
+          event.studentId,
+          event.idempotencyKey,
+          event.payload as unknown as Record<string, unknown>
+        );
+      }
+      return false;
+    }
   }
 
   // Channel 1: In-app notification (Supabase)

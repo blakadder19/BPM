@@ -6,13 +6,13 @@ import {
   Inbox,
   ChevronLeft,
   ChevronRight,
-  CalendarDays,
 } from "lucide-react";
 import { formatDate, formatTime, formatShortDate } from "@/lib/utils";
+import { TermBanner } from "@/components/ui/term-banner";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { StatusPill } from "@/components/student/primitives";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -245,7 +245,7 @@ export function ClassBrowser({
   const monthLabel = getMonthLabel(weekDates[3]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <PageHeader
         title="Classes"
         description="Browse and book your classes."
@@ -253,20 +253,18 @@ export function ClassBrowser({
 
       {/* Term banner */}
       {termInfo && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-indigo-100 bg-indigo-50 px-3 sm:px-4 py-2 sm:py-2.5 text-sm">
-          <CalendarDays className="h-4 w-4 text-indigo-500 shrink-0" />
-          <span className="font-medium text-indigo-800">{termInfo.name}</span>
-          <span className="text-indigo-600 text-xs sm:text-sm">
-            {formatShortDate(termInfo.startDate)} – {formatShortDate(termInfo.endDate)}
-          </span>
-        </div>
+        <TermBanner
+          name={termInfo.name}
+          startDate={termInfo.startDate}
+          endDate={termInfo.endDate}
+        />
       )}
 
       {/* Week calendar strip */}
-      <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm">
+      <div data-tour="class-schedule" className="rounded-md border border-gray-200 bg-white p-2.5 sm:p-3">
         {/* Header: month + navigation */}
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-800">{monthLabel}</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xs font-semibold text-gray-800">{monthLabel}</h2>
           <div className="flex items-center gap-0.5 sm:gap-1">
             <button
               onClick={goToday}
@@ -306,9 +304,9 @@ export function ClassBrowser({
                 key={d}
                 onClick={() => selectDate(d)}
                 className={`
-                  relative flex flex-col items-center rounded-lg py-2 px-0.5 sm:px-1 transition-all text-center min-h-[60px]
+                  relative flex flex-col items-center rounded-md py-1.5 px-0.5 sm:px-1 transition-all text-center min-h-[52px]
                   ${isSelected
-                    ? "bg-indigo-600 text-white shadow-md"
+                    ? "bg-indigo-600 text-white shadow-sm"
                     : isToday
                       ? "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
                       : isPast
@@ -317,26 +315,26 @@ export function ClassBrowser({
                   }
                 `}
               >
-                <span className="text-[10px] sm:text-[11px] font-medium uppercase tracking-wide">
+                <span className="text-[9px] sm:text-[10px] font-medium uppercase tracking-wide">
                   {DAY_LABELS[i]}
                 </span>
-                <span className={`mt-0.5 text-base sm:text-lg font-semibold leading-tight ${
+                <span className={`mt-0.5 text-sm sm:text-base font-semibold leading-tight ${
                   isSelected ? "text-white" : ""
                 }`}>
                   {getDayNum(d)}
                 </span>
 
                 {/* Class dot indicators */}
-                <div className="mt-1 flex items-center gap-0.5 h-2">
+                <div className="mt-0.5 flex items-center gap-0.5 h-1.5">
                   {hasClasses && stats && (
                     <>
                       {stats.booked > 0 && (
-                        <span className={`h-1.5 w-1.5 rounded-full ${
+                        <span className={`h-1 w-1 rounded-full ${
                           isSelected ? "bg-white/80" : "bg-blue-500"
                         }`} />
                       )}
                       {stats.total - stats.booked > 0 && (
-                        <span className={`h-1.5 w-1.5 rounded-full ${
+                        <span className={`h-1 w-1 rounded-full ${
                           isSelected ? "bg-white/50" : "bg-gray-300"
                         }`} />
                       )}
@@ -346,7 +344,7 @@ export function ClassBrowser({
 
                 {/* Term indicator line */}
                 {inTerm && !isSelected && (
-                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-4 rounded-full bg-indigo-300" />
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-3 rounded-full bg-indigo-300" />
                 )}
               </button>
             );
@@ -370,15 +368,15 @@ export function ClassBrowser({
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="w-full sm:max-w-xs">
           <SearchInput
             value={search}
             onChange={setSearch}
-            placeholder="Search by name, style, or level…"
+            placeholder="Search classes…"
           />
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
+        <div className="flex gap-1.5 w-full sm:w-auto">
           <SelectFilter
             value={styleFilter}
             onChange={setStyleFilter}
@@ -396,26 +394,26 @@ export function ClassBrowser({
 
       {/* Day header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-gray-900">
+        <h2 className="text-sm font-semibold text-gray-900">
           {selectedDate === todayStr
             ? "Today"
             : formatDate(selectedDate)
           }
           {selectedDate === todayStr && (
-            <span className="ml-2 text-sm font-normal text-gray-500">
+            <span className="ml-1.5 text-xs font-normal text-gray-500">
               {formatShortDate(selectedDate)}
             </span>
           )}
         </h2>
-        <span className="text-sm text-gray-500">
+        <span className="text-xs text-gray-500">
           {dayClasses.length} class{dayClasses.length !== 1 ? "es" : ""}
         </span>
       </div>
 
-      {/* Class cards for selected day */}
+      {/* Class list for selected day */}
       {dayClasses.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 py-10 text-center">
-          <Inbox className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+        <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 py-8 text-center">
+          <Inbox className="mx-auto h-6 w-6 text-gray-300 mb-1.5" />
           <p className="text-sm text-gray-500">
             {datesWithClasses.has(selectedDate)
               ? "No classes match your filters for this day."
@@ -429,7 +427,7 @@ export function ClassBrowser({
           )}
         </div>
       ) : (
-        <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="space-y-1.5">
           {dayClasses.map((c) => (
             <StudentClassCard
               key={c.id}
@@ -544,7 +542,7 @@ function ClassRestoreDialog({
             </p>
             {classData.location && <p>{classData.location}</p>}
             <div className="mt-1">
-              <StatusBadge status="cancelled" />
+              <StatusPill status="cancelled" />
             </div>
           </div>
 

@@ -1,15 +1,11 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
 import {
-  getStudentRepo,
-  getSubscriptionRepo,
-  getProductRepo,
-  getTermRepo,
-  getCocRepo,
   getBookingRepo,
   getPenaltyRepo,
   getAttendanceRepo,
 } from "@/lib/repositories";
+import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentById, cachedGetStudentSubs, cachedGetAllSubs, cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
 import { getTodayStr, isClassEnded, isClassStarted, effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
@@ -18,9 +14,8 @@ import { daysUntilExpiry } from "@/lib/domain/term-lifecycle";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
-import { computeMemberBenefits } from "@/lib/domain/member-benefits";
-import { BIRTHDAY_WEEK_DURATION_DAYS } from "@/config/business-rules";
-import { isBirthdayClassUsed, getBirthdayRedemption } from "@/lib/services/birthday-benefit-store";
+import { computeMemberBenefits, checkBirthdayBenefitEligibility } from "@/lib/domain/member-benefits";
+import { getBirthdayRedemption } from "@/lib/services/birthday-benefit-store";
 import { birthdayBenefitAvailableEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -39,31 +34,38 @@ import {
 } from "@/components/dashboard/student-dashboard";
 
 export default async function DashboardPage() {
+  const _t0 = performance.now();
   const user = await getAuthUser();
   if (!user) redirect("/login");
-
-  await ensureOperationalDataHydrated();
-
-  runAttendanceClosure();
-  await lazyExpireSubscriptions();
+  const _tAuth = performance.now();
 
   if (user.role === "student") {
-    const cocAccepted = await getCocRepo().hasAcceptedVersion(
-      user.id,
-      CURRENT_CODE_OF_CONDUCT.version
-    );
+    const year = new Date().getFullYear();
+    const todayStr = getTodayStr();
+
+    // Run hydration AND direct-DB queries in parallel — the cachedGetXxx
+    // calls go straight to Supabase and don't need hydration to complete.
+    // Hydration only needs to finish before in-memory store reads below.
+    const [, cocAccepted, student, terms, allProducts, allSubs, birthdayRedemption] = await Promise.all([
+      ensureOperationalDataHydrated(),
+      cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
+      cachedGetStudentById(user.id),
+      cachedGetTerms(),
+      cachedGetProducts(),
+      cachedGetStudentSubs(user.id),
+      getBirthdayRedemption(user.id, year),
+    ]);
+    const _tHydrate = performance.now();
+
+    runAttendanceClosure();
+    lazyExpireSubscriptions().catch(() => {});
+
     if (!cocAccepted) redirect("/onboarding");
 
     const bookingSvc = getBookingRepo().getService();
     const penaltySvc = getPenaltyRepo().getService();
     const attendanceSvc = getAttendanceRepo().getService();
-
-    const [student, terms] = await Promise.all([
-      getStudentRepo().getById(user.id),
-      getTermRepo().getAll(),
-    ]);
-
-    const todayStr = getTodayStr();
+    const _tDb = performance.now();
 
     const upcomingBookings: StudentBookingSummary[] = bookingSvc.bookings
       .filter(
@@ -113,14 +115,11 @@ export default async function DashboardPage() {
       };
     }
 
-    const year = new Date().getFullYear();
-    const [allSubs, birthdayRedemption, allProducts] = await Promise.all([
-      student ? getSubscriptionRepo().getByStudent(student.id) : Promise.resolve([]),
-      student ? getBirthdayRedemption(student.id, year) : Promise.resolve(null),
-      getProductRepo().getAll(),
-    ]);
-
-    const studentSubs = allSubs.filter((s) => s.status === "active");
+    const activeSubs = allSubs.filter((s) => s.status === "active");
+    const HISTORY_STATUSES = new Set(["expired", "exhausted", "cancelled", "paused"]);
+    const historicalSubs = allSubs
+      .filter((s) => HISTORY_STATUSES.has(s.status))
+      .sort((a, b) => b.validFrom.localeCompare(a.validFrom));
 
     function toSummary(sub: typeof allSubs[number]): StudentEntitlementSummary {
       const product = allProducts.find((p) => p.id === sub.productId);
@@ -150,13 +149,15 @@ export default async function DashboardPage() {
       };
     }
 
-    const entitlements: StudentEntitlementSummary[] = studentSubs.map(toSummary);
+    const entitlements: StudentEntitlementSummary[] = [
+      ...activeSubs.map(toSummary),
+      ...historicalSubs.map(toSummary),
+    ];
 
     let lastPlan: StudentEntitlementSummary | null = null;
-    if (entitlements.length === 0) {
-      const TERMINAL = new Set(["expired", "exhausted", "cancelled"]);
+    if (activeSubs.length === 0 && historicalSubs.length === 0) {
       const recent = allSubs
-        .filter((s) => TERMINAL.has(s.status))
+        .filter((s) => HISTORY_STATUSES.has(s.status))
         .sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0];
       if (recent) {
         lastPlan = toSummary(recent);
@@ -171,33 +172,36 @@ export default async function DashboardPage() {
       ? computeMemberBenefits({
           dateOfBirth: student.dateOfBirth,
           referenceDate: todayStr,
-          subscriptions: studentSubs,
+          subscriptions: activeSubs,
           birthdayClassUsed: !!birthdayRedemption,
           birthdayClassTitle: birthdayRedemption?.classTitle,
           birthdayClassDate: birthdayRedemption?.classDate,
         })
       : null;
 
-    if (
-      student &&
-      benefits?.birthdayWeekEligible &&
-      !benefits.birthdayFreeClassUsed &&
-      student.dateOfBirth
-    ) {
-      const expiresDate = new Date();
-      expiresDate.setDate(expiresDate.getDate() + BIRTHDAY_WEEK_DURATION_DAYS);
+    const bdayEligibility = checkBirthdayBenefitEligibility({
+      subscriptions: activeSubs,
+      dateOfBirth: student?.dateOfBirth ?? null,
+      referenceDate: todayStr,
+      alreadyUsedThisYear: !!birthdayRedemption,
+    });
+
+    if (student && bdayEligibility.currentlyActive) {
+      const expiresDate = bdayEligibility.weekRange?.sunday ?? todayStr;
       dispatchCommEvents([
         birthdayBenefitAvailableEvent({
           studentId: student.id,
           studentName: student.fullName,
-          expiresDate: expiresDate.toISOString().slice(0, 10),
+          expiresDate,
           year,
         }),
       ]).catch(() => {});
     }
 
+    const _tPrep = performance.now();
     const allInstances = getInstances();
     const danceStyles = getDanceStyles();
+    const styleByName = new Map(danceStyles.map((s) => [s.name, s]));
     const accessRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
     const studentId = student?.id ?? "";
 
@@ -210,7 +214,6 @@ export default async function DashboardPage() {
       bookingSvc.getWaitlistForStudent(studentId).map((w) => w.bookableClassId)
     );
 
-    // Determine styles where student has booked/attended above beginner
     const advancedStyleSet = new Set<string>();
     const ABOVE_BEGINNER = new Set(["Improvers", "Intermediate", "Open"]);
     const instanceMap = new Map(allInstances.map((i) => [i.id, i]));
@@ -225,17 +228,23 @@ export default async function DashboardPage() {
 
     const BEGINNER_LEVELS = new Set(["Beginner 1", "Beginner 2"]);
 
-    // Birthday benefit for "Today for you" bookability
-    let dashboardBirthdayBenefit: import("@/lib/domain/bookability").BirthdayBenefitState | undefined;
-    const activeMembership = studentSubs.find(
-      (s) => s.productType === "membership" && s.status === "active"
-    );
-    if (activeMembership && student?.dateOfBirth && benefits?.birthdayWeekEligible && !benefits?.birthdayFreeClassUsed) {
-      dashboardBirthdayBenefit = {
-        eligible: true,
-        alreadyUsed: false,
-        membershipSubscriptionId: activeMembership.id,
-      };
+    const dashboardBirthdayBenefit = bdayEligibility.potentiallyEligible
+      ? {
+          eligible: true as const,
+          alreadyUsed: bdayEligibility.alreadyUsed,
+          membershipSubscriptionId: bdayEligibility.membershipSubscriptionId!,
+        }
+      : undefined;
+
+    // Pre-compute confirmed bookings stats per class for O(1) lookup
+    const confirmedByClass = new Map<string, { total: number; leaders: number; followers: number }>();
+    for (const b of bookingSvc.bookings) {
+      if (b.status !== "confirmed" && b.status !== "checked_in") continue;
+      let entry = confirmedByClass.get(b.bookableClassId);
+      if (!entry) { entry = { total: 0, leaders: 0, followers: 0 }; confirmedByClass.set(b.bookableClassId, entry); }
+      entry.total++;
+      if (b.danceRole === "leader") entry.leaders++;
+      else if (b.danceRole === "follower") entry.followers++;
     }
 
     const todayForYou: TodayForYouItem[] = allInstances
@@ -247,8 +256,8 @@ export default async function DashboardPage() {
           return [];
         }
 
-        const style = c.styleName ? danceStyles.find((s) => s.name === c.styleName) : null;
-        const confirmedForClass = bookingSvc.getConfirmedBookingsForClass(c.id);
+        const style = c.styleName ? styleByName.get(c.styleName) : null;
+        const stats = confirmedByClass.get(c.id);
         const requiresBalance = style?.requiresRoleBalance ?? false;
         const classInfo: ClassInstanceInfo = {
           id: c.id, title: c.title, classType: c.classType, styleName: c.styleName,
@@ -256,9 +265,9 @@ export default async function DashboardPage() {
           status: c.status, location: c.location, maxCapacity: c.maxCapacity,
           leaderCap: c.leaderCap, followerCap: c.followerCap,
           danceStyleRequiresBalance: requiresBalance,
-          currentLeaders: confirmedForClass.filter((b) => b.danceRole === "leader").length,
-          currentFollowers: confirmedForClass.filter((b) => b.danceRole === "follower").length,
-          totalBooked: confirmedForClass.length,
+          currentLeaders: stats?.leaders ?? 0,
+          currentFollowers: stats?.followers ?? 0,
+          totalBooked: stats?.total ?? 0,
           termBound: c.termBound ?? false,
           termId: c.termId ?? null,
         };
@@ -266,7 +275,7 @@ export default async function DashboardPage() {
         const ctx: BookabilityContext = {
           classInstance: classInfo,
           studentState: { activeBookingId: null, activeBookingStatus: null, waitlistEntry: null, cancelledBooking: null },
-          studentSubscriptions: studentSubs,
+          studentSubscriptions: activeSubs,
           terms,
           accessRulesMap,
           studentPreferredRole: student?.preferredRole ?? null,
@@ -296,6 +305,8 @@ export default async function DashboardPage() {
         }];
       })
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    const _tEnd = performance.now();
+    console.info(`[perf /dashboard] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tHydrate-_tAuth).toFixed(0)}ms prep+todayForYou=${(_tEnd-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
     return (
       <StudentDashboard
@@ -317,6 +328,11 @@ export default async function DashboardPage() {
     );
   }
 
+  await ensureOperationalDataHydrated();
+  runAttendanceClosure();
+  lazyExpireSubscriptions().catch(() => {});
+
+  const _tAdmin0 = performance.now();
   const todayStr = getTodayStr();
 
   const allInstances = getInstances();
@@ -336,19 +352,20 @@ export default async function DashboardPage() {
     (bc) => bc.date === todayStr && bc.classType === "class"
   ).length;
 
-  const ACTIVE_BOOKING_STATUSES = new Set(["confirmed", "checked_in"]);
-  const upcomingBookingCount = bookingSvc.bookings.filter((b) => {
-    if (!ACTIVE_BOOKING_STATUSES.has(b.status)) return false;
-    const cls = bookingSvc.getClass(b.bookableClassId);
-    if (!cls || cls.date < todayStr) return false;
-    return !isClassEnded(cls.date, cls.endTime);
-  }).length;
-
   const upcomingClassIds = new Set(
     allInstances
       .filter((bc) => bc.date >= todayStr && !isClassEnded(bc.date, bc.endTime))
       .map((bc) => bc.id)
   );
+
+  const ACTIVE_BOOKING_STATUSES = new Set(["confirmed", "checked_in"]);
+  let upcomingBookingCount = 0;
+  for (const b of bookingSvc.bookings) {
+    if (ACTIVE_BOOKING_STATUSES.has(b.status) && upcomingClassIds.has(b.bookableClassId)) {
+      upcomingBookingCount++;
+    }
+  }
+
   const activeWaitlistCount = bookingSvc.waitlist.filter(
     (w) => w.status === "waiting" && upcomingClassIds.has(w.bookableClassId)
   ).length;
@@ -388,12 +405,13 @@ export default async function DashboardPage() {
     .filter((bc) => bc.leaderCap !== null && bc.followerCap !== null && bc.bookedCount > 0)
     .map(toSummary);
 
-  const attendanceTotals = {
-    present: attendanceSvc.records.filter((a) => a.status === "present").length,
-    late: attendanceSvc.records.filter((a) => a.status === "late").length,
-    absent: attendanceSvc.records.filter((a) => a.status === "absent").length,
-    excused: attendanceSvc.records.filter((a) => a.status === "excused").length,
-  };
+  const attendanceTotals = { present: 0, late: 0, absent: 0, excused: 0 };
+  for (const a of attendanceSvc.records) {
+    if (a.status === "present") attendanceTotals.present++;
+    else if (a.status === "late") attendanceTotals.late++;
+    else if (a.status === "absent") attendanceTotals.absent++;
+    else if (a.status === "excused") attendanceTotals.excused++;
+  }
   const attendanceTotal =
     attendanceTotals.present + attendanceTotals.late +
     attendanceTotals.absent + attendanceTotals.excused;
@@ -406,16 +424,17 @@ export default async function DashboardPage() {
   }
   const maxWeekday = Math.max(...byWeekday, 1);
 
-  const allSubs = await getSubscriptionRepo().getAll();
+  const [allSubs, allStudents, allProducts] = await Promise.all([
+    cachedGetAllSubs(),
+    cachedGetAllStudents(),
+    cachedGetProducts(),
+  ]);
   const activeSubs = allSubs.filter((s) => s.status === "active");
   const subsByType: Record<string, number> = {};
   for (const s of activeSubs) {
     subsByType[s.productType] = (subsByType[s.productType] ?? 0) + 1;
   }
   const studentsWithSub = new Set(activeSubs.map((s) => s.studentId)).size;
-
-  const allStudents = await getStudentRepo().getAll();
-  const allProducts = await getProductRepo().getAll();
 
   const dashboardData: AdminDashboardData = {
     todayStr,
@@ -436,6 +455,9 @@ export default async function DashboardPage() {
     totalStudents: allStudents.length,
     totalProducts: allProducts.filter((p) => p.isActive).length,
   };
+
+  const _tAdminEnd = performance.now();
+  console.info(`[perf /dashboard admin] admin-path=${(_tAdminEnd-_tAdmin0).toFixed(0)}ms total=${(_tAdminEnd-_t0).toFixed(0)}ms`);
 
   return <AdminDashboard data={dashboardData} />;
 }

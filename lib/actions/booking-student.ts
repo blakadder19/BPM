@@ -258,7 +258,7 @@ export async function studentCancelBookingAction(
  * Check whether a cancelled booking can be restored by the student.
  * Returns eligibility info for the UI without performing the restore.
  */
-const RESTORE_CUTOFF_MINUTES = 10;
+const RESTORE_CUTOFF_MINUTES = 30;
 
 export async function checkRestoreEligibilityAction(
   bookingId: string

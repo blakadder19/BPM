@@ -17,17 +17,22 @@ import type { ClassCancelledPayload } from "./events";
 
 const TABLE = "student_notifications";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _cachedClient: any = null;
+
 function getClient() {
+  if (_cachedClient) return _cachedClient;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
-  return createClient(url, key, {
+  _cachedClient = createClient(url, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
       detectSessionInUrl: false,
     },
   });
+  return _cachedClient;
 }
 
 // ── Write ────────────────────────────────────────────────────
@@ -169,6 +174,40 @@ export async function hasNotificationWithKey(
   }
 }
 
+/**
+ * Update the payload of an existing notification identified by idempotency key.
+ * Used when business-rule corrections must propagate to already-persisted
+ * notifications (e.g. birthday benefit date range change).
+ */
+export async function updateNotificationPayloadByKey(
+  studentId: string,
+  idempotencyKey: string,
+  newPayload: Record<string, unknown>
+): Promise<boolean> {
+  const client = getClient();
+  if (!client) return false;
+
+  try {
+    const { error } = await client
+      .from(TABLE)
+      .update({ payload: newPayload })
+      .eq("student_id", studentId)
+      .eq("idempotency_key", idempotencyKey);
+
+    if (error) {
+      console.warn("[notification-store] update-payload:", error.message);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn(
+      "[notification-store] update-payload error:",
+      e instanceof Error ? e.message : e
+    );
+    return false;
+  }
+}
+
 // ── Dismiss ──────────────────────────────────────────────────
 
 export async function dismissNotification(
@@ -212,6 +251,28 @@ export async function dismissNotificationsForSubscription(
     }
   } catch (e) {
     console.warn("[notification-store] dismiss-by-sub:", e instanceof Error ? e.message : e);
+  }
+}
+
+export async function dismissNotificationsByType(
+  studentId: string,
+  type: CommEventType
+): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client
+      .from(TABLE)
+      .delete()
+      .eq("student_id", studentId)
+      .eq("type", type);
+    if (error)
+      console.warn("[notification-store] dismiss-by-type:", error.message);
+  } catch (e) {
+    console.warn(
+      "[notification-store] dismiss-by-type error:",
+      e instanceof Error ? e.message : e
+    );
   }
 }
 

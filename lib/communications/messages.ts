@@ -86,7 +86,7 @@ const buildBirthdayBenefitAvailable: MessageBuilder<"birthday_benefit_available"
   p: BirthdayBenefitAvailablePayload
 ) => ({
   title: "Happy birthday! 🎂",
-  body: `${p.benefitDescription}. Book any class before ${p.expiresDate} to use your birthday benefit.`,
+  body: `${p.benefitDescription}. Book any class by ${p.expiresDate} to use your birthday benefit.`,
   href: "/classes",
 });
 

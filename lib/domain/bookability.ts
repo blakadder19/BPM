@@ -162,11 +162,21 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
     if (effectiveTermStatus === "upcoming") {
       // Term hasn't started yet — student can book normally.
     } else if (effectiveTermStatus === "active") {
-      // 7. Term has started — block student self-booking.
-      return {
-        status: "blocked",
-        reason: "This course has already started. Please speak to reception if you'd like to check whether late entry is still possible.",
-      };
+      // Birthday benefit can bypass term-start restriction for non-beginner classes.
+      // Beginners 1/2 term-start gating always applies per academy rule.
+      const isBeginner1or2 = /^Beginner [12]$/i.test(cls.level ?? "");
+      const hasBirthdayOverride =
+        ctx.birthdayBenefit?.eligible &&
+        !ctx.birthdayBenefit.alreadyUsed &&
+        ctx.studentDateOfBirth &&
+        isBirthdayWeek(ctx.studentDateOfBirth, cls.date);
+
+      if (!hasBirthdayOverride || isBeginner1or2) {
+        return {
+          status: "blocked",
+          reason: "This course has already started. Please speak to reception if you'd like to check whether late entry is still possible.",
+        };
+      }
     } else {
       // past / ended
       return {

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
-import { getProductRepo, getTermRepo, getSubscriptionRepo, getCocRepo } from "@/lib/repositories";
+import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentSubs } from "@/lib/server/cached-queries";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getCurrentTerm, getNextTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
@@ -54,26 +54,23 @@ function resolveStyleSelection(
 export default async function CatalogPage() {
   const user = await requireRole(["student"]);
 
-  await ensureOperationalDataHydrated();
-
-  const cocDone = await getCocRepo().hasAcceptedVersion(user.id, CURRENT_CODE_OF_CONDUCT.version);
-  if (!cocDone) redirect("/onboarding");
-  await lazyExpireSubscriptions();
-
-  const [products, terms, allSubs] = await Promise.all([
-    getProductRepo().getAll(),
-    getTermRepo().getAll(),
-    getSubscriptionRepo().getAll(),
+  // Run hydration AND direct-DB queries in parallel
+  const [, cocDone, products, terms, allStudentSubs] = await Promise.all([
+    ensureOperationalDataHydrated(),
+    cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
+    cachedGetProducts(),
+    cachedGetTerms(),
+    cachedGetStudentSubs(user.id),
   ]);
+  if (!cocDone) redirect("/onboarding");
+  lazyExpireSubscriptions().catch(() => {});
 
   const danceStyles = getDanceStyles().map((s) => ({ id: s.id, name: s.name }));
   const todayStr = getTodayStr();
   const currentTerm = getCurrentTerm(terms, todayStr);
   const nextTerm = getNextTerm(terms, todayStr);
 
-  const studentSubs = allSubs.filter(
-    (s) => s.studentId === user.id && s.status === "active"
-  );
+  const studentSubs = allStudentSubs.filter((s) => s.status === "active");
 
   const termsById = new Map(terms.map((t) => [t.id, t]));
 

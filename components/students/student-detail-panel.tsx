@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw } from "lucide-react";
+import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw, ChevronDown, ChevronRight } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -96,10 +96,9 @@ export function StudentDetailPanel({
     });
   }
 
-  const txs = walletTransactions
+  const allTxs = walletTransactions
     .filter((tx) => tx.studentId === student.id)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 10);
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const recentBookings = bookings
     .filter((b) =>
@@ -211,14 +210,19 @@ export function StudentDetailPanel({
                   <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} renewEligible={renewEligibleIds.has(sub.id)} onRenew={handleRenew} renewPending={renewTransPending && renewPendingId === sub.id} />
                 ))}
                 {inactiveSubs.length > 0 && (
-                  <>
-                    <p className="pt-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                      Product History ({inactiveSubs.length})
-                    </p>
-                    {inactiveSubs.map((sub) => (
-                      <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} renewEligible={renewEligibleIds.has(sub.id)} onRenew={handleRenew} renewPending={renewTransPending && renewPendingId === sub.id} />
-                    ))}
-                  </>
+                  <InactiveSubsHistory
+                    inactiveSubs={inactiveSubs}
+                    allStudentSubs={subs}
+                    termsById={termsById}
+                    products={products}
+                    onEdit={onEditSub}
+                    onRemove={setRemoveTarget}
+                    onDelete={setDeleteTarget}
+                    renewEligibleIds={renewEligibleIds}
+                    onRenew={handleRenew}
+                    renewTransPending={renewTransPending}
+                    renewPendingId={renewPendingId}
+                  />
                 )}
               </div>
             )}
@@ -248,28 +252,10 @@ export function StudentDetailPanel({
                   ))}
               </div>
             )}
-            {txs.length === 0 ? (
+            {allTxs.length === 0 ? (
               <p className="text-sm text-gray-400">No transactions.</p>
             ) : (
-              <div className="space-y-1">
-                {txs.map((tx) => (
-                  <div
-                    key={tx.id}
-                    className="flex items-center gap-3 text-xs text-gray-600"
-                  >
-                    <span
-                      className={tx.credits < 0 ? "text-red-600" : "text-green-600"}
-                    >
-                      {tx.credits > 0 ? "+" : ""}
-                      {tx.credits}
-                    </span>
-                    <span className="flex-1 truncate">{tx.description}</span>
-                    <span className="whitespace-nowrap text-gray-400">
-                      {formatDate(tx.createdAt)}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <PaginatedTransactions transactions={allTxs} />
             )}
           </Section>
 
@@ -299,22 +285,7 @@ export function StudentDetailPanel({
           {/* ── Penalties section ── */}
           {studentPenalties.length > 0 && (
             <Section title="Penalties" className="md:col-span-2">
-              <div className="space-y-1.5">
-                {studentPenalties.map((p) => (
-                  <div
-                    key={p.id}
-                    className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
-                  >
-                    <span className="text-gray-500 whitespace-nowrap">{formatDate(p.date)}</span>
-                    <span className="text-gray-800">{p.classTitle}</span>
-                    <StatusBadge status={p.reason} />
-                    <span className="text-gray-600">
-                      €{(p.amountCents / 100).toFixed(2)}
-                    </span>
-                    <StatusBadge status={p.resolution} />
-                  </div>
-                ))}
-              </div>
+              <PaginatedPenalties penalties={studentPenalties} />
             </Section>
           )}
         </div>
@@ -369,6 +340,160 @@ function DL({ label, value }: { label: string; value: string }) {
     <div className="flex items-start gap-2 text-sm">
       <span className="w-36 shrink-0 text-gray-500">{label}</span>
       <span className="text-gray-800">{value}</span>
+    </div>
+  );
+}
+
+const HISTORY_PREVIEW = 3;
+
+function InactiveSubsHistory({
+  inactiveSubs,
+  allStudentSubs,
+  termsById,
+  products,
+  onEdit,
+  onRemove,
+  onDelete,
+  renewEligibleIds,
+  onRenew,
+  renewTransPending,
+  renewPendingId,
+}: {
+  inactiveSubs: MockSubscription[];
+  allStudentSubs: MockSubscription[];
+  termsById: Map<string, MockTerm>;
+  products: MockProduct[];
+  onEdit: (sub: MockSubscription) => void;
+  onRemove: (sub: MockSubscription) => void;
+  onDelete: (sub: MockSubscription) => void;
+  renewEligibleIds: Set<string>;
+  onRenew: (sub: MockSubscription) => void;
+  renewTransPending: boolean;
+  renewPendingId: string | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
+  const visibleSubs = expanded
+    ? showAll
+      ? inactiveSubs
+      : inactiveSubs.slice(0, HISTORY_PREVIEW)
+    : [];
+  const hasMore = inactiveSubs.length > HISTORY_PREVIEW;
+
+  return (
+    <div className="pt-1 space-y-2">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center justify-between rounded px-0.5 py-0.5 text-left hover:bg-gray-100 transition-colors"
+      >
+        <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+          Product History ({inactiveSubs.length})
+        </p>
+        {expanded ? (
+          <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
+        )}
+      </button>
+      {expanded && (
+        <>
+          {visibleSubs.map((sub) => (
+            <SubCard
+              key={sub.id}
+              sub={sub}
+              allStudentSubs={allStudentSubs}
+              termsById={termsById}
+              products={products}
+              onEdit={onEdit}
+              onRemove={onRemove}
+              onDelete={onDelete}
+              renewEligible={renewEligibleIds.has(sub.id)}
+              onRenew={onRenew}
+              renewPending={renewTransPending && renewPendingId === sub.id}
+            />
+          ))}
+          {hasMore && !showAll && (
+            <button
+              type="button"
+              onClick={() => setShowAll(true)}
+              className="text-xs font-medium text-blue-600 hover:text-blue-700"
+            >
+              View all {inactiveSubs.length} past products
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function PaginatedTransactions({ transactions }: { transactions: MockWalletTx[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? transactions : transactions.slice(0, 10);
+  const hasMore = transactions.length > 10;
+
+  return (
+    <div className="space-y-1">
+      {visible.map((tx) => (
+        <div
+          key={tx.id}
+          className="flex items-center gap-3 text-xs text-gray-600"
+        >
+          <span className={tx.credits < 0 ? "text-red-600" : "text-green-600"}>
+            {tx.credits > 0 ? "+" : ""}
+            {tx.credits}
+          </span>
+          <span className="flex-1 truncate">{tx.description}</span>
+          <span className="whitespace-nowrap text-gray-400">
+            {formatDate(tx.createdAt)}
+          </span>
+        </div>
+      ))}
+      {hasMore && !showAll && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="text-xs font-medium text-blue-600 hover:text-blue-700 pt-1"
+        >
+          View all {transactions.length} transactions
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PaginatedPenalties({ penalties }: { penalties: MockPenalty[] }) {
+  const [showAll, setShowAll] = useState(false);
+  const visible = showAll ? penalties : penalties.slice(0, 5);
+  const hasMore = penalties.length > 5;
+
+  return (
+    <div className="space-y-1.5">
+      {visible.map((p) => (
+        <div
+          key={p.id}
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm"
+        >
+          <span className="text-gray-500 whitespace-nowrap">{formatDate(p.date)}</span>
+          <span className="text-gray-800">{p.classTitle}</span>
+          <StatusBadge status={p.reason} />
+          <span className="text-gray-600">
+            €{(p.amountCents / 100).toFixed(2)}
+          </span>
+          <StatusBadge status={p.resolution} />
+        </div>
+      ))}
+      {hasMore && !showAll && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="text-xs font-medium text-blue-600 hover:text-blue-700 pt-1"
+        >
+          View all {penalties.length} penalties
+        </button>
+      )}
     </div>
   );
 }

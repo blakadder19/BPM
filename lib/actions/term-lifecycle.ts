@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole, getAuthUser } from "@/lib/auth";
+import { requireRole } from "@/lib/auth";
 import { getSubscriptionRepo, getTermRepo, getStudentRepo } from "@/lib/repositories";
 import {
   createSubscription,
@@ -186,7 +186,10 @@ export async function runTermLifecycleAction(
  * Lightweight lazy expiry check — runs on page load for any role.
  * Only expires overdue subscriptions; does NOT prepare renewals.
  * Throttled: skips if it ran within LAZY_COOLDOWN_MS.
- * Returns the number of subscriptions expired (for logging/debugging).
+ *
+ * Callers are expected to have already authenticated and hydrated
+ * operational data before calling this. The function skips redundant
+ * auth/hydration calls to avoid extra Supabase round-trips.
  */
 export async function lazyExpireSubscriptions(): Promise<number> {
   const now = Date.now();
@@ -194,14 +197,10 @@ export async function lazyExpireSubscriptions(): Promise<number> {
     return 0;
   }
 
-  const user = await getAuthUser();
-  if (!user) return 0;
-
   if (!acquireLock()) return 0;
 
   try {
     g.__bpm_lazy_last_run = now;
-    await ensureOperationalDataHydrated();
 
     const allSubs = await getSubscriptionRepo().getAll();
     const today = getTodayStr();
