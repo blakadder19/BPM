@@ -76,6 +76,14 @@ export async function middleware(request: NextRequest) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("next", pathname);
+    // If the request had auth cookies but getUser() failed, the session
+    // is stale/expired — tell the login page so it can show a message.
+    const hadAuthCookies = request.cookies.getAll().some(
+      (c) => c.name.includes("-auth-token")
+    );
+    if (hadAuthCookies) {
+      loginUrl.searchParams.set("expired", "1");
+    }
     return NextResponse.redirect(loginUrl);
   }
 

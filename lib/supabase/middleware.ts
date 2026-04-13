@@ -61,6 +61,19 @@ export async function updateSession(request: NextRequest) {
     user = data.user;
   }
 
+  // Stale session recovery: if getUser() returned null but the request
+  // carried Supabase auth cookies, the tokens are invalid/expired.
+  // Sign out server-side to clear the stale cookies from the response,
+  // preventing an infinite redirect loop with the login page.
+  if (!user) {
+    const hasAuthCookies = request.cookies.getAll().some(
+      (c) => c.name.includes("-auth-token")
+    );
+    if (hasAuthCookies) {
+      await supabase.auth.signOut().catch(() => {});
+    }
+  }
+
   const _m1 = Date.now();
   if (process.env.NODE_ENV === "development") {
     console.info(`[perf middleware] ${freshJwt ? "getSession(fresh)" : "getUser"}=${_m1 - _m0}ms path=${request.nextUrl.pathname}`);

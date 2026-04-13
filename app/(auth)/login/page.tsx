@@ -30,6 +30,8 @@ export default function LoginPage() {
   const callbackError = searchParams.get("error");
   const confirmed = searchParams.get("confirmed") === "1";
 
+  const expired = searchParams.get("expired") === "1";
+
   const [error, setError] = useState<string | null>(
     callbackError === "auth_callback_failed"
       ? "Authentication failed. Please try again."
@@ -37,14 +39,19 @@ export default function LoginPage() {
   );
   const [isPending, setIsPending] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(
+    expired ? "Your session expired. Please sign in again." : null
+  );
 
   const destination = safeRedirectPath(next);
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
+    supabase.auth.getUser().then(({ data: { user }, error: err }) => {
+      if (user && !err) {
         window.location.href = destination;
+      } else {
+        supabase.auth.signOut().catch(() => {});
       }
     });
   }, [destination]);
@@ -129,7 +136,13 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {confirmed && !error && (
+          {sessionNotice && !error && (
+            <div className="mb-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700">
+              {sessionNotice}
+            </div>
+          )}
+
+          {confirmed && !error && !sessionNotice && (
             <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
               Email confirmed successfully. Please sign in.
             </div>
