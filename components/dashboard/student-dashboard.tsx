@@ -25,6 +25,7 @@ import {
   ChevronDown,
   ChevronRight,
   History,
+  HelpCircle,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -46,7 +47,7 @@ import {
   StudentBookDialog,
   type BookDialogClass,
 } from "@/components/booking/student-book-dialog";
-import { useOnboardingAutoOpen, StudentWalkthrough } from "@/components/dashboard/student-onboarding";
+import { useOnboardingAutoOpen, StudentWalkthrough, WelcomeModal } from "@/components/dashboard/student-onboarding";
 import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
 import { toggleAutoRenewAction } from "@/lib/actions/catalog-purchase";
 import { payPendingSubscriptionAction } from "@/lib/actions/stripe-checkout";
@@ -179,10 +180,20 @@ export function StudentDashboard({
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={`Welcome, ${firstName}`}
-        description="Your dance classes at a glance."
-      />
+      <div className="flex items-start justify-between gap-2">
+        <PageHeader
+          title={`Welcome, ${firstName}`}
+          description="Your dance classes at a glance."
+        />
+        <button
+          type="button"
+          onClick={onboarding.open}
+          title="Reopen tour"
+          className="mt-1 shrink-0 flex h-8 w-8 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 transition-colors hover:text-bpm-600 hover:border-bpm-200 hover:bg-bpm-50"
+        >
+          <HelpCircle className="h-4 w-4" />
+        </button>
+      </div>
 
       {/* Current Term Banner */}
       {termInfo && (
@@ -312,10 +323,10 @@ export function StudentDashboard({
               type="button"
               onClick={() => setShowQr(true)}
               data-tour="qr-button"
-              className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-gray-50 active:bg-gray-100"
+              className="flex items-center justify-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-violet-100 active:bg-violet-150"
             >
-              <QrCode className="h-5 w-5 sm:h-4 sm:w-4 text-gray-500 shrink-0" />
-              <span className="text-sm sm:text-xs font-medium text-gray-600">Show QR code</span>
+              <QrCode className="h-5 w-5 sm:h-4 sm:w-4 text-violet-600 shrink-0" />
+              <span className="text-sm sm:text-xs font-semibold text-violet-700">Show QR code</span>
             </button>
           )}
         </div>
@@ -345,8 +356,11 @@ export function StudentDashboard({
         </div>
       )}
 
-      {/* Onboarding walkthrough */}
-      {onboarding.show && (
+      {/* Onboarding: welcome modal → walkthrough */}
+      {onboarding.showWelcome && (
+        <WelcomeModal onStartTour={onboarding.startTour} onSkip={onboarding.skipWelcome} />
+      )}
+      {onboarding.showTour && (
         <StudentWalkthrough onClose={onboarding.close} onDismiss={onboarding.dismiss} />
       )}
 

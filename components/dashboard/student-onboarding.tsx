@@ -34,10 +34,12 @@ import {
 
 const STORAGE_KEY = "bpm_onboarding_dismissed";
 
+type OnboardingPhase = "idle" | "welcome" | "tour";
+
 // ── Hook ─────────────────────────────────────────────────────
 
 export function useOnboardingAutoOpen(isGetStartedState: boolean) {
-  const [show, setShow] = useState(false);
+  const [phase, setPhase] = useState<OnboardingPhase>("idle");
 
   useEffect(() => {
     if (!isGetStartedState) return;
@@ -46,21 +48,39 @@ export function useOnboardingAutoOpen(isGetStartedState: boolean) {
     } catch {
       return;
     }
-    setShow(true);
+    setPhase("welcome");
   }, [isGetStartedState]);
 
-  const open = useCallback(() => setShow(true), []);
-  const close = useCallback(() => setShow(false), []);
+  const open = useCallback(() => setPhase("tour"), []);
+  const startTour = useCallback(() => setPhase("tour"), []);
+  const close = useCallback(() => setPhase("idle"), []);
   const dismiss = useCallback(() => {
     try {
       localStorage.setItem(STORAGE_KEY, "1");
     } catch {
       /* ignore */
     }
-    setShow(false);
+    setPhase("idle");
+  }, []);
+  const skipWelcome = useCallback(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setPhase("idle");
   }, []);
 
-  return { show, open, close, dismiss };
+  return {
+    phase,
+    showWelcome: phase === "welcome",
+    showTour: phase === "tour",
+    open,
+    startTour,
+    close,
+    dismiss,
+    skipWelcome,
+  };
 }
 
 // ── Step definitions ─────────────────────────────────────────
@@ -130,7 +150,7 @@ const STEPS: WalkthroughStep[] = [
     iconBg: "bg-sky-100",
     iconColor: "text-sky-600",
     title: "How terms work",
-    body: "Classes run in terms (8\u201312 weeks). Your product is linked to the current term. Renew at the end to continue.",
+    body: "BPM runs on 4-week terms. Some products are linked to a specific term. When purchasing, you can choose the current or next term \u2014 but the current term is only available during its first 2 weeks.",
     spotlightSelector: "[data-tour='term-banner']",
     Preview: TermsPreview,
   },
@@ -351,10 +371,10 @@ function TermsPreview() {
               <CalendarDays className="h-3 w-3 text-bpm-500" />
               <span className="text-[10px] font-semibold text-bpm-800">Spring 2026</span>
             </div>
-            <span className="text-[10px] text-bpm-600">Week 4 / 10</span>
+            <span className="text-[10px] text-bpm-600">Week 2 / 4</span>
           </div>
           <div className="mt-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-1.5 w-[40%] rounded-full bg-bpm-500" />
+            <div className="h-1.5 w-[50%] rounded-full bg-bpm-500" />
           </div>
         </div>
 
@@ -363,7 +383,7 @@ function TermsPreview() {
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-gray-500">Next term</p>
             <p className="text-[10px] text-gray-400">
-              Renew your product to continue
+              Choose next term after week 2
             </p>
           </div>
         </div>
@@ -462,12 +482,12 @@ export function StudentWalkthrough({
       {spotlightRect ? (
         <SpotlightOverlay rect={spotlightRect} />
       ) : (
-        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-black/60" />
       )}
 
-      <div className="relative z-10 flex h-full items-end sm:items-center justify-center p-0 sm:p-4 pointer-events-none">
+      <div className="relative z-10 flex h-full items-center justify-center p-4 pt-[env(safe-area-inset-top,16px)] pointer-events-none">
         <div
-          className="w-full max-w-md max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden pointer-events-auto"
+          className="w-full max-w-md max-h-[90vh] sm:max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Scrollable body */}
@@ -569,6 +589,59 @@ export function StudentWalkthrough({
                 Don&apos;t show this again
               </span>
             </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Welcome Modal (shown before tour) ───────────────────────
+
+export function WelcomeModal({
+  onStartTour,
+  onSkip,
+}: {
+  onStartTour: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50" onClick={onSkip}>
+      <div className="absolute inset-0 bg-black/60" />
+      <div className="relative z-10 flex h-full items-center justify-center p-4 pt-[env(safe-area-inset-top,16px)] pointer-events-none">
+        <div
+          className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden pointer-events-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-6 pt-8 pb-2 text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-bpm-100">
+              <CalendarPlus className="h-7 w-7 text-bpm-600" />
+            </div>
+            <h2 className="font-display text-xl font-bold text-gray-900">
+              Welcome to BPM
+            </h2>
+            <p className="mt-2.5 text-sm leading-relaxed text-gray-600 max-w-[280px] mx-auto">
+              Welcome to your student dashboard.
+              We&apos;ll show you a quick tour so you can learn how to buy
+              a product, book classes, manage bookings, and use your QR code.
+            </p>
+          </div>
+          <div className="px-6 pt-4 pb-6 space-y-2.5">
+            <button
+              type="button"
+              onClick={onStartTour}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-bpm-600 to-bpm-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-shadow hover:shadow-md"
+            >
+              Start tour
+              <ArrowRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onSkip}
+              className="w-full rounded-lg px-4 py-2 text-sm font-medium text-gray-500 transition-colors hover:text-gray-700 hover:bg-gray-50"
+            >
+              Skip for now
+            </button>
           </div>
         </div>
       </div>
