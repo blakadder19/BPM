@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/reset-password", "/update-password", "/checkout", "/embed-entry"];
+const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/reset-password", "/update-password", "/checkout", "/embed-entry", "/explore"];
 const API_ROUTES_SELF_AUTH = ["/api/lifecycle", "/api/webhooks"];
 
 const EMBED_ALLOWED_ORIGINS = [

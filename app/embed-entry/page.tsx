@@ -32,7 +32,7 @@ export default function EmbedEntryPage() {
 
           <div className="mt-8 space-y-3">
             <a
-              href={`${APP_ORIGIN}/classes`}
+              href={`${APP_ORIGIN}/dashboard`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-bpm-600 to-bpm-500 px-4 py-3 text-sm font-semibold text-white shadow-sm transition-shadow hover:shadow-md active:shadow-sm"
@@ -55,7 +55,7 @@ export default function EmbedEntryPage() {
           <p className="mt-5 text-center text-xs text-gray-400">
             New here?{" "}
             <a
-              href={`${APP_ORIGIN}/classes`}
+              href={`${APP_ORIGIN}/explore`}
               target="_blank"
               rel="noopener noreferrer"
               className="font-medium text-bpm-600 hover:text-bpm-700"
