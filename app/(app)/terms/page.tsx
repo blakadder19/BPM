@@ -10,7 +10,7 @@ export default async function TermsPage() {
   const terms = await cachedGetTerms();
 
   const _tEnd = performance.now();
-  console.info(`[perf /terms] total=${(_tEnd-_t0).toFixed(0)}ms`);
+  if (process.env.NODE_ENV === "development") console.info(`[perf /terms] total=${(_tEnd-_t0).toFixed(0)}ms`);
 
   return <AdminTerms terms={terms} today={getTodayStr()} />;
 }

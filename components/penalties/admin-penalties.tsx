@@ -115,12 +115,12 @@ export function AdminPenalties({ penalties, students, classes, penaltyFees, isDe
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader
           title="Penalties"
           description={`Late cancel ${formatCents(penaltyFees.lateCancelCents)} · No-show ${formatCents(penaltyFees.noShowCents)}. Classes only — socials excluded.`}
         />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {isDev && (
             <>
               <Button

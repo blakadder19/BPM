@@ -131,7 +131,8 @@ export function AdminBookings({
         else sp.delete(k);
       }
       sp.delete("page");
-      router.push(`${pathname}?${sp.toString()}`);
+      const qs = sp.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
     },
     [router, pathname, currentParams]
   );
@@ -141,7 +142,8 @@ export function AdminBookings({
       const sp = new URLSearchParams(currentParams.toString());
       if (page <= 1) sp.delete("page");
       else sp.set("page", String(page));
-      router.push(`${pathname}?${sp.toString()}`);
+      const qs = sp.toString();
+      router.push(qs ? `${pathname}?${qs}` : pathname);
     },
     [router, pathname, currentParams]
   );
@@ -323,6 +325,13 @@ export function AdminBookings({
 
       {/* Table */}
       <AdminTable headers={HEADERS} count={totalCount}>
+        {displayBookings.length === 0 && (
+          <tr>
+            <td colSpan={HEADERS.length} className="px-4 py-12 text-center text-sm text-gray-400">
+              No bookings match your current filters.
+            </td>
+          </tr>
+        )}
         {displayBookings.map((b) => {
           const isExpanded = expandedId === b.id;
           const isActive =
@@ -367,7 +376,7 @@ export function AdminBookings({
                 </Td>
                 <Td>{b.styleName ?? "—"}</Td>
                 <Td>
-                  {b.danceRole ? (
+                  {b.danceRole && b.danceStyleRequiresBalance ? (
                     <StatusBadge status={b.danceRole} />
                   ) : (
                     "—"
@@ -446,7 +455,7 @@ export function AdminBookings({
 
       {/* Pagination */}
       {pagination && pagination.totalPages > 1 && (
-        <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-gray-200 pt-4">
           <p className="text-sm text-gray-500">
             Showing {(pagination.currentPage - 1) * pagination.pageSize + 1}–
             {Math.min(pagination.currentPage * pagination.pageSize, pagination.totalCount)} of{" "}

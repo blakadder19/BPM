@@ -72,7 +72,10 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = STATUS_MAP[status] ?? { label: status, variant: "default" as BadgeVariant };
+  const config = STATUS_MAP[status] ?? {
+    label: status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    variant: "default" as BadgeVariant,
+  };
   return (
     <Badge variant={config.variant} className={className}>
       {config.label}

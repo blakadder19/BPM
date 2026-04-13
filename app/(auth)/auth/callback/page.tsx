@@ -25,7 +25,8 @@ export default function AuthCallbackPage() {
     const code = searchParams.get("code");
     const tokenHash = searchParams.get("token_hash");
     const type = searchParams.get("type");
-    const next = searchParams.get("next") ?? "/onboarding";
+    const rawNext = searchParams.get("next") ?? "/onboarding";
+    const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/onboarding";
     const supabase = createClient();
 
     function clearDevCookies() {

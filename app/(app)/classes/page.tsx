@@ -212,7 +212,7 @@ export default async function ClassesPage() {
         : null;
 
     const _tEnd = performance.now();
-    console.info(`[perf /classes] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tDb-_tAuth).toFixed(0)}ms prep=${(_tPrep-_tDb).toFixed(0)}ms loop(${futureInstances.length}cls)=${(_tLoop-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+    if (process.env.NODE_ENV === "development") console.info(`[perf /classes] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tDb-_tAuth).toFixed(0)}ms prep=${(_tPrep-_tDb).toFixed(0)}ms loop(${futureInstances.length}cls)=${(_tLoop-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
     return (
       <ClassBrowser

@@ -28,7 +28,7 @@ export default async function CheckoutCancelPage() {
             No payment was made and no plan was activated. You can try again
             whenever you&apos;re ready, or pay at reception instead.
           </p>
-          <div className="mt-6 flex gap-3">
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
             {isStudent ? (
               <Link
                 href="/catalog"

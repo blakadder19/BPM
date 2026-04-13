@@ -814,13 +814,13 @@ export function DeleteBookingDialog({
             <Button variant="ghost" onClick={onClose}>Close</Button>
           ) : (
             <>
-              <Button variant="ghost" onClick={onClose}>Cancel</Button>
+              <Button variant="ghost" onClick={onClose}>Go Back</Button>
               <Button
                 variant="danger"
                 onClick={handleDelete}
                 disabled={isPending || !consequencesReady}
               >
-                {isPending ? "Deleting…" : "Permanently Delete"}
+                {isPending ? "Deleting…" : "Delete Permanently"}
               </Button>
             </>
           )}

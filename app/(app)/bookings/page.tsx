@@ -29,6 +29,7 @@ export interface StudentWaitlistView {
   location: string;
   position: number;
   danceRole: string | null;
+  danceStyleRequiresBalance: boolean;
 }
 
 export interface BookingView {
@@ -41,6 +42,7 @@ export interface BookingView {
   startTime: string;
   endTime: string;
   danceRole: string | null;
+  danceStyleRequiresBalance: boolean;
   status: string;
   source: string | null;
   subscriptionName: string | null;
@@ -166,6 +168,7 @@ export default async function BookingsPage({
       startTime: cls?.startTime ?? raw?.startTime ?? "",
       endTime: cls?.endTime ?? raw?.endTime ?? "",
       danceRole: b.danceRole,
+      danceStyleRequiresBalance: cls?.danceStyleRequiresBalance ?? false,
       status: b.status,
       source: b.source ?? null,
       subscriptionName: b.subscriptionName ?? null,
@@ -219,13 +222,14 @@ export default async function BookingsPage({
           location: cls?.location ?? "",
           position: w.position,
           danceRole: w.danceRole,
+          danceStyleRequiresBalance: cls?.danceStyleRequiresBalance ?? false,
         };
       })
       .filter((w) => !isClassEnded(w.date, w.endTime))
       .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
 
     const _tEnd = performance.now();
-    console.info(`[perf /bookings] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms enrich+render=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+    if (process.env.NODE_ENV === "development") console.info(`[perf /bookings] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms enrich+render=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
     return <StudentBookings bookings={mine} waitlistEntries={myWaitlist} />;
   }
 
@@ -393,7 +397,7 @@ export default async function BookingsPage({
   }
 
   const _tEnd = performance.now();
-  console.info(`[perf /bookings admin] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms enrich+filter=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+  if (process.env.NODE_ENV === "development") console.info(`[perf /bookings admin] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms enrich+filter=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
   return (
     <AdminBookings

@@ -34,11 +34,14 @@ export default async function SettingsPage() {
   const allStyles = DANCE_STYLES.map((s) => ({ id: s.id, name: s.name }));
   const supabaseStatus = await probeSupabaseStatus();
 
+  const isDev = process.env.NODE_ENV === "development";
+
   return (
     <SettingsForm
       initialSettings={settings}
       allStyles={allStyles}
       supabaseStatus={supabaseStatus}
+      isDev={isDev}
     />
   );
 }

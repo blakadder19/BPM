@@ -62,7 +62,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   const _m1 = Date.now();
-  console.info(`[perf middleware] ${freshJwt ? "getSession(fresh)" : "getUser"}=${_m1 - _m0}ms path=${request.nextUrl.pathname}`);
+  if (process.env.NODE_ENV === "development") {
+    console.info(`[perf middleware] ${freshJwt ? "getSession(fresh)" : "getUser"}=${_m1 - _m0}ms path=${request.nextUrl.pathname}`);
+  }
 
   return { supabaseResponse, user };
 }

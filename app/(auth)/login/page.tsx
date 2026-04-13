@@ -14,6 +14,16 @@ const DEMO_USERS = [
   { label: "Student", email: "student@bpm.dance" },
 ];
 
+function safeRedirectPath(raw: string): string {
+  if (!raw) return "/dashboard";
+  try {
+    const url = new URL(raw, "http://localhost");
+    return url.pathname + url.search;
+  } catch {
+    return raw.startsWith("/") ? raw : "/dashboard";
+  }
+}
+
 export default function LoginPage() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "";
@@ -28,7 +38,7 @@ export default function LoginPage() {
   const [isPending, setIsPending] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
 
-  const destination = next || "/dashboard";
+  const destination = safeRedirectPath(next);
 
   useEffect(() => {
     const supabase = createClient();
@@ -68,13 +78,14 @@ export default function LoginPage() {
       return;
     }
 
-    console.info(`[perf login] signIn=${(t1-t0).toFixed(0)}ms — navigating to ${destination}`);
+    if (process.env.NODE_ENV === "development") console.info(`[perf login] signIn=${(t1-t0).toFixed(0)}ms — navigating to ${destination}`);
     setIsNavigating(true);
 
     // Signal to middleware that the JWT was just issued and doesn't need
     // the expensive getUser() HTTP validation. Short-lived (10s) cookie
     // that saves ~100-300ms on the very first protected page load.
-    document.cookie = "bpm_fresh_jwt=1; path=/; max-age=10; SameSite=Lax";
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `bpm_fresh_jwt=1; path=/; max-age=10; SameSite=Lax${secure}`;
 
     // Use hard navigation instead of router.push(). After login, the
     // browser has no prefetched RSC payload for the protected route, so

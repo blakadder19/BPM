@@ -179,7 +179,7 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
       {open && (
         <div
           ref={panelRef}
-          className="absolute right-0 top-full z-50 mt-1 w-96 rounded-xl border border-gray-200 bg-white shadow-lg"
+          className="absolute right-0 top-full z-50 mt-1 w-[calc(100vw-2rem)] sm:w-96 rounded-xl border border-gray-200 bg-white shadow-lg"
         >
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-2.5">
             <h3 className="text-sm font-semibold text-gray-800">

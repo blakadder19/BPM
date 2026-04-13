@@ -39,7 +39,7 @@ export function BookingDetailPanel({
   return (
     <tr>
       <td colSpan={colSpan} className="bg-gray-50 p-0">
-        <div className="grid gap-5 px-8 py-5 md:grid-cols-2">
+        <div className="grid gap-5 px-4 py-5 sm:px-8 md:grid-cols-2">
           {isOrphaned && (
             <div className="md:col-span-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               <p className="font-medium">Orphaned booking</p>
@@ -49,7 +49,9 @@ export function BookingDetailPanel({
           <Section title="Student">
             <DL label="Name" value={b.studentName} />
             <DL label="Student ID" value={b.studentId ?? "—"} />
-            <DL label="Role" value={b.danceRole ?? "—"} />
+            {b.danceRole && b.danceStyleRequiresBalance && (
+              <DL label="Role" value={b.danceRole.charAt(0).toUpperCase() + b.danceRole.slice(1)} />
+            )}
           </Section>
 
           <Section title="Class Instance">

@@ -76,7 +76,7 @@ export default async function AttendancePage({
     }));
 
   const _tEnd = performance.now();
-  console.info(`[perf /attendance] hydrate=${(_tHydrate-_t0).toFixed(0)}ms rest=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+  if (process.env.NODE_ENV === "development") console.info(`[perf /attendance] hydrate=${(_tHydrate-_t0).toFixed(0)}ms rest=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
   return (
     <AttendanceClient

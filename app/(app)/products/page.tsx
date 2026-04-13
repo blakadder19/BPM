@@ -48,7 +48,7 @@ export default async function ProductsPage() {
   }
 
   const _tEnd = performance.now();
-  console.info(`[perf /products] hydrate=${(_tHydrate-_t0).toFixed(0)}ms db=${(_tDb-_tHydrate).toFixed(0)}ms enrich=${(_tEnd-_tDb).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+  if (process.env.NODE_ENV === "development") console.info(`[perf /products] hydrate=${(_tHydrate-_t0).toFixed(0)}ms db=${(_tDb-_tHydrate).toFixed(0)}ms enrich=${(_tEnd-_tDb).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
   return (
     <AdminProducts

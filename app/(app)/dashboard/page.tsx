@@ -27,7 +27,6 @@ import { getInstances } from "@/lib/services/schedule-store";
 import {
   StudentDashboard,
   type StudentBookingSummary,
-  type StudentPenaltySummary,
   type StudentTermInfo,
   type StudentEntitlementSummary,
   type TodayForYouItem,
@@ -63,7 +62,6 @@ export default async function DashboardPage() {
     if (!cocAccepted) redirect("/onboarding");
 
     const bookingSvc = getBookingRepo().getService();
-    const penaltySvc = getPenaltyRepo().getService();
     const attendanceSvc = getAttendanceRepo().getService();
     const _tDb = performance.now();
 
@@ -85,6 +83,7 @@ export default async function DashboardPage() {
           endTime: cls.endTime,
           location: cls.location,
           danceRole: b.danceRole,
+          danceStyleRequiresBalance: cls.danceStyleRequiresBalance ?? false,
           status: resolveStudentVisibleStatus(b.status, attRecord?.status),
         };
       })
@@ -94,16 +93,6 @@ export default async function DashboardPage() {
           a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime)
       );
 
-    const penalties: StudentPenaltySummary[] = penaltySvc.penalties
-      .filter((p) => p.studentId === user.id && p.resolution !== "attendance_corrected")
-      .map((p) => ({
-        id: p.id,
-        classTitle: p.classTitle,
-        date: p.classDate,
-        reason: p.reason,
-        amountCents: p.amountCents,
-        resolution: p.resolution,
-      }));
     const currentTerm = getCurrentTerm(terms, todayStr);
     let termInfo: StudentTermInfo | null = null;
     if (currentTerm) {
@@ -306,14 +295,13 @@ export default async function DashboardPage() {
       })
       .sort((a, b) => a.startTime.localeCompare(b.startTime));
     const _tEnd = performance.now();
-    console.info(`[perf /dashboard] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tHydrate-_tAuth).toFixed(0)}ms prep+todayForYou=${(_tEnd-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
+    if (process.env.NODE_ENV === "development") console.info(`[perf /dashboard] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tHydrate-_tAuth).toFixed(0)}ms prep+todayForYou=${(_tEnd-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
     return (
       <StudentDashboard
         fullName={user.fullName}
         dateOfBirth={student?.dateOfBirth ?? null}
         upcomingBookings={upcomingBookings}
-        penalties={penalties}
         termInfo={termInfo}
         entitlements={entitlements}
         lastPlan={lastPlan}
@@ -457,7 +445,7 @@ export default async function DashboardPage() {
   };
 
   const _tAdminEnd = performance.now();
-  console.info(`[perf /dashboard admin] admin-path=${(_tAdminEnd-_tAdmin0).toFixed(0)}ms total=${(_tAdminEnd-_t0).toFixed(0)}ms`);
+  if (process.env.NODE_ENV === "development") console.info(`[perf /dashboard admin] admin-path=${(_tAdminEnd-_tAdmin0).toFixed(0)}ms total=${(_tAdminEnd-_t0).toFixed(0)}ms`);
 
   return <AdminDashboard data={dashboardData} />;
 }

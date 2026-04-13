@@ -88,9 +88,9 @@ export async function POST(request: Request) {
         `[stripe-webhook] Fulfillment failed for session ${session.id}:`,
         result.error,
       );
-    } else {
-      console.info(
-        `[stripe-webhook] Fulfilled session ${session.id} for student ${metadata.bpm_student_id}.`,
+      return NextResponse.json(
+        { error: "Fulfillment failed" },
+        { status: 500 },
       );
     }
   }

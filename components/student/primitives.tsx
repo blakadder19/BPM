@@ -156,10 +156,10 @@ const STATUS_STYLES: Record<StatusVariant, string> = {
 
 const STATUS_LABELS: Record<string, { label: string; variant: StatusVariant }> = {
   confirmed: { label: "Confirmed", variant: "confirmed" },
-  checked_in: { label: "Checked in", variant: "checked_in" },
+  checked_in: { label: "Checked In", variant: "checked_in" },
   waiting: { label: "Waitlisted", variant: "waitlisted" },
   cancelled: { label: "Cancelled", variant: "cancelled" },
-  late_cancelled: { label: "Late cancel", variant: "cancelled" },
+  late_cancelled: { label: "Late Cancelled", variant: "cancelled" },
   missed: { label: "Missed", variant: "missed" },
 };
 
@@ -187,6 +187,13 @@ export function StatusPill({
       {text}
     </span>
   );
+}
+
+// ── Role display helper ────────────────────────────────────
+
+export function formatRoleLabel(role: string | null | undefined): string | null {
+  if (!role) return null;
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 // ── Inline badge ───────────────────────────────────────────

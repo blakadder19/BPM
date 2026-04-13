@@ -279,13 +279,13 @@ export function ScheduleCalendar({
           </div>
         )}
 
-        <SelectFilter value={teacherFilter} onChange={setTeacherFilter} options={teacherOptions} placeholder="All Teachers" />
-        <SelectFilter value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} placeholder="All Types" />
+        <SelectFilter value={teacherFilter} onChange={setTeacherFilter} options={teacherOptions} placeholder="All teachers" />
+        <SelectFilter value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} placeholder="All types" />
         {styleOptions.length > 1 && (
-          <SelectFilter value={styleFilter} onChange={setStyleFilter} options={styleOptions} placeholder="All Styles" />
+          <SelectFilter value={styleFilter} onChange={setStyleFilter} options={styleOptions} placeholder="All styles" />
         )}
         {locationOptions.length > 1 && (
-          <SelectFilter value={locationFilter} onChange={setLocationFilter} options={locationOptions} placeholder="All Locations" />
+          <SelectFilter value={locationFilter} onChange={setLocationFilter} options={locationOptions} placeholder="All locations" />
         )}
         <label className="flex items-center gap-1.5 text-xs text-gray-600">
           <input

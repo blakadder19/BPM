@@ -43,8 +43,8 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       if (syncErr) {
         console.warn(`[ensureProfile] email sync: ${syncErr.message}`);
       }
-      console.log(
-        `[ensureProfile] Existing profile found for ${authUser.email} — skipped full provisioning (claim-safe).`
+      console.info(
+        `[ensureProfile] Existing profile found — skipped full provisioning (claim-safe).`
       );
       return { success: true };
     }
@@ -125,7 +125,7 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       }
     }
 
-    console.log(`[ensureProfile] Provisioned ${authUser.email} (role=${role})`);
+    console.info(`[ensureProfile] Provisioned new user (role=${role})`);
     return { success: true };
   } catch (err) {
     const msg = `Exception at "${step}": ${err instanceof Error ? err.message : String(err)}`;

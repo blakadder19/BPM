@@ -33,7 +33,7 @@ export function OnboardingFlow({ userName, coc }: Props) {
       if (result.success) {
         setAccepted(true);
       } else {
-        setError(result.error ?? "Something went wrong");
+        setError(result.error ?? "We couldn't save your acceptance. Please try again.");
       }
     });
   }

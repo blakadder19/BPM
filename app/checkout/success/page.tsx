@@ -31,7 +31,7 @@ export default async function CheckoutSuccessPage() {
             Your payment was successful. Your plan will be activated shortly — it
             may take a few moments to appear on your dashboard.
           </p>
-          <div className="mt-6 flex gap-3">
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
             {isStudent ? (
               <Link
                 href="/dashboard"

@@ -39,6 +39,7 @@ import {
   RowTitle,
   ClassListItem,
   BookingListItem,
+  formatRoleLabel,
 } from "@/components/student/primitives";
 import { CocAcceptanceDialog } from "@/components/booking/coc-acceptance-dialog";
 import {
@@ -63,16 +64,8 @@ export interface StudentBookingSummary {
   endTime: string;
   location: string;
   danceRole: string | null;
+  danceStyleRequiresBalance: boolean;
   status: string;
-}
-
-export interface StudentPenaltySummary {
-  id: string;
-  classTitle: string;
-  date: string;
-  reason: string;
-  amountCents: number;
-  resolution: string;
 }
 
 export interface StudentTermInfo {
@@ -125,7 +118,6 @@ interface StudentDashboardProps {
   fullName: string;
   dateOfBirth?: string | null;
   upcomingBookings: StudentBookingSummary[];
-  penalties: StudentPenaltySummary[];
   termInfo?: StudentTermInfo | null;
   entitlements?: StudentEntitlementSummary[];
   lastPlan?: StudentEntitlementSummary | null;
@@ -142,7 +134,6 @@ export function StudentDashboard({
   fullName,
   dateOfBirth,
   upcomingBookings,
-  penalties,
   termInfo,
   entitlements = [],
   lastPlan,
@@ -549,7 +540,7 @@ export function StudentDashboard({
                 key={b.id}
                 border={b.status === "confirmed" ? "border-green-200" : "border-gray-200"}
                 name={b.classTitle}
-                badge={b.danceRole ? <InlineBadge className="bg-gray-100 text-gray-600">{b.danceRole}</InlineBadge> : undefined}
+                badge={b.danceRole && b.danceStyleRequiresBalance ? <InlineBadge className="bg-gray-100 text-gray-600">{formatRoleLabel(b.danceRole)}</InlineBadge> : undefined}
                 meta={
                   <RowMeta>
                     <span>{formatDate(b.date)}</span>

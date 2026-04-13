@@ -27,9 +27,10 @@ interface SettingsFormProps {
   initialSettings: AppSettings;
   allStyles: StyleOption[];
   supabaseStatus?: SupabaseStatus;
+  isDev?: boolean;
 }
 
-export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: SettingsFormProps) {
+export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev }: SettingsFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -176,14 +177,16 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: Set
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle>Role Balance</CardTitle>
-                <Badge variant="muted">Partially wired</Badge>
+                {isDev && <Badge variant="muted">Partially wired</Badge>}
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-1 flex items-start gap-2">
-                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>The imbalance number is saved but booking enforcement still uses a static default. The style checkboxes control display badges in Schedule/Templates.</span>
-              </div>
+              {isDev && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-1 flex items-start gap-2">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>The imbalance number is saved but booking enforcement still uses a static default. The style checkboxes control display badges in Schedule/Templates.</span>
+                </div>
+              )}
               <NumberField
                 id="allowedRoleImbalance"
                 label="Max leader/follower imbalance"
@@ -229,14 +232,16 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: Set
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle>Class Availability</CardTitle>
-                <Badge variant="muted">UI only</Badge>
+                {isDev && <Badge variant="muted">UI only</Badge>}
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3 flex items-start gap-2">
-                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>These toggles control display labels only. Booking enforcement uses the event type configuration and is not yet driven by these settings.</span>
-              </div>
+              {isDev && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3 flex items-start gap-2">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>These toggles control display labels only. Booking enforcement uses the event type configuration and is not yet driven by these settings.</span>
+                </div>
+              )}
               <CheckboxField
                 name="socialsBookable"
                 label="Socials are bookable"
@@ -266,14 +271,16 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: Set
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle>Waitlist</CardTitle>
-                <Badge variant="muted">Not yet wired</Badge>
+                {isDev && <Badge variant="muted">Not yet wired</Badge>}
               </div>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3 flex items-start gap-2">
-                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>This setting is saved but not yet consumed by any waitlist logic. It will be wired when automated waitlist offer expiry is implemented.</span>
-              </div>
+              {isDev && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 mb-3 flex items-start gap-2">
+                  <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>This setting is saved but not yet consumed by any waitlist logic. It will be wired when automated waitlist offer expiry is implemented.</span>
+                </div>
+              )}
               <NumberField
                 id="waitlistOfferExpiryHours"
                 label="Waitlist offer expiry (hours)"
@@ -421,7 +428,7 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: Set
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle>Provisional / Pending Decisions</CardTitle>
-                <Badge variant="warning">PROVISIONAL</Badge>
+                {isDev && <Badge variant="warning">PROVISIONAL</Badge>}
               </div>
             </CardHeader>
             <CardContent>
@@ -461,7 +468,7 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: Set
             <CardHeader>
               <div className="flex items-center gap-2">
                 <CardTitle>Payments</CardTitle>
-                <Badge variant="muted">Not implemented</Badge>
+                {isDev && <Badge variant="muted">Not implemented</Badge>}
               </div>
             </CardHeader>
             <CardContent>
@@ -474,18 +481,20 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus }: Set
         </div>
 
         {/* ── Save bar ───────────────────────────────────────── */}
-        <div className="mt-6 flex items-center gap-3">
-          <Button type="submit" disabled={isPending}>
-            <Save className="mr-2 h-4 w-4" />
-            {isPending ? "Saving…" : "Save settings"}
-          </Button>
-          {saved && (
-            <span className="flex items-center gap-1 text-sm text-emerald-600">
-              <CheckCircle className="h-4 w-4" />
-              Settings saved
-            </span>
-          )}
-          {error && <span className="text-sm text-red-600">{error}</span>}
+        <div className="sticky bottom-0 z-10 -mx-4 mt-6 border-t border-gray-200 bg-white/95 backdrop-blur px-4 py-3 md:-mx-6 md:px-6">
+          <div className="flex items-center gap-3">
+            <Button type="submit" disabled={isPending}>
+              <Save className="mr-2 h-4 w-4" />
+              {isPending ? "Saving…" : "Save settings"}
+            </Button>
+            {saved && (
+              <span className="flex items-center gap-1 text-sm text-emerald-600">
+                <CheckCircle className="h-4 w-4" />
+                Settings saved
+              </span>
+            )}
+            {error && <span className="text-sm text-red-600">{error}</span>}
+          </div>
         </div>
       </form>
     </div>

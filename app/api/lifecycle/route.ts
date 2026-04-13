@@ -10,12 +10,14 @@ import { runTermLifecycleAction } from "@/lib/actions/term-lifecycle";
  *  - Manual: admin clicks "Term Lifecycle" button in Students page
  *
  * Authentication: requires CRON_SECRET env var to match the Authorization bearer token.
- * Falls back to allowing the call if CRON_SECRET is not set (dev convenience).
+ * In development only, allows calls when CRON_SECRET is unset.
  */
 
 function isAuthorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
+  if (!secret) {
+    return process.env.NODE_ENV === "development";
+  }
   const auth = request.headers.get("authorization");
   return auth === `Bearer ${secret}`;
 }

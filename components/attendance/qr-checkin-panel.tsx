@@ -91,7 +91,7 @@ export function QrCheckInPanel() {
   const doLookup = useCallback(
     (token: string) => {
       if (!isValidStudentQrToken(token)) {
-        setLookupResult({ success: false, error: "Not a valid student QR code. Expected a bpm-… code." });
+        setLookupResult({ success: false, error: "Not a valid student QR code. Please try scanning again." });
         return;
       }
       setScannerPaused(true);

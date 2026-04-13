@@ -423,7 +423,7 @@ function PurchaseDialog({
         setSuccess(true);
         router.refresh();
       } else {
-        setError(res.error ?? "Something went wrong.");
+        setError(res.error ?? "We couldn't process your purchase. Please try again.");
       }
     });
   }

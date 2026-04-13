@@ -181,7 +181,7 @@ export async function ensureOperationalDataHydrated(): Promise<void> {
         refreshClassInstances(),
       ]);
       const _h2 = performance.now();
-      console.info(`[perf hydrate] settings+bootstrap=${(_h1-_h0).toFixed(0)}ms opData+instances=${(_h2-_h1).toFixed(0)}ms total=${(_h2-_h0).toFixed(0)}ms`);
+      if (process.env.NODE_ENV === "development") console.info(`[perf hydrate] settings+bootstrap=${(_h1-_h0).toFixed(0)}ms opData+instances=${(_h2-_h1).toFixed(0)}ms total=${(_h2-_h0).toFixed(0)}ms`);
 
       _lastHydratedAt = Date.now();
     } finally {

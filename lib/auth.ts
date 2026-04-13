@@ -68,8 +68,6 @@ function hasSupabaseConfig(): boolean {
 async function resolveSupabaseUser(): Promise<AuthUser | null> {
   if (!hasSupabaseConfig()) return null;
 
-  const _a0 = performance.now();
-
   let supabase;
   try {
     supabase = await createServerSupabaseClient();
@@ -96,12 +94,12 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
     return null;
   }
 
-  const _a1 = performance.now();
   const emailConfirmed = !!authUser.email_confirmed_at;
 
   // Build identity from JWT metadata — used as fast path or fallback.
   const email = authUser.email ?? "";
-  const demo = DEMO_ACCOUNTS[email];
+  const isDev = process.env.NODE_ENV === "development";
+  const demo = isDev ? DEMO_ACCOUNTS[email] : undefined;
   const meta = authUser.user_metadata ?? {};
   const jwtUser: AuthUser = {
     id: authUser.id,
@@ -120,8 +118,6 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
   const cookieStore = await cookies();
   const freshJwt = !!cookieStore.get("bpm_fresh_jwt")?.value;
   if (freshJwt && jwtUser.role) {
-    const _a2 = performance.now();
-    console.info(`[perf auth] session=${(_a1-_a0).toFixed(0)}ms profile=SKIP(fresh) total=${(_a2-_a0).toFixed(0)}ms`);
     return jwtUser;
   }
 
@@ -136,8 +132,6 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
       .eq("id", authUser.id)
       .maybeSingle();
     const dbUser = data as Pick<UserRow, "id" | "email" | "full_name" | "role" | "avatar_url" | "academy_id"> | null;
-    const _a2 = performance.now();
-    console.info(`[perf auth] session=${(_a1-_a0).toFixed(0)}ms profile=${(_a2-_a1).toFixed(0)}ms total=${(_a2-_a0).toFixed(0)}ms`);
     if (dbUser) {
       return {
         id: dbUser.id,
@@ -153,8 +147,6 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
     // DB unreachable — use JWT metadata
   }
 
-  const _a2 = performance.now();
-  console.info(`[perf auth] session=${(_a1-_a0).toFixed(0)}ms profile(fallback)=${(_a2-_a1).toFixed(0)}ms total=${(_a2-_a0).toFixed(0)}ms`);
   return jwtUser;
 }
 

@@ -1,5 +1,4 @@
-import { getAuthUser } from "@/lib/auth";
-import { redirect } from "next/navigation";
+import { requireRole } from "@/lib/auth";
 import { getPenaltyRepo, getSettingsRepo } from "@/lib/repositories";
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -12,19 +11,12 @@ export default async function PenaltiesPage({
 }: {
   searchParams?: Promise<{ classTitle?: string; date?: string; student?: string }>;
 }) {
-  const _t0 = performance.now();
-  const user = await getAuthUser();
-  if (!user) redirect("/login");
+  await requireRole(["admin"]);
   const params = searchParams ? await searchParams : {};
 
   await ensureOperationalDataHydrated();
-  const _tHydrate = performance.now();
 
   const svc = getPenaltyRepo().getService();
-
-  if (user.role === "student") {
-    redirect("/dashboard");
-  }
 
   const allPenalties = svc.getAllPenalties();
 
@@ -41,9 +33,6 @@ export default async function PenaltiesPage({
     .map((c) => ({ id: c.id, title: c.title }));
 
   const isDev = process.env.NODE_ENV === "development";
-
-  const _tEnd = performance.now();
-  console.info(`[perf /penalties] hydrate=${(_tHydrate-_t0).toFixed(0)}ms rest=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
   return (
     <AdminPenalties

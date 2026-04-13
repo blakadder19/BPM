@@ -314,10 +314,10 @@ export function DeleteConfirmDialog({
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
-            Cancel
+            Keep Penalty
           </Button>
           <Button variant="danger" onClick={handleConfirm} disabled={isPending}>
-            {isPending ? "Deleting…" : "Delete"}
+            {isPending ? "Deleting…" : "Delete Permanently"}
           </Button>
         </DialogFooter>
       </DialogContent>

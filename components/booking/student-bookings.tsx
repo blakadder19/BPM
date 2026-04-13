@@ -23,6 +23,7 @@ import {
   InlineBadge,
   BookingListItem,
   SectionLabel,
+  formatRoleLabel,
 } from "@/components/student/primitives";
 import { checkLateCancelStatusAction } from "@/lib/actions/bookings-admin";
 import { studentCancelBookingAction } from "@/lib/actions/booking-student";
@@ -249,7 +250,7 @@ function BookingCard({
       bg={b.isAcademyCancelled ? "bg-gray-50/80" : "bg-white"}
       name={b.classTitle}
       muted={b.isAcademyCancelled}
-      badge={b.danceRole ? <InlineBadge className="bg-gray-100 text-gray-600">{b.danceRole}</InlineBadge> : undefined}
+      badge={b.danceRole && b.danceStyleRequiresBalance ? <InlineBadge className="bg-gray-100 text-gray-600">{formatRoleLabel(b.danceRole)}</InlineBadge> : undefined}
       meta={
         <RowMeta>
           {b.date ? <span>{formatDate(b.date)}</span> : <span className="text-gray-400">—</span>}
@@ -307,7 +308,7 @@ function WaitlistCard({ entry: w }: { entry: StudentWaitlistView }) {
       name={w.classTitle}
       badge={
         <>
-          {w.danceRole && <InlineBadge className="bg-amber-100 text-amber-700">{w.danceRole}</InlineBadge>}
+          {w.danceRole && w.danceStyleRequiresBalance && <InlineBadge className="bg-amber-100 text-amber-700">{formatRoleLabel(w.danceRole)}</InlineBadge>}
           <InlineBadge className="bg-amber-100 text-amber-800">#{w.position}</InlineBadge>
         </>
       }
@@ -347,6 +348,7 @@ function StudentCancelDialog({
     hasStarted: boolean;
     cutoffMinutes: number;
     feeCents: number;
+    penaltiesEnabled: boolean;
   } | null>(null);
   const [result, setResult] = useState<{
     isLate: boolean;
@@ -364,6 +366,7 @@ function StudentCancelDialog({
           hasStarted: res.hasStarted!,
           cutoffMinutes: res.cutoffMinutes!,
           feeCents: res.lateCancelFeeCents!,
+          penaltiesEnabled: res.lateCancelPenaltiesEnabled ?? true,
         });
       }
     });
@@ -428,7 +431,7 @@ function StudentCancelDialog({
             </div>
           ) : (
             <>
-              {lateInfo?.isLate && (
+              {lateInfo?.isLate && lateInfo.penaltiesEnabled && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
                   <p className="font-medium">Late Cancellation Warning</p>
                   <p className="mt-1">
@@ -439,7 +442,7 @@ function StudentCancelDialog({
                   </p>
                 </div>
               )}
-              {lateInfo && !lateInfo.isLate && (
+              {lateInfo && (!lateInfo.isLate || !lateInfo.penaltiesEnabled) && (
                 <p className="text-sm text-gray-500">
                   Are you sure you want to cancel this booking? No penalty will
                   apply.
@@ -468,7 +471,7 @@ function StudentCancelDialog({
               >
                 {isPending
                   ? "Cancelling…"
-                  : lateInfo?.isLate
+                  : lateInfo?.isLate && lateInfo.penaltiesEnabled
                     ? "Cancel Anyway"
                     : "Cancel Booking"}
               </Button>
@@ -580,7 +583,7 @@ function StudentRestoreDialog({
           ) : (
             <>
               <Button variant="ghost" onClick={onClose}>
-                Keep Cancelled
+                Don&apos;t Restore
               </Button>
               <Button
                 onClick={handleRestore}

@@ -78,7 +78,7 @@ export default async function AppLayout({
   const [devStudents, alerts] = await Promise.all([devStudentsPromise, alertsPromise]);
 
   const _ltEnd = performance.now();
-  console.info(`[perf layout] auth=${(_ltAuth-_lt0).toFixed(0)}ms alerts=${(_ltEnd-_ltAuth).toFixed(0)}ms total=${(_ltEnd-_lt0).toFixed(0)}ms`);
+  if (isDev) console.info(`[perf layout] auth=${(_ltAuth-_lt0).toFixed(0)}ms alerts=${(_ltEnd-_ltAuth).toFixed(0)}ms total=${(_ltEnd-_lt0).toFixed(0)}ms`);
   const panelStudentId = devStudentId ?? user.id;
   const panelStudentName = devStudentId
     ? devStudents?.find((s) => s.id === devStudentId)?.fullName ?? user.fullName

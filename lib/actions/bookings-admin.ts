@@ -546,6 +546,7 @@ export async function checkLateCancelStatusAction(
   cutoffMinutes?: number;
   minutesUntilStart?: number;
   lateCancelFeeCents?: number;
+  lateCancelPenaltiesEnabled?: boolean;
   error?: string;
 }> {
   await requireAuth();
@@ -567,6 +568,8 @@ export async function checkLateCancelStatusAction(
     return { success: false, error: "Invalid class date/time data" };
   }
 
+  const settings = getSettings();
+
   return {
     success: true,
     isLate: ctx.isLate,
@@ -575,6 +578,7 @@ export async function checkLateCancelStatusAction(
     cutoffMinutes: ctx.cutoffMinutes,
     minutesUntilStart: ctx.minutesUntilStart,
     lateCancelFeeCents: penaltyFeeCents("late_cancel"),
+    lateCancelPenaltiesEnabled: settings.lateCancelPenaltiesEnabled,
   };
 }
 
