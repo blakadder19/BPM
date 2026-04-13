@@ -32,6 +32,17 @@ import {
   BookingListItem,
 } from "@/components/student/primitives";
 
+function useScrollLock(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const orig = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = orig;
+    };
+  }, [active]);
+}
+
 const STORAGE_KEY = "bpm_onboarding_dismissed";
 
 type OnboardingPhase = "idle" | "welcome" | "tour";
@@ -161,49 +172,27 @@ const STEPS: WalkthroughStep[] = [
 function CatalogPreview() {
   return (
     <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
-      <div className="p-3 space-y-3">
-        <div>
-          <p className="text-sm font-bold text-gray-900">Products</p>
-          <p className="mt-0.5 text-[10px] text-gray-500">Browse memberships, passes &amp; drop-ins</p>
-        </div>
-
+      <div className="p-2.5 space-y-2">
         <div className="flex flex-wrap gap-1.5">
           <span className="rounded-full bg-gray-900 px-2 py-0.5 text-[10px] font-medium text-white">All</span>
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">Memberships</span>
           <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">Passes</span>
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">Drop-in</span>
         </div>
-
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <SectionLabel>Memberships</SectionLabel>
-            <ProductListItem
-              name="Gold Membership"
-              desc="Unlimited classes &middot; 1 term"
-              price={<PricePill accent>&euro;99</PricePill>}
-              border="border-emerald-200"
-              bg="bg-emerald-50/60"
-              chevron
-            />
-          </div>
-          <div className="space-y-1.5">
-            <SectionLabel>Passes</SectionLabel>
-            <ProductListItem
-              name="Class Pack (8)"
-              desc="8 classes &middot; any style"
-              price={<PricePill>&euro;72</PricePill>}
-              chevron
-            />
-          </div>
-          <div className="space-y-1.5">
-            <SectionLabel>Drop-in</SectionLabel>
-            <ProductListItem
-              name="Drop-In"
-              desc="Single class"
-              price={<PricePill>&euro;12</PricePill>}
-              chevron
-            />
-          </div>
+        <div className="space-y-1.5">
+          <ProductListItem
+            name="Gold Membership"
+            desc="Unlimited classes · 1 term"
+            price={<PricePill accent>&euro;99</PricePill>}
+            border="border-emerald-200"
+            bg="bg-emerald-50/60"
+            chevron
+          />
+          <ProductListItem
+            name="Class Pack (8)"
+            desc="8 classes · any style"
+            price={<PricePill>&euro;72</PricePill>}
+            chevron
+          />
         </div>
       </div>
     </div>
@@ -212,32 +201,10 @@ function CatalogPreview() {
 
 function ClassesPreview() {
   const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const classes = [
-    { name: "Bachata Beginners 1", time: "20:30", loc: "Studio A", style: "Bachata" },
-    { name: "Cuban Improvers", time: "18:30", loc: "Studio A", style: "Cuban" },
-  ];
   return (
     <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
-      <div className="p-3 space-y-3">
-        <div>
-          <p className="text-sm font-bold text-gray-900">Classes</p>
-          <p className="mt-0.5 text-[10px] text-gray-500">Browse and book your classes</p>
-        </div>
-
-        <div className="rounded-md border border-bpm-100 bg-bpm-50/70 px-2 py-1.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <CalendarDays className="h-3 w-3 text-bpm-500" />
-              <span className="text-[10px] font-semibold text-bpm-800">Spring 2026</span>
-            </div>
-            <span className="text-[10px] text-bpm-600">Week 4 / 10</span>
-          </div>
-          <div className="mt-1 h-1 rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-1 w-[40%] rounded-full bg-bpm-500" />
-          </div>
-        </div>
-
-        <div className="rounded-md border border-gray-200 bg-white p-2">
+      <div className="p-2.5 space-y-2">
+        <div className="rounded-md border border-gray-200 bg-white p-1.5">
           <div className="grid grid-cols-7 gap-0.5">
             {days.map((d, i) => (
               <div
@@ -254,22 +221,19 @@ function ClassesPreview() {
             ))}
           </div>
         </div>
-
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-gray-900">Today</p>
-          <p className="text-[10px] text-gray-500">2 classes</p>
-        </div>
-
         <div className="space-y-1.5">
-          {classes.map((c) => (
-            <ClassListItem
-              key={c.name}
-              name={c.name}
-              badges={<InlineBadge>{c.style}</InlineBadge>}
-              meta={<RowMeta><MetaTime>{c.time}</MetaTime><MetaLocation>{c.loc}</MetaLocation></RowMeta>}
-              action={<ActionPill>Book</ActionPill>}
-            />
-          ))}
+          <ClassListItem
+            name="Bachata Beginners 1"
+            badges={<InlineBadge>Bachata</InlineBadge>}
+            meta={<RowMeta><MetaTime>20:30</MetaTime><MetaLocation>Studio A</MetaLocation></RowMeta>}
+            action={<ActionPill>Book</ActionPill>}
+          />
+          <ClassListItem
+            name="Cuban Improvers"
+            badges={<InlineBadge>Cuban</InlineBadge>}
+            meta={<RowMeta><MetaTime>18:30</MetaTime><MetaLocation>Studio A</MetaLocation></RowMeta>}
+            action={<ActionPill>Book</ActionPill>}
+          />
         </div>
       </div>
     </div>
@@ -441,6 +405,7 @@ export function StudentWalkthrough({
   onClose: () => void;
   onDismiss: () => void;
 }) {
+  useScrollLock(true);
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [dontShow, setDontShow] = useState(false);
@@ -478,20 +443,20 @@ export function StudentWalkthrough({
   }
 
   return (
-    <div className="fixed inset-0 z-50" onClick={handleClose}>
+    <div className="fixed inset-0 z-50 overscroll-none" onClick={handleClose} onTouchMove={(e) => e.preventDefault()}>
       {spotlightRect ? (
         <SpotlightOverlay rect={spotlightRect} />
       ) : (
         <div className="absolute inset-0 bg-black/60" />
       )}
 
-      <div className="relative z-10 flex h-full items-center justify-center p-4 pt-[env(safe-area-inset-top,16px)] pointer-events-none">
+      <div className="relative z-10 flex h-[100dvh] items-center justify-center p-3 sm:p-4 pointer-events-none">
         <div
-          className="w-full max-w-md max-h-[90vh] sm:max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden pointer-events-auto"
+          className="w-full max-w-md max-h-[calc(100dvh-24px)] sm:max-h-[85dvh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden pointer-events-auto"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Scrollable body */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto overscroll-contain" onTouchMove={(e) => e.stopPropagation()}>
             {/* Close */}
             <div className="sticky top-0 z-10">
               <button
@@ -605,10 +570,11 @@ export function WelcomeModal({
   onStartTour: () => void;
   onSkip: () => void;
 }) {
+  useScrollLock(true);
   return (
-    <div className="fixed inset-0 z-50" onClick={onSkip}>
+    <div className="fixed inset-0 z-50 overscroll-none" onClick={onSkip} onTouchMove={(e) => e.preventDefault()}>
       <div className="absolute inset-0 bg-black/60" />
-      <div className="relative z-10 flex h-full items-center justify-center p-4 pt-[env(safe-area-inset-top,16px)] pointer-events-none">
+      <div className="relative z-10 flex h-[100dvh] items-center justify-center p-3 sm:p-4 pointer-events-none">
         <div
           className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden pointer-events-auto"
           onClick={(e) => e.stopPropagation()}

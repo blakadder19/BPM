@@ -52,8 +52,15 @@ export default function AuthCallbackPage() {
       router.refresh();
     }
 
+    const isEmailConfirmation = type === "signup" || type === "email" || type === "email_change";
+
     function goToLogin() {
       router.push("/login?confirmed=1");
+    }
+
+    async function handleConfirmation() {
+      await supabase.auth.signOut().catch(() => {});
+      goToLogin();
     }
 
     async function handle() {
@@ -68,6 +75,10 @@ export default function AuthCallbackPage() {
             goToRecovery();
             return;
           }
+          if (isEmailConfirmation) {
+            await handleConfirmation();
+            return;
+          }
           await goToApp();
           return;
         }
@@ -79,10 +90,12 @@ export default function AuthCallbackPage() {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (!error) {
-          // After code exchange for recovery, Supabase establishes a
-          // recovery session. Check if next points to update-password.
           if (next === "/update-password") {
             goToRecovery();
+            return;
+          }
+          if (isEmailConfirmation) {
+            await handleConfirmation();
             return;
           }
           await goToApp();
