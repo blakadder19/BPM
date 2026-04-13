@@ -35,10 +35,14 @@ import {
 function useScrollLock(active: boolean) {
   useEffect(() => {
     if (!active) return;
-    const orig = document.body.style.overflow;
+    const main = document.querySelector("[data-main-scroll]") as HTMLElement | null;
+    const origBody = document.body.style.overflow;
+    const origMain = main?.style.overflow ?? "";
     document.body.style.overflow = "hidden";
+    if (main) main.style.overflow = "hidden";
     return () => {
-      document.body.style.overflow = orig;
+      document.body.style.overflow = origBody;
+      if (main) main.style.overflow = origMain;
     };
   }, [active]);
 }
