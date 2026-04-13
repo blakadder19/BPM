@@ -89,7 +89,7 @@ const MARK_OPTIONS: {
   { value: "present", label: "Present", icon: Check, color: "text-emerald-600", activeColor: "bg-emerald-50 ring-emerald-500 text-emerald-700" },
   { value: "late", label: "Late", icon: Timer, color: "text-amber-600", activeColor: "bg-amber-50 ring-amber-500 text-amber-700" },
   { value: "absent", label: "Absent", icon: X, color: "text-red-600", activeColor: "bg-red-50 ring-red-500 text-red-700" },
-  { value: "excused", label: "Excused", icon: ShieldOff, color: "text-blue-600", activeColor: "bg-blue-50 ring-blue-500 text-blue-700" },
+  { value: "excused", label: "Excused", icon: ShieldOff, color: "text-bpm-600", activeColor: "bg-blue-50 ring-bpm-500 text-bpm-700" },
 ];
 
 const HISTORY_STATUS_OPTIONS = [
@@ -230,7 +230,7 @@ function TabButton({ label, icon, active, onClick }: { label: string; icon?: Rea
       className={cn(
         "whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-medium transition-colors flex items-center gap-1.5",
         active
-          ? "border-blue-600 text-blue-600"
+          ? "border-bpm-600 text-bpm-600"
           : "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
       )}
     >
@@ -268,10 +268,10 @@ function TokenCheckInPanel() {
   }
 
   return (
-    <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+    <div className="rounded-xl border border-bpm-100 bg-bpm-50/50 p-4">
       <div className="flex items-center gap-2 mb-3">
-        <QrCode className="h-4 w-4 text-indigo-600" />
-        <h3 className="text-sm font-semibold text-indigo-900">QR / Token Check-In</h3>
+        <QrCode className="h-4 w-4 text-bpm-600" />
+        <h3 className="text-sm font-semibold text-bpm-900">QR / Token Check-In</h3>
       </div>
       <form onSubmit={handleSubmit} className="flex items-center gap-2">
         <input
@@ -282,7 +282,7 @@ function TokenCheckInPanel() {
             setResult(null);
           }}
           placeholder="Enter or scan check-in token…"
-          className="flex-1 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-sm font-mono placeholder:text-gray-400 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          className="flex-1 rounded-lg border border-bpm-200 bg-white px-3 py-2 text-sm font-mono placeholder:text-gray-400 focus:border-bpm-500 focus:ring-1 focus:ring-bpm-500"
         />
         <Button type="submit" disabled={isPending || !token.trim()} size="sm">
           {isPending ? "Validating…" : "Check In"}
@@ -607,7 +607,7 @@ function ClassAttendanceCard({
                         </span>
                       )}
                       {creditAlert && currentMark === "excused" && (
-                        <span className="text-[10px] font-medium text-blue-600">Credit restored</span>
+                        <span className="text-[10px] font-medium text-bpm-600">Credit restored</span>
                       )}
                       {creditAlert && currentMark === "absent" && (
                         <span className="text-[10px] font-medium text-amber-600">Credit refunded (absent policy)</span>
@@ -659,7 +659,7 @@ function ClassAttendanceCard({
                   </div>
                 )}
                 {currentMark === "excused" && creditAlert && (
-                  <div className="mt-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-1.5 text-xs text-blue-700">
+                  <div className="mt-2 flex items-center gap-1.5 rounded-md bg-blue-50 px-3 py-1.5 text-xs text-bpm-700">
                     <ShieldOff className="h-3.5 w-3.5 flex-shrink-0" />
                     Credit restored — no penalty applied.
                   </div>
@@ -735,7 +735,7 @@ function SummaryPill({
 const SOURCE_BADGE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   subscription: { bg: "bg-violet-50", text: "text-violet-600", label: "Subscription" },
   drop_in: { bg: "bg-teal-50", text: "text-teal-600", label: "Drop-in" },
-  walk_in: { bg: "bg-indigo-50", text: "text-indigo-600", label: "Walk-in" },
+  walk_in: { bg: "bg-bpm-50", text: "text-bpm-600", label: "Walk-in" },
   admin: { bg: "bg-gray-100", text: "text-gray-600", label: "Admin" },
 };
 
@@ -982,11 +982,11 @@ function HistoryRow({
           onChange={(e) => handleStatusChange(e.target.value as AttendanceMark)}
           disabled={isPending}
           className={cn(
-            "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-100",
+            "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-bpm-100",
             currentStatus === "present" && "border-emerald-200 bg-emerald-50 text-emerald-700",
             currentStatus === "late" && "border-amber-200 bg-amber-50 text-amber-700",
             currentStatus === "absent" && "border-red-200 bg-red-50 text-red-700",
-            currentStatus === "excused" && "border-blue-200 bg-blue-50 text-blue-700"
+            currentStatus === "excused" && "border-blue-200 bg-blue-50 text-bpm-700"
           )}
         >
           <option value="present">Present</option>
@@ -1067,7 +1067,7 @@ function AttendanceReversalDialog({
   const borderColor = isExcusing ? "border-blue-200" : "border-amber-200";
   const bgColor = isExcusing ? "bg-blue-50" : "bg-amber-50";
   const headerColor = isExcusing ? "text-blue-800" : "text-amber-800";
-  const textColor = isExcusing ? "text-blue-700" : "text-amber-700";
+  const textColor = isExcusing ? "text-bpm-700" : "text-amber-700";
 
   return (
     <Dialog open onClose={onCancel}>
@@ -1331,7 +1331,7 @@ function AddAttendanceDialog({
     });
   }
 
-  const inputCls = "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+  const inputCls = "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-bpm-500 focus:ring-1 focus:ring-bpm-500";
 
   return (
     <Dialog open onClose={onClose}>
@@ -1414,7 +1414,7 @@ function AddAttendanceDialog({
               </select>
                 )}
                 {selectedSub && creditsApply && (
-                  <p className="mt-1 text-xs text-indigo-600">
+                  <p className="mt-1 text-xs text-bpm-600">
                     1 credit will be consumed from {selectedSub.productName}.
                   </p>
                 )}
@@ -1462,7 +1462,7 @@ function AddAttendanceDialog({
                 {source === "subscription" && selectedSub && (
                   <p>The credit consumed from <strong>{selectedSub.productName}</strong> will be given back.</p>
                 )}
-                <p className="text-blue-600">By saving, you confirm this absence is excused.</p>
+                <p className="text-bpm-600">By saving, you confirm this absence is excused.</p>
               </div>
             )}
 

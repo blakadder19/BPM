@@ -288,7 +288,7 @@ export function BulkAssignDialog({
                   onClick={() => { setWriteTarget("instances"); if (action === "restore") setAction("assign"); }}
                   className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                     writeTarget === "instances"
-                      ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                      ? "border-bpm-300 bg-bpm-50 text-bpm-700"
                       : "border-gray-200 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
@@ -303,7 +303,7 @@ export function BulkAssignDialog({
                   onClick={() => setWriteTarget("defaults")}
                   className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors ${
                     writeTarget === "defaults"
-                      ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                      ? "border-bpm-300 bg-bpm-50 text-bpm-700"
                       : "border-gray-200 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
@@ -361,7 +361,7 @@ export function BulkAssignDialog({
                   type="button"
                   onClick={() => setAction("assign")}
                   className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                    action === "assign" ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    action === "assign" ? "border-bpm-300 bg-bpm-50 text-bpm-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
                   }`}
                 >
                   <Users className="h-3.5 w-3.5" /> Assign
@@ -415,7 +415,7 @@ export function BulkAssignDialog({
                   type="checkbox"
                   checked={alsoUnblock}
                   onChange={(e) => setAlsoUnblock(e.target.checked)}
-                  className="mt-0.5 h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-gray-300 text-bpm-600"
                 />
                 <div>
                   <p className="font-medium">Also restore cleared dates ({blockedInScope.length})</p>
@@ -436,7 +436,7 @@ export function BulkAssignDialog({
                   <select
                     value={newTeacher1Id}
                     onChange={(e) => setNewTeacher1Id(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   >
                     <option value="">— Select —</option>
                     {activeRoster.map((t) => (
@@ -451,7 +451,7 @@ export function BulkAssignDialog({
                   <select
                     value={newTeacher2Id}
                     onChange={(e) => setNewTeacher2Id(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   >
                     <option value="">— None —</option>
                     {activeRoster.map((t) => (
@@ -482,7 +482,7 @@ export function BulkAssignDialog({
                         </Badge>
                         <span className="font-medium">{e.classTitle}</span>
                         <span className="text-gray-400">{e.date}</span>
-                        <span className={`ml-auto shrink-0 text-[10px] font-medium ${staysBlocked ? "text-gray-400" : "text-indigo-600"}`}>
+                        <span className={`ml-auto shrink-0 text-[10px] font-medium ${staysBlocked ? "text-gray-400" : "text-bpm-600"}`}>
                           {rl}
                         </span>
                       </div>

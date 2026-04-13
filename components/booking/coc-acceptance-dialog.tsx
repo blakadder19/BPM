@@ -63,7 +63,7 @@ export function CocAcceptanceDialog({ onClose, onAccepted }: CocAcceptanceDialog
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ScrollText className="h-5 w-5 text-indigo-600" />
+            <ScrollText className="h-5 w-5 text-bpm-600" />
             {coc.title}
           </DialogTitle>
         </DialogHeader>
@@ -84,7 +84,7 @@ export function CocAcceptanceDialog({ onClose, onAccepted }: CocAcceptanceDialog
               type="checkbox"
               checked={accepted}
               onChange={(e) => setAccepted(e.target.checked)}
-              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
             />
             <span className="text-sm text-gray-700">
               I have read and agree to the BPM Studio Policy
@@ -118,7 +118,7 @@ export function CocReadOnlyDialog({ onClose }: CocReadOnlyDialogProps) {
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <ScrollText className="h-5 w-5 text-indigo-600" />
+            <ScrollText className="h-5 w-5 text-bpm-600" />
             {coc.title}
           </DialogTitle>
         </DialogHeader>

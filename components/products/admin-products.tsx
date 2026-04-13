@@ -174,8 +174,8 @@ export function AdminProducts({
                   <Td>
                     {p.termBound ? (
                       <span className="inline-flex items-center gap-1">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-indigo-500" />
-                        <span className="text-xs text-indigo-700">Term-bound</span>
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-bpm-500" />
+                        <span className="text-xs text-bpm-700">Term-bound</span>
                         {p.recurring && (
                           <span className="text-[10px] text-gray-400 ml-1">recurring</span>
                         )}

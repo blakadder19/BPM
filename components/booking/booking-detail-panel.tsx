@@ -129,7 +129,7 @@ export function BookingDetailPanel({
               />
               <button
                 onClick={onViewWaitlist}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-gray-50"
+                className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-bpm-600 hover:bg-gray-50"
               >
                 <Users className="h-3 w-3" />
                 Waitlist
@@ -187,7 +187,7 @@ function QuickLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-gray-50"
+      className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-bpm-600 hover:bg-gray-50"
     >
       <ExternalLink className="h-3 w-3" />
       {label}

@@ -211,7 +211,7 @@ function PastBookingsSection({ bookings }: { bookings: BookingView[] }) {
               <button
                 type="button"
                 onClick={() => setVisibleCount((c) => c + PAST_PAGE_SIZE)}
-                className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                className="text-xs font-medium text-bpm-600 hover:text-bpm-700 transition-colors"
               >
                 Show more ({bookings.length - visibleCount} remaining)
               </button>

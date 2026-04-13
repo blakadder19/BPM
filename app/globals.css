@@ -1,7 +1,37 @@
 @import "tailwindcss";
 
-/* Ensure smooth touch scrolling on mobile */
+@theme {
+  /* Override default sans with Raleway (UI text, labels, nav, controls) */
+  --font-sans: var(--font-raleway), "Raleway", sans-serif;
+  /* Playfair Display for hero headings and branded moments */
+  --font-display: var(--font-playfair), "Playfair Display", serif;
+
+  /* BPM Brand Color Scale — warm coral extracted from logo gradient */
+  --color-bpm-50: #fef7f4;
+  --color-bpm-100: #fce8e0;
+  --color-bpm-200: #f5c4b4;
+  --color-bpm-300: #eba088;
+  --color-bpm-400: #e07c5c;
+  --color-bpm-500: #d4542c;
+  --color-bpm-600: #be4825;
+  --color-bpm-700: #a03d20;
+  --color-bpm-800: #82321a;
+  --color-bpm-900: #6a2a16;
+
+  /* BPM Accent Palette */
+  --color-bpm-orange: #e8873a;
+  --color-bpm-amber: #f0a830;
+  --color-bpm-lime: #d5e47d;
+  --color-bpm-green: #4a9e3f;
+  --color-bpm-forest: #1e7a3a;
+}
+
 html, body {
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
+}
+
+/* BPM auth page gradient — the primary brand background treatment */
+.bpm-auth-bg {
+  background: linear-gradient(135deg, #c04828 0%, #e8873a 30%, #f0a830 55%, #d5e47d 80%, #4a9e3f 100%);
 }

@@ -235,7 +235,7 @@ export function BulkCreateDialog({
                     placeholder="Search templates…"
                     value={templateSearch}
                     onChange={(e) => setTemplateSearch(e.target.value)}
-                    className="flex-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="flex-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   />
                   <button
                     type="button"
@@ -264,7 +264,7 @@ export function BulkCreateDialog({
                           type="checkbox"
                           checked={selectedIds.has(tpl.id)}
                           onChange={() => toggleTemplate(tpl.id)}
-                          className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
+                          className="h-3.5 w-3.5 rounded border-gray-300 text-bpm-600"
                         />
                         <span className="flex-1 text-sm">
                           {tpl.title}
@@ -303,7 +303,7 @@ export function BulkCreateDialog({
                     <select
                       value={selectedTermId}
                       onChange={(e) => handleTermSelect(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                     >
                       <option value="">— Choose a term —</option>
                       {allTerms.map((t) => (
@@ -327,7 +327,7 @@ export function BulkCreateDialog({
                         setStartDate(e.target.value);
                         setShowPreview(false);
                       }}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                     />
                   </div>
                   <div>
@@ -341,7 +341,7 @@ export function BulkCreateDialog({
                         setEndDate(e.target.value);
                         setShowPreview(false);
                       }}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                     />
                   </div>
                 </div>
@@ -357,7 +357,7 @@ export function BulkCreateDialog({
                   onChange={(e) =>
                     setInitialStatus(e.target.value as "scheduled" | "open")
                   }
-                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
                   <option value="scheduled">Scheduled</option>
                   <option value="open">Open</option>

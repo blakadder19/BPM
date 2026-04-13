@@ -123,7 +123,7 @@ export function SearchableSelect({
         className={`flex items-center gap-1 rounded-lg border bg-white px-3 py-2 text-sm ${
           disabled
             ? "border-gray-100 bg-gray-50 text-gray-400"
-            : "border-gray-200 text-gray-900 focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100"
+            : "border-gray-200 text-gray-900 focus-within:border-bpm-300 focus-within:ring-2 focus-within:ring-bpm-100"
         }`}
         onClick={() => {
           if (!disabled) {
@@ -171,7 +171,7 @@ export function SearchableSelect({
             <li
               key={opt.value}
               className={`cursor-pointer px-3 py-2 text-sm ${
-                i === highlightIdx ? "bg-indigo-50 text-indigo-700" : "text-gray-700 hover:bg-gray-50"
+                i === highlightIdx ? "bg-bpm-50 text-bpm-700" : "text-gray-700 hover:bg-gray-50"
               } ${opt.value === value ? "font-medium" : ""}`}
               onMouseEnter={() => setHighlightIdx(i)}
               onMouseDown={(e) => {

@@ -303,19 +303,19 @@ export function AdminSchedule({
         <div className="flex rounded-lg border border-gray-200">
           <button
             onClick={() => setViewMode("table")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "table" ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "table" ? "bg-bpm-50 text-bpm-700" : "text-gray-500 hover:text-gray-700"}`}
           >
             <LayoutGrid className="h-3.5 w-3.5" /> Table
           </button>
           <button
             onClick={() => setViewMode("weekly")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "weekly" ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "weekly" ? "bg-bpm-50 text-bpm-700" : "text-gray-500 hover:text-gray-700"}`}
           >
             <List className="h-3.5 w-3.5" /> Weekly
           </button>
           <button
             onClick={() => setViewMode("monthly")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "monthly" ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "monthly" ? "bg-bpm-50 text-bpm-700" : "text-gray-500 hover:text-gray-700"}`}
           >
             <Calendar className="h-3.5 w-3.5" /> Monthly
           </button>
@@ -338,7 +338,7 @@ export function AdminSchedule({
             {dateFilter && (
               <button
                 onClick={() => { setDateFilter(""); setHidePast(true); }}
-                className="rounded-md bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+                className="rounded-md bg-bpm-50 px-2.5 py-1.5 text-xs font-medium text-bpm-700 hover:bg-bpm-100 transition-colors"
               >
                 Clear date filter
               </button>

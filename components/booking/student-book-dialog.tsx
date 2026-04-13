@@ -121,7 +121,7 @@ export function StudentBookDialog({
             </div>
             <div className="flex gap-1.5 mt-1">
               {cls.styleName && (
-                <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                <span className="rounded-full bg-bpm-50 px-2 py-0.5 text-xs font-medium text-bpm-700">
                   {cls.styleName}
                 </span>
               )}

@@ -213,7 +213,7 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
                           value={style.name}
                           checked={checked}
                           onChange={() => toggleStyle(style.name)}
-                          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
                         />
                         <span>{style.name}</span>
                       </label>
@@ -405,7 +405,7 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
                         type="checkbox"
                         checked={isEnabled}
                         onChange={() => toggleAlertId(meta.id)}
-                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="mt-0.5 h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
                       />
                       <div className="flex-1 min-w-0">
                         <span className={isEnabled ? "text-gray-700 font-medium" : "text-gray-400 line-through"}>
@@ -550,7 +550,7 @@ function CheckboxField({
         name={name}
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+        className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
       />
       <span>{label}</span>
     </label>

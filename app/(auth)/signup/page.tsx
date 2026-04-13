@@ -111,8 +111,8 @@ export default function SignupPage() {
 
   if (existingEmail) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-        <Card className="w-full max-w-md">
+      <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+        <Card className="w-full max-w-md shadow-xl">
           <CardContent className="flex flex-col items-center py-12">
             <CheckCircle2 className="h-12 w-12 text-amber-500" />
             <h2 className="mt-4 text-lg font-semibold text-gray-900">
@@ -124,13 +124,13 @@ export default function SignupPage() {
             </p>
             <Link
               href="/reset-password"
-              className="mt-6 inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+              className="mt-6 inline-flex items-center rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-500"
             >
               Set your password
             </Link>
             <Link
               href="/login"
-              className="mt-3 text-sm font-medium text-indigo-600 hover:text-indigo-500"
+              className="mt-3 text-sm font-medium text-bpm-600 hover:text-bpm-500"
             >
               Back to sign in
             </Link>
@@ -142,10 +142,10 @@ export default function SignupPage() {
 
   if (confirmationSent) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-        <Card className="w-full max-w-md">
+      <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+        <Card className="w-full max-w-md shadow-xl">
           <CardContent className="flex flex-col items-center py-12">
-            <CheckCircle2 className="h-12 w-12 text-indigo-500" />
+            <CheckCircle2 className="h-12 w-12 text-bpm-500" />
             <h2 className="mt-4 text-lg font-semibold text-gray-900">
               Check your email
             </h2>
@@ -155,7 +155,7 @@ export default function SignupPage() {
             </p>
             <Link
               href="/login"
-              className="mt-6 text-sm font-medium text-indigo-600 hover:text-indigo-500"
+              className="mt-6 text-sm font-medium text-bpm-600 hover:text-bpm-500"
             >
               Back to sign in
             </Link>
@@ -166,8 +166,8 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+      <Card className="w-full max-w-md shadow-xl">
         <CardContent className="pt-8 pb-8">
           <div className="mb-8 flex flex-col items-center">
             <img
@@ -175,7 +175,7 @@ export default function SignupPage() {
               alt="BPM"
               className="h-20 w-auto object-contain"
             />
-            <h1 className="mt-4 text-xl font-bold text-gray-900">
+            <h1 className="mt-4 font-display text-xl font-bold text-gray-900">
               Create Account
             </h1>
             <p className="mt-1 text-sm text-gray-500">
@@ -200,7 +200,7 @@ export default function SignupPage() {
                   name="firstName"
                   type="text"
                   required
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 />
               </div>
               <div>
@@ -212,7 +212,7 @@ export default function SignupPage() {
                   name="lastName"
                   type="text"
                   required
-                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 />
               </div>
             </div>
@@ -227,7 +227,7 @@ export default function SignupPage() {
                 type="email"
                 required
                 placeholder="you@example.com"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             </div>
 
@@ -242,7 +242,7 @@ export default function SignupPage() {
                 required
                 minLength={6}
                 placeholder="At least 6 characters"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             </div>
 
@@ -253,7 +253,7 @@ export default function SignupPage() {
               <select
                 id="preferredRole"
                 name="preferredRole"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               >
                 <option value="">No preference</option>
                 <option value="leader">Leader</option>
@@ -270,7 +270,7 @@ export default function SignupPage() {
                 <select
                   name="dobMonth"
                   aria-label="Birth month"
-                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
                   <option value="">Month</option>
                   {Array.from({ length: 12 }, (_, i) => (
@@ -282,7 +282,7 @@ export default function SignupPage() {
                 <select
                   name="dobDay"
                   aria-label="Birth day"
-                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
                   <option value="">Day</option>
                   {Array.from({ length: 31 }, (_, i) => (
@@ -303,7 +303,7 @@ export default function SignupPage() {
                 id="phone"
                 name="phone"
                 type="tel"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             </div>
 
@@ -314,7 +314,7 @@ export default function SignupPage() {
 
           <p className="mt-6 text-center text-sm text-gray-500">
             Already have an account?{" "}
-            <Link href="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
+            <Link href="/login" className="font-medium text-bpm-600 hover:text-bpm-500">
               Sign in
             </Link>
           </p>

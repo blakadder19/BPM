@@ -1,8 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Playfair_Display, Raleway } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
+  display: "swap",
+});
+
+const raleway = Raleway({
+  subsets: ["latin"],
+  variable: "--font-raleway",
+  display: "swap",
+});
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -12,7 +22,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "BPM Booking System",
+  title: "BPM — Balance Power Motion",
   description: "Booking system for Balance Power Motion dance academy",
 };
 
@@ -22,8 +32,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} antialiased`}>{children}</body>
+    <html lang="en" className={`${playfair.variable} ${raleway.variable}`}>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }

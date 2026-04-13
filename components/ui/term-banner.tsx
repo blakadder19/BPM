@@ -18,17 +18,17 @@ export function TermBanner({ name, startDate, endDate, weekNumber }: TermBannerP
     : null;
 
   return (
-    <div data-tour="term-banner" className="rounded-md border border-indigo-100 bg-indigo-50/70 px-3 py-2">
+    <div data-tour="term-banner" className="rounded-md border border-bpm-100 bg-bpm-50/70 px-3 py-2">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <CalendarDays className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
-          <span className="text-xs font-semibold text-indigo-800 truncate">{name}</span>
-          <span className="text-[11px] text-indigo-600 hidden sm:inline">
+          <CalendarDays className="h-3.5 w-3.5 text-bpm-500 shrink-0" />
+          <span className="text-xs font-semibold text-bpm-800 truncate">{name}</span>
+          <span className="text-[11px] text-bpm-600 hidden sm:inline">
             {formatShortDate(startDate)} – {formatShortDate(endDate)}
           </span>
         </div>
         {weekNumber != null && (
-          <span className="text-[10px] font-medium text-indigo-600 shrink-0">
+          <span className="text-[10px] font-medium text-bpm-600 shrink-0">
             Week {weekNumber}{totalWeeks > 0 ? ` / ${totalWeeks}` : ""}
           </span>
         )}
@@ -36,12 +36,12 @@ export function TermBanner({ name, startDate, endDate, weekNumber }: TermBannerP
       {progressPct !== null && (
         <div className="mt-1.5 h-1.5 rounded-full bg-gray-100 overflow-hidden">
           <div
-            className="h-1.5 rounded-full bg-indigo-500 transition-all"
+            className="h-1.5 rounded-full bg-bpm-500 transition-all"
             style={{ width: `${progressPct}%` }}
           />
         </div>
       )}
-      <div className="mt-0.5 text-[10px] text-indigo-500 sm:hidden">
+      <div className="mt-0.5 text-[10px] text-bpm-500 sm:hidden">
         {formatShortDate(startDate)} – {formatShortDate(endDate)}
       </div>
     </div>

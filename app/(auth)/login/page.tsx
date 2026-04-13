@@ -104,28 +104,28 @@ export default function LoginPage() {
 
   if (isNavigating) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 gap-4">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-        <p className="text-sm font-medium text-gray-600">Signing you in…</p>
+      <div className="flex min-h-screen flex-col items-center justify-center bpm-auth-bg gap-4">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+        <p className="text-sm font-medium text-white">Signing you in…</p>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-sm">
-        <CardContent className="pt-8 pb-8">
-          <div className="mb-8 flex flex-col items-center">
+    <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+      <Card className="w-full max-w-sm shadow-xl">
+        <CardContent className="pt-10 pb-8">
+          <div className="mb-10 flex flex-col items-center">
             <img
               src="/branding/bpm-logo-full.jpg"
               alt="BPM"
-              className="h-20 w-auto object-contain"
+              className="h-24 w-auto object-contain"
             />
-            <h1 className="mt-4 text-xl font-bold text-gray-900">
+            <h1 className="mt-5 font-display text-xl font-bold text-gray-900">
               Sign in
             </h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Sign in to manage your dance classes
+            <p className="mt-1.5 text-sm text-gray-500">
+              Welcome to Balance Power Motion
             </p>
           </div>
 
@@ -156,7 +156,7 @@ export default function LoginPage() {
                 autoComplete="email"
                 required
                 placeholder="you@example.com"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             </div>
             <div>
@@ -173,7 +173,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 required
                 placeholder="••••••••"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-base shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isPending}>
@@ -184,13 +184,13 @@ export default function LoginPage() {
           <div className="mt-4 flex items-center justify-between text-sm">
             <Link
               href="/signup"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
+              className="font-medium text-bpm-600 hover:text-bpm-500"
             >
               Create account
             </Link>
             <Link
               href="/reset-password"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
+              className="font-medium text-bpm-600 hover:text-bpm-500"
             >
               Forgot password?
             </Link>

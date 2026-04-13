@@ -17,7 +17,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  admin: "bg-indigo-100 text-indigo-700",
+  admin: "bg-bpm-100 text-bpm-700",
   teacher: "bg-emerald-100 text-emerald-700",
   student: "bg-sky-100 text-sky-700",
 };
@@ -72,7 +72,7 @@ export function Sidebar({ user }: SidebarProps) {
               className={cn(
                 "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-indigo-50 text-indigo-700"
+                  ? "bg-bpm-50 text-bpm-700"
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               )}
             >
@@ -80,7 +80,7 @@ export function Sidebar({ user }: SidebarProps) {
                 className={cn(
                   "h-5 w-5 shrink-0",
                   isActive
-                    ? "text-indigo-600"
+                    ? "text-bpm-600"
                     : "text-gray-400 group-hover:text-gray-500"
                 )}
               />

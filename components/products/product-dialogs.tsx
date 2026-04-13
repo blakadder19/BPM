@@ -29,7 +29,7 @@ interface DanceStyleOption {
 const LEVEL_OPTIONS = ["Beginner 1", "Beginner 2", "Intermediate", "Open"];
 
 const SELECT_CLASS =
-  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100";
+  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100";
 
 const TYPE_OPTIONS = [
   { value: "membership", label: "Membership" },
@@ -118,8 +118,8 @@ function ProductFormFields({
       </div>
 
       {isMembership && (
-        <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 space-y-3">
-          <p className="text-xs font-medium text-indigo-700">Membership allowance</p>
+        <div className="rounded-lg border border-bpm-100 bg-bpm-50/50 p-3 space-y-3">
+          <p className="text-xs font-medium text-bpm-700">Membership allowance</p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="pf-classesPerTerm">Classes per Term *</Label>
@@ -202,7 +202,7 @@ function ProductFormFields({
                     type="checkbox"
                     checked={selectedStyleIds.has(s.id)}
                     onChange={() => toggleStyle(s.id)}
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
                   />
                   {s.name}
                 </label>
@@ -231,7 +231,7 @@ function ProductFormFields({
                   type="checkbox"
                   checked={selectedLevels.has(lvl)}
                   onChange={() => toggleLevel(lvl)}
-                  className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-3.5 w-3.5 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
                 />
                 {lvl}
               </label>
@@ -280,7 +280,7 @@ function ProductFormFields({
             name="termBound"
             type="checkbox"
             defaultChecked={defaults?.termBound ?? isMembership}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
           />
           <Label htmlFor="pf-termBound" className="!mb-0">
             Term-bound
@@ -293,7 +293,7 @@ function ProductFormFields({
               name="recurring"
               type="checkbox"
               defaultChecked={defaults?.recurring ?? isMembership}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
             />
             <Label htmlFor="pf-recurring" className="!mb-0">
               Recurring (auto-renew eligible)
@@ -319,7 +319,7 @@ function ProductFormFields({
               name="isActive"
               type="checkbox"
               defaultChecked={defaults?.isActive ?? true}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
             />
             <Label htmlFor="pf-isActive" className="!mb-0">
               Active

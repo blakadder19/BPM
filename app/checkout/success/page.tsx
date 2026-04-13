@@ -20,11 +20,11 @@ export default async function CheckoutSuccessPage() {
   const isStudent = user?.role === "student";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+      <Card className="w-full max-w-md shadow-xl">
         <CardContent className="flex flex-col items-center py-12">
           <CheckCircle2 className="h-12 w-12 text-green-500" />
-          <h1 className="mt-4 text-lg font-semibold text-gray-900">
+          <h1 className="mt-4 font-display text-lg font-semibold text-gray-900">
             Payment received
           </h1>
           <p className="mt-2 text-center text-sm text-gray-500">
@@ -35,14 +35,14 @@ export default async function CheckoutSuccessPage() {
             {isStudent ? (
               <Link
                 href="/dashboard"
-                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                className="inline-flex items-center rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-500"
               >
                 Go to dashboard
               </Link>
             ) : (
               <Link
                 href="/login"
-                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                className="inline-flex items-center rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-500"
               >
                 Log in to your dashboard
               </Link>

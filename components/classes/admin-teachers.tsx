@@ -68,7 +68,7 @@ export function AdminTeachers({
             onClick={() => setActiveSection(s.key)}
             className={`pb-2 text-sm font-medium transition-colors ${
               activeSection === s.key
-                ? "border-b-2 border-indigo-600 text-indigo-600"
+                ? "border-b-2 border-bpm-600 text-bpm-600"
                 : "text-gray-500 hover:text-gray-700"
             }`}
           >
@@ -515,7 +515,7 @@ function AssignmentsSection({
                         {classHistory
                           .sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom))
                           .map((h) => (
-                            <div key={h.id} className={`flex items-center gap-4 rounded px-2 py-1 text-sm ${h.id === tp.id ? "bg-indigo-50 font-medium" : ""}`}>
+                            <div key={h.id} className={`flex items-center gap-4 rounded px-2 py-1 text-sm ${h.id === tp.id ? "bg-bpm-50 font-medium" : ""}`}>
                               <span className="w-40">
                                 {resolve(h.teacher1Id) ?? "No teacher assigned"}
                                 {h.teacher2Id ? ` & ${resolve(h.teacher2Id) ?? "Unknown"}` : " (solo)"}

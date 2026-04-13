@@ -32,7 +32,7 @@ import type { StudentListItem } from "@/types/domain";
 import type { MockSubscription, MockProduct, MockTerm, MockDanceStyle } from "@/lib/mock-data";
 
 const SELECT_CLASS =
-  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100";
+  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100";
 
 const SUB_STATUS_OPTIONS = [
   { value: "active", label: "Active" },
@@ -732,8 +732,8 @@ export function AddSubscriptionDialog({
           <input type="hidden" name="studentId" value={studentId} />
           <DialogBody className="space-y-4">
             {recommendedStyleName && (
-              <div className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-2">
-                <p className="text-xs text-indigo-800">
+              <div className="rounded-lg bg-bpm-50 border border-bpm-200 px-3 py-2">
+                <p className="text-xs text-bpm-800">
                   From QR check-in — recommended for <span className="font-semibold">{recommendedStyleName}</span> class.
                   A drop-in has been pre-selected.
                 </p>
@@ -800,14 +800,14 @@ export function AddSubscriptionDialog({
                 </select>
 
                 {isSpanProduct && selectedTerm && resolvedNextTerm && (
-                  <div className="rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs text-indigo-800 space-y-1">
+                  <div className="rounded-lg border border-bpm-100 bg-bpm-50 px-3 py-2 text-xs text-bpm-800 space-y-1">
                     <p className="font-medium">
                       Covers: {selectedTerm.name} + {resolvedNextTerm.name}
                     </p>
                     <p>
                       Validity: {selectedTerm.startDate} → {resolvedNextTerm.endDate}
                     </p>
-                    <p className="text-indigo-600">
+                    <p className="text-bpm-600">
                       Covers 4 Beginner 1 classes + 4 Beginner 2 classes in consecutive terms.
                     </p>
                   </div>
@@ -873,7 +873,7 @@ export function AddSubscriptionDialog({
                   name="autoRenew"
                   type="checkbox"
                   defaultChecked
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
                 />
                 <Label htmlFor="as-autoRenew" className="!mb-0">Auto-renew</Label>
               </div>
@@ -1183,7 +1183,7 @@ export function EditSubscriptionDialog({
                     <Label htmlFor="es-paidAt">Paid At</Label>
                     <button
                       type="button"
-                      className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800"
+                      className="text-[11px] font-medium text-bpm-600 hover:text-bpm-800"
                       onClick={() => {
                         if (paidAtRef.current) {
                           const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Dublin" }));
@@ -1356,7 +1356,7 @@ function StyleSelectionField({
                   checked={checked}
                   disabled={disabled}
                   onChange={() => onMultiToggle(s.id, pickCount)}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
                 />
                 {s.name}
               </label>

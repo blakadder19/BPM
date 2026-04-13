@@ -90,8 +90,8 @@ const STEPS: WalkthroughStep[] = [
   },
   {
     icon: CalendarPlus,
-    iconBg: "bg-indigo-100",
-    iconColor: "text-indigo-600",
+    iconBg: "bg-bpm-100",
+    iconColor: "text-bpm-600",
     title: "Book a class",
     body: "Check this week\u2019s schedule and tap Book on any class your product covers. Full class? Join the waitlist.",
     linkTo: "/classes",
@@ -101,7 +101,7 @@ const STEPS: WalkthroughStep[] = [
   {
     icon: BookOpen,
     iconBg: "bg-blue-100",
-    iconColor: "text-blue-600",
+    iconColor: "text-bpm-600",
     title: "View your bookings",
     body: "All your upcoming and past bookings in one place \u2014 class name, date, time, and status at a glance.",
     linkTo: "/bookings",
@@ -204,16 +204,16 @@ function ClassesPreview() {
           <p className="mt-0.5 text-[10px] text-gray-500">Browse and book your classes</p>
         </div>
 
-        <div className="rounded-md border border-indigo-100 bg-indigo-50/70 px-2 py-1.5">
+        <div className="rounded-md border border-bpm-100 bg-bpm-50/70 px-2 py-1.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <CalendarDays className="h-3 w-3 text-indigo-500" />
-              <span className="text-[10px] font-semibold text-indigo-800">Spring 2026</span>
+              <CalendarDays className="h-3 w-3 text-bpm-500" />
+              <span className="text-[10px] font-semibold text-bpm-800">Spring 2026</span>
             </div>
-            <span className="text-[10px] text-indigo-600">Week 4 / 10</span>
+            <span className="text-[10px] text-bpm-600">Week 4 / 10</span>
           </div>
           <div className="mt-1 h-1 rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-1 w-[40%] rounded-full bg-indigo-500" />
+            <div className="h-1 w-[40%] rounded-full bg-bpm-500" />
           </div>
         </div>
 
@@ -224,7 +224,7 @@ function ClassesPreview() {
                 key={d}
                 className={`flex flex-col items-center rounded-md py-1 text-center ${
                   i === 0
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-bpm-600 text-white"
                     : "text-gray-400"
                 }`}
               >
@@ -265,7 +265,7 @@ function BookingsPreview() {
             <p className="text-sm font-bold text-gray-900">My Bookings</p>
             <p className="mt-0.5 text-[10px] text-gray-500">Upcoming and past bookings</p>
           </div>
-          <span className="shrink-0 rounded-md bg-indigo-600 px-2 py-1 text-[10px] font-medium text-white">Book a class</span>
+          <span className="shrink-0 rounded-md bg-bpm-600 px-2 py-1 text-[10px] font-medium text-white">Book a class</span>
         </div>
 
         <SectionLabel>Upcoming (2)</SectionLabel>
@@ -345,16 +345,16 @@ function TermsPreview() {
   return (
     <div className="mt-3 rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
       <div className="p-3 space-y-2.5">
-        <div className="rounded-md border border-indigo-100 bg-indigo-50/70 px-2 py-1.5">
+        <div className="rounded-md border border-bpm-100 bg-bpm-50/70 px-2 py-1.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <CalendarDays className="h-3 w-3 text-indigo-500" />
-              <span className="text-[10px] font-semibold text-indigo-800">Spring 2026</span>
+              <CalendarDays className="h-3 w-3 text-bpm-500" />
+              <span className="text-[10px] font-semibold text-bpm-800">Spring 2026</span>
             </div>
-            <span className="text-[10px] text-indigo-600">Week 4 / 10</span>
+            <span className="text-[10px] text-bpm-600">Week 4 / 10</span>
           </div>
           <div className="mt-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-1.5 w-[40%] rounded-full bg-indigo-500" />
+            <div className="h-1.5 w-[40%] rounded-full bg-bpm-500" />
           </div>
         </div>
 
@@ -491,7 +491,7 @@ export function StudentWalkthrough({
                   type="button"
                   onClick={() => setStep(i)}
                   className={`h-1.5 flex-1 rounded-full transition-colors ${
-                    i <= step ? "bg-indigo-500" : "bg-gray-200"
+                    i <= step ? "bg-bpm-500" : "bg-gray-200"
                   } ${i === step ? "scale-y-125" : ""}`}
                 />
               ))}
@@ -521,7 +521,7 @@ export function StudentWalkthrough({
                 <button
                   type="button"
                   onClick={() => handleLink(current.linkTo!)}
-                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors"
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-bpm-600 hover:text-bpm-700 transition-colors"
                 >
                   {current.linkLabel ?? "Go there now"}
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -563,7 +563,7 @@ export function StudentWalkthrough({
                 type="checkbox"
                 checked={dontShow}
                 onChange={(e) => setDontShow(e.target.checked)}
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
               />
               <span className="text-xs text-gray-500">
                 Don&apos;t show this again

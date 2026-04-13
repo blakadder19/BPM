@@ -185,7 +185,7 @@ export function AdminPenalties({ penalties, students, classes, penaltyFees, isDe
               <span>{backfillResult}</span>
               <button
                 onClick={() => setBackfillResult(null)}
-                className="ml-auto text-blue-400 hover:text-blue-600"
+                className="ml-auto text-blue-400 hover:text-bpm-600"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -197,7 +197,7 @@ export function AdminPenalties({ penalties, students, classes, penaltyFees, isDe
               <span>{clearResult}</span>
               <button
                 onClick={() => setClearResult(null)}
-                className="ml-auto text-blue-400 hover:text-blue-600"
+                className="ml-auto text-blue-400 hover:text-bpm-600"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

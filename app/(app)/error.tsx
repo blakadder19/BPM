@@ -54,7 +54,7 @@ export default function AppError({
       </div>
       <button
         onClick={handleRetry}
-        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
+        className="inline-flex items-center gap-2 rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-700 transition-colors"
       >
         <RotateCcw className="h-4 w-4" />
         {isChunkError ? "Reload page" : "Try again"}

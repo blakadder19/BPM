@@ -94,7 +94,7 @@ function TemplateForm({
           name="title"
           defaultValue={initial.title ?? ""}
           required
-          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
         />
       </div>
 
@@ -105,7 +105,7 @@ function TemplateForm({
             name="classType"
             value={classType}
             onChange={(e) => setClassType(e.target.value as MockClass["classType"])}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           >
             {CLASS_TYPES.map((ct) => (
               <option key={ct.value} value={ct.value}>{ct.label}</option>
@@ -119,7 +119,7 @@ function TemplateForm({
               name="styleId"
               value={styleId}
               onChange={(e) => setStyleId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
             >
               <option value="">— None —</option>
               {allStyles.map((s) => (
@@ -142,7 +142,7 @@ function TemplateForm({
               const lv = e.target.value || null;
               if (isTermBoundLevel(lv) && !isTermBound) setIsTermBound(true);
             }}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           >
             <option value="">— None —</option>
             <option value="Beginner 1">Beginner 1</option>
@@ -158,7 +158,7 @@ function TemplateForm({
           <select
             name="dayOfWeek"
             defaultValue={initial.dayOfWeek === 0 ? 7 : (initial.dayOfWeek ?? 1)}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           >
             {DAYS.map((d) => (
               <option key={d.value} value={d.value}>{d.label}</option>
@@ -170,37 +170,37 @@ function TemplateForm({
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Start Time *</label>
-          <input name="startTime" type="time" defaultValue={initial.startTime ?? ""} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+          <input name="startTime" type="time" defaultValue={initial.startTime ?? ""} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">End Time *</label>
-          <input name="endTime" type="time" defaultValue={initial.endTime ?? ""} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+          <input name="endTime" type="time" defaultValue={initial.endTime ?? ""} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
         </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Total Capacity</label>
-          <input name="maxCapacity" type="number" min={0} defaultValue={initial.maxCapacity ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+          <input name="maxCapacity" type="number" min={0} defaultValue={initial.maxCapacity ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Leader Cap</label>
-          <input name="leaderCap" type="number" min={0} defaultValue={initial.leaderCap ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+          <input name="leaderCap" type="number" min={0} defaultValue={initial.leaderCap ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Follower Cap</label>
-          <input name="followerCap" type="number" min={0} defaultValue={initial.followerCap ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+          <input name="followerCap" type="number" min={0} defaultValue={initial.followerCap ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
         </div>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700">Location</label>
-        <input name="location" defaultValue={initial.location ?? ""} placeholder="e.g. Studio A, Studio B" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+        <input name="location" defaultValue={initial.location ?? ""} placeholder="e.g. Studio A, Studio B" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700">Notes</label>
-        <textarea name="notes" rows={2} defaultValue={initial.notes ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+        <textarea name="notes" rows={2} defaultValue={initial.notes ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
       </div>
 
       <div className="flex items-center gap-4">
@@ -214,7 +214,7 @@ function TemplateForm({
                 const hidden = e.target.form?.querySelector('input[name="isActive"][type="hidden"]') as HTMLInputElement | null;
                 if (hidden) hidden.value = e.target.checked ? "true" : "false";
               }}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+              className="h-4 w-4 rounded border-gray-300 text-bpm-600"
             />
             Active
           </label>
@@ -233,7 +233,7 @@ function TemplateForm({
                 setSelectedTermId(e.target.value);
                 if (!e.target.value) setIsTermBound(false);
               }}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
             >
               <option value="">— No term —</option>
               {allTerms.map((t) => (
@@ -249,7 +249,7 @@ function TemplateForm({
                 type="checkbox"
                 checked={isTermBound}
                 onChange={(e) => setIsTermBound(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                className="h-4 w-4 rounded border-gray-300 text-bpm-600"
               />
               Enforce term late-entry rules
             </label>

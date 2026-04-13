@@ -227,15 +227,15 @@ export function AdminStudents({
       </div>
 
       {lifecycleMsg && (
-        <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-800">
+        <div className="rounded-lg border border-bpm-200 bg-bpm-50 px-4 py-2 text-sm text-bpm-800">
           <div className="flex items-center justify-between">
             <span>{lifecycleMsg}</span>
-            <button onClick={() => setLifecycleMsg(null)} className="text-indigo-400 hover:text-indigo-600 ml-2">
+            <button onClick={() => setLifecycleMsg(null)} className="text-bpm-400 hover:text-bpm-600 ml-2">
               ✕
             </button>
           </div>
           {lastRunTs && (
-            <p className="text-xs text-indigo-500 mt-1">
+            <p className="text-xs text-bpm-500 mt-1">
               Last full run: {new Date(lastRunTs).toLocaleString()} (manual).
               Lazy expiry also runs on page loads. Scheduled via /api/lifecycle if configured.
             </p>

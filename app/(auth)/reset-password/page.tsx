@@ -47,10 +47,10 @@ export default function ResetPasswordPage() {
 
   if (sent) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+        <Card className="w-full max-w-sm shadow-xl">
           <CardContent className="flex flex-col items-center py-12">
-            <CheckCircle2 className="h-12 w-12 text-indigo-500" />
+            <CheckCircle2 className="h-12 w-12 text-bpm-500" />
             <h2 className="mt-4 text-lg font-semibold text-gray-900">
               Check your email
             </h2>
@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
             </p>
             <Link
               href="/login"
-              className="mt-6 text-sm font-medium text-indigo-600 hover:text-indigo-500"
+              className="mt-6 text-sm font-medium text-bpm-600 hover:text-bpm-500"
             >
               Back to sign in
             </Link>
@@ -71,8 +71,8 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+      <Card className="w-full max-w-sm shadow-xl">
         <CardContent className="pt-8 pb-8">
           <div className="mb-8 flex flex-col items-center">
             <img
@@ -80,7 +80,7 @@ export default function ResetPasswordPage() {
               alt="BPM"
               className="h-20 w-auto object-contain"
             />
-            <h1 className="mt-4 text-xl font-bold text-gray-900">
+            <h1 className="mt-4 font-display text-xl font-bold text-gray-900">
               Reset Password
             </h1>
             <p className="mt-1 text-center text-sm text-gray-500">
@@ -109,7 +109,7 @@ export default function ResetPasswordPage() {
                 type="email"
                 required
                 placeholder="you@example.com"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isPending}>
@@ -120,7 +120,7 @@ export default function ResetPasswordPage() {
           <p className="mt-6 text-center text-sm text-gray-500">
             <Link
               href="/login"
-              className="font-medium text-indigo-600 hover:text-indigo-500"
+              className="font-medium text-bpm-600 hover:text-bpm-500"
             >
               Back to sign in
             </Link>

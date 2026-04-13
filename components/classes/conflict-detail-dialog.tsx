@@ -113,7 +113,7 @@ export function ConflictDetailDialog({
                         <div className="ml-3 flex shrink-0 items-center gap-1">
                           <button
                             onClick={() => onOpenAssign(entry)}
-                            className="rounded p-1.5 text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700"
+                            className="rounded p-1.5 text-bpm-500 hover:bg-bpm-50 hover:text-bpm-700"
                             title="Edit assignment"
                           >
                             <Pencil className="h-3.5 w-3.5" />

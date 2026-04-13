@@ -211,7 +211,7 @@ export function StudioHireCalendar({ entries, onEntryClick }: Props) {
                 key={ds}
                 className={cn(
                   "px-1 py-1.5 text-center text-xs font-medium border-r border-gray-200 last:border-r-0",
-                  isToday ? "bg-indigo-50 text-indigo-700" : "text-gray-600"
+                  isToday ? "bg-bpm-50 text-bpm-700" : "text-gray-600"
                 )}
               >
                 <div className="leading-tight">{DAY_LABELS_SHORT[i]}</div>
@@ -251,7 +251,7 @@ export function StudioHireCalendar({ entries, onEntryClick }: Props) {
                 key={ds}
                 className={cn(
                   "relative border-r border-gray-200 last:border-r-0",
-                  isToday && "bg-indigo-50/20"
+                  isToday && "bg-bpm-50/20"
                 )}
                 style={{ height: gridHeight }}
               >

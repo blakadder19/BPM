@@ -283,7 +283,7 @@ function ProductCard({
               <ul className="space-y-1">
                 {p.benefits.map((b, i) => (
                   <li key={i} className="flex items-start gap-2 text-xs text-gray-600">
-                    <Gift className="h-3.5 w-3.5 shrink-0 text-indigo-400 mt-0.5" />
+                    <Gift className="h-3.5 w-3.5 shrink-0 text-bpm-400 mt-0.5" />
                     {b}
                   </li>
                 ))}
@@ -508,7 +508,7 @@ function PurchaseDialog({
                       name="style"
                       checked={selectedOne?.id === s.id}
                       onChange={() => setSelectedOne(s)}
-                      className="accent-blue-600"
+                      className="accent-bpm-600"
                     />
                     <span className="text-sm font-medium text-gray-900">{s.name}</span>
                   </label>
@@ -543,7 +543,7 @@ function PurchaseDialog({
                         checked={checked}
                         onChange={() => toggleMany(s.id)}
                         disabled={!checked && selectedMany.size >= p.pickCount}
-                        className="accent-blue-600"
+                        className="accent-bpm-600"
                       />
                       <span className="text-sm font-medium text-gray-900">{s.name}</span>
                     </label>
@@ -586,7 +586,7 @@ function PurchaseDialog({
                         checked={selectedTerm?.id === t.id}
                         onChange={() => !covered && setSelectedTerm(t)}
                         disabled={covered}
-                        className="accent-blue-600"
+                        className="accent-bpm-600"
                       />
                       <div className="flex-1 min-w-0">
                         <span className="text-sm font-medium text-gray-900">{t.name}</span>
@@ -619,7 +619,7 @@ function PurchaseDialog({
                   type="checkbox"
                   checked={autoRenew}
                   onChange={() => setAutoRenew(!autoRenew)}
-                  className="accent-indigo-600"
+                  className="accent-bpm-600"
                 />
                 <div>
                   <span className="text-sm font-medium text-gray-900">
@@ -644,7 +644,7 @@ function PurchaseDialog({
                   <label
                     className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
                       checkoutChoice === "online"
-                        ? "border-indigo-400 bg-indigo-50"
+                        ? "border-bpm-400 bg-bpm-50"
                         : "border-gray-200 hover:border-gray-300"
                     }`}
                   >
@@ -653,7 +653,7 @@ function PurchaseDialog({
                       name="checkout"
                       checked={checkoutChoice === "online"}
                       onChange={() => setCheckoutChoice("online")}
-                      className="accent-indigo-600"
+                      className="accent-bpm-600"
                     />
                     <div>
                       <span className="text-sm font-medium text-gray-900">
@@ -668,7 +668,7 @@ function PurchaseDialog({
                 <label
                   className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
                     checkoutChoice === "reception"
-                      ? "border-indigo-400 bg-indigo-50"
+                      ? "border-bpm-400 bg-bpm-50"
                       : "border-gray-200 hover:border-gray-300"
                   }`}
                 >
@@ -677,7 +677,7 @@ function PurchaseDialog({
                     name="checkout"
                     checked={checkoutChoice === "reception"}
                     onChange={() => setCheckoutChoice("reception")}
-                    className="accent-indigo-600"
+                    className="accent-bpm-600"
                   />
                   <div>
                     <span className="text-sm font-medium text-gray-900">

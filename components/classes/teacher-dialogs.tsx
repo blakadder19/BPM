@@ -57,7 +57,7 @@ function TeacherForm({
           name="fullName"
           defaultValue={initial.fullName ?? ""}
           required
-          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
         />
       </div>
 
@@ -68,7 +68,7 @@ function TeacherForm({
             name="email"
             type="email"
             defaultValue={initial.email ?? ""}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           />
         </div>
         <div>
@@ -76,7 +76,7 @@ function TeacherForm({
           <input
             name="phone"
             defaultValue={initial.phone ?? ""}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           />
         </div>
       </div>
@@ -86,7 +86,7 @@ function TeacherForm({
         <select
           name="category"
           defaultValue={initial.category ?? ""}
-          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
         >
           {CATEGORY_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>{o.label}</option>
@@ -100,7 +100,7 @@ function TeacherForm({
           name="notes"
           rows={2}
           defaultValue={initial.notes ?? ""}
-          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
         />
       </div>
 
@@ -120,7 +120,7 @@ function TeacherForm({
               ) as HTMLInputElement | null;
               if (hidden) hidden.value = e.target.checked ? "true" : "false";
             }}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+            className="h-4 w-4 rounded border-gray-300 text-bpm-600"
           />
           Active
         </label>
@@ -238,7 +238,7 @@ function AssignmentForm({
           onChange={(e) => setClassId(e.target.value)}
           required
           disabled={isEdit}
-          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100 disabled:bg-gray-50 disabled:text-gray-500"
+          className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100 disabled:bg-gray-50 disabled:text-gray-500"
         >
           <option value="">— Select a class —</option>
           {templates.map((t) => (
@@ -254,7 +254,7 @@ function AssignmentForm({
             name="teacher1Id"
             defaultValue={initial.teacher1Id ?? ""}
             required
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           >
             <option value="">— Select —</option>
             {activeTeachers.map((t) => (
@@ -267,7 +267,7 @@ function AssignmentForm({
           <select
             name="teacher2Id"
             defaultValue={initial.teacher2Id ?? ""}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           >
             <option value="">— None (solo) —</option>
             {activeTeachers.map((t) => (
@@ -285,7 +285,7 @@ function AssignmentForm({
             type="date"
             defaultValue={initial.effectiveFrom ?? new Date().toISOString().slice(0, 10)}
             required
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           />
         </div>
         <div>
@@ -294,7 +294,7 @@ function AssignmentForm({
             name="effectiveUntil"
             type="date"
             defaultValue={initial.effectiveUntil ?? ""}
-            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+            className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
           />
         </div>
       </div>
@@ -315,7 +315,7 @@ function AssignmentForm({
               ) as HTMLInputElement | null;
               if (hidden) hidden.value = e.target.checked ? "true" : "false";
             }}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+            className="h-4 w-4 rounded border-gray-300 text-bpm-600"
           />
           Active
         </label>

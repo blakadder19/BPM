@@ -17,11 +17,11 @@ export default async function CheckoutCancelPage() {
   const isStudent = user?.role === "student";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+      <Card className="w-full max-w-md shadow-xl">
         <CardContent className="flex flex-col items-center py-12">
           <XCircle className="h-12 w-12 text-gray-400" />
-          <h1 className="mt-4 text-lg font-semibold text-gray-900">
+          <h1 className="mt-4 font-display text-lg font-semibold text-gray-900">
             Payment cancelled
           </h1>
           <p className="mt-2 text-center text-sm text-gray-500">
@@ -32,14 +32,14 @@ export default async function CheckoutCancelPage() {
             {isStudent ? (
               <Link
                 href="/catalog"
-                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                className="inline-flex items-center rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-500"
               >
                 Back to catalog
               </Link>
             ) : (
               <Link
                 href="/login"
-                className="inline-flex items-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+                className="inline-flex items-center rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-500"
               >
                 Log in to continue
               </Link>

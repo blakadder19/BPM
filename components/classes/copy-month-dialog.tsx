@@ -315,7 +315,7 @@ export function CopyMonthDialog({
                       setSourceYM(e.target.value);
                       setShowPreview(false);
                     }}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   >
                     {monthOptions.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -334,7 +334,7 @@ export function CopyMonthDialog({
                       setTargetYM(e.target.value);
                       setShowPreview(false);
                     }}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   >
                     {monthOptions.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -396,7 +396,7 @@ export function CopyMonthDialog({
                     type="checkbox"
                     checked={copyTeachers}
                     onChange={(e) => setCopyTeachers(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-bpm-600"
                   />
                   Copy teacher overrides
                 </label>
@@ -405,7 +405,7 @@ export function CopyMonthDialog({
                     type="checkbox"
                     checked={copyNotes}
                     onChange={(e) => setCopyNotes(e.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
+                    className="h-3.5 w-3.5 rounded border-gray-300 text-bpm-600"
                   />
                   Copy notes
                 </label>
@@ -418,7 +418,7 @@ export function CopyMonthDialog({
                     onChange={(e) =>
                       setInitialStatus(e.target.value as "scheduled" | "open")
                     }
-                    className="rounded-lg border border-gray-200 px-2.5 py-1 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="rounded-lg border border-gray-200 px-2.5 py-1 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   >
                     <option value="scheduled">Scheduled</option>
                     <option value="open">Open</option>

@@ -418,7 +418,7 @@ function InactiveSubsHistory({
             <button
               type="button"
               onClick={() => setShowAll(true)}
-              className="text-xs font-medium text-blue-600 hover:text-blue-700"
+              className="text-xs font-medium text-bpm-600 hover:text-bpm-700"
             >
               View all {inactiveSubs.length} past products
             </button>
@@ -455,7 +455,7 @@ function PaginatedTransactions({ transactions }: { transactions: MockWalletTx[] 
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="text-xs font-medium text-blue-600 hover:text-blue-700 pt-1"
+          className="text-xs font-medium text-bpm-600 hover:text-bpm-700 pt-1"
         >
           View all {transactions.length} transactions
         </button>
@@ -489,7 +489,7 @@ function PaginatedPenalties({ penalties }: { penalties: MockPenalty[] }) {
         <button
           type="button"
           onClick={() => setShowAll(true)}
-          className="text-xs font-medium text-blue-600 hover:text-blue-700 pt-1"
+          className="text-xs font-medium text-bpm-600 hover:text-bpm-700 pt-1"
         >
           View all {penalties.length} penalties
         </button>
@@ -604,7 +604,7 @@ function SubCard({
         </Badge>
       )}
       {sub.autoRenew && (
-        <span className="text-[10px] text-indigo-600 font-medium">Auto-renew</span>
+        <span className="text-[10px] text-bpm-600 font-medium">Auto-renew</span>
       )}
       {expiryDays !== null && expiryDays <= 7 && expiryDays >= 0 && (
         <Badge variant={expiryDays <= 2 ? "danger" : "warning"}>
@@ -639,7 +639,7 @@ function SubCard({
                 : `Admin-assigned${sub.assignedAt ? ` on ${formatDate(sub.assignedAt)}` : ""}`}
       </span>
       {sub.renewedFromId && (
-        <span className="text-[10px] text-indigo-500 font-medium">Renewal</span>
+        <span className="text-[10px] text-bpm-500 font-medium">Renewal</span>
       )}
       {sub.paymentStatus === "paid" && (sub.paidAt || sub.collectedBy || sub.paymentReference) && (
         <span className="w-full text-xs text-gray-400">
@@ -659,7 +659,7 @@ function SubCard({
           <button
             onClick={() => onRenew(sub)}
             disabled={renewPending}
-            className="rounded-lg p-1 text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50"
+            className="rounded-lg p-1 text-bpm-500 hover:bg-bpm-50 hover:text-bpm-700 disabled:opacity-50"
             title="Renew for next term"
           >
             <RotateCw className={`h-3.5 w-3.5 ${renewPending ? "animate-spin" : ""}`} />
@@ -788,7 +788,7 @@ function RemoveSubscriptionDialog({
                     name="bookingAction"
                     checked={bookingAction === "keep"}
                     onChange={() => setBookingAction("keep")}
-                    className="text-indigo-600"
+                    className="text-bpm-600"
                   />
                   Keep all bookings
                 </label>
@@ -798,7 +798,7 @@ function RemoveSubscriptionDialog({
                     name="bookingAction"
                     checked={bookingAction === "remove_all"}
                     onChange={() => setBookingAction("remove_all")}
-                    className="text-indigo-600"
+                    className="text-bpm-600"
                   />
                   Cancel all related bookings
                 </label>
@@ -808,7 +808,7 @@ function RemoveSubscriptionDialog({
                     name="bookingAction"
                     checked={bookingAction === "select"}
                     onChange={() => setBookingAction("select")}
-                    className="text-indigo-600"
+                    className="text-bpm-600"
                   />
                   Choose which bookings to cancel
                 </label>
@@ -821,7 +821,7 @@ function RemoveSubscriptionDialog({
                         type="checkbox"
                         checked={selectedBookingIds.has(b.id)}
                         onChange={() => toggleBooking(b.id)}
-                        className="text-indigo-600 rounded"
+                        className="text-bpm-600 rounded"
                       />
                       <span className="font-medium">{b.classTitle}</span>
                       <span className="text-gray-500">{formatDate(b.date)}</span>

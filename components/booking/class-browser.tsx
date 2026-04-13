@@ -268,7 +268,7 @@ export function ClassBrowser({
           <div className="flex items-center gap-0.5 sm:gap-1">
             <button
               onClick={goToday}
-              className="rounded-md px-2 sm:px-2.5 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50 transition-colors"
+              className="rounded-md px-2 sm:px-2.5 py-1 text-xs font-medium text-bpm-600 hover:bg-bpm-50 transition-colors"
             >
               Today
             </button>
@@ -306,9 +306,9 @@ export function ClassBrowser({
                 className={`
                   relative flex flex-col items-center rounded-md py-1.5 px-0.5 sm:px-1 transition-all text-center min-h-[52px]
                   ${isSelected
-                    ? "bg-indigo-600 text-white shadow-sm"
+                    ? "bg-bpm-600 text-white shadow-sm"
                     : isToday
-                      ? "bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200"
+                      ? "bg-bpm-50 text-bpm-700 ring-1 ring-bpm-200"
                       : isPast
                         ? "text-gray-400 hover:bg-gray-50"
                         : "text-gray-700 hover:bg-gray-50"
@@ -344,7 +344,7 @@ export function ClassBrowser({
 
                 {/* Term indicator line */}
                 {inTerm && !isSelected && (
-                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-3 rounded-full bg-indigo-300" />
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 h-0.5 w-3 rounded-full bg-bpm-300" />
                 )}
               </button>
             );
@@ -361,7 +361,7 @@ export function ClassBrowser({
           </span>
           {termInfo && (
             <span className="flex items-center gap-1">
-              <span className="h-0.5 w-3 rounded-full bg-indigo-300" /> In term
+              <span className="h-0.5 w-3 rounded-full bg-bpm-300" /> In term
             </span>
           )}
         </div>

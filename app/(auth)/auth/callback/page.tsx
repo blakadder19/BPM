@@ -126,9 +126,9 @@ export default function AuthCallbackPage() {
   }, [searchParams, router]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-gray-50">
-      <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
-      <p className="text-sm text-gray-500">Completing sign-in...</p>
+    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bpm-auth-bg">
+      <Loader2 className="h-6 w-6 animate-spin text-white" />
+      <p className="text-sm text-white/80">Completing sign-in...</p>
     </div>
   );
 }

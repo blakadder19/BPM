@@ -259,13 +259,13 @@ export function TeacherCalendar({
         <div className="flex rounded-lg border border-gray-200">
           <button
             onClick={() => setViewMode("weekly")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "weekly" ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "weekly" ? "bg-bpm-50 text-bpm-700" : "text-gray-500 hover:text-gray-700"}`}
           >
             <List className="h-3.5 w-3.5" /> Weekly
           </button>
           <button
             onClick={() => setViewMode("monthly")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "monthly" ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === "monthly" ? "bg-bpm-50 text-bpm-700" : "text-gray-500 hover:text-gray-700"}`}
           >
             <Calendar className="h-3.5 w-3.5" /> Monthly
           </button>
@@ -284,7 +284,7 @@ export function TeacherCalendar({
             type="checkbox"
             checked={unassignedOnly}
             onChange={(e) => setUnassignedOnly(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
+            className="h-3.5 w-3.5 rounded border-gray-300 text-bpm-600"
           />
           Unassigned only
         </label>
@@ -388,7 +388,7 @@ function CalendarMetrics({
         <strong>{metrics.unassigned}</strong> no regular teacher
       </span>
       {metrics.blocked > 0 && <span className="text-gray-500"><strong>{metrics.blocked}</strong> no teacher assigned</span>}
-      {metrics.dateSpecific > 0 && <span className="text-blue-600"><strong>{metrics.dateSpecific}</strong> this-date-only</span>}
+      {metrics.dateSpecific > 0 && <span className="text-bpm-600"><strong>{metrics.dateSpecific}</strong> this-date-only</span>}
       {metrics.conflicts > 0 && (
         <button
           onClick={onConflictsClick}
@@ -445,7 +445,7 @@ function WeeklyGrid({
           <span className="min-w-[200px] text-center text-sm font-medium text-gray-700">{weekLabel}</span>
           <button onClick={() => setWeekOffset((o) => o + 1)} className="rounded p-1.5 text-gray-500 hover:bg-gray-100"><ChevronRight className="h-5 w-5" /></button>
           {weekOffset !== 0 && (
-            <button onClick={() => setWeekOffset(() => 0)} className="rounded px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50">This Week</button>
+            <button onClick={() => setWeekOffset(() => 0)} className="rounded px-2 py-1 text-xs text-bpm-600 hover:bg-bpm-50">This Week</button>
           )}
         </div>
       </div>
@@ -456,11 +456,11 @@ function WeeklyGrid({
           const d = new Date(date + "T12:00:00Z");
           const isToday = date === today;
           return (
-            <div key={date} className={`rounded-lg border ${isToday ? "border-indigo-300 bg-indigo-50/30" : "border-gray-200 bg-white"} p-4`}>
-              <h3 className={`mb-3 text-sm font-semibold ${isToday ? "text-indigo-700" : "text-gray-700"}`}>
+            <div key={date} className={`rounded-lg border ${isToday ? "border-bpm-300 bg-bpm-50/30" : "border-gray-200 bg-white"} p-4`}>
+              <h3 className={`mb-3 text-sm font-semibold ${isToday ? "text-bpm-700" : "text-gray-700"}`}>
                 {DAY_LABELS[i]}
                 <span className="ml-1.5 font-normal text-gray-400">{d.getUTCDate()}</span>
-                {isToday && <span className="ml-2 rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">Today</span>}
+                {isToday && <span className="ml-2 rounded bg-bpm-100 px-1.5 py-0.5 text-[10px] font-medium text-bpm-600">Today</span>}
               </h3>
               {dayEntries.length === 0 ? (
                 <p className="text-xs text-gray-400">No classes</p>
@@ -527,7 +527,7 @@ function MonthlyGrid({
         </span>
         <button onClick={() => setMonthOffset((o) => o + 1)} className="rounded p-1.5 text-gray-500 hover:bg-gray-100"><ChevronRight className="h-5 w-5" /></button>
         {monthOffset !== 0 && (
-          <button onClick={() => setMonthOffset(() => 0)} className="rounded px-2 py-1 text-xs text-indigo-600 hover:bg-indigo-50">This Month</button>
+          <button onClick={() => setMonthOffset(() => 0)} className="rounded px-2 py-1 text-xs text-bpm-600 hover:bg-bpm-50">This Month</button>
         )}
       </div>
 
@@ -554,9 +554,9 @@ function MonthlyGrid({
                 return (
                   <div
                     key={date}
-                    className={`min-h-[90px] bg-white p-1.5 ${!isCurrentMonth ? "opacity-40" : ""} ${isToday ? "ring-2 ring-inset ring-indigo-300" : ""}`}
+                    className={`min-h-[90px] bg-white p-1.5 ${!isCurrentMonth ? "opacity-40" : ""} ${isToday ? "ring-2 ring-inset ring-bpm-300" : ""}`}
                   >
-                    <div className={`mb-1 text-right text-xs font-medium ${isToday ? "text-indigo-700" : isCurrentMonth ? "text-gray-700" : "text-gray-400"}`}>
+                    <div className={`mb-1 text-right text-xs font-medium ${isToday ? "text-bpm-700" : isCurrentMonth ? "text-gray-700" : "text-gray-400"}`}>
                       {d.getUTCDate()}
                     </div>
                     <div className="space-y-0.5">
@@ -596,8 +596,8 @@ function CalendarCard({
     : null;
 
   const dotColor =
-    entry.source === "override" ? "bg-blue-500"
-    : entry.source === "one-off" ? "bg-blue-500"
+    entry.source === "override" ? "bg-bpm-500"
+    : entry.source === "one-off" ? "bg-bpm-500"
     : entry.source === "default" ? "bg-green-500"
     : entry.source === "blocked" ? "bg-gray-500"
     : "bg-red-400";
@@ -679,7 +679,7 @@ function CalendarLegend() {
     <div className="space-y-2 pt-1">
       <div className="flex items-center gap-4 text-xs text-gray-400">
         <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-full bg-green-500" /> Regular</span>
-        <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-full bg-blue-500" /> This date only</span>
+        <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-full bg-bpm-500" /> This date only</span>
         <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-full bg-gray-500" /> No teacher assigned</span>
         <span className="flex items-center gap-1.5"><span className="inline-block h-2 w-2 rounded-full bg-red-400" /> No regular teacher set</span>
         <span className="flex items-center gap-1.5"><Badge variant="danger" className="text-[10px]">Conflict</Badge></span>
@@ -694,17 +694,17 @@ function CalendarLegend() {
       </div>
 
       {showHelp && (
-        <div className="relative rounded-lg border border-indigo-100 bg-indigo-50/50 px-4 py-3 text-xs text-gray-700">
+        <div className="relative rounded-lg border border-bpm-100 bg-bpm-50/50 px-4 py-3 text-xs text-gray-700">
           <button
             onClick={() => setShowHelp(false)}
             className="absolute right-2 top-2 rounded p-0.5 text-gray-400 hover:text-gray-600"
           >
             <X className="h-3.5 w-3.5" />
           </button>
-          <p className="mb-2 text-xs font-semibold text-indigo-700">How teacher scheduling works</p>
+          <p className="mb-2 text-xs font-semibold text-bpm-700">How teacher scheduling works</p>
           <div className="space-y-1.5">
             <p><span className="inline-block h-2 w-2 rounded-full bg-green-500 align-middle" /> <strong>Regular</strong> — this class uses its usual teacher assignment.</p>
-            <p><span className="inline-block h-2 w-2 rounded-full bg-blue-500 align-middle" /> <strong>This date only</strong> — this date has a different teacher assignment than usual.</p>
+            <p><span className="inline-block h-2 w-2 rounded-full bg-bpm-500 align-middle" /> <strong>This date only</strong> — this date has a different teacher assignment than usual.</p>
             <p><span className="inline-block h-2 w-2 rounded-full bg-gray-500 align-middle" /> <strong>No teacher assigned</strong> — no teacher is assigned for this specific date.</p>
             <p><span className="inline-block h-2 w-2 rounded-full bg-red-400 align-middle" /> <strong>No regular teacher set</strong> — this class does not have a usual teacher assignment configured yet.</p>
             <p><Badge variant="danger" className="text-[10px] align-middle">Conflict</Badge> — a teacher is assigned to two classes at the same time.</p>

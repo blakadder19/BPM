@@ -42,7 +42,7 @@ export function CheckInQrDialog({
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <QrCode className="h-5 w-5 text-indigo-600" />
+            <QrCode className="h-5 w-5 text-bpm-600" />
             Check-in QR Code
           </DialogTitle>
         </DialogHeader>
@@ -53,7 +53,7 @@ export function CheckInQrDialog({
             {date} at {startTime}
           </p>
 
-          <div className="rounded-xl border-2 border-indigo-100 bg-white p-4">
+          <div className="rounded-xl border-2 border-bpm-100 bg-white p-4">
             <QRCodeSVG
               value={token}
               size={200}

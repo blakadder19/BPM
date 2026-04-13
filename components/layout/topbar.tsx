@@ -111,7 +111,7 @@ const SEVERITY_ICON: Record<AlertSeverity, typeof AlertTriangle> = {
 const SEVERITY_COLORS: Record<AlertSeverity, string> = {
   critical: "text-red-600 bg-red-50",
   warning: "text-amber-600 bg-amber-50",
-  info: "text-blue-600 bg-blue-50",
+  info: "text-bpm-600 bg-blue-50",
 };
 
 const SEVERITY_DOT: Record<AlertSeverity, string> = {
@@ -263,7 +263,7 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
                                 router.push(target);
                               }
                             }}
-                            className="mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+                            className="mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium text-bpm-600 hover:text-bpm-700"
                           >
                             View
                             <ChevronRight className="h-3 w-3" />

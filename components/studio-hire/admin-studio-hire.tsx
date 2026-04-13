@@ -90,7 +90,7 @@ const BOOKING_TYPE_LABELS: Record<StudioHireBookingType, string> = {
 };
 
 const INPUT_CLS =
-  "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500";
+  "mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-bpm-500 focus:ring-1 focus:ring-bpm-500";
 
 // ── Main Component ───────────────────────────────────────────
 
@@ -239,7 +239,7 @@ export function AdminStudioHire({
                 <p className="text-xs text-gray-400">
                   {e.startTime} – {e.endTime}
                   {isOvernightBooking(e.startTime, e.endTime) && (
-                    <span className="ml-1 text-indigo-500" title="Ends next day">+1d</span>
+                    <span className="ml-1 text-bpm-500" title="Ends next day">+1d</span>
                   )}
                 </p>
               </Td>
@@ -454,7 +454,7 @@ function StudioHireFormDialog({
             </div>
 
             {isOvernight && (
-              <div className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-700">
+              <div className="flex items-center gap-2 rounded-lg border border-bpm-200 bg-bpm-50 px-3 py-2 text-sm text-bpm-700">
                 <Moon className="h-4 w-4 flex-shrink-0" />
                 Overnight booking — ends next day
               </div>
@@ -683,7 +683,7 @@ function DetailDialog({
                 <Mail className="h-4 w-4 text-gray-400" />
                 <a
                   href={`mailto:${entry.contactEmail}`}
-                  className="text-indigo-600 hover:underline"
+                  className="text-bpm-600 hover:underline"
                 >
                   {entry.contactEmail}
                 </a>
@@ -703,7 +703,7 @@ function DetailDialog({
               <Clock className="h-4 w-4 text-gray-400" />
               {entry.startTime} – {entry.endTime}
               {isOvernightBooking(entry.startTime, entry.endTime) && (
-                <span className="ml-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-600">
+                <span className="ml-1 inline-flex items-center gap-1 rounded bg-bpm-50 px-1.5 py-0.5 text-xs text-bpm-600">
                   <Moon className="h-3 w-3" /> next day
                 </span>
               )}

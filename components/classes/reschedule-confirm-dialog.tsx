@@ -105,8 +105,8 @@ export function RescheduleConfirmDialog({
                   <CalendarDays className="h-4 w-4 text-gray-400" />
                   {formatDate(instance.date)}
                 </div>
-                <MoveRight className="h-4 w-4 text-indigo-500" />
-                <div className="flex items-center gap-1.5 font-medium text-indigo-700">
+                <MoveRight className="h-4 w-4 text-bpm-500" />
+                <div className="flex items-center gap-1.5 font-medium text-bpm-700">
                   <CalendarDays className="h-4 w-4" />
                   {formatDate(newDate)}
                 </div>

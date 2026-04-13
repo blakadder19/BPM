@@ -33,7 +33,7 @@ export function RowTitle({ children, muted }: { children: ReactNode; muted?: boo
 
 export function RowMeta({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-600">
       {children}
     </div>
   );
@@ -109,7 +109,7 @@ export function PricePill({
 type ActionVariant = "primary" | "waitlist" | "danger" | "restore" | "secondary" | "coc";
 
 const ACTION_STYLES: Record<ActionVariant, string> = {
-  primary: "bg-indigo-100 text-indigo-700 hover:bg-indigo-200",
+  primary: "bg-bpm-100 text-bpm-700 hover:bg-bpm-200",
   waitlist: "bg-amber-100 text-amber-700 hover:bg-amber-200",
   danger: "bg-red-100 text-red-600 hover:bg-red-200",
   restore: "bg-orange-100 text-orange-700 hover:bg-orange-200",
@@ -200,7 +200,7 @@ export function formatRoleLabel(role: string | null | undefined): string | null 
 
 export function InlineBadge({
   children,
-  className = "bg-indigo-50 text-indigo-700",
+  className = "bg-bpm-50 text-bpm-700",
 }: {
   children: ReactNode;
   className?: string;

@@ -51,7 +51,7 @@ export function OnboardingFlow({ userName, coc }: Props) {
           </p>
           <a
             href="/dashboard"
-            className="mt-4 text-sm font-medium text-indigo-600 hover:text-indigo-500"
+            className="mt-4 text-sm font-medium text-bpm-600 hover:text-bpm-500"
           >
             Go to dashboard
           </a>

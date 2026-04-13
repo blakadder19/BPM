@@ -507,7 +507,7 @@ function DeleteTemplateModal({
                     {upcoming.length > 1 && (
                       <button
                         onClick={toggleSelectAll}
-                        className="text-xs text-indigo-600 hover:text-indigo-800"
+                        className="text-xs text-bpm-600 hover:text-bpm-800"
                       >
                         {selected.size === upcoming.length ? "Deselect all" : "Select all"}
                       </button>
@@ -518,14 +518,14 @@ function DeleteTemplateModal({
                       <label
                         key={inst.id}
                         className={`flex items-center gap-2.5 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors ${
-                          selected.has(inst.id) ? "border-indigo-300 bg-indigo-50" : "border-gray-200 bg-white hover:bg-gray-50"
+                          selected.has(inst.id) ? "border-bpm-300 bg-bpm-50" : "border-gray-200 bg-white hover:bg-gray-50"
                         }`}
                       >
                         <input
                           type="checkbox"
                           checked={selected.has(inst.id)}
                           onChange={() => toggleSelect(inst.id)}
-                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                          className="rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
                         />
                         <Calendar className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
                         <span className="flex-1 truncate">

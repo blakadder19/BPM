@@ -213,7 +213,7 @@ export function StudentDashboard({
             type="button"
             onClick={() => navigateTo("/classes", "hero")}
             disabled={loadingId === "hero"}
-            className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 p-4 text-left transition-shadow hover:shadow-lg active:shadow-md"
+            className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-bpm-600 to-bpm-500 p-4 text-left transition-shadow hover:shadow-lg active:shadow-md"
           >
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/20">
               <CalendarPlus className="h-6 w-6 text-white" />
@@ -222,7 +222,7 @@ export function StudentDashboard({
               <p className="text-base font-bold text-white">
                 {loadingId === "hero" ? "Loading…" : "Book a Class"}
               </p>
-              <p className="text-xs text-indigo-100">Browse schedule and sign up</p>
+              <p className="text-xs text-bpm-100">Browse schedule and sign up</p>
             </div>
             <ArrowRight className="h-4 w-4 text-white/70 shrink-0" />
           </button>
@@ -256,7 +256,7 @@ export function StudentDashboard({
               type="button"
               onClick={() => navigateTo("/catalog", "hero-getstarted")}
               disabled={loadingId === "hero-getstarted"}
-              className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 p-4 text-left transition-shadow hover:shadow-lg active:shadow-md cursor-pointer"
+              className="flex w-full items-center gap-3 rounded-xl bg-gradient-to-r from-bpm-600 to-bpm-500 p-4 text-left transition-shadow hover:shadow-lg active:shadow-md cursor-pointer"
             >
               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white/20">
                 <CreditCard className="h-6 w-6 text-white" />
@@ -265,14 +265,14 @@ export function StudentDashboard({
                 <p className="text-base font-bold text-white">
                   {loadingId === "hero-getstarted" ? "Loading…" : "Get started"}
                 </p>
-                <p className="text-xs text-indigo-100">Buy a product to book classes</p>
+                <p className="text-xs text-bpm-100">Buy a product to book classes</p>
               </div>
               <ArrowRight className="h-4 w-4 text-white/70 shrink-0" />
             </button>
             <button
               type="button"
               onClick={onboarding.open}
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-700 transition-colors px-1"
+              className="text-xs font-medium text-bpm-600 hover:text-bpm-700 transition-colors px-1"
             >
               New here? See how it works
             </button>
@@ -286,10 +286,10 @@ export function StudentDashboard({
               type="button"
               onClick={() => navigateTo("/catalog", "quick-products")}
               disabled={loadingId === "quick-products"}
-              className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-emerald-700 active:bg-emerald-800"
+              className="flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-emerald-100 active:bg-emerald-150"
             >
-              <ShoppingBag className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
-              <span className="text-sm sm:text-xs font-bold text-white">
+              <ShoppingBag className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-700 shrink-0" />
+              <span className="text-sm sm:text-xs font-semibold text-emerald-800">
                 {loadingId === "quick-products" ? "…" : "Buy a product"}
               </span>
             </button>
@@ -298,10 +298,10 @@ export function StudentDashboard({
               type="button"
               onClick={() => navigateTo("/classes", "quick-classes")}
               disabled={loadingId === "quick-classes"}
-              className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-blue-700 active:bg-blue-800"
+              className="flex items-center justify-center gap-2 rounded-lg border border-bpm-200 bg-bpm-50 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-bpm-100 active:bg-bpm-150"
             >
-              <Calendar className="h-5 w-5 sm:h-4 sm:w-4 text-white/80 shrink-0" />
-              <span className="text-sm sm:text-xs font-bold text-white">
+              <Calendar className="h-5 w-5 sm:h-4 sm:w-4 text-bpm-700 shrink-0" />
+              <span className="text-sm sm:text-xs font-semibold text-bpm-800">
                 {loadingId === "quick-classes" ? "…" : "Book a class"}
               </span>
             </button>
@@ -314,8 +314,8 @@ export function StudentDashboard({
               data-tour="qr-button"
               className="flex items-center justify-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-gray-50 active:bg-gray-100"
             >
-              <QrCode className="h-5 w-5 sm:h-4 sm:w-4 text-indigo-600 shrink-0" />
-              <span className="text-sm sm:text-xs font-bold text-gray-900">Show QR code</span>
+              <QrCode className="h-5 w-5 sm:h-4 sm:w-4 text-gray-500 shrink-0" />
+              <span className="text-sm sm:text-xs font-medium text-gray-600">Show QR code</span>
             </button>
           )}
         </div>
@@ -334,7 +334,7 @@ export function StudentDashboard({
             </button>
             <div className="flex flex-col items-center gap-4">
               <p className="text-lg font-bold text-gray-900">My Check-in QR</p>
-              <div className="rounded-2xl border-2 border-indigo-100 bg-white p-4 shadow-sm">
+              <div className="rounded-2xl border-2 border-bpm-100 bg-white p-4 shadow-sm">
                 <QRCodeSVG value={qrToken} size={200} level="M" bgColor="#ffffff" fgColor="#1e1b4b" />
               </div>
               <p className="text-xs text-gray-400 text-center max-w-[220px]">
@@ -353,7 +353,7 @@ export function StudentDashboard({
       {/* Stats */}
       <Link href="/bookings" className="flex items-center gap-4 rounded-md border border-gray-200 bg-white px-3 py-2.5 hover:bg-gray-50 transition-colors">
         <div className="flex items-center gap-2">
-          <BookOpen className="h-4 w-4 text-blue-600" />
+          <BookOpen className="h-4 w-4 text-bpm-600" />
           <span className="text-lg font-bold text-gray-900">{upcomingBookings.length}</span>
           <span className="text-xs text-gray-500">upcoming</span>
         </div>
@@ -374,7 +374,7 @@ export function StudentDashboard({
               <Star className="h-3.5 w-3.5 text-amber-500" />
               Today for you
             </h2>
-            <Link href="/classes" className="text-[11px] font-medium text-blue-600 hover:text-blue-700">
+            <Link href="/classes" className="text-[11px] font-medium text-bpm-600 hover:text-bpm-700">
               View all
             </Link>
           </div>
@@ -459,7 +459,7 @@ export function StudentDashboard({
                   <EntitlementBalance e={lastPlan} />
                   {lastPlan.termName && <span>{lastPlan.termName}</span>}
                   {lastPlan.selectedStyleName && (
-                    <span className="text-indigo-600">{lastPlan.selectedStyleName}</span>
+                    <span className="text-bpm-600">{lastPlan.selectedStyleName}</span>
                   )}
                 </RowMeta>
               </div>
@@ -483,12 +483,12 @@ export function StudentDashboard({
       {benefits?.isMember && (
         <div className="space-y-1.5">
           <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-400 px-1">
-            <Star className="h-3.5 w-3.5 text-indigo-500" />
+            <Star className="h-3.5 w-3.5 text-bpm-500" />
             Member Benefits
           </h2>
-          <div className="rounded-md border border-indigo-100 bg-indigo-50/30 divide-y divide-indigo-100/50">
+          <div className="rounded-md border border-bpm-100 bg-bpm-50/30 divide-y divide-bpm-100/50">
             <div className="flex items-center gap-2.5 px-3 py-2">
-              <Cake className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <Cake className="h-3.5 w-3.5 text-bpm-400 shrink-0" />
               <span className="flex-1 text-xs font-medium text-gray-900 truncate">Birthday Free Class</span>
               <span className="shrink-0">
                 {benefits.birthdayFreeClassUsed ? (
@@ -501,12 +501,12 @@ export function StudentDashboard({
               </span>
             </div>
             <div className="flex items-center gap-2.5 px-3 py-2">
-              <Gift className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <Gift className="h-3.5 w-3.5 text-bpm-400 shrink-0" />
               <span className="flex-1 text-xs font-medium text-gray-900">Giveaways</span>
               <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">Eligible</span>
             </div>
             <div className="flex items-center gap-2.5 px-3 py-2">
-              <Music className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+              <Music className="h-3.5 w-3.5 text-bpm-400 shrink-0" />
               <span className="flex-1 text-xs font-medium text-gray-900">Weekend Practice</span>
               <span className="rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">Included</span>
             </div>
@@ -521,7 +521,7 @@ export function StudentDashboard({
             <Calendar className="h-3.5 w-3.5 text-gray-400" />
             My Upcoming Classes
           </h2>
-          <Link href="/bookings" className="text-[11px] font-medium text-blue-600 hover:text-blue-700">
+          <Link href="/bookings" className="text-[11px] font-medium text-bpm-600 hover:text-bpm-700">
             View all
           </Link>
         </div>
@@ -529,7 +529,7 @@ export function StudentDashboard({
           <div className="rounded-md border border-dashed border-gray-200 bg-gray-50 py-6 text-center">
             <Inbox className="mx-auto h-5 w-5 text-gray-300 mb-1" />
             <p className="text-xs text-gray-500">No upcoming bookings</p>
-            <Link href="/classes" className="mt-1.5 inline-block text-xs font-medium text-blue-600 hover:text-blue-700">
+            <Link href="/classes" className="mt-1.5 inline-block text-xs font-medium text-bpm-600 hover:text-bpm-700">
               Browse classes
             </Link>
           </div>
@@ -627,7 +627,7 @@ function EntitlementsSection({
                   <button
                     type="button"
                     onClick={() => setVisibleCount((c) => c + HISTORY_PAGE_SIZE)}
-                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                    className="text-xs font-medium text-bpm-600 hover:text-bpm-700"
                   >
                     Load more ({remaining} older)
                   </button>
@@ -657,7 +657,7 @@ function EntitlementRow({
             <RowTitle>{e.productName}</RowTitle>
             <InlineBadge className={
               e.isFutureTerm
-                ? "bg-blue-50 text-blue-700"
+                ? "bg-blue-50 text-bpm-700"
                 : e.status === "active"
                   ? "bg-green-50 text-green-700"
                   : "bg-gray-100 text-gray-600"
@@ -685,12 +685,12 @@ function EntitlementRow({
               </InlineBadge>
             )}
             {e.isRenewal && (
-              <InlineBadge className="bg-indigo-50 text-indigo-700">Renewal</InlineBadge>
+              <InlineBadge className="bg-bpm-50 text-bpm-700">Renewal</InlineBadge>
             )}
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-gray-500">
             {e.selectedStyleName && (
-              <span className="text-indigo-600 font-medium">{e.selectedStyleName}</span>
+              <span className="text-bpm-600 font-medium">{e.selectedStyleName}</span>
             )}
             {e.isFutureTerm ? (
               <span>Starts {formatDate(e.validFrom)}{e.termName ? ` · ${e.termName}` : ""}</span>
@@ -847,7 +847,7 @@ function ProfileCard({
               <select
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
-                className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-100"
+                className="rounded border border-gray-300 px-2 py-1 text-xs focus:border-bpm-500 focus:outline-none focus:ring-1 focus:ring-bpm-100"
               >
                 <option value="">No preference</option>
                 <option value="leader">Leader</option>
@@ -856,7 +856,7 @@ function ProfileCard({
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="rounded bg-indigo-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded bg-bpm-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-bpm-700 disabled:opacity-50"
               >
                 {saving ? "…" : "Save"}
               </button>
@@ -876,7 +876,7 @@ function ProfileCard({
               </p>
               <button
                 onClick={() => setEditing(true)}
-                className="text-gray-400 hover:text-indigo-600 transition-colors"
+                className="text-gray-400 hover:text-bpm-600 transition-colors"
                 aria-label="Edit preferred role"
               >
                 <Pencil className="h-3 w-3" />

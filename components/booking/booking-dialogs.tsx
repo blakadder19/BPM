@@ -85,7 +85,7 @@ export interface SubscriptionOption {
 }
 
 const INPUT_CLASS =
-  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100";
+  "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100";
 
 const SOURCE_OPTIONS = [
   { value: "subscription", label: "Subscription" },

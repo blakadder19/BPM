@@ -274,7 +274,7 @@ export function QuickAssignDialog({
                 <label className="block text-xs font-medium text-gray-600">Quick Preset</label>
                 <select
                   onChange={(e) => e.target.value && applyPreset(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   defaultValue=""
                 >
                   <option value="">Select a pair preset…</option>
@@ -292,7 +292,7 @@ export function QuickAssignDialog({
                 <select
                   value={teacher1Id}
                   onChange={(e) => setTeacher1Id(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
                   <option value="">— None —</option>
                   {activeRoster.map((t) => (
@@ -305,7 +305,7 @@ export function QuickAssignDialog({
                 <select
                   value={teacher2Id}
                   onChange={(e) => setTeacher2Id(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
                   <option value="">— None —</option>
                   {activeRoster.map((t) => (
@@ -321,7 +321,7 @@ export function QuickAssignDialog({
                 type="checkbox"
                 checked={saveAsPreset}
                 onChange={(e) => setSaveAsPreset(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-gray-300 text-indigo-600"
+                className="h-3.5 w-3.5 rounded border-gray-300 text-bpm-600"
               />
               <Bookmark className="h-3 w-3" /> Save as pair preset
             </label>
@@ -331,32 +331,32 @@ export function QuickAssignDialog({
                 value={presetLabel}
                 onChange={(e) => setPresetLabel(e.target.value)}
                 placeholder="Preset label, e.g. 'María & Carlos'"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             )}
 
             {/* Add teacher shortcut */}
             {showAddTeacher ? (
-              <div className="rounded-lg border border-indigo-100 bg-indigo-50/30 p-3">
-                <p className="mb-2 text-xs font-medium text-indigo-700">New Teacher</p>
+              <div className="rounded-lg border border-bpm-100 bg-bpm-50/30 p-3">
+                <p className="mb-2 text-xs font-medium text-bpm-700">New Teacher</p>
                 <form onSubmit={handleAddTeacher} className="space-y-2">
                   <input
                     name="fullName"
                     required
                     placeholder="Full Name *"
-                    className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <input
                       name="email"
                       type="email"
                       placeholder="Email"
-                      className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                     />
                     <input
                       name="phone"
                       placeholder="Phone"
-                      className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                      className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                     />
                   </div>
                   <input type="hidden" name="isActive" value="true" />
@@ -370,7 +370,7 @@ export function QuickAssignDialog({
               <button
                 type="button"
                 onClick={() => setShowAddTeacher(true)}
-                className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-700"
+                className="flex items-center gap-1.5 text-xs text-bpm-600 hover:text-bpm-700"
               >
                 <UserPlus className="h-3.5 w-3.5" /> Add new teacher
               </button>

@@ -127,7 +127,7 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
               <p className="mt-1 text-[10px] text-amber-600">{b.reason}</p>
             )}
             {isBlocked && (
-              <p className="mt-1.5 text-[11px] text-gray-500">{b.reason}</p>
+              <p className="mt-1.5 text-[11px] text-gray-600">{b.reason}</p>
             )}
             {b.status === "restore_available" && (
               <p className="mt-1 text-[10px] text-orange-600">Cancelled — tap Restore to rebook</p>
@@ -176,7 +176,7 @@ function CompactActionEl({
       }
       return <InlineBadge className="bg-gray-100 text-gray-500">Blocked</InlineBadge>;
     case "not_bookable":
-      return <InlineBadge className="bg-gray-100 text-gray-400">N/A</InlineBadge>;
+      return <InlineBadge className="bg-gray-100 text-gray-500">N/A</InlineBadge>;
   }
 }
 
@@ -203,8 +203,8 @@ function EntitlementHint({
   }
 
   return (
-    <p className="text-[10px] text-gray-500">
-      <span className="font-medium text-gray-600">{ent.productName}</span>
+    <p className="text-[10px] text-gray-600">
+      <span className="font-medium text-gray-700">{ent.productName}</span>
       <span className="mx-0.5">·</span>
       <span>{usageLabel}</span>
       {entitlements.length > 1 && (

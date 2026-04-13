@@ -21,7 +21,7 @@ export function SearchInput({ value, onChange, placeholder = "Search…", onKeyD
         onKeyDown={onKeyDown}
         onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+        className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
       />
     </div>
   );

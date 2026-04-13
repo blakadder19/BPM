@@ -109,7 +109,7 @@ export function AddInstanceDialog({
               <select
                 value={selectedTemplateId}
                 onChange={(e) => setSelectedTemplateId(e.target.value)}
-                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               >
                 <option value="">— Manual entry —</option>
                 {templates.filter((t) => t.isActive).map((t) => (
@@ -138,7 +138,7 @@ export function AddInstanceDialog({
                       setSelectedTermId(e.target.value);
                       if (!e.target.value && isManual) setEnforceTermRules(false);
                     }}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   >
                     <option value="">— No term —</option>
                     {allTerms.map((t) => (
@@ -152,7 +152,7 @@ export function AddInstanceDialog({
                       type="checkbox"
                       checked={enforceTermRules}
                       onChange={(e) => setEnforceTermRules(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                      className="h-4 w-4 rounded border-gray-300 text-bpm-600"
                     />
                     Enforce term late-entry rules
                   </label>
@@ -163,11 +163,11 @@ export function AddInstanceDialog({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Title *</label>
-                <input name="title" defaultValue={tpl?.title ?? ""} key={selectedTemplateId} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="title" defaultValue={tpl?.title ?? ""} key={selectedTemplateId} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Class Type *</label>
-                <select name="classType" defaultValue={tpl?.classType ?? "class"} key={`ct-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                <select name="classType" defaultValue={tpl?.classType ?? "class"} key={`ct-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100">
                   <option value="class">Class</option>
                   <option value="social">Social</option>
                   <option value="student_practice">Student Practice</option>
@@ -183,7 +183,7 @@ export function AddInstanceDialog({
                     <select
                       value={manualStyleId}
                       onChange={(e) => setManualStyleId(e.target.value)}
-                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                      className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                     >
                       <option value="">— None —</option>
                       {allStyles.map((s) => (
@@ -199,7 +199,7 @@ export function AddInstanceDialog({
                   <select
                     value={manualLevel}
                     onChange={(e) => setManualLevel(e.target.value)}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   >
                     <option value="">— None —</option>
                     <option value="Beginner 1">Beginner 1</option>
@@ -216,41 +216,41 @@ export function AddInstanceDialog({
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date *</label>
-                <input name="date" type="date" defaultValue={today} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="date" type="date" defaultValue={today} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Start *</label>
-                <input name="startTime" type="time" defaultValue={tpl?.startTime ?? ""} key={`st-${selectedTemplateId}`} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="startTime" type="time" defaultValue={tpl?.startTime ?? ""} key={`st-${selectedTemplateId}`} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">End *</label>
-                <input name="endTime" type="time" defaultValue={tpl?.endTime ?? ""} key={`et-${selectedTemplateId}`} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="endTime" type="time" defaultValue={tpl?.endTime ?? ""} key={`et-${selectedTemplateId}`} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Capacity</label>
-                <input name="maxCapacity" type="number" min={0} defaultValue={tpl?.maxCapacity ?? ""} key={`mc-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="maxCapacity" type="number" min={0} defaultValue={tpl?.maxCapacity ?? ""} key={`mc-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Leader Cap</label>
-                <input name="leaderCap" type="number" min={0} defaultValue={tpl?.leaderCap ?? ""} key={`lc-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="leaderCap" type="number" min={0} defaultValue={tpl?.leaderCap ?? ""} key={`lc-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Follower Cap</label>
-                <input name="followerCap" type="number" min={0} defaultValue={tpl?.followerCap ?? ""} key={`fc-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="followerCap" type="number" min={0} defaultValue={tpl?.followerCap ?? ""} key={`fc-${selectedTemplateId}`} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Location</label>
-                <input name="location" defaultValue={tpl?.location ?? ""} key={`loc-${selectedTemplateId}`} placeholder="e.g. Studio A, Studio B" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="location" defaultValue={tpl?.location ?? ""} key={`loc-${selectedTemplateId}`} placeholder="e.g. Studio A, Studio B" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Status</label>
-                <select name="status" defaultValue="scheduled" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                <select name="status" defaultValue="scheduled" className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100">
                   {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
@@ -258,7 +258,7 @@ export function AddInstanceDialog({
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Notes</label>
-              <textarea name="notes" rows={2} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              <textarea name="notes" rows={2} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
             </div>
 
             <div className="flex justify-end gap-3 pt-2">
@@ -314,11 +314,11 @@ export function EditInstanceDialog({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Title *</label>
-                <input name="title" defaultValue={instance.title} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="title" defaultValue={instance.title} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Status</label>
-                <select name="status" defaultValue={instance.status} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                <select name="status" defaultValue={instance.status} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100">
                   {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
@@ -335,7 +335,7 @@ export function EditInstanceDialog({
                       setSelectedTermId(e.target.value);
                       if (!e.target.value) setEnforceTermRules(false);
                     }}
-                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                    className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                   >
                     <option value="">— No term —</option>
                     {allTerms.map((t) => (
@@ -349,7 +349,7 @@ export function EditInstanceDialog({
                       type="checkbox"
                       checked={enforceTermRules}
                       onChange={(e) => setEnforceTermRules(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                      className="h-4 w-4 rounded border-gray-300 text-bpm-600"
                     />
                     Enforce term late-entry rules
                   </label>
@@ -360,41 +360,41 @@ export function EditInstanceDialog({
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Date</label>
-                <input name="date" type="date" defaultValue={instance.date} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="date" type="date" defaultValue={instance.date} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Start</label>
-                <input name="startTime" type="time" defaultValue={instance.startTime} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="startTime" type="time" defaultValue={instance.startTime} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">End</label>
-                <input name="endTime" type="time" defaultValue={instance.endTime} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="endTime" type="time" defaultValue={instance.endTime} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700">Capacity</label>
-                <input name="maxCapacity" type="number" min={0} defaultValue={instance.maxCapacity ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="maxCapacity" type="number" min={0} defaultValue={instance.maxCapacity ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Leader Cap</label>
-                <input name="leaderCap" type="number" min={0} defaultValue={instance.leaderCap ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="leaderCap" type="number" min={0} defaultValue={instance.leaderCap ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700">Follower Cap</label>
-                <input name="followerCap" type="number" min={0} defaultValue={instance.followerCap ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                <input name="followerCap" type="number" min={0} defaultValue={instance.followerCap ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Location</label>
-              <input name="location" defaultValue={instance.location} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              <input name="location" defaultValue={instance.location} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700">Notes</label>
-              <textarea name="notes" rows={2} defaultValue={instance.notes ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+              <textarea name="notes" rows={2} defaultValue={instance.notes ?? ""} className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
             </div>
 
             {instance.classId && (
@@ -474,7 +474,7 @@ export function TeacherOverrideDialog({
                 <select
                   value={t1}
                   onChange={(e) => setT1(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
                   <option value="">— Select —</option>
                   {activeTeachers.map((t) => (
@@ -487,7 +487,7 @@ export function TeacherOverrideDialog({
                 <select
                   value={t2}
                   onChange={(e) => setT2(e.target.value)}
-                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                  className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
                   <option value="">— None (solo) —</option>
                   {activeTeachers.map((t) => (
@@ -616,22 +616,22 @@ export function GenerateScheduleDialog({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Start Date *</label>
-                  <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreview(null); }} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                  <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreview(null); }} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">End Date *</label>
-                  <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreview(null); }} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                  <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreview(null); }} required className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100" />
                 </div>
               </div>
 
               {/* Options */}
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={includeInactive} onChange={(e) => { setIncludeInactive(e.target.checked); setPreview(null); }} className="h-4 w-4 rounded border-gray-300 text-indigo-600" />
+                  <input type="checkbox" checked={includeInactive} onChange={(e) => { setIncludeInactive(e.target.checked); setPreview(null); }} className="h-4 w-4 rounded border-gray-300 text-bpm-600" />
                   Include inactive templates
                 </label>
                 <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={overwrite} onChange={(e) => { setOverwrite(e.target.checked); setPreview(null); }} className="h-4 w-4 rounded border-gray-300 text-indigo-600" />
+                  <input type="checkbox" checked={overwrite} onChange={(e) => { setOverwrite(e.target.checked); setPreview(null); }} className="h-4 w-4 rounded border-gray-300 text-bpm-600" />
                   Overwrite existing matching instances
                 </label>
                 {overwrite && (
@@ -643,8 +643,8 @@ export function GenerateScheduleDialog({
 
               {/* Preview */}
               {preview && (
-                <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 px-4 py-3 text-sm">
-                  <p className="font-medium text-indigo-700">Preview</p>
+                <div className="rounded-lg border border-bpm-100 bg-bpm-50/50 px-4 py-3 text-sm">
+                  <p className="font-medium text-bpm-700">Preview</p>
                   <div className="mt-1 space-y-0.5 text-gray-700">
                     <p><strong>{preview.toCreate}</strong> new instance{preview.toCreate !== 1 ? "s" : ""} will be created</p>
                     {preview.toSkip > 0 && <p><strong>{preview.toSkip}</strong> duplicate{preview.toSkip !== 1 ? "s" : ""} will be skipped</p>}

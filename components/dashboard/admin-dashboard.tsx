@@ -85,15 +85,15 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
           label="Today's Classes"
           value={d.todaysClassCount}
           icon={Calendar}
-          color="text-indigo-600"
-          bg="bg-indigo-50"
+          color="text-bpm-600"
+          bg="bg-bpm-50"
           href={`/classes/bookable?date=${d.todayStr}`}
         />
         <KpiCard
           label="Upcoming Bookings"
           value={d.upcomingBookingCount}
           icon={BookOpen}
-          color="text-blue-600"
+          color="text-bpm-600"
           bg="bg-blue-50"
           href="/bookings"
         />
@@ -204,7 +204,7 @@ function UpcomingClassesCard({ classes }: { classes: DashboardClassSummary[] }) 
         </CardTitle>
         <Link
           href="/classes/bookable"
-          className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          className="text-sm font-medium text-bpm-600 hover:text-bpm-700 flex items-center gap-1"
         >
           View all <ArrowRight className="h-3.5 w-3.5" />
         </Link>
@@ -379,7 +379,7 @@ function RoleBalanceCard({ classes }: { classes: DashboardClassSummary[] }) {
                     />
                   </div>
                   <div className="mt-1.5 flex items-center justify-between text-xs">
-                    <span className="text-blue-600 font-medium">
+                    <span className="text-bpm-600 font-medium">
                       {bc.leaderCount}L / {bc.leaderCap}
                     </span>
                     <span
@@ -433,7 +433,7 @@ function AttendanceSummaryCard({
         </CardTitle>
         <Link
           href="/attendance"
-          className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          className="text-sm font-medium text-bpm-600 hover:text-bpm-700 flex items-center gap-1"
         >
           View all <ArrowRight className="h-3.5 w-3.5" />
         </Link>
@@ -583,7 +583,7 @@ function SubscriptionsCard({
         </CardTitle>
         <Link
           href="/products"
-          className="text-sm font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1"
+          className="text-sm font-medium text-bpm-600 hover:text-bpm-700 flex items-center gap-1"
         >
           View all <ArrowRight className="h-3.5 w-3.5" />
         </Link>

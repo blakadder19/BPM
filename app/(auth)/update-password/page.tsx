@@ -52,8 +52,8 @@ export default function UpdatePasswordPage() {
 
   if (success) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+        <Card className="w-full max-w-sm shadow-xl">
           <CardContent className="flex flex-col items-center py-12">
             <CheckCircle2 className="h-12 w-12 text-green-500" />
             <h2 className="mt-4 text-lg font-semibold text-gray-900">
@@ -79,8 +79,8 @@ export default function UpdatePasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <Card className="w-full max-w-sm">
+    <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
+      <Card className="w-full max-w-sm shadow-xl">
         <CardContent className="pt-8 pb-8">
           <div className="mb-8 flex flex-col items-center">
             <img
@@ -88,7 +88,7 @@ export default function UpdatePasswordPage() {
               alt="BPM"
               className="h-20 w-auto object-contain"
             />
-            <h1 className="mt-4 text-xl font-bold text-gray-900">
+            <h1 className="mt-4 font-display text-xl font-bold text-gray-900">
               Set Your Password
             </h1>
             <p className="mt-1 text-center text-sm text-gray-500">
@@ -117,7 +117,7 @@ export default function UpdatePasswordPage() {
                 required
                 minLength={6}
                 placeholder="At least 6 characters"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             </div>
             <div>
@@ -134,7 +134,7 @@ export default function UpdatePasswordPage() {
                 required
                 minLength={6}
                 placeholder="Repeat your password"
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
               />
             </div>
             <Button type="submit" className="w-full" disabled={isPending}>

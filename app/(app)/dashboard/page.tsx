@@ -63,6 +63,30 @@ export default async function DashboardPage() {
 
     const bookingSvc = getBookingRepo().getService();
     const attendanceSvc = getAttendanceRepo().getService();
+
+    const instances = getInstances();
+    const danceStyles = getDanceStyles();
+    const styleByName = new Map(danceStyles.map((s) => [s.name, s]));
+    bookingSvc.refreshClasses(
+      instances.map((bc) => {
+        const style = bc.styleName ? styleByName.get(bc.styleName) : null;
+        return {
+          id: bc.id,
+          title: bc.title,
+          classType: bc.classType,
+          styleName: bc.styleName,
+          danceStyleRequiresBalance: style?.requiresRoleBalance ?? false,
+          status: bc.status,
+          date: bc.date,
+          startTime: bc.startTime,
+          endTime: bc.endTime,
+          maxCapacity: bc.maxCapacity,
+          leaderCap: bc.leaderCap,
+          followerCap: bc.followerCap,
+          location: bc.location,
+        };
+      })
+    );
     const _tDb = performance.now();
 
     const upcomingBookings: StudentBookingSummary[] = bookingSvc.bookings
@@ -154,7 +178,11 @@ export default async function DashboardPage() {
     }
 
     const waitlistedCount = student
-      ? bookingSvc.getWaitlistForStudent(student.id).length
+      ? bookingSvc.getWaitlistForStudent(student.id)
+          .filter((w) => {
+            const cls = bookingSvc.getClass(w.bookableClassId);
+            return cls ? !isClassEnded(cls.date, cls.endTime) : false;
+          }).length
       : 0;
 
     const benefits = student
@@ -188,9 +216,7 @@ export default async function DashboardPage() {
     }
 
     const _tPrep = performance.now();
-    const allInstances = getInstances();
-    const danceStyles = getDanceStyles();
-    const styleByName = new Map(danceStyles.map((s) => [s.name, s]));
+    const allInstances = instances;
     const accessRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
     const studentId = student?.id ?? "";
 
