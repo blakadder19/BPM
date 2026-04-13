@@ -7,6 +7,7 @@ const API_ROUTES_SELF_AUTH = ["/api/lifecycle", "/api/webhooks"];
 const EMBED_ALLOWED_ORIGINS = [
   "https://www.balancepowermotion.com",
   "https://balancepowermotion.com",
+  "https://*.squarespace.com",
 ];
 
 function isPublicRoute(pathname: string): boolean {
