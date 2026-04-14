@@ -129,6 +129,7 @@ export interface CreatePurchaseData {
   paymentMethod: EventPaymentMethod;
   paymentStatus?: EventPaymentStatus;
   paymentReference?: string | null;
+  paidAt?: string | null;
   notes?: string | null;
 }
 

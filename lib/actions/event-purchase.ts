@@ -209,6 +209,7 @@ export async function fulfillGuestEventPurchase(
     paymentMethod: "stripe",
     paymentStatus: "paid",
     paymentReference: paymentRef,
+    paidAt: new Date().toISOString(),
   });
 
   if (!result.success) {
@@ -276,6 +277,7 @@ export async function fulfillEventPurchase(
     paymentMethod: "stripe",
     paymentStatus: "paid",
     paymentReference: paymentRef,
+    paidAt: new Date().toISOString(),
   });
 
   if (result.success) {

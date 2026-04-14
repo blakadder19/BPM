@@ -332,6 +332,7 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
         payment_method: input.paymentMethod,
         payment_status: input.paymentStatus ?? "pending",
         payment_reference: input.paymentReference ?? null,
+        paid_at: input.paidAt ?? null,
         notes: input.notes ?? null,
       } as never)
       .select()

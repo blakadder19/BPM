@@ -406,7 +406,7 @@ export async function createGuestEventStripeCheckoutAction(input: {
         bpm_guest_email: input.guestEmail,
         bpm_guest_phone: input.guestPhone ?? "",
       },
-      success_url: `${appUrl}/event/${input.eventId}?purchase=success`,
+      success_url: `${appUrl}/event/${input.eventId}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/event/${input.eventId}?purchase=cancelled`,
     });
 

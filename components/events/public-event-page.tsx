@@ -13,7 +13,6 @@ import {
   Banknote,
   CheckCircle2,
   Loader2,
-  Mail,
   XCircle,
 } from "lucide-react";
 import { EventHero } from "./event-hero";
@@ -145,29 +144,7 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
           </div>
         </div>
 
-        {/* ── Post-checkout status banner ──────────────────── */}
-        {purchaseStatus === "success" && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 space-y-3">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-8 w-8 text-emerald-500 shrink-0" />
-              <div>
-                <h3 className="font-display text-lg font-semibold text-gray-900">Payment successful</h3>
-                <p className="text-sm text-gray-600 mt-0.5">
-                  Your purchase for <strong>{event.title}</strong> has been confirmed. Thank you!
-                </p>
-              </div>
-            </div>
-            <div className="ml-11 space-y-2">
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <Mail className="h-4 w-4 text-gray-400 shrink-0" />
-                <span>A confirmation email with your QR code is being sent to the email you provided.</span>
-              </div>
-              <p className="text-xs text-gray-500">
-                Show the QR code from your email at reception when you arrive. If you don&apos;t receive the email within a few minutes, please check your spam folder.
-              </p>
-            </div>
-          </div>
-        )}
+        {/* ── Post-checkout cancel banner ─────────────────── */}
         {purchaseStatus === "cancelled" && (
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-5">
             <div className="flex items-center gap-3">
@@ -286,18 +263,7 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
         )}
 
         {/* ── CTA / Guest purchase ─────────────────────────────── */}
-        {purchaseStatus === "success" ? (
-          <div className="rounded-xl border border-gray-200 bg-white p-6 text-center space-y-3">
-            <p className="text-sm text-gray-600">
-              Want to purchase another ticket or create an account?
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link href="/login" className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 transition-colors">
-                Log in or create account <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </div>
-        ) : products.length > 0 ? (
+        {products.length > 0 ? (
           <GuestPurchaseSection
             event={event}
             products={products}
