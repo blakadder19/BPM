@@ -172,11 +172,16 @@ export async function fulfillGuestEventPurchase(
   sessionId: string,
   metadata: Record<string, string>,
 ): Promise<{ success: boolean; error?: string }> {
+  const tag = `[guest-fulfill session=${sessionId}]`;
   const eventProductId = metadata.bpm_event_product_id;
   const eventId = metadata.bpm_event_id;
   const guestName = metadata.bpm_guest_name;
   const guestEmail = metadata.bpm_guest_email;
+
+  console.info(`${tag} Starting. event=${eventId} product=${eventProductId} guest=${guestEmail}`);
+
   if (!eventProductId || !eventId || !guestEmail) {
+    console.error(`${tag} Missing metadata: eventProductId=${eventProductId} eventId=${eventId} guestEmail=${guestEmail}`);
     return { success: false, error: "Missing guest event metadata in Stripe session" };
   }
 
@@ -185,9 +190,13 @@ export async function fulfillGuestEventPurchase(
 
   const allPurchases = await repo.getPurchasesByEvent(eventId);
   const alreadyFulfilled = allPurchases.find((p) => p.paymentReference === paymentRef);
-  if (alreadyFulfilled) return { success: true };
+  if (alreadyFulfilled) {
+    console.info(`${tag} Already fulfilled (idempotent skip). purchaseId=${alreadyFulfilled.id}`);
+    return { success: true };
+  }
 
   const qrToken = generateGuestPurchaseQrToken();
+  console.info(`${tag} Generated QR token: ${qrToken.slice(0, 8)}...`);
 
   const result = await createPurchase({
     studentId: null,
@@ -202,28 +211,38 @@ export async function fulfillGuestEventPurchase(
     paymentReference: paymentRef,
   });
 
-  if (result.success) {
-    try {
-      const [event, product] = await Promise.all([
-        repo.getEventById(eventId).catch(() => null),
-        repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
-      ]);
-      if (product) {
-        sendEventPurchaseEmail({
-          studentId: null,
-          studentName: guestName ?? "Guest",
-          directEmail: guestEmail,
-          eventTitle: event?.title ?? "Special Event",
-          eventId,
-          productName: product.name,
-          productType: product.productType,
-          priceLabel: centsToEuros(product.priceCents),
-          paymentStatus: "paid",
-          inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
-          qrToken,
-        }).catch((err) => console.warn("[event-purchase] Failed to send guest Stripe purchase email:", err));
-      }
-    } catch (err) { console.warn("[event-purchase] Failed to resolve guest purchase email data:", err); }
+  if (!result.success) {
+    console.error(`${tag} createPurchase FAILED: ${result.error}`);
+    return result;
+  }
+
+  console.info(`${tag} Purchase created successfully. Sending confirmation email...`);
+
+  try {
+    const [event, product] = await Promise.all([
+      repo.getEventById(eventId).catch(() => null),
+      repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
+    ]);
+    if (product) {
+      await sendEventPurchaseEmail({
+        studentId: null,
+        studentName: guestName ?? "Guest",
+        directEmail: guestEmail,
+        eventTitle: event?.title ?? "Special Event",
+        eventId,
+        productName: product.name,
+        productType: product.productType,
+        priceLabel: centsToEuros(product.priceCents),
+        paymentStatus: "paid",
+        inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
+        qrToken,
+      });
+      console.info(`${tag} Email send completed (check email-provider logs for delivery status).`);
+    } else {
+      console.warn(`${tag} Could not resolve product ${eventProductId} — email skipped.`);
+    }
+  } catch (err) {
+    console.error(`${tag} Email send threw:`, err instanceof Error ? err.message : err);
   }
 
   return result;
@@ -337,13 +356,15 @@ export async function markEventPurchasePaidAction(input: {
     revalidateEventPaths(input.eventId);
 
     if (isGuestPurchase && purchase.guestEmail) {
+      const adminTag = `[admin-mark-paid purchase=${input.purchaseId}]`;
+      console.info(`${adminTag} Guest purchase marked paid. Sending confirmation email to ${purchase.guestEmail}...`);
       try {
         const [event, product] = await Promise.all([
           repo.getEventById(input.eventId).catch(() => null),
           repo.getProductsByEvent(input.eventId).then((ps) => ps.find((p) => p.id === purchase.eventProductId)).catch(() => null),
         ]);
         if (product) {
-          sendEventPurchaseEmail({
+          await sendEventPurchaseEmail({
             studentId: null,
             studentName: purchase.guestName ?? "Guest",
             directEmail: purchase.guestEmail,
@@ -355,9 +376,14 @@ export async function markEventPurchasePaidAction(input: {
             paymentStatus: "paid",
             inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
             qrToken: qrToken ?? undefined,
-          }).catch((err) => console.warn("[event-purchase] Failed to send guest paid email:", err));
+          });
+          console.info(`${adminTag} Email send completed.`);
+        } else {
+          console.warn(`${adminTag} Could not resolve product — email skipped.`);
         }
-      } catch (err) { console.warn("[event-purchase] Failed to resolve guest paid email data:", err); }
+      } catch (err) {
+        console.error(`${adminTag} Email send threw:`, err instanceof Error ? err.message : err);
+      }
     }
   }
 

@@ -31,6 +31,7 @@ import {
   type StudentTermInfo,
   type StudentEntitlementSummary,
   type TodayForYouItem,
+  type DashboardEvent,
 } from "@/components/dashboard/student-dashboard";
 
 export default async function DashboardPage() {
@@ -325,9 +326,42 @@ export default async function DashboardPage() {
     if (process.env.NODE_ENV === "development") console.info(`[perf /dashboard] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tHydrate-_tAuth).toFixed(0)}ms prep+todayForYou=${(_tEnd-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
     const allEvents = await cachedGetAllEvents();
-    const dashboardEvents = allEvents.filter(
+    const promotedEvents = allEvents.filter(
       (e) => e.status === "published" && e.isVisible && e.featuredOnDashboard && e.endDate >= todayStr,
     );
+
+    const evtRepo = getSpecialEventRepo();
+    const studentEventPurchases = student ? await evtRepo.getPurchasesByStudent(student.id) : [];
+    const activePurchases = studentEventPurchases.filter((p) => p.paymentStatus !== "refunded");
+
+    const ownedEventIds = new Set(activePurchases.map((p) => p.eventId));
+    const dashboardEventsMap = new Map<string, DashboardEvent>();
+
+    for (const evt of promotedEvents) {
+      dashboardEventsMap.set(evt.id, { event: evt, reason: "promoted" });
+    }
+
+    for (const pur of activePurchases) {
+      const evt = allEvents.find((e) => e.id === pur.eventId);
+      if (!evt || evt.status !== "published" || !evt.isVisible || evt.endDate < todayStr) continue;
+      const evtProducts = await evtRepo.getProductsByEvent(evt.id);
+      const product = evtProducts.find((p) => p.id === pur.eventProductId);
+      const existing = dashboardEventsMap.get(evt.id);
+      if (!existing || existing.reason === "promoted") {
+        dashboardEventsMap.set(evt.id, {
+          event: evt,
+          reason: "owned",
+          purchaseStatus: pur.paymentStatus === "paid" ? "paid" : "pending",
+          purchaseProductName: product?.name ?? null,
+        });
+      }
+    }
+
+    const dashboardEventsList = Array.from(dashboardEventsMap.values()).sort((a, b) => {
+      if (a.reason === "owned" && b.reason !== "owned") return -1;
+      if (a.reason !== "owned" && b.reason === "owned") return 1;
+      return a.event.startDate.localeCompare(b.event.startDate);
+    });
 
     return (
       <StudentDashboard
@@ -344,7 +378,7 @@ export default async function DashboardPage() {
         qrToken={student?.qrToken ?? null}
         todayForYou={todayForYou}
         studentPreferredRole={student?.preferredRole ?? null}
-        featuredEvents={dashboardEvents}
+        dashboardEvents={dashboardEventsList}
       />
     );
   }

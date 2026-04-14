@@ -27,6 +27,9 @@ import {
   History,
   HelpCircle,
   Sparkles,
+  Ticket,
+  CheckCircle2,
+  AlertTriangle,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -58,6 +61,16 @@ import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
 import type { DanceRole, ProductType } from "@/types/domain";
 import type { MockSpecialEvent } from "@/lib/mock-data";
+
+export interface DashboardEvent {
+  event: MockSpecialEvent;
+  /** "owned" = student has a purchase; "promoted" = academy-promoted, no purchase */
+  reason: "owned" | "promoted";
+  /** If student has a purchase, the payment status */
+  purchaseStatus?: "paid" | "pending" | null;
+  /** Product name the student purchased, if any */
+  purchaseProductName?: string | null;
+}
 
 export interface StudentBookingSummary {
   id: string;
@@ -132,6 +145,7 @@ interface StudentDashboardProps {
   todayForYou?: TodayForYouItem[];
   studentPreferredRole?: DanceRole | null;
   featuredEvents?: MockSpecialEvent[];
+  dashboardEvents?: DashboardEvent[];
 }
 
 export function StudentDashboard({
@@ -149,6 +163,7 @@ export function StudentDashboard({
   todayForYou = [],
   studentPreferredRole,
   featuredEvents = [],
+  dashboardEvents = [],
 }: StudentDashboardProps) {
   const firstName = fullName.split(" ")[0];
   const router = useRouter();
@@ -455,40 +470,72 @@ export function StudentDashboard({
       )}
 
       {/* Special Events */}
-      {featuredEvents.length > 0 && (
-        <div className="space-y-1.5">
-          <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-400 px-1">
-            <Sparkles className="h-3.5 w-3.5 text-bpm-500" />
-            Special Events
-          </h2>
-          <div className="space-y-2">
-            {featuredEvents.map((evt) => (
-              <Link key={evt.id} href={`/events/${evt.id}`} className="block">
-                <div className="rounded-lg border border-bpm-100 bg-gradient-to-r from-bpm-50/40 to-white p-3.5 hover:border-bpm-200 transition-colors">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-gray-900 truncate">{evt.title}</span>
-                        {evt.isFeatured && <Star className="h-3 w-3 text-amber-500 fill-amber-500 shrink-0" />}
-                      </div>
-                      {evt.subtitle && <p className="text-xs text-gray-500 mt-0.5 truncate">{evt.subtitle}</p>}
-                      <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(evt.startDate + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" })}
-                          {evt.startDate !== evt.endDate && ` – ${new Date(evt.endDate + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" })}`}
-                        </span>
-                        {evt.location && <span className="truncate">{evt.location}</span>}
+      {(dashboardEvents.length > 0 || featuredEvents.length > 0) && (() => {
+        const items: DashboardEvent[] = dashboardEvents.length > 0
+          ? dashboardEvents
+          : featuredEvents.map((evt) => ({ event: evt, reason: "promoted" as const }));
+        if (items.length === 0) return null;
+        return (
+          <div className="space-y-1.5">
+            <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-400 px-1">
+              <Sparkles className="h-3.5 w-3.5 text-bpm-500" />
+              Special Events
+            </h2>
+            <div className="space-y-2">
+              {items.map((item) => {
+                const evt = item.event;
+                const isOwned = item.reason === "owned";
+                const isPending = item.purchaseStatus === "pending";
+                return (
+                  <Link key={evt.id} href={`/events/${evt.id}`} className="block">
+                    <div className={`rounded-lg border p-3.5 transition-colors ${
+                      isOwned
+                        ? isPending
+                          ? "border-amber-200 bg-gradient-to-r from-amber-50/40 to-white hover:border-amber-300"
+                          : "border-green-200 bg-gradient-to-r from-green-50/40 to-white hover:border-green-300"
+                        : "border-bpm-100 bg-gradient-to-r from-bpm-50/40 to-white hover:border-bpm-200"
+                    }`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm text-gray-900 truncate">{evt.title}</span>
+                            {evt.isFeatured && !isOwned && <Star className="h-3 w-3 text-amber-500 fill-amber-500 shrink-0" />}
+                            {isOwned && !isPending && (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                                <CheckCircle2 className="h-2.5 w-2.5" /> Purchased
+                              </span>
+                            )}
+                            {isOwned && isPending && (
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                                <AlertTriangle className="h-2.5 w-2.5" /> Payment pending
+                              </span>
+                            )}
+                          </div>
+                          {isOwned && item.purchaseProductName && (
+                            <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
+                              <Ticket className="h-3 w-3 text-gray-400" /> {item.purchaseProductName}
+                            </p>
+                          )}
+                          {!isOwned && evt.subtitle && <p className="text-xs text-gray-500 mt-0.5 truncate">{evt.subtitle}</p>}
+                          <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(evt.startDate + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" })}
+                              {evt.startDate !== evt.endDate && ` – ${new Date(evt.endDate + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" })}`}
+                            </span>
+                            {evt.location && <span className="truncate">{evt.location}</span>}
+                          </div>
+                        </div>
+                        <ArrowRight className="h-4 w-4 text-bpm-400 shrink-0 mt-1" />
                       </div>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-bpm-400 shrink-0 mt-1" />
-                  </div>
-                </div>
-              </Link>
-            ))}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Entitlements */}
       {entitlements.length > 0 && (

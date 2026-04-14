@@ -48,9 +48,11 @@ export function isEmailEnabled(): boolean {
 export async function sendEmail(payload: EmailPayload): Promise<boolean> {
   const config = getConfig();
   if (!config) {
-    console.info("[email] Skipped — BREVO_API_KEY not configured.");
+    console.warn(`[email-provider] BREVO_API_KEY not configured — cannot send to ${payload.to}.`);
     return false;
   }
+
+  console.info(`[email-provider] Sending to=${payload.to} subject="${payload.subject}" via Brevo...`);
 
   try {
     const res = await fetch(BREVO_ENDPOINT, {
@@ -70,16 +72,17 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.warn(
-        `[email] Brevo API ${res.status}: ${body.slice(0, 200)}`,
+      console.error(
+        `[email-provider] Brevo API rejected (${res.status}): ${body.slice(0, 300)}`,
       );
       return false;
     }
 
+    console.info(`[email-provider] Brevo accepted email to ${payload.to} (${res.status}).`);
     return true;
   } catch (e) {
-    console.warn(
-      "[email] Send failed:",
+    console.error(
+      `[email-provider] Network/fetch error sending to ${payload.to}:`,
       e instanceof Error ? e.message : e,
     );
     return false;

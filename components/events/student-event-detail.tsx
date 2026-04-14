@@ -10,6 +10,9 @@ import {
   Star,
   Ticket,
   Check,
+  QrCode,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EventHero } from "./event-hero";
@@ -62,11 +65,16 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
 
   const activePurchases = myPurchases.filter((p) => p.paymentStatus !== "refunded");
   const purchasedProductIds = new Set(activePurchases.map((p) => p.eventProductId));
+  const purchaseByProduct = new Map(activePurchases.map((p) => [p.eventProductId, p]));
 
   const hasFullPass = activePurchases.some((pur) => {
     const prod = products.find((p) => p.id === pur.eventProductId);
     return prod?.productType === "full_pass";
   });
+
+  const hasPaidPurchase = activePurchases.some((p) => p.paymentStatus === "paid");
+  const hasPendingPurchase = activePurchases.some((p) => p.paymentStatus === "pending");
+  const hasAnyPurchase = activePurchases.length > 0;
 
   const sessionsByDate = sessions.reduce<Record<string, MockEventSession[]>>((acc, s) => {
     (acc[s.date] ??= []).push(s);
@@ -116,6 +124,39 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
           </div>
         </div>
       </div>
+
+      {/* ── Purchase status banner ─────────────────────────── */}
+      {hasAnyPurchase && (
+        <div className={`rounded-xl border p-4 space-y-2 ${
+          hasPendingPurchase && !hasPaidPurchase
+            ? "border-amber-200 bg-amber-50"
+            : "border-green-200 bg-green-50"
+        }`}>
+          <div className="flex items-center gap-2">
+            {hasPaidPurchase ? (
+              <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+            ) : (
+              <Clock className="h-5 w-5 text-amber-600 shrink-0" />
+            )}
+            <p className={`text-sm font-semibold ${hasPaidPurchase ? "text-green-800" : "text-amber-800"}`}>
+              {hasPaidPurchase
+                ? "This event is in your account"
+                : "You have a reservation for this event"}
+            </p>
+          </div>
+          {hasPendingPurchase && (
+            <p className="text-sm text-amber-700 ml-7">
+              Payment pending — please complete payment at reception before or on the day of the event.
+            </p>
+          )}
+          <div className="flex items-center gap-2 ml-7">
+            <QrCode className="h-4 w-4 text-gray-500 shrink-0" />
+            <p className="text-sm text-gray-600">
+              Use your normal BPM student QR code when attending. No separate event QR is needed.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Schedule ────────────────────────────────────────── */}
       {sessions.length > 0 && (
@@ -171,6 +212,9 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
           <div className="grid gap-3 sm:grid-cols-2">
             {products.filter((p) => p.salesOpen || purchasedProductIds.has(p.id)).map((p) => {
               const purchased = purchasedProductIds.has(p.id);
+              const purchase = purchaseByProduct.get(p.id);
+              const isPaid = purchase?.paymentStatus === "paid";
+              const isPending = purchase?.paymentStatus === "pending";
               const blockedByFullPass = hasFullPass && !purchased;
               return (
                 <div key={p.id} className={`rounded-xl border p-5 flex flex-col ${blockedByFullPass ? "border-gray-100 bg-gray-50 opacity-60" : "border-gray-200 bg-white"}`}>
@@ -180,9 +224,13 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
                   </div>
                   {p.description && <p className="mt-1 text-sm text-gray-500">{p.description}</p>}
                   <div className="mt-auto pt-4">
-                    {purchased ? (
+                    {purchased && isPaid ? (
                       <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-sm font-medium text-green-700 w-full justify-center">
-                        <Check className="h-4 w-4" /> Purchased
+                        <Check className="h-4 w-4" /> Paid
+                      </span>
+                    ) : purchased && isPending ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm font-medium text-amber-700 w-full justify-center">
+                        <Clock className="h-4 w-4" /> Payment pending at reception
                       </span>
                     ) : blockedByFullPass ? (
                       <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 border border-gray-200 px-3 py-2 text-sm font-medium text-gray-500 w-full justify-center">

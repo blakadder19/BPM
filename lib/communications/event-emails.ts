@@ -75,13 +75,23 @@ export interface EventPurchaseEmailData {
 }
 
 export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Promise<void> {
-  if (!isEmailEnabled()) return;
+  const tag = `[event-email ${data.eventTitle}]`;
+
+  if (!isEmailEnabled()) {
+    console.warn(`${tag} BREVO_API_KEY not configured — email NOT sent to ${data.directEmail ?? data.studentId ?? "unknown"}.`);
+    return;
+  }
 
   let email: string | null = data.directEmail ?? null;
   if (!email && data.studentId) {
     email = await resolveStudentEmail(data.studentId);
   }
-  if (!email) return;
+  if (!email) {
+    console.warn(`${tag} Could not resolve recipient email — email NOT sent.`);
+    return;
+  }
+
+  console.info(`${tag} Preparing email to ${email} (paymentStatus=${data.paymentStatus}, hasQr=${!!data.qrToken})`);
 
   const isGuest = !data.studentId;
 
@@ -119,8 +129,11 @@ export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Prom
     </p>`;
 
   const html = wrap(data.studentName, heading, bodyHtml);
+  console.info(`${tag} Calling Brevo API to send to ${email}...`);
   const ok = await sendEmail({ to: email, subject, html });
   if (ok) {
-    console.info(`[event-email] Sent ${data.paymentStatus} purchase email to ${email} for ${data.eventTitle}`);
+    console.info(`${tag} SUCCESS — ${data.paymentStatus} purchase email delivered to ${email}.`);
+  } else {
+    console.error(`${tag} FAILED — Brevo API did not accept email to ${email}. Check email-provider logs above.`);
   }
 }

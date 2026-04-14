@@ -62,25 +62,32 @@ export async function POST(request: Request) {
 
   // ── Handle events ──────────────────────────────────────────
 
+  console.info(`[stripe-webhook] Received event type=${event.type} id=${event.id}`);
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
+    const metadata = (session.metadata ?? {}) as Record<string, string>;
+
+    console.info(
+      `[stripe-webhook] checkout.session.completed session=${session.id} payment_status=${session.payment_status} purchase_type=${metadata.bpm_purchase_type ?? "standard"}`,
+    );
 
     if (session.payment_status !== "paid") {
       console.info(
-        `[stripe-webhook] Session ${session.id} completed but payment_status=${session.payment_status} — skipping.`,
+        `[stripe-webhook] Session ${session.id} not yet paid (status=${session.payment_status}) — skipping fulfillment.`,
       );
       return NextResponse.json({ received: true });
     }
 
-    const metadata = (session.metadata ?? {}) as Record<string, string>;
-
     // Guest event purchase — no student ID, uses guest fields
     if (metadata.bpm_purchase_type === "event_guest") {
+      console.info(`[stripe-webhook] Routing to guest event fulfillment. event=${metadata.bpm_event_id} product=${metadata.bpm_event_product_id} guest=${metadata.bpm_guest_email}`);
       const result = await fulfillGuestEventPurchase(session.id, metadata);
       if (!result.success) {
-        console.error(`[stripe-webhook] Guest fulfillment failed for session ${session.id}:`, result.error);
+        console.error(`[stripe-webhook] Guest fulfillment FAILED for session ${session.id}:`, result.error);
         return NextResponse.json({ error: "Fulfillment failed" }, { status: 500 });
       }
+      console.info(`[stripe-webhook] Guest fulfillment SUCCEEDED for session ${session.id}`);
       return NextResponse.json({ received: true });
     }
 
