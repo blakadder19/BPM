@@ -4,6 +4,7 @@ import { Fragment, useState, useTransition, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChevronDown, ChevronUp, Pencil, Plus, Users, Power, Trash2, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -190,6 +191,7 @@ export function AdminStudents({
           description="Student directory — click a row to expand details, or use the edit button."
         />
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <AdminHelpButton pageKey="students" />
           <Button
             variant="outline"
             size="sm"

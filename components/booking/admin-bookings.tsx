@@ -4,6 +4,7 @@ import { useState, useMemo, useTransition, useCallback } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Plus, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -231,10 +232,13 @@ export function AdminBookings({
         title="Bookings"
         description="Manage student bookings, waitlist, and cancellations. Walk-in attendance is tracked separately in Attendance."
         actions={
-          <Button size="sm" onClick={() => setShowAdd(true)}>
-            <Plus className="h-4 w-4 mr-1" />
-            New Booking
-          </Button>
+          <>
+            <AdminHelpButton pageKey="bookings" />
+            <Button size="sm" onClick={() => setShowAdd(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              New Booking
+            </Button>
+          </>
         }
       />
 

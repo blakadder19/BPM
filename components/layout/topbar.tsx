@@ -225,7 +225,8 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
                             {alert.title}
                           </p>
                           <button
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setDismissed((prev) => {
                                 const next = new Set(prev);
                                 next.add(alert.id);
@@ -233,8 +234,9 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
                               });
                               if (isStudent) dismissStudentNoticeAction(alert.id);
                             }}
-                            className="shrink-0 rounded p-0.5 text-gray-300 opacity-0 transition-opacity hover:text-gray-500 group-hover:opacity-100"
+                            className="shrink-0 rounded p-1 text-gray-300 transition-colors hover:bg-gray-100 hover:text-gray-500"
                             title="Dismiss"
+                            aria-label="Dismiss notification"
                           >
                             <X className="h-3.5 w-3.5" />
                           </button>

@@ -26,6 +26,7 @@ import {
   ChevronRight,
   History,
   HelpCircle,
+  Sparkles,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -56,6 +57,7 @@ import { TermBanner } from "@/components/ui/term-banner";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
 import type { DanceRole, ProductType } from "@/types/domain";
+import type { MockSpecialEvent } from "@/lib/mock-data";
 
 export interface StudentBookingSummary {
   id: string;
@@ -129,6 +131,7 @@ interface StudentDashboardProps {
   qrToken?: string | null;
   todayForYou?: TodayForYouItem[];
   studentPreferredRole?: DanceRole | null;
+  featuredEvents?: MockSpecialEvent[];
 }
 
 export function StudentDashboard({
@@ -145,6 +148,7 @@ export function StudentDashboard({
   qrToken,
   todayForYou = [],
   studentPreferredRole,
+  featuredEvents = [],
 }: StudentDashboardProps) {
   const firstName = fullName.split(" ")[0];
   const router = useRouter();
@@ -448,6 +452,42 @@ export function StudentDashboard({
           defaultDanceRole={studentPreferredRole}
           onClose={() => setBookTarget(null)}
         />
+      )}
+
+      {/* Special Events */}
+      {featuredEvents.length > 0 && (
+        <div className="space-y-1.5">
+          <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-gray-400 px-1">
+            <Sparkles className="h-3.5 w-3.5 text-bpm-500" />
+            Special Events
+          </h2>
+          <div className="space-y-2">
+            {featuredEvents.map((evt) => (
+              <Link key={evt.id} href={`/events/${evt.id}`} className="block">
+                <div className="rounded-lg border border-bpm-100 bg-gradient-to-r from-bpm-50/40 to-white p-3.5 hover:border-bpm-200 transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-sm text-gray-900 truncate">{evt.title}</span>
+                        {evt.isFeatured && <Star className="h-3 w-3 text-amber-500 fill-amber-500 shrink-0" />}
+                      </div>
+                      {evt.subtitle && <p className="text-xs text-gray-500 mt-0.5 truncate">{evt.subtitle}</p>}
+                      <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {new Date(evt.startDate + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" })}
+                          {evt.startDate !== evt.endDate && ` – ${new Date(evt.endDate + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" })}`}
+                        </span>
+                        {evt.location && <span className="truncate">{evt.location}</span>}
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-bpm-400 shrink-0 mt-1" />
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Entitlements */}

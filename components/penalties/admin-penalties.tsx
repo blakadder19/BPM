@@ -15,6 +15,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -121,6 +122,7 @@ export function AdminPenalties({ penalties, students, classes, penaltyFees, isDe
           description={`Late cancel ${formatCents(penaltyFees.lateCancelCents)} · No-show ${formatCents(penaltyFees.noShowCents)}. Classes only — socials excluded.`}
         />
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <AdminHelpButton pageKey="penalties" />
           {isDev && (
             <>
               <Button

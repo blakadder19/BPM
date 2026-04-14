@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Plus, CalendarRange, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -34,10 +35,13 @@ export function AdminTerms({ terms, today }: AdminTermsProps) {
           title="Terms"
           description="Academy terms define the commercial cycle for memberships and passes."
         />
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Term
-        </Button>
+        <div className="flex items-center gap-2">
+          <AdminHelpButton pageKey="terms" />
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Term
+          </Button>
+        </div>
       </div>
 
       {terms.length === 0 ? (

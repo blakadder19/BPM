@@ -31,3 +31,16 @@ export function generateStudentQrToken(): string {
 export function isValidStudentQrToken(token: string): boolean {
   return typeof token === "string" && /^bpm-[a-f0-9]{32}$/.test(token);
 }
+
+export function generateGuestPurchaseQrToken(): string {
+  const hex = [
+    Date.now().toString(16),
+    Math.random().toString(16).slice(2, 10),
+    Math.random().toString(16).slice(2, 10),
+  ].join("").slice(0, 32).padEnd(32, "0");
+  return `evt-${hex}`;
+}
+
+export function isValidGuestPurchaseQrToken(token: string): boolean {
+  return typeof token === "string" && /^evt-[a-f0-9]{32}$/.test(token);
+}

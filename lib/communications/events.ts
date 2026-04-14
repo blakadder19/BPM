@@ -18,6 +18,7 @@ export const COMM_EVENT_TYPES = [
   "waitlist_promoted",
   "booking_reminder",
   "birthday_benefit_available",
+  "event_announcement",
 ] as const;
 
 export type CommEventType = (typeof COMM_EVENT_TYPES)[number];
@@ -74,6 +75,14 @@ export interface BirthdayBenefitAvailablePayload {
   expiresDate: string;
 }
 
+export interface EventAnnouncementPayload {
+  eventTitle: string;
+  eventId: string;
+  shortDescription: string;
+  dates: string;
+  location: string;
+}
+
 // ── Discriminated union for all payloads ─────────────────────
 
 export type CommEventPayloadMap = {
@@ -84,6 +93,7 @@ export type CommEventPayloadMap = {
   waitlist_promoted: WaitlistPromotedPayload;
   booking_reminder: BookingReminderPayload;
   birthday_benefit_available: BirthdayBenefitAvailablePayload;
+  event_announcement: EventAnnouncementPayload;
 };
 
 // ── The full communication event ─────────────────────────────

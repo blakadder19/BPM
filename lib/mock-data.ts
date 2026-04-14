@@ -11,6 +11,12 @@ import type {
   ClassType,
   CreditsModel,
   DanceRole,
+  EventInclusionRule,
+  EventPaymentMethod,
+  EventPaymentStatus,
+  EventProductType,
+  EventSessionType,
+  EventStatus,
   InstanceStatus,
   PaymentMethod,
   PenaltyReason,
@@ -525,3 +531,118 @@ export interface MockWalletTx {
 }
 
 export const WALLET_TRANSACTIONS: MockWalletTx[] = [];
+
+// ── Special Events ───────────────────────────────────────────
+
+export interface MockSpecialEvent {
+  id: string;
+  title: string;
+  subtitle: string | null;
+  description: string;
+  coverImageUrl: string | null;
+  location: string;
+  startDate: string;
+  endDate: string;
+  status: EventStatus;
+  isVisible: boolean;
+  isFeatured: boolean;
+  featuredOnDashboard: boolean;
+  isPublic: boolean;
+  salesOpen: boolean;
+  overallCapacity: number | null;
+  allowReceptionPayment: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MockEventSession {
+  id: string;
+  eventId: string;
+  title: string;
+  sessionType: EventSessionType;
+  date: string;
+  startTime: string;
+  endTime: string;
+  teacherName: string | null;
+  room: string | null;
+  capacity: number | null;
+  description: string | null;
+  sortOrder: number;
+}
+
+export interface MockEventProduct {
+  id: string;
+  eventId: string;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  productType: EventProductType;
+  isVisible: boolean;
+  salesOpen: boolean;
+  inclusionRule: EventInclusionRule;
+  includedSessionIds: string[] | null;
+  sortOrder: number;
+}
+
+export interface MockEventPurchase {
+  id: string;
+  studentId: string | null;
+  eventProductId: string;
+  eventId: string;
+  guestName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  /** Unique QR token for guest purchase check-in; generated only after payment confirmation */
+  qrToken: string | null;
+  paymentMethod: EventPaymentMethod;
+  paymentStatus: EventPaymentStatus;
+  paymentReference: string | null;
+  receptionMethod: string | null;
+  purchasedAt: string;
+  paidAt: string | null;
+  notes: string | null;
+}
+
+export const SPECIAL_EVENTS: MockSpecialEvent[] = [
+  {
+    id: "evt-1",
+    title: "BPM Guest Artist Weekend",
+    subtitle: "with Daniel & Desiree",
+    description: "A weekend of intensive workshops and socials with internationally renowned Bachata artists Daniel & Desiree. Two days of workshops covering musicality, body movement, and partner connection, plus a Saturday night social.",
+    coverImageUrl: null,
+    location: "BPM Dance Academy, Dublin",
+    startDate: "2026-05-16",
+    endDate: "2026-05-17",
+    status: "published",
+    isVisible: true,
+    isFeatured: true,
+    featuredOnDashboard: true,
+    isPublic: true,
+    salesOpen: true,
+    overallCapacity: 100,
+    allowReceptionPayment: true,
+    createdAt: "2026-04-01T10:00:00",
+    updatedAt: "2026-04-01T10:00:00",
+  },
+];
+
+export const EVENT_SESSIONS: MockEventSession[] = [
+  { id: "es-1", eventId: "evt-1", title: "Musicality & Timing", sessionType: "workshop", date: "2026-05-16", startTime: "14:00", endTime: "15:30", teacherName: "Daniel & Desiree", room: "Studio A", capacity: 40, description: "Deep dive into musical interpretation and timing for Bachata.", sortOrder: 1 },
+  { id: "es-2", eventId: "evt-1", title: "Body Movement Foundations", sessionType: "workshop", date: "2026-05-16", startTime: "16:00", endTime: "17:30", teacherName: "Daniel & Desiree", room: "Studio A", capacity: 40, description: "Isolations, waves, and body movement technique.", sortOrder: 2 },
+  { id: "es-3", eventId: "evt-1", title: "Saturday Night Social", sessionType: "social", date: "2026-05-16", startTime: "21:00", endTime: "02:00", teacherName: null, room: "Main Hall", capacity: 120, description: "Social dancing with DJ sets and a guest performance.", sortOrder: 3 },
+  { id: "es-4", eventId: "evt-1", title: "Partner Connection & Flow", sessionType: "workshop", date: "2026-05-17", startTime: "12:00", endTime: "13:30", teacherName: "Daniel & Desiree", room: "Studio A", capacity: 40, description: "Lead/follow dynamics and creating flow in your dance.", sortOrder: 4 },
+  { id: "es-5", eventId: "evt-1", title: "Advanced Combinations", sessionType: "masterclass", date: "2026-05-17", startTime: "14:00", endTime: "15:30", teacherName: "Daniel & Desiree", room: "Studio A", capacity: 30, description: "Complex turn patterns and advanced combos. Intermediate+ level.", sortOrder: 5 },
+];
+
+export const EVENT_PRODUCTS: MockEventProduct[] = [
+  { id: "ep-1", eventId: "evt-1", name: "Full Weekend Pass", description: "Access to all workshops, masterclass, and Saturday social.", priceCents: 12000, productType: "full_pass", isVisible: true, salesOpen: true, inclusionRule: "all_sessions", includedSessionIds: null, sortOrder: 1 },
+  { id: "ep-2", eventId: "evt-1", name: "Saturday Pass", description: "Both Saturday workshops + Saturday social.", priceCents: 7500, productType: "combo_pass", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: ["es-1", "es-2", "es-3"], sortOrder: 2 },
+  { id: "ep-3", eventId: "evt-1", name: "Sunday Pass", description: "Both Sunday sessions.", priceCents: 5000, productType: "combo_pass", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: ["es-4", "es-5"], sortOrder: 3 },
+  { id: "ep-4", eventId: "evt-1", name: "Single Workshop", description: "Access to one workshop of your choice.", priceCents: 3000, productType: "single_session", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: null, sortOrder: 4 },
+  { id: "ep-5", eventId: "evt-1", name: "Social Ticket", description: "Saturday night social only.", priceCents: 1500, productType: "social_ticket", isVisible: true, salesOpen: true, inclusionRule: "socials_only", includedSessionIds: null, sortOrder: 5 },
+];
+
+export const EVENT_PURCHASES: MockEventPurchase[] = [
+  { id: "epur-1", studentId: "s-01", eventProductId: "ep-1", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "stripe", paymentStatus: "paid", paymentReference: "stripe:cs_evt_001", receptionMethod: null, purchasedAt: "2026-04-05T14:00:00", paidAt: "2026-04-05T14:00:00", notes: null },
+  { id: "epur-2", studentId: "s-03", eventProductId: "ep-2", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "manual", paymentStatus: "pending", paymentReference: null, receptionMethod: null, purchasedAt: "2026-04-06T10:00:00", paidAt: null, notes: "Will pay at reception" },
+];

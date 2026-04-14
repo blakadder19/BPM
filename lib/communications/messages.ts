@@ -20,6 +20,7 @@ import type {
   WaitlistPromotedPayload,
   BookingReminderPayload,
   BirthdayBenefitAvailablePayload,
+  EventAnnouncementPayload,
 } from "./events";
 
 export interface CommMessage {
@@ -90,6 +91,14 @@ const buildBirthdayBenefitAvailable: MessageBuilder<"birthday_benefit_available"
   href: "/classes",
 });
 
+const buildEventAnnouncement: MessageBuilder<"event_announcement"> = (
+  p: EventAnnouncementPayload
+) => ({
+  title: `Special Event: ${p.eventTitle}`,
+  body: `${p.shortDescription}${p.dates ? ` — ${p.dates}` : ""}${p.location ? ` at ${p.location}` : ""}`,
+  href: `/events/${p.eventId}`,
+});
+
 // ── Registry ─────────────────────────────────────────────────
 
 const BUILDERS: {
@@ -102,6 +111,7 @@ const BUILDERS: {
   waitlist_promoted: buildWaitlistPromoted,
   booking_reminder: buildBookingReminder,
   birthday_benefit_available: buildBirthdayBenefitAvailable,
+  event_announcement: buildEventAnnouncement,
 };
 
 /**

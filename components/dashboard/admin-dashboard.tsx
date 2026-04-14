@@ -13,9 +13,12 @@ import {
   Package,
   ArrowRight,
   MapPin,
+  Ticket,
+  Sparkles,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatShortDate, formatCents, cn } from "@/lib/utils";
@@ -47,6 +50,25 @@ export interface DashboardDemandItem extends DashboardClassSummary {
   fillRate: number;
 }
 
+export interface PendingEventPayment {
+  studentId: string | null;
+  studentName: string;
+  eventTitle: string;
+  productName: string;
+  eventId: string;
+}
+
+export interface DashboardEventSummary {
+  id: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  totalSold: number;
+  totalPaid: number;
+  totalPending: number;
+  overallCapacity: number | null;
+}
+
 export interface AdminDashboardData {
   todayStr: string;
   todaysClassCount: number;
@@ -65,6 +87,8 @@ export interface AdminDashboardData {
   studentsWithSub: number;
   totalStudents: number;
   totalProducts: number;
+  pendingEventPayments: PendingEventPayment[];
+  upcomingEvents: DashboardEventSummary[];
 }
 
 // ── Page ────────────────────────────────────────────────────
@@ -77,6 +101,7 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
       <PageHeader
         title="Dashboard"
         description={`Overview as of ${formatDate(d.todayStr)}`}
+        actions={<AdminHelpButton pageKey="dashboard" />}
       />
 
       {/* KPI cards */}
@@ -116,6 +141,47 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
           urgent={d.unresolvedPenaltyCount > 0}
         />
       </div>
+
+      {/* Special Events overview */}
+      {d.upcomingEvents.length > 0 && (
+        <SpecialEventsCard events={d.upcomingEvents} />
+      )}
+
+      {/* Pending event payments */}
+      {d.pendingEventPayments.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Ticket className="h-4 w-4 text-amber-600" />
+              Pending Event Payments
+              <Badge variant="warning">{d.pendingEventPayments.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {d.pendingEventPayments.slice(0, 5).map((p, i) => (
+                <Link
+                  key={i}
+                  href={`/events/${p.eventId}`}
+                  className="flex items-center justify-between rounded-md border border-amber-100 bg-white px-3 py-2 text-sm hover:bg-amber-50 transition-colors"
+                >
+                  <div>
+                    <span className="font-medium text-gray-900">{p.studentName}</span>
+                    <span className="text-gray-400 mx-1.5">·</span>
+                    <span className="text-gray-600">{p.productName}</span>
+                  </div>
+                  <span className="text-xs text-gray-500 shrink-0">{p.eventTitle}</span>
+                </Link>
+              ))}
+              {d.pendingEventPayments.length > 5 && (
+                <p className="text-xs text-gray-500 text-center pt-1">
+                  +{d.pendingEventPayments.length - 5} more pending
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Row 2: Upcoming classes + Highest demand */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -548,6 +614,74 @@ function BookingsByWeekdayCard({
             </p>
           </div>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ── Subscriptions overview ──────────────────────────────────
+
+function SpecialEventsCard({ events }: { events: DashboardEventSummary[] }) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-bpm-500" />
+          Special Events
+        </CardTitle>
+        <Link
+          href="/events"
+          className="text-sm font-medium text-bpm-600 hover:text-bpm-700 flex items-center gap-1"
+        >
+          View all <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="divide-y divide-gray-100">
+          {events.map((evt) => {
+            const remaining = evt.overallCapacity != null ? evt.overallCapacity - evt.totalSold : null;
+            const pct = evt.overallCapacity != null && evt.overallCapacity > 0 ? Math.round((evt.totalSold / evt.overallCapacity) * 100) : null;
+            return (
+              <Link
+                key={evt.id}
+                href={`/events/${evt.id}`}
+                className="flex flex-col gap-2 px-6 py-3 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{evt.title}</p>
+                    <p className="text-xs text-gray-500">
+                      {formatShortDate(evt.startDate)}
+                      {evt.startDate !== evt.endDate && <> – {formatShortDate(evt.endDate)}</>}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="default" className="text-xs">{evt.totalSold} sold</Badge>
+                    {evt.totalPaid > 0 && <Badge variant="success" className="text-xs">{evt.totalPaid} paid</Badge>}
+                    {evt.totalPending > 0 && <Badge variant="warning" className="text-xs">{evt.totalPending} pending</Badge>}
+                  </div>
+                </div>
+                {pct !== null && (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          pct >= 90 ? "bg-red-400" : pct >= 60 ? "bg-amber-400" : "bg-emerald-400",
+                        )}
+                        style={{ width: `${Math.min(pct, 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500 tabular-nums shrink-0">
+                      {evt.totalSold}/{evt.overallCapacity}
+                      {remaining !== null && remaining > 0 && <> ({remaining} left)</>}
+                    </span>
+                  </div>
+                )}
+              </Link>
+            );
+          })}
+        </div>
       </CardContent>
     </Card>
   );

@@ -6,6 +6,7 @@
  */
 
 import { formatTime } from "@/lib/utils";
+import { getAppUrl } from "@/lib/utils/app-url";
 import type {
   CommEventType,
   CommEventPayloadMap,
@@ -16,6 +17,7 @@ import type {
   WaitlistPromotedPayload,
   BookingReminderPayload,
   BirthdayBenefitAvailablePayload,
+  EventAnnouncementPayload,
 } from "./events";
 
 export interface EmailContent {
@@ -233,6 +235,31 @@ function birthdayBenefitAvailable(
   };
 }
 
+function eventAnnouncement(
+  studentName: string,
+  p: EventAnnouncementPayload
+): EmailContent {
+  const eventUrl = `${getAppUrl()}/event/${p.eventId}`;
+
+  return {
+    subject: `Special Event: ${p.eventTitle}`,
+    html: wrap(
+      studentName,
+      p.eventTitle,
+      `<p style="margin:0 0 16px;color:#52525b;font-size:14px;">
+        ${p.shortDescription}
+      </p>
+      <table style="width:100%;" cellpadding="0" cellspacing="0">
+        ${p.dates ? infoRow("When", p.dates) : ""}
+        ${p.location ? infoRow("Where", p.location) : ""}
+      </table>
+      <p style="margin:16px 0 0;">
+        <a href="${eventUrl}" style="display:inline-block;padding:10px 20px;background:#18181b;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:500;">View event & tickets</a>
+      </p>`
+    ),
+  };
+}
+
 // ── Registry ─────────────────────────────────────────────────
 
 type TemplateBuilder<T extends CommEventType> = (
@@ -250,6 +277,7 @@ const TEMPLATES: {
   waitlist_promoted: waitlistPromoted,
   booking_reminder: bookingReminder,
   birthday_benefit_available: birthdayBenefitAvailable,
+  event_announcement: eventAnnouncement,
 };
 
 /**

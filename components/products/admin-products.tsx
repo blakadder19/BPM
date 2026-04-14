@@ -4,6 +4,7 @@ import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, Pencil, Plus, Package, Power, Trash2, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -106,10 +107,13 @@ export function AdminProducts({
           title="Products"
           description="Memberships, passes, and drop-ins. Click a row to see details."
         />
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Product
-        </Button>
+        <div className="flex items-center gap-2">
+          <AdminHelpButton pageKey="products" />
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Product
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">

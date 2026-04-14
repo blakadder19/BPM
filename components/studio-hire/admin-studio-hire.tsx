@@ -19,6 +19,7 @@ import {
   Moon,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -130,6 +131,7 @@ export function AdminStudioHire({
         description="Manage studio hire enquiries and bookings"
         actions={
           <div className="flex items-center gap-2">
+            <AdminHelpButton pageKey="studio-hire" />
             <div className="flex rounded-lg border border-gray-200 bg-white p-0.5">
               <button
                 onClick={() => setViewMode("table")}

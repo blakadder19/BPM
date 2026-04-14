@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { CalendarPlus, LogIn, ArrowRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getAppUrl } from "@/lib/utils/app-url";
 
 export const metadata: Metadata = {
   title: "BPM — Book Your Classes",
   description: "Balance Power Motion dance academy booking system",
 };
 
-const APP_ORIGIN =
-  process.env.NEXT_PUBLIC_APP_URL ?? "https://book.balancepowermotion.com";
+const APP_ORIGIN = getAppUrl();
 
 export default function EmbedEntryPage() {
   return (

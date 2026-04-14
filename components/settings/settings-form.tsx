@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Save, CheckCircle, AlertTriangle, Database, Wifi, WifiOff, Info, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -107,6 +108,7 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
       <PageHeader
         title="Settings"
         description="Academy configuration and business rules."
+        actions={<AdminHelpButton pageKey="settings" />}
       />
 
       <form onSubmit={handleSubmit}>

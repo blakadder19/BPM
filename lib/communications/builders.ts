@@ -181,6 +181,34 @@ export function bookingReminderEvent(input: {
   };
 }
 
+// ── event_announcement ───────────────────────────────────────
+
+export function eventAnnouncementEvent(input: {
+  studentId: string;
+  studentName: string;
+  eventTitle: string;
+  eventId: string;
+  shortDescription: string;
+  dates: string;
+  location: string;
+}): CommEvent<"event_announcement"> {
+  return {
+    id: generateId("ean"),
+    studentId: input.studentId,
+    studentName: input.studentName,
+    type: "event_announcement",
+    payload: {
+      eventTitle: input.eventTitle,
+      eventId: input.eventId,
+      shortDescription: input.shortDescription,
+      dates: input.dates,
+      location: input.location,
+    },
+    createdAt: new Date().toISOString(),
+    idempotencyKey: `event_announcement:${input.studentId}:${input.eventId}`,
+  };
+}
+
 // ── birthday_benefit_available ────────────────────────────────
 
 export function birthdayBenefitAvailableEvent(input: {

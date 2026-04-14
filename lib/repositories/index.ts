@@ -19,6 +19,7 @@ import type { IPenaltyRepository } from "./interfaces/penalty-repository";
 import type { ICreditRepository } from "./interfaces/credit-repository";
 import type { IStudioHireRepository } from "./interfaces/studio-hire-repository";
 import type { IDanceStyleRepository } from "./interfaces/dance-style-repository";
+import type { ISpecialEventRepository } from "./interfaces/special-event-repository";
 
 import { memorySettingsRepo } from "./memory/settings-repository";
 import { memoryBookingRepo } from "./memory/booking-repository";
@@ -127,4 +128,12 @@ export function getDanceStyleRepo(): IDanceStyleRepository {
   }
   const { memoryDanceStyleRepo } = require("./memory/dance-style-repository");
   return memoryDanceStyleRepo;
+}
+
+export function getSpecialEventRepo(): ISpecialEventRepository {
+  const { memorySpecialEventRepo } = require("./memory/special-event-repository");
+  return resolveRepo(memorySpecialEventRepo, () => {
+    const { supabaseSpecialEventRepo } = require("./supabase/special-event-repository");
+    return supabaseSpecialEventRepo;
+  });
 }

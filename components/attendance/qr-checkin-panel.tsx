@@ -24,6 +24,7 @@ import { QrScanner } from "./qr-scanner";
 import { formatTime, formatDate } from "@/lib/utils";
 import {
   lookupStudentByQrAction,
+  lookupGuestPurchaseByQrAction,
   qrCheckInBookingAction,
   qrWalkInCheckInAction,
   qrMarkPaidAndCheckInAction,
@@ -34,8 +35,9 @@ import {
   type QrStudentBooking,
   type QrEntitlementDetail,
   type QrTodayClass,
+  type GuestPurchaseQrResult,
 } from "@/lib/actions/qr-checkin";
-import { isValidStudentQrToken } from "@/lib/domain/checkin-token";
+import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 
 type InputMode = "camera" | "manual";
 
@@ -80,6 +82,7 @@ export function QrCheckInPanel() {
   const [manualToken, setManualToken] = useState("");
   const [isLooking, startLookup] = useTransition();
   const [lookupResult, setLookupResult] = useState<QrLookupResult | null>(null);
+  const [guestResult, setGuestResult] = useState<GuestPurchaseQrResult | null>(null);
   const [checkInResults, setCheckInResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [isCheckingIn, startCheckIn] = useTransition();
   const [paymentConfirm, setPaymentConfirm] = useState<PaymentConfirmation | null>(null);
@@ -90,12 +93,25 @@ export function QrCheckInPanel() {
 
   const doLookup = useCallback(
     (token: string) => {
+      if (isValidGuestPurchaseQrToken(token)) {
+        setScannerPaused(true);
+        lastTokenRef.current = token;
+        setLookupResult(null);
+        startLookup(async () => {
+          const res = await lookupGuestPurchaseByQrAction(token);
+          setGuestResult(res);
+          setCheckInResults(new Map());
+        });
+        return;
+      }
       if (!isValidStudentQrToken(token)) {
-        setLookupResult({ success: false, error: "Not a valid student QR code. Please try scanning again." });
+        setLookupResult({ success: false, error: "Not a valid QR code. Please try scanning again." });
+        setGuestResult(null);
         return;
       }
       setScannerPaused(true);
       lastTokenRef.current = token;
+      setGuestResult(null);
       startLookup(async () => {
         const res = await lookupStudentByQrAction(token);
         setLookupResult(res);
@@ -108,8 +124,13 @@ export function QrCheckInPanel() {
   const refreshStudent = useCallback(async () => {
     const token = lastTokenRef.current;
     if (!token) return;
-    const res = await lookupStudentByQrAction(token);
-    setLookupResult(res);
+    if (isValidGuestPurchaseQrToken(token)) {
+      const res = await lookupGuestPurchaseByQrAction(token);
+      setGuestResult(res);
+    } else {
+      const res = await lookupStudentByQrAction(token);
+      setLookupResult(res);
+    }
   }, []);
 
   function handleScan(code: string) {
@@ -270,6 +291,7 @@ export function QrCheckInPanel() {
 
   function resetScan() {
     setLookupResult(null);
+    setGuestResult(null);
     setCheckInResults(new Map());
     setManualToken("");
     setPaymentConfirm(null);
@@ -312,8 +334,8 @@ export function QrCheckInPanel() {
       {mode === "camera" ? (
         <div className="space-y-3">
           <div className="relative">
-            <QrScanner onScan={handleScan} active={mode === "camera" && !lookupResult && !scannerPaused} />
-            {scannerPaused && !lookupResult && (
+            <QrScanner onScan={handleScan} active={mode === "camera" && !lookupResult && !guestResult && !scannerPaused} />
+            {scannerPaused && !lookupResult && !guestResult && (
               <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/50">
                 <div className="flex items-center gap-2 rounded-full bg-white/90 px-4 py-2">
                   <CheckCircle2 className="h-5 w-5 text-green-600" />
@@ -334,7 +356,7 @@ export function QrCheckInPanel() {
             type="text"
             value={manualToken}
             onChange={(e) => setManualToken(e.target.value)}
-            placeholder="Enter student QR token (bpm-…)"
+            placeholder="Enter QR token (bpm-… or evt-…)"
             className="w-full rounded-lg border border-gray-300 px-3 py-3 text-sm font-mono placeholder:text-gray-400 focus:border-bpm-500 focus:ring-1 focus:ring-bpm-500"
             autoFocus
           />
@@ -347,11 +369,98 @@ export function QrCheckInPanel() {
       {/* Loading state */}
       {isLooking && (
         <div className="rounded-xl border border-bpm-100 bg-bpm-50 p-4 text-center">
-          <p className="text-sm text-bpm-700 animate-pulse">Looking up student…</p>
+          <p className="text-sm text-bpm-700 animate-pulse">Looking up…</p>
         </div>
       )}
 
-      {/* Lookup result */}
+      {/* Guest purchase QR result */}
+      {guestResult && !isLooking && (
+        <div className="space-y-3">
+          {!guestResult.success ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-500 shrink-0" />
+                <p className="text-sm font-medium text-red-800">{guestResult.error}</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={resetScan} className="w-full">
+                Scan Again
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+              <div className="px-4 py-3 bg-amber-50 border-b border-amber-100">
+                <div className="flex items-center gap-2">
+                  <QrCode className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-amber-800">Guest Event Purchase</span>
+                </div>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-amber-100">
+                    <User className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-lg font-semibold text-gray-900">{guestResult.purchase!.guestName}</p>
+                    <p className="text-sm text-gray-500 truncate">{guestResult.purchase!.guestEmail}</p>
+                  </div>
+                  <StatusBadge status={guestResult.purchase!.paymentStatus} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-gray-500">Event</p>
+                    <p className="font-medium text-gray-900">{guestResult.purchase!.eventTitle}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Product</p>
+                    <p className="font-medium text-gray-900">{guestResult.purchase!.productName}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Payment</p>
+                    <p className="font-medium text-gray-900">{guestResult.purchase!.paymentMethod === "stripe" ? "Card (Stripe)" : "Pay at reception"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500">Purchased</p>
+                    <p className="font-medium text-gray-900">{new Date(guestResult.purchase!.purchasedAt).toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric" })}</p>
+                  </div>
+                  {guestResult.purchase!.guestPhone && (
+                    <div>
+                      <p className="text-gray-500">Phone</p>
+                      <p className="font-medium text-gray-900">{guestResult.purchase!.guestPhone}</p>
+                    </div>
+                  )}
+                  {guestResult.purchase!.inclusionSummary && (
+                    <div className="col-span-2">
+                      <p className="text-gray-500">Includes</p>
+                      <p className="font-medium text-gray-900">{guestResult.purchase!.inclusionSummary}</p>
+                    </div>
+                  )}
+                </div>
+
+                {guestResult.purchase!.paymentStatus === "paid" && (
+                  <div className="rounded-lg bg-green-50 border border-green-100 p-3 flex items-center gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                    <p className="text-sm text-green-800 font-medium">Payment confirmed — guest is cleared for entry.</p>
+                  </div>
+                )}
+                {guestResult.purchase!.paymentStatus === "pending" && (
+                  <div className="rounded-lg bg-amber-50 border border-amber-100 p-3 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+                    <p className="text-sm text-amber-800 font-medium">Payment pending — collect payment before granting entry.</p>
+                  </div>
+                )}
+              </div>
+              <div className="px-4 py-3 border-t border-gray-100">
+                <Button size="sm" variant="outline" onClick={resetScan} className="w-full">
+                  Scan Another
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Student lookup result */}
       {lookupResult && !isLooking && (
         <div className="space-y-3">
           {!lookupResult.success ? (

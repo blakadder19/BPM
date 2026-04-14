@@ -4,8 +4,9 @@ import {
   getBookingRepo,
   getPenaltyRepo,
   getAttendanceRepo,
+  getSpecialEventRepo,
 } from "@/lib/repositories";
-import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentById, cachedGetStudentSubs, cachedGetAllSubs, cachedGetAllStudents } from "@/lib/server/cached-queries";
+import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentById, cachedGetStudentSubs, cachedGetAllSubs, cachedGetAllStudents, cachedGetAllEvents } from "@/lib/server/cached-queries";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
 import { getTodayStr, isClassEnded, isClassStarted, effectiveInstanceStatus } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
@@ -22,7 +23,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { isStripeEnabled } from "@/lib/stripe";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
-import { AdminDashboard, type AdminDashboardData, type DashboardClassSummary, type DashboardDemandItem } from "@/components/dashboard/admin-dashboard";
+import { AdminDashboard, type AdminDashboardData, type DashboardClassSummary, type DashboardDemandItem, type DashboardEventSummary } from "@/components/dashboard/admin-dashboard";
 import { getInstances } from "@/lib/services/schedule-store";
 import {
   StudentDashboard,
@@ -323,6 +324,11 @@ export default async function DashboardPage() {
     const _tEnd = performance.now();
     if (process.env.NODE_ENV === "development") console.info(`[perf /dashboard] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate+db=${(_tHydrate-_tAuth).toFixed(0)}ms prep+todayForYou=${(_tEnd-_tPrep).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
+    const allEvents = await cachedGetAllEvents();
+    const dashboardEvents = allEvents.filter(
+      (e) => e.status === "published" && e.isVisible && e.featuredOnDashboard && e.endDate >= todayStr,
+    );
+
     return (
       <StudentDashboard
         fullName={user.fullName}
@@ -338,6 +344,7 @@ export default async function DashboardPage() {
         qrToken={student?.qrToken ?? null}
         todayForYou={todayForYou}
         studentPreferredRole={student?.preferredRole ?? null}
+        featuredEvents={dashboardEvents}
       />
     );
   }
@@ -450,6 +457,43 @@ export default async function DashboardPage() {
   }
   const studentsWithSub = new Set(activeSubs.map((s) => s.studentId)).size;
 
+  const evtRepo = getSpecialEventRepo();
+  const allEvts = await evtRepo.getAllEvents();
+  const pendingEventPayments: { studentId: string | null; eventTitle: string; productName: string; eventId: string }[] = [];
+  const upcomingEvents: DashboardEventSummary[] = [];
+  for (const evt of allEvts) {
+    const purchases = await evtRepo.getPurchasesByEvent(evt.id);
+    const products = await evtRepo.getProductsByEvent(evt.id);
+    for (const pur of purchases) {
+      if (pur.paymentStatus === "pending") {
+        const prod = products.find((p) => p.id === pur.eventProductId);
+        pendingEventPayments.push({
+          studentId: pur.studentId,
+          eventTitle: evt.title,
+          productName: prod?.name ?? "Unknown product",
+          eventId: evt.id,
+        });
+      }
+    }
+    if (evt.status === "published" && evt.endDate >= todayStr) {
+      const nonRefunded = purchases.filter((p) => p.paymentStatus !== "refunded");
+      upcomingEvents.push({
+        id: evt.id,
+        title: evt.title,
+        startDate: evt.startDate,
+        endDate: evt.endDate,
+        totalSold: nonRefunded.length,
+        totalPaid: nonRefunded.filter((p) => p.paymentStatus === "paid").length,
+        totalPending: nonRefunded.filter((p) => p.paymentStatus === "pending").length,
+        overallCapacity: evt.overallCapacity,
+      });
+    }
+  }
+  upcomingEvents.sort((a, b) => a.startDate.localeCompare(b.startDate));
+
+  const studentNameMap: Record<string, string> = {};
+  for (const s of allStudents) studentNameMap[s.id] = s.fullName;
+
   const dashboardData: AdminDashboardData = {
     todayStr,
     todaysClassCount,
@@ -468,6 +512,11 @@ export default async function DashboardPage() {
     studentsWithSub,
     totalStudents: allStudents.length,
     totalProducts: allProducts.filter((p) => p.isActive).length,
+    pendingEventPayments: pendingEventPayments.map((p) => ({
+      ...p,
+      studentName: p.studentId ? (studentNameMap[p.studentId] ?? p.studentId) : "Guest",
+    })),
+    upcomingEvents,
   };
 
   const _tAdminEnd = performance.now();

@@ -278,6 +278,146 @@ export async function fulfillStripeCheckout(
   return result;
 }
 
+// ── Create Stripe Checkout for event product ─────────────────
+
+export async function createEventStripeCheckoutAction(input: {
+  eventProductId: string;
+  eventId: string;
+  eventProductName: string;
+  eventProductDescription: string | null;
+  priceCents: number;
+}): Promise<{ success: boolean; url?: string; error?: string }> {
+  if (!isStripeEnabled()) {
+    return {
+      success: false,
+      error: "Online payment is not yet available. Please pay at reception.",
+    };
+  }
+
+  const { requireRole } = await import("@/lib/auth");
+  const user = await requireRole(["student"]);
+
+  const appUrl = await resolveAppUrl();
+
+  try {
+    const stripe = getStripe();
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: user.email || undefined,
+      line_items: [
+        {
+          price_data: {
+            currency: "eur",
+            product_data: {
+              name: input.eventProductName,
+              description: input.eventProductDescription ?? input.eventProductName,
+            },
+            unit_amount: input.priceCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        bpm_purchase_type: "event",
+        bpm_student_id: user.id,
+        bpm_event_product_id: input.eventProductId,
+        bpm_event_id: input.eventId,
+      },
+      success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${appUrl}/checkout/cancel`,
+    });
+
+    return { success: true, url: session.url ?? undefined };
+  } catch (e) {
+    console.error(
+      "[stripe-checkout] Event checkout session creation failed:",
+      e instanceof Error ? e.message : e,
+    );
+    return {
+      success: false,
+      error: "Could not start online payment. Please try again or pay at reception.",
+    };
+  }
+}
+
+// ── Guest Stripe Checkout for event product (no auth) ─────────
+
+export async function createGuestEventStripeCheckoutAction(input: {
+  eventProductId: string;
+  eventId: string;
+  guestName: string;
+  guestEmail: string;
+  guestPhone?: string;
+}): Promise<{ success: boolean; url?: string; error?: string }> {
+  if (!isStripeEnabled()) {
+    return { success: false, error: "Online payment is not yet available." };
+  }
+
+  const { getSpecialEventRepo } = await import("@/lib/repositories");
+  const repo = getSpecialEventRepo();
+
+  const event = await repo.getEventById(input.eventId);
+  if (!event) return { success: false, error: "Event not found" };
+  if (!event.isPublic) return { success: false, error: "This event is not available for public purchase" };
+
+  const product = (await repo.getProductsByEvent(input.eventId)).find(
+    (p) => p.id === input.eventProductId,
+  );
+  if (!product) return { success: false, error: "Event product not found" };
+  if (!product.salesOpen) return { success: false, error: "Sales are not open for this product" };
+
+  if (event.overallCapacity != null) {
+    const allPurchases = await repo.getPurchasesByEvent(input.eventId);
+    const totalSold = allPurchases.filter((p) => p.paymentStatus !== "refunded").length;
+    if (totalSold >= event.overallCapacity) {
+      return { success: false, error: "This event is sold out" };
+    }
+  }
+
+  const appUrl = await resolveAppUrl();
+
+  try {
+    const stripe = getStripe();
+
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      customer_email: input.guestEmail,
+      line_items: [
+        {
+          price_data: {
+            currency: "eur",
+            product_data: {
+              name: product.name,
+              description: product.description ?? product.name,
+            },
+            unit_amount: product.priceCents,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        bpm_purchase_type: "event_guest",
+        bpm_event_product_id: input.eventProductId,
+        bpm_event_id: input.eventId,
+        bpm_guest_name: input.guestName,
+        bpm_guest_email: input.guestEmail,
+        bpm_guest_phone: input.guestPhone ?? "",
+      },
+      success_url: `${appUrl}/event/${input.eventId}?purchase=success`,
+      cancel_url: `${appUrl}/event/${input.eventId}?purchase=cancelled`,
+    });
+
+    return { success: true, url: session.url ?? undefined };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[stripe-checkout] Guest event checkout session creation failed:", msg);
+    return { success: false, error: `Could not start online payment: ${msg}` };
+  }
+}
+
 // ── Pay existing pending subscription fulfillment ─────────────
 
 export async function fulfillExistingSubscriptionPayment(

@@ -289,6 +289,15 @@ export interface AdminTask {
   createdAt: string;
 }
 
+// ── Special Events ───────────────────────────────────────────
+
+export type EventStatus = "draft" | "published";
+export type EventSessionType = "workshop" | "social" | "intensive" | "masterclass" | "other";
+export type EventProductType = "full_pass" | "combo_pass" | "single_session" | "social_ticket" | "other";
+export type EventInclusionRule = "all_sessions" | "selected_sessions" | "all_workshops" | "socials_only";
+export type EventPaymentMethod = "stripe" | "manual";
+export type EventPaymentStatus = "pending" | "paid" | "refunded";
+
 // ── Studio Hire ──────────────────────────────────────────────
 
 export type StudioHireStatus = "enquiry" | "pending" | "confirmed" | "cancelled";

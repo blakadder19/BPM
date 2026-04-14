@@ -18,6 +18,7 @@ import {
   ScanLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -156,6 +157,7 @@ export function AttendanceClient({
           description="Mark students as they arrive. Track class attendance history."
         />
         <div className="flex items-center gap-2">
+          <AdminHelpButton pageKey="attendance" />
           <Button onClick={() => setShowAddAttendance(true)}>
             <Plus className="mr-1.5 h-4 w-4" />
             Add Record

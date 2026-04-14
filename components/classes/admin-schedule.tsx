@@ -11,6 +11,7 @@ import type { MockBookableClass, MockClass, MockTeacherPair } from "@/lib/mock-d
 import type { Teacher } from "@/lib/services/teacher-roster-store";
 import type { PairPreset } from "@/lib/services/pair-preset-store";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -262,6 +263,7 @@ export function AdminSchedule({
           description="Dated class instances — generated from templates or created manually."
         />
         <div className="flex items-center gap-2">
+          <AdminHelpButton pageKey="schedule" />
           {isDev && (
             <>
               <Button variant="outline" size="sm" onClick={handleClearSchedule} disabled={clearPending}>

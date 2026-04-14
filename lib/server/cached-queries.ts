@@ -17,6 +17,7 @@ import {
   getStudentRepo,
   getSubscriptionRepo,
   getDanceStyleRepo,
+  getSpecialEventRepo,
 } from "@/lib/repositories";
 import { getNotificationsForStudent as _getNotificationsFromDB } from "@/lib/communications/notification-store";
 
@@ -43,3 +44,11 @@ export const cachedGetNotifications = cache((studentId: string) =>
 export const cachedGetAllStudents = cache(() => getStudentRepo().getAll());
 export const cachedGetAllSubs = cache(() => getSubscriptionRepo().getAll());
 export const cachedGetAllDanceStyles = cache(() => getDanceStyleRepo().getAll());
+
+// ── Special Events ───────────────────────────────────────────
+export const cachedGetAllEvents = cache(() => getSpecialEventRepo().getAllEvents());
+export const cachedGetEventById = cache((id: string) => getSpecialEventRepo().getEventById(id));
+export const cachedGetEventSessions = cache((eventId: string) => getSpecialEventRepo().getSessionsByEvent(eventId));
+export const cachedGetEventProducts = cache((eventId: string) => getSpecialEventRepo().getProductsByEvent(eventId));
+export const cachedGetEventPurchases = cache((eventId: string) => getSpecialEventRepo().getPurchasesByEvent(eventId));
+export const cachedGetStudentEventPurchases = cache((studentId: string) => getSpecialEventRepo().getPurchasesByStudent(studentId));

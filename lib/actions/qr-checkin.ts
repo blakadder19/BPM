@@ -570,3 +570,81 @@ export async function qrSellDropInAndCheckInAction(
 
   return qrWalkInCheckInAction(studentId, classId, subResult.subscriptionId);
 }
+
+// ── Guest purchase QR lookup ──────────────────────────────────
+
+export interface GuestPurchaseQrResult {
+  success: boolean;
+  error?: string;
+  purchase?: {
+    id: string;
+    guestName: string;
+    guestEmail: string;
+    guestPhone: string | null;
+    eventTitle: string;
+    eventId: string;
+    productName: string;
+    productType: string;
+    paymentStatus: string;
+    paymentMethod: string;
+    purchasedAt: string;
+    paidAt: string | null;
+    inclusionSummary: string;
+  };
+}
+
+export async function lookupGuestPurchaseByQrAction(token: string): Promise<GuestPurchaseQrResult> {
+  const user = await getAuthUser();
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  const { isValidGuestPurchaseQrToken } = await import("@/lib/domain/checkin-token");
+  if (!token || !isValidGuestPurchaseQrToken(token)) {
+    return { success: false, error: "Invalid guest purchase QR code format" };
+  }
+
+  const { getSpecialEventRepo } = await import("@/lib/repositories");
+  const repo = getSpecialEventRepo();
+
+  const purchase = await repo.getPurchaseByQrToken(token);
+  if (!purchase) {
+    return { success: false, error: "No purchase found for this QR code" };
+  }
+
+  const [event, products] = await Promise.all([
+    repo.getEventById(purchase.eventId).catch(() => null),
+    repo.getProductsByEvent(purchase.eventId).catch(() => []),
+  ]);
+
+  const product = products.find((p) => p.id === purchase.eventProductId);
+
+  let inclusionSummary = "";
+  if (product) {
+    switch (product.inclusionRule) {
+      case "all_sessions": inclusionSummary = "All event sessions"; break;
+      case "all_workshops": inclusionSummary = "All workshops"; break;
+      case "socials_only": inclusionSummary = "Social sessions only"; break;
+      case "selected_sessions": inclusionSummary = "Selected sessions"; break;
+    }
+  }
+
+  return {
+    success: true,
+    purchase: {
+      id: purchase.id,
+      guestName: purchase.guestName ?? "Guest",
+      guestEmail: purchase.guestEmail ?? "",
+      guestPhone: purchase.guestPhone ?? null,
+      eventTitle: event?.title ?? "Unknown event",
+      eventId: purchase.eventId,
+      productName: product?.name ?? "Unknown product",
+      productType: product?.productType ?? "other",
+      paymentStatus: purchase.paymentStatus,
+      paymentMethod: purchase.paymentMethod,
+      purchasedAt: purchase.purchasedAt,
+      paidAt: purchase.paidAt ?? null,
+      inclusionSummary,
+    },
+  };
+}

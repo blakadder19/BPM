@@ -6,6 +6,7 @@ import { Inbox, Plus, ChevronDown, ChevronUp, Pencil, Power, Trash2, AlertTriang
 import type { MockClass, MockTeacherPair } from "@/lib/mock-data";
 import type { LinkedInstance } from "@/lib/actions/classes";
 import { PageHeader } from "@/components/ui/page-header";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectFilter } from "@/components/ui/select-filter";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -152,10 +153,13 @@ export function AdminTemplates({
           title="Class Templates"
           description="Weekly recurring class definitions. Settings-aware badges show role balance and bookability."
         />
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Template
-        </Button>
+        <div className="flex items-center gap-2">
+          <AdminHelpButton pageKey="templates" />
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Template
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
