@@ -29,7 +29,7 @@ function getConfig(): BrevoConfig | null {
   const apiKey = process.env.BREVO_API_KEY;
   if (!apiKey) return null;
 
-  const fromRaw = process.env.EMAIL_FROM_ADDRESS ?? "BPM <noreply@bpm.dance>";
+  const fromRaw = process.env.EMAIL_FROM_ADDRESS ?? "BPM Studio <no-reply@balancepowermotion.com>";
   const match = fromRaw.match(/^(.+?)\s*<(.+?)>$/);
   const senderName = match?.[1]?.trim() ?? "BPM";
   const senderEmail = match?.[2]?.trim() ?? fromRaw;
@@ -52,7 +52,7 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
     return false;
   }
 
-  console.info(`[email-provider] Sending to=${payload.to} subject="${payload.subject}" via Brevo...`);
+  console.info(`[email-provider] Sending to=${payload.to} from="${config.senderName} <${config.senderEmail}>" subject="${payload.subject}" via Brevo...`);
 
   try {
     const res = await fetch(BREVO_ENDPOINT, {

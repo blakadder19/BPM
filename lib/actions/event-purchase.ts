@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { createPurchase, updatePurchasePayment } from "@/lib/services/special-event-service";
-import { sendEventPurchaseEmail } from "@/lib/communications/event-emails";
+import { sendEventPurchaseEmail, type EmailSendResult } from "@/lib/communications/event-emails";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 
 function centsToEuros(c: number): string {
@@ -171,7 +171,7 @@ export async function createGuestEventPurchaseAction(input: {
 export async function fulfillGuestEventPurchase(
   sessionId: string,
   metadata: Record<string, string>,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; emailResult?: EmailSendResult }> {
   const tag = `[guest-fulfill session=${sessionId}]`;
   const eventProductId = metadata.bpm_event_product_id;
   const eventId = metadata.bpm_event_id;
@@ -192,7 +192,7 @@ export async function fulfillGuestEventPurchase(
   const alreadyFulfilled = allPurchases.find((p) => p.paymentReference === paymentRef);
   if (alreadyFulfilled) {
     console.info(`${tag} Already fulfilled (idempotent skip). purchaseId=${alreadyFulfilled.id}`);
-    return { success: true };
+    return { success: true, emailResult: { sent: false, reason: "Already fulfilled (email was sent on first fulfillment)" } };
   }
 
   const qrToken = generateGuestPurchaseQrToken();
@@ -219,13 +219,15 @@ export async function fulfillGuestEventPurchase(
 
   console.info(`${tag} Purchase created successfully. Sending confirmation email...`);
 
+  let emailResult: EmailSendResult = { sent: false, reason: "Email send was not attempted" };
+
   try {
     const [event, product] = await Promise.all([
       repo.getEventById(eventId).catch(() => null),
       repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
     ]);
     if (product) {
-      await sendEventPurchaseEmail({
+      emailResult = await sendEventPurchaseEmail({
         studentId: null,
         studentName: guestName ?? "Guest",
         directEmail: guestEmail,
@@ -238,15 +240,18 @@ export async function fulfillGuestEventPurchase(
         inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
         qrToken,
       });
-      console.info(`${tag} Email send completed (check email-provider logs for delivery status).`);
+      console.info(`${tag} Email result: sent=${emailResult.sent}${!emailResult.sent ? ` reason="${emailResult.reason}"` : ""}`);
     } else {
-      console.warn(`${tag} Could not resolve product ${eventProductId} — email skipped.`);
+      emailResult = { sent: false, reason: `Could not resolve product ${eventProductId}` };
+      console.warn(`${tag} ${emailResult.reason} — email skipped.`);
     }
   } catch (err) {
-    console.error(`${tag} Email send threw:`, err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    emailResult = { sent: false, reason: `Email send threw: ${msg}` };
+    console.error(`${tag} ${emailResult.reason}`);
   }
 
-  return result;
+  return { ...result, emailResult };
 }
 
 /**

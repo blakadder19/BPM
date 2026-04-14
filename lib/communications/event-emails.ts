@@ -74,12 +74,15 @@ export interface EventPurchaseEmailData {
   qrToken?: string;
 }
 
-export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Promise<void> {
+export type EmailSendResult = { sent: true } | { sent: false; reason: string };
+
+export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Promise<EmailSendResult> {
   const tag = `[event-email ${data.eventTitle}]`;
 
   if (!isEmailEnabled()) {
-    console.warn(`${tag} BREVO_API_KEY not configured — email NOT sent to ${data.directEmail ?? data.studentId ?? "unknown"}.`);
-    return;
+    const reason = "BREVO_API_KEY not configured";
+    console.warn(`${tag} ${reason} — email NOT sent to ${data.directEmail ?? data.studentId ?? "unknown"}.`);
+    return { sent: false, reason };
   }
 
   let email: string | null = data.directEmail ?? null;
@@ -87,8 +90,9 @@ export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Prom
     email = await resolveStudentEmail(data.studentId);
   }
   if (!email) {
-    console.warn(`${tag} Could not resolve recipient email — email NOT sent.`);
-    return;
+    const reason = "Could not resolve recipient email";
+    console.warn(`${tag} ${reason} — email NOT sent.`);
+    return { sent: false, reason };
   }
 
   console.info(`${tag} Preparing email to ${email} (paymentStatus=${data.paymentStatus}, hasQr=${!!data.qrToken})`);
@@ -133,7 +137,10 @@ export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Prom
   const ok = await sendEmail({ to: email, subject, html });
   if (ok) {
     console.info(`${tag} SUCCESS — ${data.paymentStatus} purchase email delivered to ${email}.`);
+    return { sent: true };
   } else {
-    console.error(`${tag} FAILED — Brevo API did not accept email to ${email}. Check email-provider logs above.`);
+    const reason = "Brevo API did not accept the email (check server logs for details)";
+    console.error(`${tag} FAILED — ${reason}.`);
+    return { sent: false, reason };
   }
 }

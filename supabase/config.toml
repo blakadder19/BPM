@@ -236,8 +236,8 @@ otp_expiry = 3600
 # port = 587
 # user = "env(BREVO_SMTP_USER)"
 # pass = "env(BREVO_SMTP_PASS)"
-# admin_email = "noreply@bpm.dance"
-# sender_name = "BPM Dance Academy"
+# admin_email = "no-reply@balancepowermotion.com"
+# sender_name = "BPM Studio"
 
 [auth.email.template.confirmation]
 subject = "Confirm your email — BPM"

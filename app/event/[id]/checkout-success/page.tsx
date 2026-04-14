@@ -4,12 +4,14 @@ import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { fulfillGuestEventPurchase } from "@/lib/actions/event-purchase";
+import type { EmailSendResult } from "@/lib/communications/event-emails";
 
 interface FulfillmentResult {
   status: "fulfilled" | "already_fulfilled" | "not_paid" | "error";
   eventTitle?: string;
   productName?: string;
   guestEmail?: string;
+  emailResult?: EmailSendResult;
   error?: string;
 }
 
@@ -65,18 +67,17 @@ async function verifyAndFulfill(
   ]);
   const product = products.find((p) => p.id === metadata.bpm_event_product_id);
 
-  const allPurchases = await repo.getPurchasesByEvent(eventId).catch(() => []);
-  const wasDuplicate = allPurchases.filter(
-    (p) => p.paymentReference === `stripe:${sessionId}`,
-  ).length > 0;
-
-  console.info(`${tag} Fulfillment complete (duplicate=${wasDuplicate ? "idempotent-skip" : "new"}).`);
+  console.info(`${tag} Fulfillment complete. emailSent=${result.emailResult?.sent ?? "unknown"}`);
 
   return {
-    status: wasDuplicate ? "already_fulfilled" : "fulfilled",
+    status: result.emailResult?.sent === false &&
+      result.emailResult.reason?.startsWith("Already fulfilled")
+      ? "already_fulfilled"
+      : "fulfilled",
     eventTitle: event?.title,
     productName: product?.name,
     guestEmail: metadata.bpm_guest_email,
+    emailResult: result.emailResult,
   };
 }
 
@@ -171,20 +172,7 @@ export default async function GuestCheckoutSuccessPage({
           </div>
         )}
 
-        <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 space-y-2 max-w-sm mx-auto">
-          <div className="flex items-center justify-center gap-2 text-sm font-medium text-emerald-800">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
-            Confirmation email sent
-          </div>
-          {result.guestEmail && (
-            <p className="text-xs text-emerald-700">
-              A confirmation with your QR code has been sent to <strong>{result.guestEmail}</strong>.
-            </p>
-          )}
-          <p className="text-xs text-gray-500">
-            If you don&apos;t see it within a few minutes, check your spam folder.
-          </p>
-        </div>
+        <EmailStatusBlock emailResult={result.emailResult} guestEmail={result.guestEmail} />
 
         <div className="pt-2 space-y-3">
           <p className="text-sm text-gray-500">
@@ -199,6 +187,65 @@ export default async function GuestCheckoutSuccessPage({
         </div>
       </div>
     </Shell>
+  );
+}
+
+function EmailStatusBlock({
+  emailResult,
+  guestEmail,
+}: {
+  emailResult?: EmailSendResult;
+  guestEmail?: string;
+}) {
+  if (emailResult?.sent) {
+    return (
+      <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-4 space-y-2 max-w-sm mx-auto">
+        <div className="flex items-center justify-center gap-2 text-sm font-medium text-emerald-800">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+          Confirmation email sent
+        </div>
+        {guestEmail && (
+          <p className="text-xs text-emerald-700">
+            A confirmation with your QR code has been sent to <strong>{guestEmail}</strong>.
+          </p>
+        )}
+        <p className="text-xs text-gray-500">
+          If you don&apos;t see it within a few minutes, check your spam folder.
+        </p>
+      </div>
+    );
+  }
+
+  if (emailResult && !emailResult.sent && emailResult.reason?.startsWith("Already fulfilled")) {
+    return (
+      <div className="rounded-lg bg-blue-50 border border-blue-200 p-4 space-y-2 max-w-sm mx-auto">
+        <div className="flex items-center justify-center gap-2 text-sm font-medium text-blue-800">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" /></svg>
+          Confirmation email was sent earlier
+        </div>
+        {guestEmail && (
+          <p className="text-xs text-blue-700">
+            Check <strong>{guestEmail}</strong> for your confirmation and QR code.
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 space-y-2 max-w-sm mx-auto">
+      <div className="flex items-center justify-center gap-2 text-sm font-medium text-amber-800">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
+        Confirmation email could not be sent
+      </div>
+      <p className="text-xs text-amber-700">
+        Your purchase is confirmed, but the confirmation email could not be sent right now.
+        Please contact the academy if you need your QR code.
+      </p>
+      {emailResult && !emailResult.sent && (
+        <p className="text-xs text-gray-400 font-mono">{emailResult.reason}</p>
+      )}
+    </div>
   );
 }
 
