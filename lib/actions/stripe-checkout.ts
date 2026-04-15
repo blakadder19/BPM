@@ -368,8 +368,19 @@ export async function createGuestEventStripeCheckoutAction(input: {
   if (!product) return { success: false, error: "Event product not found" };
   if (!product.salesOpen) return { success: false, error: "Sales are not open for this product" };
 
+  const allPurchases = await repo.getPurchasesByEvent(input.eventId);
+
+  const duplicateGuest = allPurchases.find(
+    (p) =>
+      p.guestEmail?.toLowerCase() === input.guestEmail.toLowerCase() &&
+      p.eventProductId === input.eventProductId &&
+      p.paymentStatus !== "refunded",
+  );
+  if (duplicateGuest) {
+    return { success: false, error: "A purchase for this product already exists for this email. Please check your email or contact the academy if you need help." };
+  }
+
   if (event.overallCapacity != null) {
-    const allPurchases = await repo.getPurchasesByEvent(input.eventId);
     const totalSold = allPurchases.filter((p) => p.paymentStatus !== "refunded").length;
     if (totalSold >= event.overallCapacity) {
       return { success: false, error: "This event is sold out" };

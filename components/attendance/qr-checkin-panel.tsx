@@ -17,6 +17,7 @@ import {
   X,
   Banknote,
   Smartphone,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -35,6 +36,7 @@ import {
   type QrStudentBooking,
   type QrEntitlementDetail,
   type QrTodayClass,
+  type QrEventPurchase,
   type GuestPurchaseQrResult,
 } from "@/lib/actions/qr-checkin";
 import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
@@ -542,6 +544,18 @@ export function QrCheckInPanel() {
                 )}
               </div>
 
+              {/* Special Event Purchases */}
+              {lookupResult.eventPurchases && lookupResult.eventPurchases.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="text-sm font-semibold text-gray-700">
+                    Special Event Purchases ({lookupResult.eventPurchases.length})
+                  </h3>
+                  {lookupResult.eventPurchases.map((ep, idx) => (
+                    <EventPurchaseCard key={`${ep.eventId}-${idx}`} purchase={ep} />
+                  ))}
+                </div>
+              )}
+
               {/* Today's bookings */}
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-gray-700">
@@ -1007,6 +1021,43 @@ const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   exhausted: { label: "Exhausted", className: "bg-amber-100 text-amber-700" },
   cancelled: { label: "Cancelled", className: "bg-gray-200 text-gray-600" },
 };
+
+const EVENT_PAYMENT_BADGE: Record<string, { label: string; className: string }> = {
+  paid: { label: "Paid", className: "bg-green-100 text-green-700" },
+  pending: { label: "Pending", className: "bg-amber-100 text-amber-700" },
+};
+
+function EventPurchaseCard({ purchase }: { purchase: QrEventPurchase }) {
+  const badge = EVENT_PAYMENT_BADGE[purchase.paymentStatus] ?? { label: purchase.paymentStatus, className: "bg-gray-200 text-gray-600" };
+
+  return (
+    <div className={`rounded-xl border p-3 shadow-sm space-y-1.5 ${
+      purchase.paymentStatus === "paid" ? "border-green-200 bg-green-50/50" : "border-amber-200 bg-amber-50/50"
+    }`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <CalendarDays className="h-4 w-4 text-bpm-500 shrink-0" />
+          <p className="font-medium text-gray-900 text-sm truncate">{purchase.eventTitle}</p>
+        </div>
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium ${badge.className}`}>
+          {badge.label}
+        </span>
+      </div>
+      <div className="flex items-center gap-3 text-xs text-gray-500 pl-6">
+        <span>{purchase.productName}</span>
+        <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
+          {purchase.productType.replace("_", " ")}
+        </span>
+      </div>
+      {purchase.paymentStatus === "paid" && (
+        <p className="text-xs text-green-700 pl-6">Event access valid — use student QR for entry.</p>
+      )}
+      {purchase.paymentStatus === "pending" && (
+        <p className="text-xs text-amber-700 pl-6">Payment pending — collect payment before granting entry.</p>
+      )}
+    </div>
+  );
+}
 
 function ExpiredEntitlementRow({ ent }: { ent: QrEntitlementDetail }) {
   const balance = formatBalance(ent);

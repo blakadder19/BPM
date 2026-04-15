@@ -66,25 +66,18 @@ export function useOnboardingAutoOpen(isGetStartedState: boolean) {
     setPhase("welcome");
   }, [isGetStartedState]);
 
+  const persistDismiss = useCallback(() => {
+    try { localStorage.setItem(STORAGE_KEY, "1"); } catch { /* ignore */ }
+  }, []);
+
   const open = useCallback(() => setPhase("tour"), []);
   const startTour = useCallback(() => setPhase("tour"), []);
-  const close = useCallback(() => setPhase("idle"), []);
-  const dismiss = useCallback(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      /* ignore */
-    }
+  const close = useCallback(() => {
+    persistDismiss();
     setPhase("idle");
-  }, []);
-  const skipWelcome = useCallback(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      /* ignore */
-    }
-    setPhase("idle");
-  }, []);
+  }, [persistDismiss]);
+  const dismiss = close;
+  const skipWelcome = close;
 
   return {
     phase,
@@ -412,7 +405,6 @@ export function StudentWalkthrough({
   useScrollLock(true);
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [dontShow, setDontShow] = useState(false);
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
 
   const current = STEPS[step];
@@ -437,8 +429,7 @@ export function StudentWalkthrough({
   }, [step, current.spotlightSelector]);
 
   function handleClose() {
-    if (dontShow) onDismiss();
-    else onClose();
+    onDismiss();
   }
 
   function handleLink(href: string) {
@@ -547,17 +538,6 @@ export function StudentWalkthrough({
                 </Button>
               )}
             </div>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={dontShow}
-                onChange={(e) => setDontShow(e.target.checked)}
-                className="rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
-              />
-              <span className="text-xs text-gray-500">
-                Don&apos;t show this again
-              </span>
-            </label>
           </div>
         </div>
       </div>

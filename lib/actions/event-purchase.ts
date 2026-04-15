@@ -92,6 +92,7 @@ export async function createEventPurchaseAction(input: {
       priceLabel: centsToEuros(product.priceCents),
       paymentStatus: "pending",
       inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
+      coverImageUrl: event.coverImageUrl ?? undefined,
     }).catch((err) => console.warn("[event-purchase] Failed to send purchase email:", err));
   }
   return result;
@@ -126,8 +127,19 @@ export async function createGuestEventPurchaseAction(input: {
   if (!product) return { success: false, error: "Event product not found" };
   if (!product.salesOpen) return { success: false, error: "Sales are not open for this product" };
 
+  const allPurchases = await repo.getPurchasesByEvent(input.eventId);
+
+  const duplicateGuest = allPurchases.find(
+    (p) =>
+      p.guestEmail?.toLowerCase() === email.trim().toLowerCase() &&
+      p.eventProductId === input.eventProductId &&
+      p.paymentStatus !== "refunded",
+  );
+  if (duplicateGuest) {
+    return { success: false, error: "A purchase for this product already exists for this email. Please check your email or contact the academy if you need help." };
+  }
+
   if (event.overallCapacity != null) {
-    const allPurchases = await repo.getPurchasesByEvent(input.eventId);
     const totalSold = allPurchases.filter((p) => p.paymentStatus !== "refunded").length;
     if (totalSold >= event.overallCapacity) {
       return { success: false, error: "This event is sold out" };
@@ -159,6 +171,7 @@ export async function createGuestEventPurchaseAction(input: {
       priceLabel: centsToEuros(product.priceCents),
       paymentStatus: "pending",
       inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
+      coverImageUrl: event.coverImageUrl ?? undefined,
     }).catch((err) => console.warn("[event-purchase] Failed to send guest purchase email:", err));
   }
   return result;
@@ -239,6 +252,7 @@ export async function fulfillGuestEventPurchase(
         paymentStatus: "paid",
         inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
         qrToken,
+        coverImageUrl: event?.coverImageUrl ?? undefined,
       });
       console.info(`${tag} Email result: sent=${emailResult.sent}${!emailResult.sent ? ` reason="${emailResult.reason}"` : ""}`);
     } else {
@@ -303,6 +317,7 @@ export async function fulfillEventPurchase(
           priceLabel: centsToEuros(product.priceCents),
           paymentStatus: "paid",
           inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
+          coverImageUrl: event?.coverImageUrl ?? undefined,
         }).catch((err) => console.warn("[event-purchase] Failed to send Stripe purchase email:", err));
       }
     } catch (err) { console.warn("[event-purchase] Failed to resolve purchase email data:", err); }
@@ -383,6 +398,7 @@ export async function markEventPurchasePaidAction(input: {
             paymentStatus: "paid",
             inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
             qrToken: qrToken ?? undefined,
+            coverImageUrl: event?.coverImageUrl ?? undefined,
           });
           console.info(`${adminTag} Email send completed.`);
         } else {

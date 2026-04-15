@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
-import { getStudentRepo, getSubscriptionRepo, getTermRepo, getProductRepo } from "@/lib/repositories";
+import { getStudentRepo, getSubscriptionRepo, getTermRepo, getProductRepo, getSpecialEventRepo } from "@/lib/repositories";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getInstances } from "@/lib/services/schedule-store";
@@ -79,6 +79,15 @@ export interface QrTodayClass {
 /** @deprecated kept temporarily — use QrTodayClass instead */
 export type QrCompatibleClass = QrTodayClass;
 
+export interface QrEventPurchase {
+  eventTitle: string;
+  eventId: string;
+  productName: string;
+  productType: string;
+  paymentStatus: string;
+  purchasedAt: string;
+}
+
 export interface QrLookupResult {
   success: boolean;
   error?: string;
@@ -95,6 +104,7 @@ export interface QrLookupResult {
   recentExpiredEntitlement?: QrEntitlementDetail | null;
   paymentPending?: boolean;
   hasActiveEntitlement?: boolean;
+  eventPurchases?: QrEventPurchase[];
 }
 
 export async function lookupStudentByQrAction(token: string): Promise<QrLookupResult> {
@@ -247,6 +257,33 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
     });
   }
 
+  let eventPurchases: QrEventPurchase[] = [];
+  try {
+    const eventRepo = getSpecialEventRepo();
+    const rawPurchases = await eventRepo.getPurchasesByStudent(student.id);
+    const relevantPurchases = rawPurchases.filter((p) => p.paymentStatus !== "refunded");
+
+    if (relevantPurchases.length > 0) {
+      const eventIds = [...new Set(relevantPurchases.map((p) => p.eventId))];
+      const events = await Promise.all(eventIds.map((id) => eventRepo.getEventById(id)));
+      const eventMap = new Map(events.filter(Boolean).map((e) => [e!.id, e!]));
+      const productIds = [...new Set(relevantPurchases.map((p) => p.eventProductId))];
+      const productsByEvent = await Promise.all(eventIds.map((id) => eventRepo.getProductsByEvent(id)));
+      const productMap = new Map(productsByEvent.flat().filter((p) => productIds.includes(p.id)).map((p) => [p.id, p]));
+
+      eventPurchases = relevantPurchases.map((p) => ({
+        eventTitle: eventMap.get(p.eventId)?.title ?? "Unknown event",
+        eventId: p.eventId,
+        productName: productMap.get(p.eventProductId)?.name ?? "Unknown product",
+        productType: productMap.get(p.eventProductId)?.productType ?? "other",
+        paymentStatus: p.paymentStatus,
+        purchasedAt: p.purchasedAt,
+      }));
+    }
+  } catch {
+    // Non-critical — don't block QR scan if event repo fails
+  }
+
   return {
     success: true,
     student: {
@@ -261,6 +298,7 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
     recentExpiredEntitlement,
     paymentPending,
     hasActiveEntitlement,
+    eventPurchases: eventPurchases.length > 0 ? eventPurchases : undefined,
   };
 }
 
