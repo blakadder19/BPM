@@ -105,10 +105,21 @@ export async function createPurchase(data: CreatePurchaseData): Promise<Result<s
 
 export async function updatePurchasePayment(
   id: string,
-  patch: { paymentStatus: EventPaymentStatus; paymentReference?: string | null; receptionMethod?: string | null; paidAt?: string | null; qrToken?: string | null },
+  patch: { paymentStatus: EventPaymentStatus; paymentReference?: string | null; receptionMethod?: string | null; paidAt?: string | null; qrToken?: string | null; paidAmountCents?: number | null },
 ): Promise<Result> {
   try {
     const result = await getSpecialEventRepo().updatePurchasePayment(id, patch);
+    if (!result) return { success: false, error: "Purchase not found" };
+    return { success: true };
+  } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }
+}
+
+export async function updatePurchaseCheckIn(
+  id: string,
+  patch: { checkedInAt: string | null; checkedInBy: string | null },
+): Promise<Result> {
+  try {
+    const result = await getSpecialEventRepo().updatePurchaseCheckIn(id, patch);
     if (!result) return { success: false, error: "Purchase not found" };
     return { success: true };
   } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }

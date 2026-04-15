@@ -55,7 +55,7 @@ import { useOnboardingAutoOpen, StudentWalkthrough, WelcomeModal } from "@/compo
 import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
 import { toggleAutoRenewAction } from "@/lib/actions/catalog-purchase";
 import { payPendingSubscriptionAction } from "@/lib/actions/stripe-checkout";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatEventDateRange } from "@/lib/utils";
 import { TermBanner } from "@/components/ui/term-banner";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
@@ -520,8 +520,7 @@ export function StudentDashboard({
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-400">
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
-                              {new Date(evt.startDate + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" })}
-                              {evt.startDate !== evt.endDate && ` – ${new Date(evt.endDate + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" })}`}
+                              {formatEventDateRange(evt.startDate, evt.endDate)}
                             </span>
                             {evt.location && <span className="truncate">{evt.location}</span>}
                           </div>

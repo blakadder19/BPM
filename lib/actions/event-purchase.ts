@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { createPurchase, updatePurchasePayment } from "@/lib/services/special-event-service";
 import { sendEventPurchaseEmail, type EmailSendResult } from "@/lib/communications/event-emails";
+import { sendPaymentConfirmationEmail } from "@/lib/actions/event-emails";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 
 function centsToEuros(c: number): string {
@@ -28,6 +29,18 @@ function revalidateEventPaths(eventId: string) {
   revalidatePath("/events");
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/dashboard");
+}
+
+function buildFinancialSnapshot(product: { priceCents: number; name: string; productType: string }, isPaid: boolean) {
+  return {
+    unitPriceCentsAtPurchase: product.priceCents,
+    originalAmountCents: product.priceCents,
+    discountAmountCents: 0,
+    paidAmountCents: isPaid ? product.priceCents : 0,
+    currency: "eur",
+    productNameSnapshot: product.name,
+    productTypeSnapshot: product.productType,
+  };
 }
 
 /**
@@ -67,7 +80,7 @@ export async function createEventPurchaseAction(input: {
     const allEventPurchases = await repo.getPurchasesByEvent(input.eventId);
     const totalSold = allEventPurchases.filter((p) => p.paymentStatus !== "refunded").length;
     if (totalSold >= event.overallCapacity) {
-      return { success: false, error: "This event is sold out" };
+      return { success: false, error: "This event is fully booked. No more tickets are currently available." };
     }
   }
 
@@ -77,6 +90,7 @@ export async function createEventPurchaseAction(input: {
     eventId: input.eventId,
     paymentMethod: "manual",
     paymentStatus: "pending",
+    ...buildFinancialSnapshot(product, false),
   });
 
   if (result.success) {
@@ -142,7 +156,7 @@ export async function createGuestEventPurchaseAction(input: {
   if (event.overallCapacity != null) {
     const totalSold = allPurchases.filter((p) => p.paymentStatus !== "refunded").length;
     if (totalSold >= event.overallCapacity) {
-      return { success: false, error: "This event is sold out" };
+      return { success: false, error: "This event is fully booked. No more tickets are currently available." };
     }
   }
 
@@ -155,6 +169,7 @@ export async function createGuestEventPurchaseAction(input: {
     guestPhone: input.phone?.trim() || null,
     paymentMethod: "manual",
     paymentStatus: "pending",
+    ...buildFinancialSnapshot(product, false),
   });
 
   if (result.success) {
@@ -211,6 +226,11 @@ export async function fulfillGuestEventPurchase(
   const qrToken = generateGuestPurchaseQrToken();
   console.info(`${tag} Generated QR token: ${qrToken.slice(0, 8)}...`);
 
+  const [event, product] = await Promise.all([
+    repo.getEventById(eventId).catch(() => null),
+    repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
+  ]);
+
   const result = await createPurchase({
     studentId: null,
     eventProductId,
@@ -223,6 +243,7 @@ export async function fulfillGuestEventPurchase(
     paymentStatus: "paid",
     paymentReference: paymentRef,
     paidAt: new Date().toISOString(),
+    ...(product ? buildFinancialSnapshot(product, true) : {}),
   });
 
   if (!result.success) {
@@ -235,10 +256,6 @@ export async function fulfillGuestEventPurchase(
   let emailResult: EmailSendResult = { sent: false, reason: "Email send was not attempted" };
 
   try {
-    const [event, product] = await Promise.all([
-      repo.getEventById(eventId).catch(() => null),
-      repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
-    ]);
     if (product) {
       emailResult = await sendEventPurchaseEmail({
         studentId: null,
@@ -289,6 +306,12 @@ export async function fulfillEventPurchase(
   const alreadyFulfilled = existing.find((p) => p.paymentReference === paymentRef);
   if (alreadyFulfilled) return { success: true };
 
+  const [event, product, student] = await Promise.all([
+    repo.getEventById(eventId).catch(() => null),
+    repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
+    import("@/lib/repositories").then((m) => m.getStudentRepo().getById(studentId)).catch(() => null),
+  ]);
+
   const result = await createPurchase({
     studentId,
     eventProductId,
@@ -297,15 +320,11 @@ export async function fulfillEventPurchase(
     paymentStatus: "paid",
     paymentReference: paymentRef,
     paidAt: new Date().toISOString(),
+    ...(product ? buildFinancialSnapshot(product, true) : {}),
   });
 
   if (result.success) {
     try {
-      const [event, product, student] = await Promise.all([
-        repo.getEventById(eventId).catch(() => null),
-        repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
-        import("@/lib/repositories").then((m) => m.getStudentRepo().getById(studentId)).catch(() => null),
-      ]);
       if (product) {
         sendEventPurchaseEmail({
           studentId,
@@ -338,11 +357,31 @@ export async function fulfillPendingEventPurchase(
 
   const paymentRef = `stripe:${sessionId}`;
 
-  return updatePurchasePayment(purchaseId, {
+  const repo = getSpecialEventRepo();
+  const eventId = metadata.bpm_event_id;
+  let paidAmountCents: number | undefined;
+  if (eventId) {
+    const purchases = await repo.getPurchasesByEvent(eventId);
+    const purchase = purchases.find((p) => p.id === purchaseId);
+    if (purchase?.originalAmountCents != null) {
+      paidAmountCents = purchase.originalAmountCents - (purchase.discountAmountCents ?? 0);
+    }
+  }
+
+  const result = await updatePurchasePayment(purchaseId, {
     paymentStatus: "paid",
     paymentReference: paymentRef,
     paidAt: new Date().toISOString(),
+    ...(paidAmountCents != null ? { paidAmountCents } : {}),
   });
+
+  if (result.success && eventId) {
+    sendPaymentConfirmationEmail(purchaseId, eventId).catch((err) =>
+      console.error("[event-purchase] Post-payment email threw:", err instanceof Error ? err.message : err),
+    );
+  }
+
+  return result;
 }
 
 /**
@@ -367,11 +406,16 @@ export async function markEventPurchasePaidAction(input: {
   const isGuestPurchase = !purchase.studentId;
   const qrToken = isGuestPurchase ? generateGuestPurchaseQrToken() : undefined;
 
+  const paidAmountCents = purchase.originalAmountCents != null
+    ? purchase.originalAmountCents - (purchase.discountAmountCents ?? 0)
+    : null;
+
   const result = await updatePurchasePayment(input.purchaseId, {
     paymentStatus: "paid",
     receptionMethod: input.receptionMethod,
     paidAt: new Date().toISOString(),
     ...(qrToken ? { qrToken } : {}),
+    ...(paidAmountCents != null ? { paidAmountCents } : {}),
   });
 
   if (result.success) {
@@ -386,7 +430,7 @@ export async function markEventPurchasePaidAction(input: {
           repo.getProductsByEvent(input.eventId).then((ps) => ps.find((p) => p.id === purchase.eventProductId)).catch(() => null),
         ]);
         if (product) {
-          await sendEventPurchaseEmail({
+          const emailResult = await sendEventPurchaseEmail({
             studentId: null,
             studentName: purchase.guestName ?? "Guest",
             directEmail: purchase.guestEmail,
@@ -400,7 +444,14 @@ export async function markEventPurchasePaidAction(input: {
             qrToken: qrToken ?? undefined,
             coverImageUrl: event?.coverImageUrl ?? undefined,
           });
-          console.info(`${adminTag} Email send completed.`);
+          try {
+            await repo.updatePurchaseEmailTracking(input.purchaseId, {
+              lastEmailType: "payment_confirmation",
+              lastEmailSentAt: new Date().toISOString(),
+              lastEmailSuccess: emailResult.sent,
+            });
+          } catch { /* non-critical */ }
+          console.info(`${adminTag} Email send completed (sent=${emailResult.sent}).`);
         } else {
           console.warn(`${adminTag} Could not resolve product — email skipped.`);
         }

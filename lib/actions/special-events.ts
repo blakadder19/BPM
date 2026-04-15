@@ -15,6 +15,7 @@ import {
   deleteEventProduct,
 } from "@/lib/services/special-event-service";
 import { uploadEventCover, removeEventCover } from "@/lib/services/event-image-storage";
+import { sessionRealDateTimes, formatEventDateRange } from "@/lib/utils";
 import type {
   EventStatus,
   EventSessionType,
@@ -26,6 +27,27 @@ const VALID_STATUSES = new Set<string>(["draft", "published"]);
 const VALID_SESSION_TYPES = new Set<string>(["workshop", "social", "intensive", "masterclass", "other"]);
 const VALID_PRODUCT_TYPES = new Set<string>(["full_pass", "combo_pass", "single_session", "social_ticket", "other"]);
 const VALID_INCLUSION_RULES = new Set<string>(["all_sessions", "selected_sessions", "all_workshops", "socials_only"]);
+
+function validateSessionWithinEvent(
+  date: string, startTime: string, endTime: string,
+  eventStartDate: string, eventEndDate: string,
+): string | null {
+  const { start: sessionStart, end: sessionEnd } = sessionRealDateTimes(date, startTime, endTime);
+  const evtStart = new Date(eventStartDate).getTime();
+  const evtEnd = new Date(eventEndDate).getTime();
+  const sessStart = new Date(sessionStart).getTime();
+  const sessEnd = new Date(sessionEnd).getTime();
+
+  if (sessStart < evtStart) {
+    return `This session starts before the event begins (${formatEventDateRange(eventStartDate, eventEndDate)})`;
+  }
+  if (sessEnd > evtEnd) {
+    return endTime <= startTime
+      ? `This overnight session ends after the event finishes (${formatEventDateRange(eventStartDate, eventEndDate)})`
+      : `This session ends after the event finishes (${formatEventDateRange(eventStartDate, eventEndDate)})`;
+  }
+  return null;
+}
 
 function eurosToCents(raw: string | null): number {
   if (!raw || raw.trim() === "") return 0;
@@ -84,8 +106,8 @@ export async function createEventAction(
   const description = (formData.get("description") as string)?.trim() || "";
   const urlInput = (formData.get("coverImageUrl") as string)?.trim() || null;
   const location = (formData.get("location") as string)?.trim() || "";
-  const startDate = formData.get("startDate") as string;
-  const endDate = formData.get("endDate") as string;
+  const startDate = (formData.get("startDate") as string)?.trim();
+  const endDate = (formData.get("endDate") as string)?.trim();
   const status = (formData.get("status") as string) || "draft";
   const isVisible = formData.get("isVisible") === "on" || formData.get("isVisible") === "true";
   const isFeatured = formData.get("isFeatured") === "on" || formData.get("isFeatured") === "true";
@@ -98,7 +120,7 @@ export async function createEventAction(
 
   if (!title) return { success: false, error: "Title is required" };
   if (!startDate || !endDate) return { success: false, error: "Start and end dates are required" };
-  if (endDate < startDate) return { success: false, error: "End date must be on or after start date" };
+  if (new Date(startDate).getTime() >= new Date(endDate).getTime()) return { success: false, error: "End must be after start" };
   if (!VALID_STATUSES.has(status)) return { success: false, error: "Invalid status" };
   if (overallCapacity !== null && (isNaN(overallCapacity) || overallCapacity < 0)) return { success: false, error: "Overall capacity must be a positive number" };
 
@@ -136,8 +158,8 @@ export async function updateEventAction(
   const subtitle = (formData.get("subtitle") as string)?.trim() || null;
   const description = (formData.get("description") as string)?.trim() || "";
   const location = (formData.get("location") as string)?.trim() || "";
-  const startDate = formData.get("startDate") as string;
-  const endDate = formData.get("endDate") as string;
+  const startDate = (formData.get("startDate") as string)?.trim();
+  const endDate = (formData.get("endDate") as string)?.trim();
   const status = (formData.get("status") as string) || "draft";
   const isVisible = formData.get("isVisible") === "on" || formData.get("isVisible") === "true";
   const isFeatured = formData.get("isFeatured") === "on" || formData.get("isFeatured") === "true";
@@ -150,7 +172,7 @@ export async function updateEventAction(
 
   if (!title) return { success: false, error: "Title is required" };
   if (!startDate || !endDate) return { success: false, error: "Start and end dates are required" };
-  if (endDate < startDate) return { success: false, error: "End date must be on or after start date" };
+  if (new Date(startDate).getTime() >= new Date(endDate).getTime()) return { success: false, error: "End must be after start" };
   if (!VALID_STATUSES.has(status)) return { success: false, error: "Invalid status" };
   if (overallCapacity !== null && (isNaN(overallCapacity) || overallCapacity < 0)) return { success: false, error: "Overall capacity must be a positive number" };
 
@@ -213,9 +235,8 @@ export async function createSessionAction(
 
   const parentEvent = await getEvent(eventId);
   if (!parentEvent) return { success: false, error: "Parent event not found" };
-  if (date < parentEvent.startDate || date > parentEvent.endDate) {
-    return { success: false, error: `Session date must be between ${parentEvent.startDate} and ${parentEvent.endDate}` };
-  }
+  const sessionErr = validateSessionWithinEvent(date, startTime, endTime, parentEvent.startDate, parentEvent.endDate);
+  if (sessionErr) return { success: false, error: sessionErr };
 
   const result = await createSession({
     eventId, title, sessionType: sessionType as EventSessionType,
@@ -246,10 +267,11 @@ export async function updateSessionAction(
 
   if (!title) return { success: false, error: "Title is required" };
   if (!VALID_SESSION_TYPES.has(sessionType)) return { success: false, error: "Invalid session type" };
-  if (date) {
+  if (date && startTime && endTime) {
     const parentEvent = await getEvent(eventId);
-    if (parentEvent && (date < parentEvent.startDate || date > parentEvent.endDate)) {
-      return { success: false, error: `Session date must be between ${parentEvent.startDate} and ${parentEvent.endDate}` };
+    if (parentEvent) {
+      const sessionErr = validateSessionWithinEvent(date, startTime, endTime, parentEvent.startDate, parentEvent.endDate);
+      if (sessionErr) return { success: false, error: sessionErr };
     }
   }
 

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, X, CalendarDays, MapPin, AlertTriangle } from "lucide-react";
+import { Upload, X, CalendarDays, MapPin, AlertTriangle, Clock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -36,10 +36,7 @@ const ACCEPTED_MIME = new Set(["image/jpeg", "image/jpg", "image/png", "image/we
 const ACCEPTED_IMAGE_TYPES = ".jpg,.jpeg,.png,.webp";
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
-function formatShortDate(d: string) {
-  if (!d) return "";
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short" });
-}
+import { formatEventDateRange, eventDateOnly, eventTimeOnly, isOvernightSession } from "@/lib/utils";
 
 export function EventFormDialog({
   open,
@@ -67,8 +64,8 @@ export function EventFormDialog({
   const [liveTitle, setLiveTitle] = useState(defaults?.title ?? "");
   const [liveSubtitle, setLiveSubtitle] = useState(defaults?.subtitle ?? "");
   const [liveLocation, setLiveLocation] = useState(defaults?.location ?? "");
-  const [liveStart, setLiveStart] = useState(defaults?.startDate ?? "");
-  const [liveEnd, setLiveEnd] = useState(defaults?.endDate ?? "");
+  const [liveStart, setLiveStart] = useState(defaults?.startDate?.slice(0, 16) ?? "");
+  const [liveEnd, setLiveEnd] = useState(defaults?.endDate?.slice(0, 16) ?? "");
 
   function checkRatio(src: string) {
     const img = new Image();
@@ -246,13 +243,16 @@ export function EventFormDialog({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Start date">
-                <input type="date" name="startDate" defaultValue={defaults?.startDate ?? ""} required className={inputCls} onChange={(e) => setLiveStart(e.target.value)} />
+              <Field label="Start">
+                <input type="datetime-local" name="startDate" defaultValue={defaults?.startDate?.slice(0, 16) ?? ""} required className={inputCls} onChange={(e) => setLiveStart(e.target.value)} />
               </Field>
-              <Field label="End date">
-                <input type="date" name="endDate" defaultValue={defaults?.endDate ?? ""} required className={inputCls} onChange={(e) => setLiveEnd(e.target.value)} />
+              <Field label="End">
+                <input type="datetime-local" name="endDate" defaultValue={defaults?.endDate?.slice(0, 16) ?? ""} required className={inputCls} min={liveStart || undefined} onChange={(e) => setLiveEnd(e.target.value)} />
               </Field>
             </div>
+            {liveStart && liveEnd && new Date(liveEnd) <= new Date(liveStart) && (
+              <p className="text-xs text-red-600 -mt-2">End must be after start</p>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <Field label="Status">
@@ -261,9 +261,9 @@ export function EventFormDialog({
                   <option value="published">Published</option>
                 </select>
               </Field>
-              <Field label="Overall capacity">
+              <Field label="Overall event capacity">
                 <input type="number" name="overallCapacity" min={0} defaultValue={defaults?.overallCapacity ?? ""} className={inputCls} placeholder="No limit" />
-                <p className="mt-0.5 text-xs text-gray-400">Leave empty for no cap</p>
+                <p className="mt-0.5 text-xs text-gray-400">Total tickets for the whole event. Leave empty for no global limit. Session capacities are separate.</p>
               </Field>
             </div>
 
@@ -326,7 +326,7 @@ export function EventFormDialog({
                         {liveStart && (
                           <span className="flex items-center gap-1">
                             <CalendarDays className="h-3 w-3" />
-                            {formatShortDate(liveStart)}{liveEnd && liveEnd !== liveStart ? ` – ${formatShortDate(liveEnd)}` : ""}
+                            {liveEnd ? formatEventDateRange(liveStart, liveEnd) : formatEventDateRange(liveStart, liveStart)}
                           </span>
                         )}
                         {liveLocation && (
@@ -380,7 +380,10 @@ export function SessionFormDialog({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [liveStartTime, setLiveStartTime] = useState(defaults?.startTime ?? "");
+  const [liveEndTime, setLiveEndTime] = useState(defaults?.endTime ?? "");
   const isEdit = !!defaults;
+  const overnight = liveStartTime.length > 0 && liveEndTime.length > 0 && isOvernightSession(liveStartTime, liveEndTime);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -419,23 +422,25 @@ export function SessionFormDialog({
                 type="date"
                 name="date"
                 defaultValue={defaults?.date ?? ""}
-                min={eventStartDate}
-                max={eventEndDate}
+                min={eventStartDate ? eventDateOnly(eventStartDate) : undefined}
+                max={eventEndDate ? eventDateOnly(eventEndDate) : undefined}
                 required
                 className={inputCls}
               />
-              {eventStartDate && eventEndDate && (
-                <p className="mt-1 text-xs text-gray-400">Must be between {eventStartDate} and {eventEndDate}</p>
-              )}
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label="Start time">
-                <input type="time" name="startTime" defaultValue={defaults?.startTime ?? ""} required className={inputCls} />
+                <input type="time" name="startTime" defaultValue={defaults?.startTime ?? ""} required className={inputCls} onChange={(e) => setLiveStartTime(e.target.value)} />
               </Field>
               <Field label="End time">
-                <input type="time" name="endTime" defaultValue={defaults?.endTime ?? ""} required className={inputCls} />
+                <input type="time" name="endTime" defaultValue={defaults?.endTime ?? ""} required className={inputCls} onChange={(e) => setLiveEndTime(e.target.value)} />
               </Field>
             </div>
+            {overnight && (
+              <p className="text-xs text-amber-600 -mt-2 flex items-center gap-1">
+                <Clock className="h-3 w-3" /> Overnight session — ends the following day
+              </p>
+            )}
             <Field label="Teacher / Artist">
               <input name="teacherName" defaultValue={defaults?.teacherName ?? ""} className={inputCls} />
             </Field>

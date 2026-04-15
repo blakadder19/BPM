@@ -24,6 +24,12 @@ import {
   Users,
   User,
   QrCode,
+  AlertTriangle,
+  Ban,
+  CircleAlert,
+  ScanLine,
+  Mail,
+  Send,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminTable, Td } from "@/components/ui/admin-table";
@@ -46,6 +52,7 @@ import {
 } from "./event-dialogs";
 import { EventAnnouncementDialog } from "./event-announcement-dialog";
 import { markEventPurchasePaidAction } from "@/lib/actions/event-purchase";
+import { resendEventPurchaseEmailAction, sendEventReminderAction } from "@/lib/actions/event-emails";
 import {
   updateEventAction,
   createSessionAction,
@@ -75,9 +82,7 @@ interface Props {
   studentInfoMap: Record<string, StudentInfo>;
 }
 
-function formatDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric" });
-}
+import { formatEventDateRange, formatEventDT, formatSessionTimeRange } from "@/lib/utils";
 
 function centsToEuros(c: number) {
   return `€${(c / 100).toFixed(2)}`;
@@ -106,10 +111,27 @@ const INCLUSION_LABELS: Record<string, string> = {
   socials_only: "Socials only",
 };
 
+type CapacityState = "uncapped" | "available" | "near_capacity" | "full" | "oversold";
+
+function getCapacityState(overallCapacity: number | null, totalSold: number): CapacityState {
+  if (overallCapacity == null) return "uncapped";
+  if (totalSold > overallCapacity) return "oversold";
+  if (totalSold >= overallCapacity) return "full";
+  if (totalSold / overallCapacity >= 0.8) return "near_capacity";
+  return "available";
+}
+
+const CAPACITY_CONFIG: Record<CapacityState, { label: string; icon: typeof Check; className: string; bg: string; border: string; text: string }> = {
+  uncapped: { label: "No global limit", icon: Check, className: "text-gray-500", bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-600" },
+  available: { label: "Available", icon: Check, className: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-700" },
+  near_capacity: { label: "Near capacity", icon: CircleAlert, className: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-700" },
+  full: { label: "Full", icon: Ban, className: "text-red-600", bg: "bg-red-50", border: "border-red-200", text: "text-red-700" },
+  oversold: { label: "Oversold", icon: AlertTriangle, className: "text-red-700", bg: "bg-red-100", border: "border-red-300", text: "text-red-800" },
+};
+
 export function AdminEventDetail({ event, sessions, products, purchases, studentInfoMap }: Props) {
   const router = useRouter();
 
-  // Event edit
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -125,23 +147,61 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
     });
   }
 
-  // Session dialogs
   const [showAddSession, setShowAddSession] = useState(false);
   const [editSession, setEditSession] = useState<MockEventSession | null>(null);
   const [deleteSession, setDeleteSession] = useState<MockEventSession | null>(null);
 
-  // Product dialogs
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [editProduct, setEditProduct] = useState<MockEventProduct | null>(null);
   const [deleteProduct, setDeleteProduct] = useState<MockEventProduct | null>(null);
 
   const studentList = Object.entries(studentInfoMap).map(([id, info]) => ({ id, fullName: info.fullName }));
 
-  // Mark-as-paid dialog
   const [payPurchase, setPayPurchase] = useState<MockEventPurchase | null>(null);
   const [payMethod, setPayMethod] = useState<"cash" | "revolut">("cash");
   const [payPending, startPayTransition] = useTransition();
   const [payError, setPayError] = useState<string | null>(null);
+
+  const [emailPending, startEmailTransition] = useTransition();
+  const [emailFeedback, setEmailFeedback] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
+  const [reminderPending, startReminderTransition] = useTransition();
+  const [reminderFeedback, setReminderFeedback] = useState<string | null>(null);
+
+  function handleResendEmail(purchaseId: string, buyerEmail?: string | null) {
+    setEmailFeedback(null);
+    startEmailTransition(async () => {
+      try {
+        const res = await resendEventPurchaseEmailAction({
+          purchaseId,
+          eventId: event.id,
+          buyerEmail: buyerEmail ?? undefined,
+        });
+        const msg = res.success
+          ? res.trackingFailed ? "Sent (tracking update failed)" : "Email sent"
+          : (res.error ?? "Failed");
+        setEmailFeedback({ id: purchaseId, ok: res.success, msg });
+        if (res.success) router.refresh();
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : "Unexpected error";
+        setEmailFeedback({ id: purchaseId, ok: false, msg: errMsg });
+      }
+      setTimeout(() => setEmailFeedback(null), 5000);
+    });
+  }
+
+  function handleSendReminder() {
+    setReminderFeedback(null);
+    startReminderTransition(async () => {
+      const res = await sendEventReminderAction({ eventId: event.id });
+      if (res.success) {
+        setReminderFeedback(`Sent ${res.sentCount ?? 0} reminder${(res.sentCount ?? 0) !== 1 ? "s" : ""}${res.failedCount ? ` (${res.failedCount} failed)` : ""}`);
+        router.refresh();
+      } else {
+        setReminderFeedback(res.error ?? "Failed");
+      }
+      setTimeout(() => setReminderFeedback(null), 5000);
+    });
+  }
 
   // ── Sales stats ──────────────────────────────────────────
   const activePurchases = purchases.filter((p) => p.paymentStatus !== "refunded");
@@ -149,19 +209,45 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
   const totalPaid = activePurchases.filter((p) => p.paymentStatus === "paid").length;
   const totalPending = activePurchases.filter((p) => p.paymentStatus === "pending").length;
   const pendingCount = totalPending;
-  const remaining = event.overallCapacity != null ? Math.max(0, event.overallCapacity - totalSold) : null;
-  const capacityPct = event.overallCapacity ? Math.min(100, Math.round((totalSold / event.overallCapacity) * 100)) : null;
+  const remaining = event.overallCapacity != null ? event.overallCapacity - totalSold : null;
+  const rawPct = event.overallCapacity && event.overallCapacity > 0 ? Math.round((totalSold / event.overallCapacity) * 100) : null;
+  const capacityPct = rawPct !== null ? Math.min(rawPct, 100) : null;
+  const capacityState = getCapacityState(event.overallCapacity, totalSold);
+  const capCfg = CAPACITY_CONFIG[capacityState];
+
+  const productFallback = (p: MockEventPurchase) =>
+    products.find((pr) => pr.id === p.eventProductId)?.priceCents ?? 0;
+
+  const snapshotPaid = (p: MockEventPurchase): number =>
+    p.paidAmountCents != null ? p.paidAmountCents
+      : p.originalAmountCents != null ? p.originalAmountCents - (p.discountAmountCents ?? 0)
+      : p.unitPriceCentsAtPurchase ?? productFallback(p);
+
+  const snapshotOwed = (p: MockEventPurchase): number =>
+    p.originalAmountCents != null ? p.originalAmountCents - (p.discountAmountCents ?? 0)
+      : p.unitPriceCentsAtPurchase ?? productFallback(p);
+
+  const paidRevenue = activePurchases
+    .filter((p) => p.paymentStatus === "paid")
+    .reduce((sum, p) => sum + snapshotPaid(p), 0);
+  const pendingRevenue = activePurchases
+    .filter((p) => p.paymentStatus === "pending")
+    .reduce((sum, p) => sum + snapshotOwed(p), 0);
 
   const productBreakdown = products.map((p) => {
     const pPurchases = activePurchases.filter((pur) => pur.eventProductId === p.id);
+    const paidPurchases = pPurchases.filter((pur) => pur.paymentStatus === "paid");
+    const pendPurchases = pPurchases.filter((pur) => pur.paymentStatus === "pending");
     return {
       id: p.id,
       name: p.name,
       productType: p.productType,
+      priceCents: p.priceCents,
       total: pPurchases.length,
-      paid: pPurchases.filter((pur) => pur.paymentStatus === "paid").length,
-      pending: pPurchases.filter((pur) => pur.paymentStatus === "pending").length,
-      revenue: pPurchases.filter((pur) => pur.paymentStatus === "paid").length * p.priceCents,
+      paid: paidPurchases.length,
+      pending: pendPurchases.length,
+      paidRevenue: paidPurchases.reduce((s, pur) => s + snapshotPaid(pur), 0),
+      pendingRevenue: pendPurchases.reduce((s, pur) => s + snapshotOwed(pur), 0),
     };
   });
 
@@ -197,6 +283,12 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                     </button>
                   </>
                 )}
+                <Link
+                  href={`/events/${event.id}/operations`}
+                  className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+                >
+                  <ScanLine className="h-3.5 w-3.5" /> Reception mode
+                </Link>
                 <button
                   onClick={() => setShowAnnouncement(true)}
                   className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-2 text-sm font-medium text-white hover:bg-bpm-700"
@@ -238,7 +330,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
               {event.isPublic && <Badge variant="info"><Globe className="h-3 w-3 mr-0.5" /> Public</Badge>}
             </div>
             <div className="grid sm:grid-cols-2 gap-3 text-sm">
-              <div><span className="text-gray-500">Dates:</span> {formatDate(event.startDate)} – {formatDate(event.endDate)}</div>
+              <div><span className="text-gray-500">When:</span> {formatEventDateRange(event.startDate, event.endDate)}</div>
               <div><span className="text-gray-500">Location:</span> {event.location || "—"}</div>
             </div>
             {event.description && <p className="text-sm text-gray-600">{event.description}</p>}
@@ -255,36 +347,52 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
         </div>
       </div>
 
-      {/* ── Sales Overview ─────────────────────────────────── */}
+      {/* ── Sales & Capacity ─────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 text-gray-400" /> Sales Overview
+          <BarChart3 className="h-5 w-5 text-gray-400" /> Sales &amp; Capacity
         </h2>
 
+        {/* Capacity state banner */}
+        {capacityState !== "uncapped" && capacityState !== "available" && (
+          <div className={`flex items-center gap-3 rounded-lg border px-4 py-3 ${capCfg.bg} ${capCfg.border}`}>
+            <capCfg.icon className={`h-5 w-5 shrink-0 ${capCfg.className}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-semibold ${capCfg.text}`}>
+                {capacityState === "oversold"
+                  ? `Oversold — ${totalSold} sold vs ${event.overallCapacity} capacity`
+                  : capacityState === "full"
+                    ? "This event is fully booked. New purchases are blocked."
+                    : `Near capacity — ${remaining} spot${remaining !== 1 ? "s" : ""} remaining`}
+              </p>
+              {capacityState === "oversold" && (
+                <p className="text-xs text-red-600 mt-0.5">
+                  Capacity was reduced below current sales. No one is auto-cancelled, but new purchases are blocked.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* High-level stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total sold</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">{totalSold}</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Paid</p>
-            <p className="mt-1 text-2xl font-bold text-green-600">{totalPaid}</p>
-          </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Pending</p>
-            <p className="mt-1 text-2xl font-bold text-amber-600">{totalPending}</p>
-          </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <StatBox label="Total sold" value={String(totalSold)} />
+          <StatBox label="Paid" value={String(totalPaid)} color="text-green-600" />
+          <StatBox label="Pending" value={String(totalPending)} color={totalPending > 0 ? "text-amber-600" : undefined} />
           {event.overallCapacity != null ? (
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Remaining</p>
-              <p className={`mt-1 text-2xl font-bold ${remaining === 0 ? "text-red-600" : "text-gray-900"}`}>{remaining}</p>
-            </div>
+            <StatBox
+              label="Remaining"
+              value={String(Math.max(0, remaining ?? 0))}
+              color={remaining != null && remaining <= 0 ? "text-red-600" : undefined}
+            />
           ) : (
-            <div className="rounded-lg border border-gray-200 bg-white p-4">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Capacity</p>
-              <p className="mt-1 text-sm text-gray-400">No limit set</p>
-            </div>
+            <StatBox label="Capacity" value="No limit" small />
+          )}
+          <StatBox label="Revenue (paid)" value={centsToEuros(paidRevenue)} color="text-green-600" />
+          {pendingRevenue > 0 ? (
+            <StatBox label="Revenue (pending)" value={centsToEuros(pendingRevenue)} color="text-amber-600" />
+          ) : (
+            <StatBox label="Revenue (pending)" value={centsToEuros(0)} />
           )}
         </div>
 
@@ -292,19 +400,33 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
         {event.overallCapacity != null && capacityPct != null && (
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <div className="flex items-center justify-between text-sm mb-2">
-              <span className="font-medium text-gray-700">
-                {totalSold} / {event.overallCapacity} sold
-              </span>
-              <span className="text-gray-500">{capacityPct}%</span>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-gray-700">
+                  {totalSold} / {event.overallCapacity} sold
+                </span>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${capCfg.bg} ${capCfg.text} ${capCfg.border} border`}>
+                  <capCfg.icon className="h-3 w-3" />
+                  {capCfg.label}
+                </span>
+              </div>
+              <span className="text-gray-500 tabular-nums">{rawPct}%</span>
             </div>
             <div className="h-3 rounded-full bg-gray-100 overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${
-                  capacityPct >= 100 ? "bg-red-500" : capacityPct >= 80 ? "bg-amber-500" : "bg-bpm-500"
+                  capacityState === "oversold" || capacityState === "full" ? "bg-red-500" : capacityState === "near_capacity" ? "bg-amber-500" : "bg-bpm-500"
                 }`}
                 style={{ width: `${capacityPct}%` }}
               />
             </div>
+          </div>
+        )}
+
+        {/* Uncapped indicator */}
+        {event.overallCapacity == null && (
+          <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+            <Check className="h-4 w-4 text-gray-400" />
+            No overall capacity limit set. Purchases are not capped. Set a limit via the Edit button if needed.
           </div>
         )}
 
@@ -314,25 +436,55 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
             <div className="px-4 py-3 border-b border-gray-100">
               <h3 className="text-sm font-semibold text-gray-700">Sales by product</h3>
             </div>
-            <div className="divide-y divide-gray-100">
-              {productBreakdown.map((pb) => (
-                <div key={pb.id} className="px-4 py-3 flex items-center gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{pb.name}</p>
-                    <p className="text-xs text-gray-400">{PRODUCT_TYPE_LABELS[pb.productType] ?? pb.productType}</p>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm shrink-0">
-                    <span className="text-gray-700 font-medium">{pb.total} sold</span>
-                    <span className="text-green-600">{pb.paid} paid</span>
-                    {pb.pending > 0 && <span className="text-amber-600">{pb.pending} pending</span>}
-                    <span className="text-gray-500 font-medium">{centsToEuros(pb.revenue)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex items-center justify-between text-sm">
-              <span className="font-semibold text-gray-700">Total revenue (paid)</span>
-              <span className="font-bold text-gray-900">{centsToEuros(productBreakdown.reduce((sum, pb) => sum + pb.revenue, 0))}</span>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 text-xs text-gray-500 uppercase tracking-wide">
+                    <th className="text-left px-4 py-2 font-medium">Product</th>
+                    <th className="text-right px-4 py-2 font-medium">Sold</th>
+                    <th className="text-right px-4 py-2 font-medium">Paid</th>
+                    <th className="text-right px-4 py-2 font-medium">Pending</th>
+                    <th className="text-right px-4 py-2 font-medium">Revenue (paid)</th>
+                    <th className="text-right px-4 py-2 font-medium">Revenue (pending)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {productBreakdown.map((pb) => {
+                    const avgSnapshotCents = pb.total > 0
+                      ? Math.round((pb.paidRevenue + pb.pendingRevenue) / pb.total)
+                      : pb.priceCents;
+                    const priceChanged = pb.total > 0 && avgSnapshotCents !== pb.priceCents;
+                    return (
+                    <tr key={pb.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5">
+                        <p className="font-medium text-gray-900">{pb.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {PRODUCT_TYPE_LABELS[pb.productType] ?? pb.productType}
+                          {priceChanged
+                            ? <> · purchased at {centsToEuros(avgSnapshotCents)} <span className="text-gray-300">(now {centsToEuros(pb.priceCents)})</span></>
+                            : <> · {centsToEuros(pb.priceCents)} each</>}
+                        </p>
+                      </td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-700 tabular-nums">{pb.total}</td>
+                      <td className="px-4 py-2.5 text-right text-green-600 tabular-nums">{pb.paid}</td>
+                      <td className="px-4 py-2.5 text-right text-amber-600 tabular-nums">{pb.pending || "—"}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-gray-700 tabular-nums">{centsToEuros(pb.paidRevenue)}</td>
+                      <td className="px-4 py-2.5 text-right text-amber-600 tabular-nums">{pb.pendingRevenue > 0 ? centsToEuros(pb.pendingRevenue) : "—"}</td>
+                    </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-gray-200 bg-gray-50">
+                    <td className="px-4 py-2.5 font-semibold text-gray-700">Total</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-gray-900 tabular-nums">{totalSold}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-green-600 tabular-nums">{totalPaid}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-amber-600 tabular-nums">{totalPending || "—"}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-gray-900 tabular-nums">{centsToEuros(paidRevenue)}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-amber-600 tabular-nums">{pendingRevenue > 0 ? centsToEuros(pendingRevenue) : "—"}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           </div>
         )}
@@ -358,7 +510,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
               <tr key={s.id} className="hover:bg-gray-50">
                 <Td className="font-medium">{s.title}</Td>
                 <Td><StatusBadge status={s.sessionType} /></Td>
-                <Td>{formatDate(s.date)} {s.startTime}–{s.endTime}</Td>
+                <Td>{formatEventDT(s.date)}, {formatSessionTimeRange(s.date, s.startTime, s.endTime)}</Td>
                 <Td>{s.teacherName || "—"}</Td>
                 <Td>{s.room || "—"}</Td>
                 <Td>{s.capacity ?? "—"}</Td>
@@ -417,33 +569,56 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
 
       {/* ── Purchases ───────────────────────────────────────── */}
       <section className="space-y-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-            <Users className="h-5 w-5 text-gray-400" /> Purchases ({purchases.length})
-          </h2>
-          {pendingCount > 0 && (
-            <Badge variant="warning">{pendingCount} pending</Badge>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <Users className="h-5 w-5 text-gray-400" /> Purchases ({activePurchases.length})
+            </h2>
+            <Badge variant="success">{totalPaid} paid</Badge>
+            {pendingCount > 0 && (
+              <Badge variant="warning">{pendingCount} pending</Badge>
+            )}
+            {event.overallCapacity != null && (
+              <span className="text-xs text-gray-400">
+                · counting toward {event.overallCapacity} capacity
+              </span>
+            )}
+          </div>
+          {activePurchases.length > 0 && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSendReminder}
+                disabled={reminderPending}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <Send className="h-3 w-3" /> {reminderPending ? "Sending…" : "Send reminder"}
+              </button>
+              {reminderFeedback && (
+                <span className="text-xs text-gray-500">{reminderFeedback}</span>
+              )}
+            </div>
           )}
         </div>
 
         {purchases.length === 0 ? (
           <EmptyState icon={Ticket} title="No purchases yet" description="Purchases will appear here when students buy event products." />
         ) : (
-          <AdminTable headers={["Buyer", "Product", "Method", "Status", "QR", "Date", ""]}>
-            {purchases.map((pur) => {
+          <AdminTable headers={["#", "Buyer", "Product", "Status", "QR", "Email", ""]}>
+            {purchases.map((pur, idx) => {
               const product = products.find((p) => p.id === pur.eventProductId);
               const isGuest = !pur.studentId;
               const studentInfo = pur.studentId ? studentInfoMap[pur.studentId] : null;
               const isInternal = !!studentInfo;
               const buyerName = isGuest ? (pur.guestName ?? "Guest") : (studentInfo?.fullName ?? pur.studentId ?? "Unknown");
               const buyerEmail = isGuest ? pur.guestEmail : (studentInfo?.email ?? null);
-              const methodLabel = pur.paymentMethod === "stripe"
-                ? "Card (Stripe)"
-                : pur.receptionMethod
-                  ? `Reception (${pur.receptionMethod})`
-                  : "Pay at reception";
+              const isRefunded = pur.paymentStatus === "refunded";
+              const canResend = !isRefunded && !!buyerEmail;
+              const fb = emailFeedback?.id === pur.id ? emailFeedback : null;
               return (
-                <tr key={pur.id} className="hover:bg-gray-50">
+                <tr key={pur.id} className={`hover:bg-gray-50 ${isRefunded ? "opacity-50" : ""}`}>
+                  <Td>
+                    <span className="text-xs text-gray-400 tabular-nums">{isRefunded ? "—" : idx + 1}</span>
+                  </Td>
                   <Td>
                     <div className="flex items-center gap-2">
                       <div className="min-w-0">
@@ -468,7 +643,6 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                     </div>
                   </Td>
                   <Td>{product?.name ?? pur.eventProductId}</Td>
-                  <Td>{methodLabel}</Td>
                   <Td><StatusBadge status={pur.paymentStatus} /></Td>
                   <Td>
                     {isGuest ? (
@@ -483,16 +657,40 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                       <span className="text-xs text-gray-400" title="Internal students use their student QR">Student QR</span>
                     )}
                   </Td>
-                  <Td>{new Date(pur.purchasedAt).toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric" })}</Td>
                   <Td>
-                    {pur.paymentStatus === "pending" && (
-                      <button
-                        onClick={() => { setPayPurchase(pur); setPayMethod("cash"); setPayError(null); }}
-                        className="text-xs font-medium text-bpm-600 hover:underline"
+                    {pur.lastEmailSentAt ? (
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs ${pur.lastEmailSuccess ? "text-green-700" : "text-red-600"}`}
+                        title={`${pur.lastEmailType ?? "email"} — ${new Date(pur.lastEmailSentAt).toLocaleString("en-IE")}`}
                       >
-                        Mark as paid
-                      </button>
+                        <Mail className="h-3 w-3" />
+                        {pur.lastEmailSuccess ? "Sent" : "Failed"}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-300">—</span>
                     )}
+                  </Td>
+                  <Td>
+                    <div className="flex items-center gap-2">
+                      {pur.paymentStatus === "pending" && (
+                        <button
+                          onClick={() => { setPayPurchase(pur); setPayMethod("cash"); setPayError(null); }}
+                          className="text-xs font-medium text-bpm-600 hover:underline"
+                        >
+                          Mark as paid
+                        </button>
+                      )}
+                      {canResend && (
+                        <button
+                          onClick={() => handleResendEmail(pur.id, buyerEmail)}
+                          disabled={emailPending}
+                          className="text-xs font-medium text-gray-500 hover:text-gray-700 hover:underline disabled:opacity-50"
+                          title={fb?.msg ?? "Resend confirmation email"}
+                        >
+                          {fb ? (fb.ok ? "Sent ✓" : `Failed`) : "Resend email"}
+                        </button>
+                      )}
+                    </div>
                   </Td>
                 </tr>
               );
@@ -636,6 +834,15 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
           </DialogContent>
         </Dialog>
       )}
+    </div>
+  );
+}
+
+function StatBox({ label, value, color, small }: { label: string; value: string; color?: string; small?: boolean }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <p className="text-[11px] font-medium text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className={`mt-0.5 ${small ? "text-sm text-gray-400" : `text-xl font-bold ${color ?? "text-gray-900"}`}`}>{value}</p>
     </div>
   );
 }

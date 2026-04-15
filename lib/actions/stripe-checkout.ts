@@ -383,7 +383,7 @@ export async function createGuestEventStripeCheckoutAction(input: {
   if (event.overallCapacity != null) {
     const totalSold = allPurchases.filter((p) => p.paymentStatus !== "refunded").length;
     if (totalSold >= event.overallCapacity) {
-      return { success: false, error: "This event is sold out" };
+      return { success: false, error: "This event is fully booked. No more tickets are currently available." };
     }
   }
 

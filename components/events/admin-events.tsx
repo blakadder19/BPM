@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { EventFormDialog, ConfirmDeleteDialog } from "./event-dialogs";
 import { createEventAction, deleteEventAction } from "@/lib/actions/special-events";
+import { formatEventDateRange } from "@/lib/utils";
 import type { MockSpecialEvent } from "@/lib/mock-data";
 
 interface AdminEventsProps {
@@ -43,13 +44,6 @@ export function AdminEvents({ events, sessionCountMap, productCountMap }: AdminE
     }
     return true;
   });
-
-  function formatDateRange(start: string, end: string) {
-    const s = new Date(start + "T00:00:00");
-    const e = new Date(end + "T00:00:00");
-    const fmt = (d: Date) => d.toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric" });
-    return `${fmt(s)} – ${fmt(e)}`;
-  }
 
   return (
     <div className="space-y-4">
@@ -90,7 +84,7 @@ export function AdminEvents({ events, sessionCountMap, productCountMap }: AdminE
                 </Link>
                 {evt.subtitle && <span className="ml-1 text-gray-500 text-xs">{evt.subtitle}</span>}
               </Td>
-              <Td>{formatDateRange(evt.startDate, evt.endDate)}</Td>
+              <Td>{formatEventDateRange(evt.startDate, evt.endDate)}</Td>
               <Td><StatusBadge status={evt.status} /></Td>
               <Td>{sessionCountMap[evt.id] ?? 0}</Td>
               <Td>{productCountMap[evt.id] ?? 0}</Td>

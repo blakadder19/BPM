@@ -131,6 +131,14 @@ export interface CreatePurchaseData {
   paymentReference?: string | null;
   paidAt?: string | null;
   notes?: string | null;
+  /** Financial snapshot — set at purchase time */
+  unitPriceCentsAtPurchase?: number | null;
+  originalAmountCents?: number | null;
+  discountAmountCents?: number | null;
+  paidAmountCents?: number | null;
+  currency?: string | null;
+  productNameSnapshot?: string | null;
+  productTypeSnapshot?: string | null;
 }
 
 // ── Repository Interface ─────────────────────────────────────
@@ -162,6 +170,15 @@ export interface ISpecialEventRepository {
   createPurchase(data: CreatePurchaseData): Promise<MockEventPurchase>;
   updatePurchasePayment(
     id: string,
-    patch: { paymentStatus: EventPaymentStatus; paymentReference?: string | null; receptionMethod?: string | null; paidAt?: string | null; qrToken?: string | null },
+    patch: { paymentStatus: EventPaymentStatus; paymentReference?: string | null; receptionMethod?: string | null; paidAt?: string | null; qrToken?: string | null; paidAmountCents?: number | null },
   ): Promise<MockEventPurchase | null>;
+  updatePurchaseCheckIn(
+    id: string,
+    patch: { checkedInAt: string | null; checkedInBy: string | null },
+  ): Promise<MockEventPurchase | null>;
+
+  updatePurchaseEmailTracking(
+    id: string,
+    patch: { lastEmailType: string; lastEmailSentAt: string; lastEmailSuccess: boolean },
+  ): Promise<void>;
 }

@@ -25,6 +25,19 @@ import type {
   CreatePurchaseData,
 } from "../interfaces/special-event-repository";
 
+// ── Helpers ───────────────────────────────────────────────────
+
+/**
+ * Normalize a timestamptz string from Supabase into a clean ISO datetime
+ * without timezone offset (we store everything as UTC-like for display).
+ */
+function normalizeEventDT(val: string | null | undefined): string {
+  if (!val) return "";
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return val;
+  return d.toISOString().replace("Z", "").replace(/\.000$/, "");
+}
+
 // ── Row mappers ──────────────────────────────────────────────
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -36,8 +49,8 @@ function toEvent(r: any): MockSpecialEvent {
     description: r.description ?? "",
     coverImageUrl: r.cover_image_url ?? null,
     location: r.location ?? "",
-    startDate: r.start_date,
-    endDate: r.end_date,
+    startDate: normalizeEventDT(r.start_date),
+    endDate: normalizeEventDT(r.end_date),
     status: r.status as EventStatus,
     isVisible: r.is_visible,
     isFeatured: r.is_featured,
@@ -101,6 +114,18 @@ function toPurchase(r: any): MockEventPurchase {
     purchasedAt: r.purchased_at,
     paidAt: r.paid_at ?? null,
     notes: r.notes ?? null,
+    unitPriceCentsAtPurchase: r.unit_price_cents_at_purchase ?? null,
+    originalAmountCents: r.original_amount_cents ?? null,
+    discountAmountCents: r.discount_amount_cents ?? null,
+    paidAmountCents: r.paid_amount_cents ?? null,
+    currency: r.currency ?? null,
+    productNameSnapshot: r.product_name_snapshot ?? null,
+    productTypeSnapshot: r.product_type_snapshot ?? null,
+    checkedInAt: r.checked_in_at ?? null,
+    checkedInBy: r.checked_in_by ?? null,
+    lastEmailType: r.last_email_type ?? null,
+    lastEmailSentAt: r.last_email_sent_at ?? null,
+    lastEmailSuccess: r.last_email_success ?? null,
   };
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -334,6 +359,13 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
         payment_reference: input.paymentReference ?? null,
         paid_at: input.paidAt ?? null,
         notes: input.notes ?? null,
+        unit_price_cents_at_purchase: input.unitPriceCentsAtPurchase ?? null,
+        original_amount_cents: input.originalAmountCents ?? null,
+        discount_amount_cents: input.discountAmountCents ?? 0,
+        paid_amount_cents: input.paidAmountCents ?? null,
+        currency: input.currency ?? "eur",
+        product_name_snapshot: input.productNameSnapshot ?? null,
+        product_type_snapshot: input.productTypeSnapshot ?? null,
       } as never)
       .select()
       .single();
@@ -348,9 +380,30 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     if (patch.receptionMethod !== undefined) fields.reception_method = patch.receptionMethod;
     if (patch.paidAt !== undefined) fields.paid_at = patch.paidAt;
     if (patch.qrToken !== undefined) fields.qr_token = patch.qrToken;
+    if (patch.paidAmountCents !== undefined) fields.paid_amount_cents = patch.paidAmountCents;
     const { error } = await sb.from("event_purchases").update(fields as never).eq("id", id);
     if (error) throw new Error(error.message);
     const { data } = await sb.from("event_purchases").select("*").eq("id", id).single();
     return data ? toPurchase(data) : null;
+  },
+
+  async updatePurchaseCheckIn(id, patch) {
+    const sb = createAdminClient();
+    const { error } = await sb.from("event_purchases").update({
+      checked_in_at: patch.checkedInAt,
+      checked_in_by: patch.checkedInBy,
+    } as never).eq("id", id);
+    if (error) throw new Error(error.message);
+    const { data } = await sb.from("event_purchases").select("*").eq("id", id).single();
+    return data ? toPurchase(data) : null;
+  },
+
+  async updatePurchaseEmailTracking(id, patch) {
+    const sb = createAdminClient();
+    await sb.from("event_purchases").update({
+      last_email_type: patch.lastEmailType,
+      last_email_sent_at: patch.lastEmailSentAt,
+      last_email_success: patch.lastEmailSuccess,
+    } as never).eq("id", id);
   },
 };

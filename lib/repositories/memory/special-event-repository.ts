@@ -112,16 +112,44 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       purchasedAt: now,
       paidAt: data.paymentStatus === "paid" ? now : null,
       notes: data.notes ?? null,
+      unitPriceCentsAtPurchase: data.unitPriceCentsAtPurchase ?? null,
+      originalAmountCents: data.originalAmountCents ?? null,
+      discountAmountCents: data.discountAmountCents ?? 0,
+      paidAmountCents: data.paidAmountCents ?? null,
+      currency: data.currency ?? "eur",
+      productNameSnapshot: data.productNameSnapshot ?? null,
+      productTypeSnapshot: data.productTypeSnapshot ?? null,
+      checkedInAt: null,
+      checkedInBy: null,
+      lastEmailType: null,
+      lastEmailSentAt: null,
+      lastEmailSuccess: null,
     });
   },
 
-  async updatePurchasePayment(id, patch: { paymentStatus: EventPaymentStatus; paymentReference?: string | null; receptionMethod?: string | null; paidAt?: string | null; qrToken?: string | null }) {
+  async updatePurchasePayment(id, patch: { paymentStatus: EventPaymentStatus; paymentReference?: string | null; receptionMethod?: string | null; paidAt?: string | null; qrToken?: string | null; paidAmountCents?: number | null }) {
     return store.patchPurchase(id, {
       paymentStatus: patch.paymentStatus,
       ...(patch.paymentReference !== undefined ? { paymentReference: patch.paymentReference } : {}),
       ...(patch.receptionMethod !== undefined ? { receptionMethod: patch.receptionMethod } : {}),
       ...(patch.paidAt !== undefined ? { paidAt: patch.paidAt } : {}),
+      ...(patch.paidAmountCents !== undefined ? { paidAmountCents: patch.paidAmountCents } : {}),
       ...(patch.qrToken !== undefined ? { qrToken: patch.qrToken } : {}),
+    });
+  },
+
+  async updatePurchaseCheckIn(id, patch: { checkedInAt: string | null; checkedInBy: string | null }) {
+    return store.patchPurchase(id, {
+      checkedInAt: patch.checkedInAt,
+      checkedInBy: patch.checkedInBy,
+    });
+  },
+
+  async updatePurchaseEmailTracking(id, patch: { lastEmailType: string; lastEmailSentAt: string; lastEmailSuccess: boolean }) {
+    store.patchPurchase(id, {
+      lastEmailType: patch.lastEmailType,
+      lastEmailSentAt: patch.lastEmailSentAt,
+      lastEmailSuccess: patch.lastEmailSuccess,
     });
   },
 };

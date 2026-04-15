@@ -117,6 +117,55 @@ export function getTodayStr(): string {
   return `${v("year")}-${v("month")}-${v("day")}`;
 }
 
+/**
+ * Parse an event datetime string to a UTC Date object.
+ * Handles both ISO datetime ("2026-05-16T20:00:00") and legacy date-only ("2026-05-16").
+ */
+export function parseEventDateTime(dt: string): Date {
+  if (dt.includes("T")) return new Date(dt);
+  return new Date(dt + "T00:00:00");
+}
+
+/**
+ * Whether an event is currently live (now is between start and end datetimes).
+ */
+export function isEventLive(startDT: string, endDT: string): boolean {
+  const now = getNow();
+  return now >= parseEventDateTime(startDT) && now <= parseEventDateTime(endDT);
+}
+
+/**
+ * Whether an event has ended (end datetime is in the past).
+ */
+export function isEventEnded(endDT: string): boolean {
+  return getNow() > parseEventDateTime(endDT);
+}
+
+/**
+ * Whether an event has not yet started (start datetime is in the future).
+ */
+export function isEventUpcoming(startDT: string): boolean {
+  return getNow() < parseEventDateTime(startDT);
+}
+
+/**
+ * Extract the calendar date (YYYY-MM-DD) from an event datetime string.
+ */
+export function eventCalendarDate(dt: string): string {
+  return dt.includes("T") ? dt.slice(0, 10) : dt.slice(0, 10);
+}
+
+/**
+ * Reception/check-in window rule: check-in is enabled for the
+ * full calendar days covered by the event (start day through end day inclusive).
+ */
+export function isWithinEventCheckInWindow(startDT: string, endDT: string): boolean {
+  const today = getTodayStr();
+  const startDay = eventCalendarDate(startDT);
+  const endDay = eventCalendarDate(endDT);
+  return today >= startDay && today <= endDay;
+}
+
 export function isClassStarted(date: string, startTime: string): boolean {
   return getNow() >= classStartDT(date, startTime);
 }

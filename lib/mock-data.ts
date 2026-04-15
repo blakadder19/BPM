@@ -541,7 +541,9 @@ export interface MockSpecialEvent {
   description: string;
   coverImageUrl: string | null;
   location: string;
+  /** ISO datetime string — event start (e.g. "2026-05-16T20:00:00") */
   startDate: string;
+  /** ISO datetime string — event end (e.g. "2026-05-18T01:00:00") */
   endDate: string;
   status: EventStatus;
   isVisible: boolean;
@@ -601,6 +603,21 @@ export interface MockEventPurchase {
   purchasedAt: string;
   paidAt: string | null;
   notes: string | null;
+  /** Financial snapshot — captured at purchase time, immutable after creation */
+  unitPriceCentsAtPurchase: number | null;
+  originalAmountCents: number | null;
+  discountAmountCents: number | null;
+  paidAmountCents: number | null;
+  currency: string | null;
+  productNameSnapshot: string | null;
+  productTypeSnapshot: string | null;
+  /** Event entry check-in (separate from class/session attendance) */
+  checkedInAt: string | null;
+  checkedInBy: string | null;
+  /** Email tracking — lightweight operational visibility */
+  lastEmailType: string | null;
+  lastEmailSentAt: string | null;
+  lastEmailSuccess: boolean | null;
 }
 
 export const SPECIAL_EVENTS: MockSpecialEvent[] = [
@@ -611,8 +628,8 @@ export const SPECIAL_EVENTS: MockSpecialEvent[] = [
     description: "A weekend of intensive workshops and socials with internationally renowned Bachata artists Daniel & Desiree. Two days of workshops covering musicality, body movement, and partner connection, plus a Saturday night social.",
     coverImageUrl: null,
     location: "BPM Dance Academy, Dublin",
-    startDate: "2026-05-16",
-    endDate: "2026-05-17",
+    startDate: "2026-05-16T14:00:00",
+    endDate: "2026-05-18T01:00:00",
     status: "published",
     isVisible: true,
     isFeatured: true,
@@ -643,6 +660,6 @@ export const EVENT_PRODUCTS: MockEventProduct[] = [
 ];
 
 export const EVENT_PURCHASES: MockEventPurchase[] = [
-  { id: "epur-1", studentId: "s-01", eventProductId: "ep-1", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "stripe", paymentStatus: "paid", paymentReference: "stripe:cs_evt_001", receptionMethod: null, purchasedAt: "2026-04-05T14:00:00", paidAt: "2026-04-05T14:00:00", notes: null },
-  { id: "epur-2", studentId: "s-03", eventProductId: "ep-2", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "manual", paymentStatus: "pending", paymentReference: null, receptionMethod: null, purchasedAt: "2026-04-06T10:00:00", paidAt: null, notes: "Will pay at reception" },
+  { id: "epur-1", studentId: "s-01", eventProductId: "ep-1", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "stripe", paymentStatus: "paid", paymentReference: "stripe:cs_evt_001", receptionMethod: null, purchasedAt: "2026-04-05T14:00:00", paidAt: "2026-04-05T14:00:00", notes: null, unitPriceCentsAtPurchase: 12000, originalAmountCents: 12000, discountAmountCents: 0, paidAmountCents: 12000, currency: "eur", productNameSnapshot: "Full Weekend Pass", productTypeSnapshot: "full_pass", checkedInAt: null, checkedInBy: null, lastEmailType: null, lastEmailSentAt: null, lastEmailSuccess: null },
+  { id: "epur-2", studentId: "s-03", eventProductId: "ep-2", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "manual", paymentStatus: "pending", paymentReference: null, receptionMethod: null, purchasedAt: "2026-04-06T10:00:00", paidAt: null, notes: "Will pay at reception", unitPriceCentsAtPurchase: 7500, originalAmountCents: 7500, discountAmountCents: 0, paidAmountCents: 0, currency: "eur", productNameSnapshot: "Saturday Pass", productTypeSnapshot: "combo_pass", checkedInAt: null, checkedInBy: null, lastEmailType: null, lastEmailSentAt: null, lastEmailSuccess: null },
 ];

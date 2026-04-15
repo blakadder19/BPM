@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import {
   Calendar,
@@ -15,13 +16,14 @@ import {
   MapPin,
   Ticket,
   Sparkles,
+  ChevronDown,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
-import { formatDate, formatShortDate, formatCents, cn } from "@/lib/utils";
+import { formatDate, formatShortDate, formatCents, cn, formatEventDateRange } from "@/lib/utils";
 import type { EffectiveInstanceStatus } from "@/types/domain";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -91,6 +93,30 @@ export interface AdminDashboardData {
   upcomingEvents: DashboardEventSummary[];
 }
 
+// ── Collapsible section hook with localStorage persistence ──
+
+function useCollapsible(key: string, defaultOpen = false) {
+  const storageKey = `bpm_dash_${key}`;
+  const [open, setOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored !== null) setOpen(stored === "1");
+    } catch { /* ignore */ }
+  }, [storageKey]);
+
+  const toggle = useCallback(() => {
+    setOpen((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(storageKey, next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+  }, [storageKey]);
+
+  return { open, toggle };
+}
+
 // ── Page ────────────────────────────────────────────────────
 
 export function AdminDashboard({ data }: { data: AdminDashboardData }) {
@@ -149,38 +175,7 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
 
       {/* Pending event payments */}
       {d.pendingEventPayments.length > 0 && (
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Ticket className="h-4 w-4 text-amber-600" />
-              Pending Event Payments
-              <Badge variant="warning">{d.pendingEventPayments.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {d.pendingEventPayments.slice(0, 5).map((p, i) => (
-                <Link
-                  key={i}
-                  href={`/events/${p.eventId}`}
-                  className="flex items-center justify-between rounded-md border border-amber-100 bg-white px-3 py-2 text-sm hover:bg-amber-50 transition-colors"
-                >
-                  <div>
-                    <span className="font-medium text-gray-900">{p.studentName}</span>
-                    <span className="text-gray-400 mx-1.5">·</span>
-                    <span className="text-gray-600">{p.productName}</span>
-                  </div>
-                  <span className="text-xs text-gray-500 shrink-0">{p.eventTitle}</span>
-                </Link>
-              ))}
-              {d.pendingEventPayments.length > 5 && (
-                <p className="text-xs text-gray-500 text-center pt-1">
-                  +{d.pendingEventPayments.length - 5} more pending
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        <PendingEventPaymentsCard payments={d.pendingEventPayments} />
       )}
 
       {/* Row 2: Upcoming classes + Highest demand */}
@@ -621,68 +616,160 @@ function BookingsByWeekdayCard({
 
 // ── Subscriptions overview ──────────────────────────────────
 
+function PendingEventPaymentsCard({ payments }: { payments: PendingEventPayment[] }) {
+  const { open, toggle } = useCollapsible("pending_payments");
+  const eventCounts = new Map<string, number>();
+  for (const p of payments) {
+    eventCounts.set(p.eventTitle, (eventCounts.get(p.eventTitle) ?? 0) + 1);
+  }
+  const summaryParts = [...eventCounts.entries()].map(([title, count]) => `${count} for ${title}`);
+
+  return (
+    <Card className="border-amber-200 bg-amber-50/50">
+      <CardHeader className="pb-2">
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex items-center gap-2 text-left w-full"
+        >
+          <Ticket className="h-4 w-4 text-amber-600 shrink-0" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            Pending Event Payments
+            <Badge variant="warning">{payments.length}</Badge>
+          </CardTitle>
+          <ChevronDown className={cn("h-4 w-4 text-amber-400 transition-transform ml-auto shrink-0", open && "rotate-180")} />
+        </button>
+        {!open && summaryParts.length > 0 && (
+          <p className="text-xs text-amber-700/70 mt-1 pl-6">
+            {summaryParts.join(" · ")}
+          </p>
+        )}
+      </CardHeader>
+      {open && (
+        <CardContent>
+          <div className="space-y-2">
+            {payments.slice(0, 5).map((p, i) => (
+              <Link
+                key={i}
+                href={`/events/${p.eventId}`}
+                className="flex items-center justify-between rounded-md border border-amber-100 bg-white px-3 py-2 text-sm hover:bg-amber-50 transition-colors"
+              >
+                <div>
+                  <span className="font-medium text-gray-900">{p.studentName}</span>
+                  <span className="text-gray-400 mx-1.5">&middot;</span>
+                  <span className="text-gray-600">{p.productName}</span>
+                </div>
+                <span className="text-xs text-gray-500 shrink-0">{p.eventTitle}</span>
+              </Link>
+            ))}
+            {payments.length > 5 && (
+              <p className="text-xs text-gray-500 text-center pt-1">
+                +{payments.length - 5} more pending
+              </p>
+            )}
+          </div>
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
 function SpecialEventsCard({ events }: { events: DashboardEventSummary[] }) {
+  const { open, toggle } = useCollapsible("events");
+  const totalSold = events.reduce((s, e) => s + e.totalSold, 0);
+  const totalPaid = events.reduce((s, e) => s + e.totalPaid, 0);
+  const totalPending = events.reduce((s, e) => s + e.totalPending, 0);
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2">
-          <Sparkles className="h-5 w-5 text-bpm-500" />
-          Special Events
-        </CardTitle>
-        <Link
-          href="/events"
-          className="text-sm font-medium text-bpm-600 hover:text-bpm-700 flex items-center gap-1"
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex items-center gap-2 text-left"
         >
-          View all <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
+          <Sparkles className="h-5 w-5 text-bpm-500" />
+          <CardTitle className="flex items-center gap-2">
+            Special Events
+            <Badge variant="default" className="text-xs">{events.length}</Badge>
+          </CardTitle>
+          <ChevronDown className={cn("h-4 w-4 text-gray-400 transition-transform", open && "rotate-180")} />
+        </button>
+        <div className="flex items-center gap-3">
+          {!open && (
+            <span className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500">
+              {totalSold} sold
+              {totalPaid > 0 && <Badge variant="success" className="text-[10px] py-0">{totalPaid} paid</Badge>}
+              {totalPending > 0 && <Badge variant="warning" className="text-[10px] py-0">{totalPending} pending</Badge>}
+              {events.some((e) => e.overallCapacity != null && e.totalSold > e.overallCapacity) && <Badge variant="danger" className="text-[10px] py-0">Oversold</Badge>}
+              {!events.some((e) => e.overallCapacity != null && e.totalSold > e.overallCapacity) && events.some((e) => e.overallCapacity != null && e.totalSold >= e.overallCapacity) && <Badge variant="danger" className="text-[10px] py-0">Full</Badge>}
+            </span>
+          )}
+          <Link
+            href="/events"
+            className="text-sm font-medium text-bpm-600 hover:text-bpm-700 flex items-center gap-1"
+          >
+            View all <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        </div>
       </CardHeader>
-      <CardContent className="p-0">
-        <div className="divide-y divide-gray-100">
-          {events.map((evt) => {
-            const remaining = evt.overallCapacity != null ? evt.overallCapacity - evt.totalSold : null;
-            const pct = evt.overallCapacity != null && evt.overallCapacity > 0 ? Math.round((evt.totalSold / evt.overallCapacity) * 100) : null;
-            return (
-              <Link
-                key={evt.id}
-                href={`/events/${evt.id}`}
-                className="flex flex-col gap-2 px-6 py-3 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{evt.title}</p>
+      {open && (
+        <CardContent className="p-0">
+          <div className="divide-y divide-gray-100">
+            {events.map((evt) => {
+              const remaining = evt.overallCapacity != null ? evt.overallCapacity - evt.totalSold : null;
+              const pct = evt.overallCapacity != null && evt.overallCapacity > 0 ? Math.round((evt.totalSold / evt.overallCapacity) * 100) : null;
+              const isOversold = evt.overallCapacity != null && evt.totalSold > evt.overallCapacity;
+              const isFull = evt.overallCapacity != null && evt.totalSold >= evt.overallCapacity;
+              const isNearCap = !isFull && pct !== null && pct >= 80;
+              return (
+                <Link
+                  key={evt.id}
+                  href={`/events/${evt.id}`}
+                  className="flex flex-col gap-2 px-6 py-3 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900 truncate">{evt.title}</p>
+                      {isOversold && <Badge variant="danger" className="text-[10px] py-0 shrink-0">Oversold</Badge>}
+                      {isFull && !isOversold && <Badge variant="danger" className="text-[10px] py-0 shrink-0">Full</Badge>}
+                      {isNearCap && <Badge variant="warning" className="text-[10px] py-0 shrink-0">Near capacity</Badge>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="default" className="text-xs">{evt.totalSold} sold</Badge>
+                      {evt.totalPaid > 0 && <Badge variant="success" className="text-xs">{evt.totalPaid} paid</Badge>}
+                      {evt.totalPending > 0 && <Badge variant="warning" className="text-xs">{evt.totalPending} pending</Badge>}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
                     <p className="text-xs text-gray-500">
-                      {formatShortDate(evt.startDate)}
-                      {evt.startDate !== evt.endDate && <> – {formatShortDate(evt.endDate)}</>}
+                      {formatEventDateRange(evt.startDate, evt.endDate)}
                     </p>
+                    {evt.overallCapacity != null && (
+                      <span className="text-xs text-gray-500 tabular-nums shrink-0">
+                        {evt.totalSold}/{evt.overallCapacity}
+                        {remaining !== null && remaining > 0 && <> ({remaining} left)</>}
+                        {isFull && remaining !== null && remaining <= 0 && !isOversold && " (0 left)"}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="default" className="text-xs">{evt.totalSold} sold</Badge>
-                    {evt.totalPaid > 0 && <Badge variant="success" className="text-xs">{evt.totalPaid} paid</Badge>}
-                    {evt.totalPending > 0 && <Badge variant="warning" className="text-xs">{evt.totalPending} pending</Badge>}
-                  </div>
-                </div>
-                {pct !== null && (
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  {pct !== null && (
+                    <div className="h-1.5 rounded-full bg-gray-100 overflow-hidden">
                       <div
                         className={cn(
                           "h-full rounded-full transition-all",
-                          pct >= 90 ? "bg-red-400" : pct >= 60 ? "bg-amber-400" : "bg-emerald-400",
+                          isOversold || isFull ? "bg-red-400" : isNearCap ? "bg-amber-400" : "bg-emerald-400",
                         )}
                         style={{ width: `${Math.min(pct, 100)}%` }}
                       />
                     </div>
-                    <span className="text-xs text-gray-500 tabular-nums shrink-0">
-                      {evt.totalSold}/{evt.overallCapacity}
-                      {remaining !== null && remaining > 0 && <> ({remaining} left)</>}
-                    </span>
-                  </div>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      </CardContent>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </CardContent>
+      )}
     </Card>
   );
 }

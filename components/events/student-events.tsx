@@ -5,22 +5,12 @@ import { MapPin, CalendarDays, Star, Ticket, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatEventDateRange } from "@/lib/utils";
 import type { MockSpecialEvent, MockEventPurchase } from "@/lib/mock-data";
 
 interface Props {
   events: MockSpecialEvent[];
   purchases: MockEventPurchase[];
-}
-
-function formatDateRange(start: string, end: string) {
-  const s = new Date(start + "T00:00:00");
-  const e = new Date(end + "T00:00:00");
-  const fmt = (d: Date) => d.toLocaleDateString("en-IE", { day: "numeric", month: "short" });
-  const yearFmt = (d: Date) => d.toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric" });
-  if (s.getFullYear() === e.getFullYear() && s.getMonth() === e.getMonth() && s.getDate() === e.getDate()) {
-    return yearFmt(s);
-  }
-  return `${fmt(s)} – ${yearFmt(e)}`;
 }
 
 export function StudentEvents({ events, purchases }: Props) {
@@ -59,7 +49,7 @@ export function StudentEvents({ events, purchases }: Props) {
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-gray-600">
                   <span className="flex items-center gap-1">
                     <CalendarDays className="h-3.5 w-3.5 text-gray-400" />
-                    {formatDateRange(evt.startDate, evt.endDate)}
+                    {formatEventDateRange(evt.startDate, evt.endDate)}
                   </span>
                   {evt.location && (
                     <span className="flex items-center gap-1">

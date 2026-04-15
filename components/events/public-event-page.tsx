@@ -24,21 +24,7 @@ import type {
   MockEventProduct,
 } from "@/lib/mock-data";
 
-function formatDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IE", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
-}
-
-function formatShortDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IE", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+import { formatEventDateRange, formatEventDT, formatSessionTimeRange } from "@/lib/utils";
 
 function centsToEuros(c: number) {
   return `€${(c / 100).toFixed(2)}`;
@@ -125,8 +111,7 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
               <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                 <span className="flex items-center gap-1.5">
                   <CalendarDays className="h-4 w-4 text-gray-400" />
-                  {formatShortDate(event.startDate)} –{" "}
-                  {formatShortDate(event.endDate)}
+                  {formatEventDateRange(event.startDate, event.endDate)}
                 </span>
                 {event.location && (
                   <span className="flex items-center gap-1.5">
@@ -169,7 +154,7 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
               {sortedDates.map((date) => (
                 <div key={date}>
                   <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                    {formatDate(date)}
+                    {formatEventDT(date)}
                   </h3>
                   <div className="space-y-2">
                     {sessionsByDate[date].map((s) => (
@@ -179,10 +164,7 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
                       >
                         <div className="shrink-0 text-center pt-0.5">
                           <div className="text-sm font-semibold text-gray-900">
-                            {s.startTime}
-                          </div>
-                          <div className="text-xs text-gray-400">
-                            {s.endTime}
+                            {formatSessionTimeRange(s.date, s.startTime, s.endTime)}
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">

@@ -8,7 +8,7 @@ import {
 } from "@/lib/repositories";
 import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentById, cachedGetStudentSubs, cachedGetAllSubs, cachedGetAllStudents, cachedGetAllEvents } from "@/lib/server/cached-queries";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
-import { getTodayStr, isClassEnded, isClassStarted, effectiveInstanceStatus } from "@/lib/domain/datetime";
+import { getTodayStr, isClassEnded, isClassStarted, effectiveInstanceStatus, isEventEnded } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { daysUntilExpiry } from "@/lib/domain/term-lifecycle";
@@ -327,7 +327,7 @@ export default async function DashboardPage() {
 
     const allEvents = await cachedGetAllEvents();
     const promotedEvents = allEvents.filter(
-      (e) => e.status === "published" && e.isVisible && e.featuredOnDashboard && e.endDate >= todayStr,
+      (e) => e.status === "published" && e.isVisible && e.featuredOnDashboard && !isEventEnded(e.endDate),
     );
 
     const evtRepo = getSpecialEventRepo();
@@ -343,7 +343,7 @@ export default async function DashboardPage() {
 
     for (const pur of activePurchases) {
       const evt = allEvents.find((e) => e.id === pur.eventId);
-      if (!evt || evt.status !== "published" || !evt.isVisible || evt.endDate < todayStr) continue;
+      if (!evt || evt.status !== "published" || !evt.isVisible || isEventEnded(evt.endDate)) continue;
       const evtProducts = await evtRepo.getProductsByEvent(evt.id);
       const product = evtProducts.find((p) => p.id === pur.eventProductId);
       const existing = dashboardEventsMap.get(evt.id);
@@ -509,7 +509,7 @@ export default async function DashboardPage() {
         });
       }
     }
-    if (evt.status === "published" && evt.endDate >= todayStr) {
+    if (evt.status === "published" && !isEventEnded(evt.endDate)) {
       const nonRefunded = purchases.filter((p) => p.paymentStatus !== "refunded");
       upcomingEvents.push({
         id: evt.id,

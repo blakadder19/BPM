@@ -8,14 +8,10 @@ import { isEmailEnabled, sendEmail } from "@/lib/communications/email-provider";
 import { buildEmailContent } from "@/lib/communications/email-templates";
 import type { EventAnnouncementPayload } from "@/lib/communications/events";
 
+import { formatEventDateRange } from "@/lib/utils";
+
 function formatEventDates(startDate: string, endDate: string): string {
-  const fmt = (d: string) =>
-    new Date(d + "T00:00:00").toLocaleDateString("en-IE", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-  return startDate === endDate ? fmt(startDate) : `${fmt(startDate)} – ${fmt(endDate)}`;
+  return formatEventDateRange(startDate, endDate);
 }
 
 export interface AnnouncementResult {

@@ -32,13 +32,7 @@ interface Props {
   stripeEnabled: boolean;
 }
 
-function formatDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IE", { weekday: "long", day: "numeric", month: "long" });
-}
-
-function formatShortDate(d: string) {
-  return new Date(d + "T00:00:00").toLocaleDateString("en-IE", { day: "numeric", month: "short", year: "numeric" });
-}
+import { formatEventDateRange, formatEventDT, isOvernightSession, formatSessionTimeRange } from "@/lib/utils";
 
 function centsToEuros(c: number) {
   return `€${(c / 100).toFixed(2)}`;
@@ -111,7 +105,7 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
             <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
               <span className="flex items-center gap-1.5">
                 <CalendarDays className="h-4 w-4 text-gray-400" />
-                {formatShortDate(event.startDate)} – {formatShortDate(event.endDate)}
+                {formatEventDateRange(event.startDate, event.endDate)}
               </span>
               {event.location && (
                 <span className="flex items-center gap-1.5">
@@ -166,14 +160,13 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
             {sortedDates.map((date) => (
               <div key={date}>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  {formatDate(date)}
+                  {formatEventDT(date)}
                 </h3>
                 <div className="space-y-2">
                   {sessionsByDate[date].map((s) => (
                     <div key={s.id} className="rounded-lg border border-gray-200 bg-white p-4 flex items-start gap-4">
                       <div className="shrink-0 text-center pt-0.5">
-                        <div className="text-sm font-semibold text-gray-900">{s.startTime}</div>
-                        <div className="text-xs text-gray-400">{s.endTime}</div>
+                        <div className="text-sm font-semibold text-gray-900">{formatSessionTimeRange(s.date, s.startTime, s.endTime)}</div>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
