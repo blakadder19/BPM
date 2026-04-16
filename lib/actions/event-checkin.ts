@@ -99,13 +99,16 @@ function revalidateEvent(eventId: string) {
 // ── Event QR Lookup (scoped to a specific event) ─────────────
 // For paid + not-checked-in purchases, auto-check-in is performed.
 
-export async function eventQrLookupAction(
+/**
+ * Core event QR lookup — accepts a pre-authenticated userId.
+ * Exported for use by `processPairedScanAction`; UI-facing callers
+ * should use `eventQrLookupAction` which wraps this with auth.
+ */
+export async function eventQrLookup(
   token: string,
   eventId: string,
+  userId: string,
 ): Promise<EventQrLookupResult> {
-  const user = await requireStaff();
-  if (!user) return { success: false, error: "Not authorized" };
-
   const repo = getSpecialEventRepo();
   const event = await repo.getEventById(eventId);
   if (!event) return { success: false, error: "Event not found" };
@@ -119,7 +122,7 @@ export async function eventQrLookupAction(
     if (purchase.paymentStatus !== "paid" || purchase.checkedInAt) return false;
     const result = await updatePurchaseCheckIn(purchase.id, {
       checkedInAt: new Date().toISOString(),
-      checkedInBy: user!.id,
+      checkedInBy: userId,
     });
     if (result.success) revalidateEvent(eventId);
     return result.success;
@@ -174,6 +177,15 @@ export async function eventQrLookupAction(
   }
 
   return { success: false, error: "Invalid QR code format" };
+}
+
+export async function eventQrLookupAction(
+  token: string,
+  eventId: string,
+): Promise<EventQrLookupResult> {
+  const user = await requireStaff();
+  if (!user) return { success: false, error: "Not authorized" };
+  return eventQrLookup(token, eventId, user.id);
 }
 
 // ── Check In ─────────────────────────────────────────────────

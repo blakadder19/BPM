@@ -16,6 +16,7 @@ import {
   ChevronDown,
   Banknote,
   Lock,
+  Smartphone,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
@@ -28,7 +29,9 @@ import {
   eventQrLookupAction,
   eventCollectPaymentAndCheckInAction,
 } from "@/lib/actions/event-checkin";
-import type { EventQrPurchaseInfo } from "@/lib/actions/event-checkin";
+import type { EventQrPurchaseInfo, EventQrLookupResult } from "@/lib/actions/event-checkin";
+import { PairScannerControls } from "@/components/scan/pair-scanner-controls";
+import type { PairedScanResult } from "@/lib/domain/scan-session";
 
 import dynamic from "next/dynamic";
 const QrScanner = dynamic(
@@ -95,6 +98,7 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
 
   // QR scanner state
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [pairedOpen, setPairedOpen] = useState(false);
   const [qrResult, setQrResult] = useState<{ purchases: EventQrPurchaseInfo[]; personName: string; personType: string } | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
   const [qrPending, startQrTransition] = useTransition();
@@ -221,6 +225,27 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
     setQrError(null);
   }, []);
 
+  const handlePairedScanResult = useCallback((result: PairedScanResult) => {
+    if (result.payload.type !== "event_reception") return;
+    setQrError(null);
+    if (result.payload.success && result.payload.data) {
+      const data = result.payload.data as EventQrLookupResult;
+      if (data.purchases) {
+        setQrResult({
+          purchases: data.purchases,
+          personName: data.personName ?? "Unknown",
+          personType: data.personType ?? "guest",
+        });
+        const autoChecked = data.purchases.filter((p) => p.entryStatus === "auto_checked_in");
+        if (autoChecked.length > 0) {
+          showSuccess(`${data.personName} checked in`);
+        }
+      }
+    } else {
+      setQrError(result.payload.error ?? "Unknown error from mobile scan");
+    }
+  }, [showSuccess]);
+
   return (
     <div className="space-y-5">
       {/* ── Header ────────────────────────────────────────── */}
@@ -234,17 +259,30 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
             description={event.title}
             actions={
               isLive ? (
-                <button
-                  onClick={() => { setScannerOpen(!scannerOpen); clearQrResult(); }}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
-                    scannerOpen
-                      ? "bg-gray-700 text-white hover:bg-gray-800"
-                      : "bg-bpm-600 text-white hover:bg-bpm-700"
-                  }`}
-                >
-                  <QrCode className="h-4 w-4" />
-                  {scannerOpen ? "Close scanner" : "Scan QR"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setScannerOpen(!scannerOpen); if (!scannerOpen) setPairedOpen(false); clearQrResult(); }}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
+                      scannerOpen
+                        ? "bg-gray-700 text-white hover:bg-gray-800"
+                        : "bg-bpm-600 text-white hover:bg-bpm-700"
+                    }`}
+                  >
+                    <QrCode className="h-4 w-4" />
+                    {scannerOpen ? "Close scanner" : "Scan QR"}
+                  </button>
+                  <button
+                    onClick={() => { setPairedOpen(!pairedOpen); if (!pairedOpen) setScannerOpen(false); clearQrResult(); }}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
+                      pairedOpen
+                        ? "bg-gray-700 text-white hover:bg-gray-800"
+                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    }`}
+                  >
+                    <Smartphone className="h-4 w-4" />
+                    {pairedOpen ? "Close pair" : "Pair mobile"}
+                  </button>
+                </div>
               ) : undefined
             }
           />
@@ -308,6 +346,64 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
 
           {qrResult && (
             <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className={`rounded-full p-1 ${qrResult.personType === "student" ? "bg-blue-100" : "bg-purple-100"}`}>
+                  {qrResult.personType === "student" ? <User className="h-4 w-4 text-blue-600" /> : <Users className="h-4 w-4 text-purple-600" />}
+                </div>
+                <div>
+                  <p className="font-medium text-gray-900">{qrResult.personName}</p>
+                  <p className="text-xs text-gray-500">{qrResult.personType === "student" ? "Internal student" : "Guest"}</p>
+                </div>
+                <button onClick={clearQrResult} className="ml-auto text-xs text-gray-400 hover:text-gray-600 underline">
+                  Clear
+                </button>
+              </div>
+
+              {qrResult.purchases.map((p) => (
+                <QrPurchaseCard
+                  key={p.purchaseId}
+                  info={p}
+                  onCheckIn={handleCheckIn}
+                  onUndoCheckIn={handleUndoCheckIn}
+                  onCollectPaymentAndCheckIn={handleCollectPaymentAndCheckIn}
+                  actionPending={actionPending}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Paired Scanner Panel ─────────────────────────── */}
+      {pairedOpen && isLive && (
+        <div className="rounded-xl border border-gray-200 bg-white p-4">
+          <PairScannerControls
+            contextType="event_reception"
+            contextId={event.id}
+            onScanResult={handlePairedScanResult}
+          />
+
+          {qrPending && (
+            <div className="mt-4 text-center text-sm text-gray-500">Looking up...</div>
+          )}
+
+          {qrError && (
+            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
+              <div className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
+                <div>
+                  <p className="font-medium text-red-800">Not valid</p>
+                  <p className="text-sm text-red-600">{qrError}</p>
+                </div>
+              </div>
+              <button onClick={clearQrResult} className="mt-2 text-xs text-red-500 hover:text-red-700 underline">
+                Dismiss
+              </button>
+            </div>
+          )}
+
+          {qrResult && (
+            <div className="mt-4 space-y-3">
               <div className="flex items-center gap-2">
                 <div className={`rounded-full p-1 ${qrResult.personType === "student" ? "bg-blue-100" : "bg-purple-100"}`}>
                   {qrResult.personType === "student" ? <User className="h-4 w-4 text-blue-600" /> : <Users className="h-4 w-4 text-purple-600" />}

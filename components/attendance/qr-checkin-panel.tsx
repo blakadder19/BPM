@@ -40,8 +40,11 @@ import {
   type GuestPurchaseQrResult,
 } from "@/lib/actions/qr-checkin";
 import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
+import { PairScannerControls } from "@/components/scan/pair-scanner-controls";
+import type { PairedScanResult } from "@/lib/domain/scan-session";
+import type { QrLookupResult as QrLookupResultType } from "@/lib/actions/qr-checkin";
 
-type InputMode = "camera" | "manual";
+type InputMode = "camera" | "manual" | "paired";
 
 type PaymentConfirmation = {
   type: "booking" | "walkin";
@@ -302,6 +305,20 @@ export function QrCheckInPanel() {
     lastTokenRef.current = null;
   }
 
+  function handlePairedScanResult(result: PairedScanResult) {
+    if (result.payload.type !== "attendance") return;
+    setCheckInResults(new Map());
+    setGuestResult(null);
+    if (result.payload.success && result.payload.data) {
+      setLookupResult(result.payload.data as QrLookupResultType);
+    } else {
+      setLookupResult({
+        success: false,
+        error: result.payload.error ?? "Unknown error from mobile scan",
+      });
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Mode toggle */}
@@ -330,6 +347,18 @@ export function QrCheckInPanel() {
           <Keyboard className="h-4 w-4" />
           Manual
         </button>
+        <button
+          type="button"
+          onClick={() => { setMode("paired"); resetScan(); }}
+          className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+            mode === "paired"
+              ? "bg-bpm-600 text-white"
+              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          }`}
+        >
+          <Smartphone className="h-4 w-4" />
+          Pair mobile
+        </button>
       </div>
 
       {/* Scanner or manual entry */}
@@ -352,7 +381,7 @@ export function QrCheckInPanel() {
             </p>
           )}
         </div>
-      ) : (
+      ) : mode === "manual" ? (
         <form onSubmit={handleManualSubmit} className="space-y-2">
           <input
             type="text"
@@ -366,7 +395,12 @@ export function QrCheckInPanel() {
             {isLooking ? "Looking up…" : "Look Up Student"}
           </Button>
         </form>
-      )}
+      ) : mode === "paired" ? (
+        <PairScannerControls
+          contextType="attendance"
+          onScanResult={handlePairedScanResult}
+        />
+      ) : null}
 
       {/* Loading state */}
       {isLooking && (

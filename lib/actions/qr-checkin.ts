@@ -107,12 +107,12 @@ export interface QrLookupResult {
   eventPurchases?: QrEventPurchase[];
 }
 
-export async function lookupStudentByQrAction(token: string): Promise<QrLookupResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
-
+/**
+ * Core student QR lookup — no auth check, reusable from paired-scan.
+ * Exported for use by `processPairedScanAction`; UI-facing callers
+ * should use `lookupStudentByQrAction` which wraps this with auth.
+ */
+export async function lookupStudentByQr(token: string): Promise<QrLookupResult> {
   if (!token || !isValidStudentQrToken(token)) {
     return { success: false, error: "Invalid QR code format" };
   }
@@ -300,6 +300,15 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
     hasActiveEntitlement,
     eventPurchases: eventPurchases.length > 0 ? eventPurchases : undefined,
   };
+}
+
+export async function lookupStudentByQrAction(token: string): Promise<QrLookupResult> {
+  const user = await getAuthUser();
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  return lookupStudentByQr(token);
 }
 
 export interface QrCheckInResult {

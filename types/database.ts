@@ -477,6 +477,40 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["birthday_redemptions"]["Row"]>;
       };
+
+      scan_sessions: {
+        Row: {
+          id: string;
+          pairing_code: string;
+          context_type: string;
+          context_id: string | null;
+          created_by: string;
+          active: boolean;
+          created_at: string;
+          expires_at: string;
+        };
+        Insert: {
+          id?: string;
+          pairing_code: string;
+          context_type: string;
+          context_id?: string | null;
+          created_by: string;
+          active?: boolean;
+          created_at?: string;
+          expires_at?: string;
+        };
+        Update: {
+          id?: string;
+          pairing_code?: string;
+          context_type?: string;
+          context_id?: string | null;
+          created_by?: string;
+          active?: boolean;
+          created_at?: string;
+          expires_at?: string;
+        };
+        Relationships: [];
+      };
     };
 
     Views: Record<string, never>;
