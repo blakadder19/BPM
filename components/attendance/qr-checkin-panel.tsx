@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { QrScanner } from "./qr-scanner";
 import { formatTime, formatDate } from "@/lib/utils";
+import Link from "next/link";
 import {
   lookupStudentByQrAction,
   lookupGuestPurchaseByQrAction,
@@ -37,6 +38,7 @@ import {
   type QrEntitlementDetail,
   type QrTodayClass,
   type QrEventPurchase,
+  type QrGroupedEntitlement,
   type GuestPurchaseQrResult,
 } from "@/lib/actions/qr-checkin";
 import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
@@ -541,7 +543,12 @@ export function QrCheckInPanel() {
                     <User className="h-6 w-6 text-bpm-600" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-lg font-semibold text-gray-900">{lookupResult.student!.name}</p>
+                    <Link
+                      href={`/students?highlight=${lookupResult.student!.id}`}
+                      className="text-lg font-semibold text-bpm-600 hover:text-bpm-700 hover:underline"
+                    >
+                      {lookupResult.student!.name}
+                    </Link>
                     <p className="text-sm text-gray-500 truncate">{lookupResult.student!.email}</p>
                   </div>
                 </div>
@@ -564,33 +571,13 @@ export function QrCheckInPanel() {
                   )}
                 </div>
 
-                {/* Entitlement details */}
-                {lookupResult.entitlements && lookupResult.entitlements.length > 0 && (
-                  <div className="space-y-1.5 border-t border-gray-100 pt-3">
-                    {lookupResult.entitlements.map((ent) => (
-                      <EntitlementRow
-                        key={ent.subscriptionId}
-                        ent={ent}
-                        onMarkPaid={handleEntitlementMarkPaid}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Recent expired entitlement when no active */}
-                {!lookupResult.hasActiveEntitlement && lookupResult.recentExpiredEntitlement && (
-                  <div className="space-y-2 border-t border-gray-100 pt-3">
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Last Entitlement</p>
-                    <ExpiredEntitlementRow ent={lookupResult.recentExpiredEntitlement} />
-                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
-                      <p className="text-xs text-amber-800">
-                        This student has no active entitlement for booking or check-in.
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {!lookupResult.hasActiveEntitlement && !lookupResult.recentExpiredEntitlement && (
+                {/* All entitlements grouped by status */}
+                {lookupResult.allEntitlements && lookupResult.allEntitlements.length > 0 ? (
+                  <AllEntitlementsSection
+                    entitlements={lookupResult.allEntitlements}
+                    onMarkPaid={handleEntitlementMarkPaid}
+                  />
+                ) : (
                   <div className="border-t border-gray-100 pt-3">
                     <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
                       <p className="text-xs text-amber-800">
@@ -976,6 +963,89 @@ const PAYMENT_BADGE: Record<string, { label: string; className: string }> = {
   refunded: { label: "Refunded", className: "bg-red-100 text-red-700" },
   waived: { label: "Waived", className: "bg-gray-200 text-gray-600" },
 };
+
+const ENTITLEMENT_GROUP_CONFIG: Record<string, { label: string; borderColor: string; dotColor: string; defaultOpen: boolean }> = {
+  active: { label: "Active", borderColor: "border-green-200", dotColor: "bg-green-500", defaultOpen: true },
+  pending_payment: { label: "Payment Pending", borderColor: "border-amber-200", dotColor: "bg-amber-500", defaultOpen: true },
+  scheduled: { label: "Scheduled / Not Started", borderColor: "border-blue-200", dotColor: "bg-blue-500", defaultOpen: true },
+  ended: { label: "Expired / Ended", borderColor: "border-gray-200", dotColor: "bg-gray-400", defaultOpen: false },
+};
+
+function AllEntitlementsSection({
+  entitlements,
+  onMarkPaid,
+}: {
+  entitlements: QrGroupedEntitlement[];
+  onMarkPaid?: (subscriptionId: string, method: PaymentMethod) => void;
+}) {
+  const grouped = new Map<string, QrGroupedEntitlement[]>();
+  for (const ent of entitlements) {
+    const list = grouped.get(ent.effectiveGroup) ?? [];
+    list.push(ent);
+    grouped.set(ent.effectiveGroup, list);
+  }
+
+  const orderedGroups = ["active", "pending_payment", "scheduled", "ended"] as const;
+
+  return (
+    <div className="space-y-2 border-t border-gray-100 pt-3">
+      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        All Products ({entitlements.length})
+      </p>
+      {orderedGroups.map((group) => {
+        const items = grouped.get(group);
+        if (!items || items.length === 0) return null;
+        const config = ENTITLEMENT_GROUP_CONFIG[group];
+        return (
+          <EntitlementGroupBlock
+            key={group}
+            config={config}
+            items={items}
+            onMarkPaid={onMarkPaid}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function EntitlementGroupBlock({
+  config,
+  items,
+  onMarkPaid,
+}: {
+  config: typeof ENTITLEMENT_GROUP_CONFIG[string];
+  items: QrGroupedEntitlement[];
+  onMarkPaid?: (subscriptionId: string, method: PaymentMethod) => void;
+}) {
+  const [open, setOpen] = useState(config.defaultOpen);
+  return (
+    <div className={`rounded-lg border ${config.borderColor} overflow-hidden`}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-gray-50/50 transition-colors"
+      >
+        <span className={`h-2 w-2 rounded-full ${config.dotColor} shrink-0`} />
+        <span className="font-medium text-gray-700">{config.label}</span>
+        <span className="text-gray-400">({items.length})</span>
+        <ChevronDown className={`ml-auto h-3.5 w-3.5 text-gray-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="space-y-1 px-2 pb-2">
+          {items.map((ent) => (
+            <EntitlementRow
+              key={ent.subscriptionId}
+              ent={ent}
+              compact
+              onMarkPaid={ent.effectiveGroup === "active" || ent.effectiveGroup === "pending_payment" ? onMarkPaid : undefined}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function EntitlementRow({
   ent,

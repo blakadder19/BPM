@@ -85,10 +85,13 @@ export function ScanSessionProvider({ children }: { children: ReactNode }) {
         setLastResult(result);
         setScanCount((c) => c + 1);
 
-        // Auto-navigate to the correct context if the admin is elsewhere
+        // Auto-navigate to the correct context, landing on the scan result state
         const current = pathnameRef.current;
-        if (result.payload.type === "attendance" && !current.includes("/attendance")) {
-          router.push("/attendance");
+        if (result.payload.type === "attendance") {
+          if (!current.includes("/attendance")) {
+            router.push("/attendance?tab=qr");
+          }
+          // If already on attendance, the QrCheckInPanel useEffect picks up lastResult
         } else if (result.payload.type === "event_reception" && result.contextId) {
           const eventOpsPath = `/events/${result.contextId}/operations`;
           if (!current.includes(eventOpsPath)) {
@@ -159,4 +162,9 @@ export function useScanSession(): ScanSessionContextValue {
   const ctx = useContext(ScanSessionContext);
   if (!ctx) throw new Error("useScanSession must be used within ScanSessionProvider");
   return ctx;
+}
+
+/** Safe variant that returns null when outside the provider (e.g. for student pages). */
+export function useScanSessionSafe(): ScanSessionContextValue | null {
+  return useContext(ScanSessionContext);
 }

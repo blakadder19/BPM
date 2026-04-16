@@ -7,7 +7,8 @@ import { createSubscription, updateSubscription } from "@/lib/services/subscript
 import { getCurrentTerm, getNextTerm, getNextConsecutiveTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
-import { getAccessRule } from "@/config/product-access";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { paymentPendingEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { TERM_PURCHASE_WINDOW_DAYS } from "@/config/business-rules";
@@ -51,8 +52,20 @@ export async function validateAndPreparePurchase(
   if (!product) return { error: "Product not found." };
   if (!product.isActive) return { error: "This product is no longer available." };
 
-  // ── Style validation ───────────────────────────────────────
-  const accessRule = getAccessRule(product.id);
+  // ── Style validation (use dynamic rules with real style IDs) ──
+  const danceStyles = getDanceStyles().map((s) => ({ id: s.id, name: s.name }));
+  const allProducts = await getProductRepo().getAll();
+  const dynamicRulesMap = buildDynamicAccessRulesMap(
+    allProducts.map((p) => ({
+      id: p.id,
+      name: p.name,
+      productType: p.productType,
+      allowedLevels: p.allowedLevels ?? null,
+      allowedStyleIds: p.allowedStyleIds ?? null,
+    })),
+    danceStyles,
+  );
+  const accessRule = dynamicRulesMap.get(product.id);
   const styleMode = accessRule?.styleAccess.type;
 
   if (styleMode === "selected_style") {

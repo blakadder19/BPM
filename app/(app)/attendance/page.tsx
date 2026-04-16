@@ -12,7 +12,7 @@ const TERMINAL_STATUSES = new Set(["cancelled", "late_cancelled"]);
 export default async function AttendancePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ classTitle?: string; date?: string; student?: string }>;
+  searchParams?: Promise<{ classTitle?: string; date?: string; student?: string; tab?: string }>;
 }) {
   const _t0 = performance.now();
   const user = await requireRole(["admin", "teacher"]);
@@ -91,6 +91,7 @@ export default async function AttendancePage({
       initialClassFilter={params.classTitle ?? ""}
       initialDateFilter={params.date ?? ""}
       initialStudentSearch={params.student ?? ""}
+      initialTab={params.tab === "qr" ? "qr" : undefined}
       currentUserName={user.fullName}
     />
   );

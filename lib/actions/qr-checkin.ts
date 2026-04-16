@@ -88,6 +88,12 @@ export interface QrEventPurchase {
   purchasedAt: string;
 }
 
+export type QrEntitlementGroup = "active" | "pending_payment" | "scheduled" | "ended";
+
+export interface QrGroupedEntitlement extends QrEntitlementDetail {
+  effectiveGroup: QrEntitlementGroup;
+}
+
 export interface QrLookupResult {
   success: boolean;
   error?: string;
@@ -101,6 +107,7 @@ export interface QrLookupResult {
   /** @deprecated use todayClasses */
   compatibleClasses?: QrTodayClass[];
   entitlements?: QrEntitlementDetail[];
+  allEntitlements?: QrGroupedEntitlement[];
   recentExpiredEntitlement?: QrEntitlementDetail | null;
   paymentPending?: boolean;
   hasActiveEntitlement?: boolean;
@@ -206,6 +213,22 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
     }
   }
 
+  // Full entitlement picture for admin — ALL subscriptions grouped by effective status
+  const allEntitlements = studentSubs
+    .sort((a, b) => b.validFrom.localeCompare(a.validFrom))
+    .map((s) => {
+      const detail = buildEntitlementDetail(s);
+      let effectiveGroup: "active" | "pending_payment" | "scheduled" | "ended";
+      if (s.status === "active" && s.validFrom <= today && (!s.validUntil || s.validUntil >= today)) {
+        effectiveGroup = s.paymentStatus === "pending" ? "pending_payment" : "active";
+      } else if (s.status === "active" && s.validFrom > today) {
+        effectiveGroup = "scheduled";
+      } else {
+        effectiveGroup = "ended";
+      }
+      return { ...detail, effectiveGroup };
+    });
+
   const allProducts = await getProductRepo().getAll();
   const danceStyles = getDanceStyles();
   const accessRulesMap = buildDynamicAccessRulesMap(
@@ -295,6 +318,7 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
     todayClasses,
     compatibleClasses: todayClasses,
     entitlements: activeEntitlements,
+    allEntitlements,
     recentExpiredEntitlement,
     paymentPending,
     hasActiveEntitlement,

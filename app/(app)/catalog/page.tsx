@@ -8,7 +8,7 @@ import { getTodayStr } from "@/lib/domain/datetime";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { getSettings } from "@/lib/services/settings-store";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
-import { getAccessRule } from "@/config/product-access";
+import { buildDynamicAccessRulesMap, type ProductAccessRule } from "@/config/product-access";
 import { TERM_PURCHASE_WINDOW_DAYS } from "@/config/business-rules";
 import { isStripeEnabled } from "@/lib/stripe";
 import { StudentCatalog, type CatalogProduct, type StyleOption, type StyleSelectionMode, type TermOption } from "@/components/catalog/student-catalog";
@@ -25,10 +25,9 @@ function describeLevels(p: MockProduct): string {
 }
 
 function resolveStyleSelection(
-  p: MockProduct,
+  rule: ProductAccessRule | undefined,
   allStyles: { id: string; name: string }[]
 ): { mode: StyleSelectionMode; selectable: StyleOption[]; pickCount: number } {
-  const rule = getAccessRule(p.id);
   if (!rule) return { mode: "none", selectable: [], pickCount: 0 };
 
   const sa = rule.styleAccess;
@@ -66,6 +65,16 @@ export default async function CatalogPage() {
   lazyExpireSubscriptions().catch(() => {});
 
   const danceStyles = getDanceStyles().map((s) => ({ id: s.id, name: s.name }));
+  const accessRulesMap = buildDynamicAccessRulesMap(
+    products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      productType: p.productType,
+      allowedLevels: p.allowedLevels ?? null,
+      allowedStyleIds: p.allowedStyleIds ?? null,
+    })),
+    danceStyles,
+  );
   const todayStr = getTodayStr();
   const currentTerm = getCurrentTerm(terms, todayStr);
   const nextTerm = getNextTerm(terms, todayStr);
@@ -124,7 +133,7 @@ export default async function CatalogPage() {
         else if (nextTerm?.name) termName = `Next: ${nextTerm.name}`;
       }
 
-      const { mode, selectable, pickCount } = resolveStyleSelection(p, danceStyles);
+      const { mode, selectable, pickCount } = resolveStyleSelection(accessRulesMap.get(p.id), danceStyles);
 
       const curSub = currentSubByProduct.get(p.id);
       const renSub = renewalSubByProduct.get(p.id);
