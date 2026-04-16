@@ -10,7 +10,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   CreditCard,
-  Keyboard,
   ShoppingCart,
   Plus,
   ArrowLeft,
@@ -18,6 +17,7 @@ import {
   Banknote,
   Smartphone,
   CalendarDays,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -44,7 +44,7 @@ import { PairScannerControls } from "@/components/scan/pair-scanner-controls";
 import type { PairedScanResult } from "@/lib/domain/scan-session";
 import type { QrLookupResult as QrLookupResultType } from "@/lib/actions/qr-checkin";
 
-type InputMode = "camera" | "manual" | "paired";
+type InputMode = "paired" | "camera" | "manual";
 
 type PaymentConfirmation = {
   type: "booking" | "walkin";
@@ -83,7 +83,8 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 
 export function QrCheckInPanel() {
   const router = useRouter();
-  const [mode, setMode] = useState<InputMode>("camera");
+  const [mode, setMode] = useState<InputMode>("paired");
+  const [showFallback, setShowFallback] = useState(false);
   const [manualToken, setManualToken] = useState("");
   const [isLooking, startLookup] = useTransition();
   const [lookupResult, setLookupResult] = useState<QrLookupResult | null>(null);
@@ -321,48 +322,16 @@ export function QrCheckInPanel() {
 
   return (
     <div className="space-y-4">
-      {/* Mode toggle */}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => { setMode("camera"); resetScan(); }}
-          className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-            mode === "camera"
-              ? "bg-bpm-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          <QrCode className="h-4 w-4" />
-          Camera
-        </button>
-        <button
-          type="button"
-          onClick={() => { setMode("manual"); resetScan(); }}
-          className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-            mode === "manual"
-              ? "bg-bpm-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          <Keyboard className="h-4 w-4" />
-          Manual
-        </button>
-        <button
-          type="button"
-          onClick={() => { setMode("paired"); resetScan(); }}
-          className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors ${
-            mode === "paired"
-              ? "bg-bpm-600 text-white"
-              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-          }`}
-        >
-          <Smartphone className="h-4 w-4" />
-          Pair mobile
-        </button>
-      </div>
+      {/* Primary: Paired mobile scanner */}
+      {mode === "paired" && (
+        <PairScannerControls
+          contextType="attendance"
+          onScanResult={handlePairedScanResult}
+        />
+      )}
 
-      {/* Scanner or manual entry */}
-      {mode === "camera" ? (
+      {/* Fallback: Camera / Manual (collapsed by default) */}
+      {mode === "camera" && (
         <div className="space-y-3">
           <div className="relative">
             <QrScanner onScan={handleScan} active={mode === "camera" && !lookupResult && !guestResult && !scannerPaused} />
@@ -381,7 +350,9 @@ export function QrCheckInPanel() {
             </p>
           )}
         </div>
-      ) : mode === "manual" ? (
+      )}
+
+      {mode === "manual" && (
         <form onSubmit={handleManualSubmit} className="space-y-2">
           <input
             type="text"
@@ -395,12 +366,53 @@ export function QrCheckInPanel() {
             {isLooking ? "Looking up…" : "Look Up Student"}
           </Button>
         </form>
-      ) : mode === "paired" ? (
-        <PairScannerControls
-          contextType="attendance"
-          onScanResult={handlePairedScanResult}
-        />
-      ) : null}
+      )}
+
+      {/* Fallback toggle */}
+      {mode === "paired" && !lookupResult && !guestResult && (
+        <div className="border-t border-gray-100 pt-3">
+          <button
+            type="button"
+            onClick={() => setShowFallback(!showFallback)}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <ChevronDown className={`h-3 w-3 transition-transform ${showFallback ? "rotate-180" : ""}`} />
+            Fallback options
+          </button>
+          {showFallback && (
+            <div className="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { setMode("camera"); resetScan(); setShowFallback(false); }}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+              >
+                <QrCode className="h-3.5 w-3.5" />
+                Laptop camera
+              </button>
+              <button
+                type="button"
+                onClick={() => { setMode("manual"); resetScan(); setShowFallback(false); }}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+                Manual token
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Return to paired mode from fallback */}
+      {mode !== "paired" && (
+        <button
+          type="button"
+          onClick={() => { setMode("paired"); resetScan(); }}
+          className="flex items-center gap-1.5 text-xs text-bpm-600 hover:text-bpm-700 font-medium"
+        >
+          <Smartphone className="h-3.5 w-3.5" />
+          Back to paired scanner
+        </button>
+      )}
 
       {/* Loading state */}
       {isLooking && (

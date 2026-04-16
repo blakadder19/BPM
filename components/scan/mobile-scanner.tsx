@@ -46,6 +46,19 @@ export function MobileScanner({ initialCode }: { initialCode?: string }) {
     });
   }, [codeInput]);
 
+  const isSessionError = useCallback((msg: string) => {
+    const lower = msg.toLowerCase();
+    return lower.includes("pairing session") || lower.includes("login session") || lower.includes("not authorized");
+  }, []);
+
+  const handleResetToPairing = useCallback(() => {
+    setSession(null);
+    setPhase("pairing");
+    setCodeInput("");
+    setScanError(null);
+    setLastResult(null);
+  }, []);
+
   const handleScan = useCallback(
     (qrCode: string) => {
       if (!session || isProcessing) return;
@@ -173,8 +186,18 @@ export function MobileScanner({ initialCode }: { initialCode?: string }) {
       )}
 
       {scanError && !isProcessing && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-          {scanError}
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 space-y-2">
+          <p className="text-sm text-red-700">{scanError}</p>
+          {isSessionError(scanError) && (
+            <button
+              type="button"
+              onClick={handleResetToPairing}
+              className="flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 w-full justify-center"
+            >
+              <Link2 className="h-4 w-4" />
+              Re-pair scanner
+            </button>
+          )}
         </div>
       )}
 

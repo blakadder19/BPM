@@ -96,9 +96,8 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
   const [filterPerson, setFilterPerson] = useState<FilterPerson>("all");
   const [filterProduct, setFilterProduct] = useState<string>("all");
 
-  // QR scanner state
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const [pairedOpen, setPairedOpen] = useState(false);
+  // Scanner state — paired is primary, local camera is fallback
+  const [scannerMode, setScannerMode] = useState<"closed" | "paired" | "camera">("closed");
   const [qrResult, setQrResult] = useState<{ purchases: EventQrPurchaseInfo[]; personName: string; personType: string } | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
   const [qrPending, startQrTransition] = useTransition();
@@ -259,30 +258,17 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
             description={event.title}
             actions={
               isLive ? (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setScannerOpen(!scannerOpen); if (!scannerOpen) setPairedOpen(false); clearQrResult(); }}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
-                      scannerOpen
-                        ? "bg-gray-700 text-white hover:bg-gray-800"
-                        : "bg-bpm-600 text-white hover:bg-bpm-700"
-                    }`}
-                  >
-                    <QrCode className="h-4 w-4" />
-                    {scannerOpen ? "Close scanner" : "Scan QR"}
-                  </button>
-                  <button
-                    onClick={() => { setPairedOpen(!pairedOpen); if (!pairedOpen) setScannerOpen(false); clearQrResult(); }}
-                    className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
-                      pairedOpen
-                        ? "bg-gray-700 text-white hover:bg-gray-800"
-                        : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                    }`}
-                  >
-                    <Smartphone className="h-4 w-4" />
-                    {pairedOpen ? "Close pair" : "Pair mobile"}
-                  </button>
-                </div>
+                <button
+                  onClick={() => { setScannerMode(scannerMode === "closed" ? "paired" : "closed"); clearQrResult(); }}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
+                    scannerMode !== "closed"
+                      ? "bg-gray-700 text-white hover:bg-gray-800"
+                      : "bg-bpm-600 text-white hover:bg-bpm-700"
+                  }`}
+                >
+                  <Smartphone className="h-4 w-4" />
+                  {scannerMode !== "closed" ? "Close scanner" : "Start scanner"}
+                </button>
               ) : undefined
             }
           />
@@ -318,13 +304,48 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
         <StatPill label="Guests" value={stats.guests} />
       </div>
 
-      {/* ── QR Scanner Panel ──────────────────────────────── */}
-      {scannerOpen && isLive && (
+      {/* ── Scanner Panel (paired = primary, camera = fallback) ── */}
+      {scannerMode !== "closed" && isLive && (
         <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-4">
-          <div className="max-w-sm mx-auto">
-            <QrScanner onScan={handleQrScan} active={scannerOpen} />
-          </div>
+          {/* Primary: Paired mobile scanner */}
+          {scannerMode === "paired" && (
+            <PairScannerControls
+              contextType="event_reception"
+              contextId={event.id}
+              onScanResult={handlePairedScanResult}
+            />
+          )}
 
+          {/* Fallback: Local camera */}
+          {scannerMode === "camera" && (
+            <div className="space-y-3">
+              <div className="max-w-sm mx-auto">
+                <QrScanner onScan={handleQrScan} active={scannerMode === "camera"} />
+              </div>
+              <button
+                onClick={() => { setScannerMode("paired"); clearQrResult(); }}
+                className="flex items-center gap-1.5 text-xs text-bpm-600 hover:text-bpm-700 font-medium"
+              >
+                <Smartphone className="h-3.5 w-3.5" />
+                Back to paired scanner
+              </button>
+            </div>
+          )}
+
+          {/* Fallback toggle (only when in paired mode, no result showing) */}
+          {scannerMode === "paired" && !qrResult && !qrError && (
+            <div className="border-t border-gray-100 pt-3">
+              <button
+                onClick={() => { setScannerMode("camera"); clearQrResult(); }}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <QrCode className="h-3.5 w-3.5" />
+                Use laptop camera instead
+              </button>
+            </div>
+          )}
+
+          {/* Shared result display */}
           {qrPending && (
             <div className="text-center text-sm text-gray-500">Looking up...</div>
           )}
@@ -346,64 +367,6 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
 
           {qrResult && (
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className={`rounded-full p-1 ${qrResult.personType === "student" ? "bg-blue-100" : "bg-purple-100"}`}>
-                  {qrResult.personType === "student" ? <User className="h-4 w-4 text-blue-600" /> : <Users className="h-4 w-4 text-purple-600" />}
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">{qrResult.personName}</p>
-                  <p className="text-xs text-gray-500">{qrResult.personType === "student" ? "Internal student" : "Guest"}</p>
-                </div>
-                <button onClick={clearQrResult} className="ml-auto text-xs text-gray-400 hover:text-gray-600 underline">
-                  Clear
-                </button>
-              </div>
-
-              {qrResult.purchases.map((p) => (
-                <QrPurchaseCard
-                  key={p.purchaseId}
-                  info={p}
-                  onCheckIn={handleCheckIn}
-                  onUndoCheckIn={handleUndoCheckIn}
-                  onCollectPaymentAndCheckIn={handleCollectPaymentAndCheckIn}
-                  actionPending={actionPending}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Paired Scanner Panel ─────────────────────────── */}
-      {pairedOpen && isLive && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <PairScannerControls
-            contextType="event_reception"
-            contextId={event.id}
-            onScanResult={handlePairedScanResult}
-          />
-
-          {qrPending && (
-            <div className="mt-4 text-center text-sm text-gray-500">Looking up...</div>
-          )}
-
-          {qrError && (
-            <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-4">
-              <div className="flex items-center gap-2">
-                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-red-800">Not valid</p>
-                  <p className="text-sm text-red-600">{qrError}</p>
-                </div>
-              </div>
-              <button onClick={clearQrResult} className="mt-2 text-xs text-red-500 hover:text-red-700 underline">
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {qrResult && (
-            <div className="mt-4 space-y-3">
               <div className="flex items-center gap-2">
                 <div className={`rounded-full p-1 ${qrResult.personType === "student" ? "bg-blue-100" : "bg-purple-100"}`}>
                   {qrResult.personType === "student" ? <User className="h-4 w-4 text-blue-600" /> : <Users className="h-4 w-4 text-purple-600" />}

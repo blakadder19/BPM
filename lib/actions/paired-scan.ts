@@ -55,7 +55,7 @@ export async function createPairedScanSession(input: {
 }): Promise<CreateSessionResult> {
   const user = await getAuthUser();
   if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
+    return { success: false, error: "Your login session has expired. Please refresh the page and sign in again." };
   }
 
   // Deactivate any existing active sessions for this user + context
@@ -97,7 +97,7 @@ export interface JoinSessionResult {
 export async function joinScanSession(pairingCode: string): Promise<JoinSessionResult> {
   const user = await getAuthUser();
   if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
+    return { success: false, error: "Your login session has expired. Please sign in again on this device." };
   }
 
   const code = pairingCode.toUpperCase().trim();
@@ -113,13 +113,13 @@ export async function joinScanSession(pairingCode: string): Promise<JoinSessionR
     .single();
 
   if (error || !data) {
-    return { success: false, error: "Session not found or expired" };
+    return { success: false, error: "Pairing session not found or no longer active. Ask the laptop operator to start a new one." };
   }
 
   const session = rowToSession(data);
   if (isSessionExpired(session)) {
     await db().from("scan_sessions").update({ active: false }).eq("id", session.id);
-    return { success: false, error: "Session has expired" };
+    return { success: false, error: "Pairing session has expired. Please create a new one from the laptop." };
   }
 
   return { success: true, session };
@@ -139,7 +139,7 @@ export async function processPairedScan(input: {
 }): Promise<ProcessScanResult> {
   const user = await getAuthUser();
   if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
+    return { success: false, error: "Your login session has expired. Please sign in again on this device." };
   }
 
   const { data, error } = await db()
@@ -150,13 +150,13 @@ export async function processPairedScan(input: {
     .single();
 
   if (error || !data) {
-    return { success: false, error: "Session not found or inactive" };
+    return { success: false, error: "Pairing session not found or no longer active. Please re-pair from the laptop." };
   }
 
   const session = rowToSession(data);
   if (isSessionExpired(session)) {
     await db().from("scan_sessions").update({ active: false }).eq("id", session.id);
-    return { success: false, error: "Session has expired" };
+    return { success: false, error: "Pairing session has expired. Please create a new one from the laptop." };
   }
 
   const timestamp = new Date().toISOString();
@@ -210,7 +210,7 @@ export async function processPairedScan(input: {
 export async function closeScanSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
   const user = await getAuthUser();
   if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
+    return { success: false, error: "Your login session has expired. Please refresh the page and sign in again." };
   }
 
   const { error } = await db()
