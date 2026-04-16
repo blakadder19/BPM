@@ -207,7 +207,11 @@ export function StudentBookDialog({
               {normalEntitlements.length > 0 && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-gray-700">
-                    {birthdayEntitlement ? "Or use entitlement" : "Use entitlement"}
+                    {birthdayEntitlement
+                      ? "Or use entitlement"
+                      : normalEntitlements.length > 1
+                        ? "Choose plan to use"
+                        : "Use entitlement"}
                   </label>
                   {!birthdayEntitlement && normalEntitlements.length === 1 ? (
                     <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
@@ -236,9 +240,16 @@ export function StudentBookDialog({
                             className="accent-blue-600"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900">
-                              {e.productName}
-                            </p>
+                            <div className="flex items-center gap-1.5">
+                              <p className="text-sm font-medium text-gray-900">
+                                {e.productName}
+                              </p>
+                              {e.isRecommended && (
+                                <span className="rounded-full bg-bpm-50 px-1.5 py-0.5 text-[10px] font-semibold text-bpm-700">
+                                  Recommended
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-gray-500">{e.description}</p>
                           </div>
                           <StatusBadge status={e.productType} />

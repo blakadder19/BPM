@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition, useCallback } from "react";
+import { useState, useMemo, useTransition, useCallback, useEffect } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ import {
 } from "@/lib/actions/event-checkin";
 import type { EventQrPurchaseInfo, EventQrLookupResult } from "@/lib/actions/event-checkin";
 import { PairScannerControls } from "@/components/scan/pair-scanner-controls";
+import { useScanSession } from "@/components/providers/scan-session-provider";
 import type { PairedScanResult } from "@/lib/domain/scan-session";
 
 import dynamic from "next/dynamic";
@@ -79,6 +80,7 @@ interface Props {
 // ── Component ────────────────────────────────────────────────
 
 export function EventOperations({ event, products, purchases, studentInfoMap }: Props) {
+  const { lastResult: globalLastResult, clearLastResult, session: globalSession } = useScanSession();
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   // Event window check (calendar-day span: check-in enabled for all days covered by the event)
@@ -96,11 +98,25 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
   const [filterPerson, setFilterPerson] = useState<FilterPerson>("all");
   const [filterProduct, setFilterProduct] = useState<string>("all");
 
-  // Scanner state — paired is primary, local camera is fallback
-  const [scannerMode, setScannerMode] = useState<"closed" | "paired" | "camera">("closed");
+  // Auto-open scanner when a global paired session exists for this event
+  const [scannerMode, setScannerMode] = useState<"closed" | "paired" | "camera">(
+    globalSession && globalSession.contextType === "event_reception" && globalSession.contextId === event.id
+      ? "paired"
+      : "closed"
+  );
   const [qrResult, setQrResult] = useState<{ purchases: EventQrPurchaseInfo[]; personName: string; personType: string } | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
   const [qrPending, startQrTransition] = useTransition();
+
+  // Pick up pending scan result from global context
+  useEffect(() => {
+    if (globalLastResult && globalLastResult.payload.type === "event_reception") {
+      handlePairedScanResult(globalLastResult);
+      clearLastResult();
+      if (scannerMode === "closed") setScannerMode("paired");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalLastResult]);
 
   // Check-in action state
   const [actionPending, startActionTransition] = useTransition();

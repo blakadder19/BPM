@@ -8,6 +8,7 @@ import { UserProvider } from "@/components/providers/user-provider";
 import { SidebarProvider } from "@/components/providers/sidebar-provider";
 import { DevPanelGate } from "@/components/dev/dev-panel-gate";
 import { SessionGuard } from "@/components/layout/session-guard";
+import { ScanSessionProvider } from "@/components/providers/scan-session-provider";
 import { computeAdminAlerts, type AdminAlert } from "@/lib/domain/admin-alerts";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -100,7 +101,11 @@ export default async function AppLayout({
             <UserProvider
               user={{ role: user.role, fullName: user.fullName, email: user.email }}
             >
-              {children}
+              {user.role === "admin" || user.role === "teacher" ? (
+                <ScanSessionProvider>{children}</ScanSessionProvider>
+              ) : (
+                children
+              )}
             </UserProvider>
           </main>
         </div>

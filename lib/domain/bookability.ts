@@ -82,6 +82,33 @@ export interface BookabilityContext {
   studentDateOfBirth?: string | null;
 }
 
+// ── Recommendation logic ────────────────────────────────────
+
+const PASS_TYPES = new Set(["pass", "credit_pack", "promo_pass", "drop_in"]);
+
+function markRecommended(entitlements: ValidEntitlement[]): void {
+  // Prefer pass-like products (use-it-or-lose-it) over long-running memberships.
+  // Among equals, prefer the one with the nearest expiry date.
+  let best: ValidEntitlement | null = null;
+  let bestScore = Infinity;
+
+  for (const e of entitlements) {
+    if (e.isBirthdayBenefit) continue;
+    const isPass = PASS_TYPES.has(e.productType);
+    const tierPenalty = isPass ? 0 : 1_000_000;
+    const datePenalty = e.validUntil
+      ? new Date(e.validUntil).getTime()
+      : Number.MAX_SAFE_INTEGER;
+    const score = tierPenalty + datePenalty;
+    if (score < bestScore) {
+      bestScore = score;
+      best = e;
+    }
+  }
+
+  if (best) best.isRecommended = true;
+}
+
 // ── Engine ──────────────────────────────────────────────────
 
 export function computeBookability(ctx: BookabilityContext): BookabilityResult {
@@ -224,6 +251,7 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
         classesPerTerm: null,
         remainingCredits: null,
         totalCredits: null,
+        validUntil: null,
         isBirthdayBenefit: true,
       });
     }
@@ -236,6 +264,11 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
       ctx.accessRulesMap
     );
     return { status: "blocked", reason };
+  }
+
+  // 8c. Multi-entitlement recommendation — nearest expiry, preferring passes over memberships
+  if (validEntitlements.length > 1) {
+    markRecommended(validEntitlements);
   }
 
   // 9. Capacity + role-balance
@@ -270,7 +303,9 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
     };
   }
 
-  const autoSelected = validEntitlements.length === 1 ? validEntitlements[0] : undefined;
+  const autoSelected = validEntitlements.length === 1
+    ? validEntitlements[0]
+    : validEntitlements.find((e) => e.isRecommended);
 
   return {
     status: "bookable",

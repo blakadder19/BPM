@@ -18,7 +18,7 @@ import type { ClassType } from "@/types/domain";
 
 export type StyleAccess =
   | { type: "all" }
-  | { type: "fixed"; styleIds: string[] }
+  | { type: "fixed"; styleIds: string[]; styleNames?: string[] }
   | { type: "selected_style"; allowedStyleIds?: string[] }
   | { type: "course_group"; poolStyleIds: string[]; pickCount: number }
   | { type: "social_only" };
@@ -301,6 +301,9 @@ export function buildDynamicAccessRulesMap(
   const mockIdRemapper = danceStyles ? buildMockIdRemapper(danceStyles) : null;
   const r = (id: string) => mockIdRemapper?.get(id) ?? id;
   const rList = (ids: string[]) => ids.map(r);
+  const styleNameById = danceStyles
+    ? new Map(danceStyles.map((s) => [s.id, s.name]))
+    : null;
 
   const map = new Map<string, ProductAccessRule>();
 
@@ -317,6 +320,16 @@ export function buildDynamicAccessRulesMap(
       styleAccess = { type: "fixed", styleIds: pStyleIds };
     } else {
       styleAccess = { type: "all" };
+    }
+
+    // Enrich fixed-style rules with name-based fallback for robust matching
+    if (styleAccess.type === "fixed" && styleNameById) {
+      const names = styleAccess.styleIds
+        .map((id) => styleNameById.get(id))
+        .filter((n): n is string => !!n);
+      if (names.length > 0) {
+        styleAccess = { ...styleAccess, styleNames: names };
+      }
     }
 
     const rule: ProductAccessRule = {

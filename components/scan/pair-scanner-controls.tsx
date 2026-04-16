@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   Smartphone,
@@ -11,12 +11,8 @@ import {
   Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  createPairedScanSession,
-  closeScanSession,
-} from "@/lib/actions/paired-scan";
-import { useScanChannel } from "@/lib/hooks/use-scan-channel";
-import type { ScanSession, ScanContextType, PairedScanResult } from "@/lib/domain/scan-session";
+import { useScanSession } from "@/components/providers/scan-session-provider";
+import type { ScanContextType, PairedScanResult } from "@/lib/domain/scan-session";
 
 interface PairScannerControlsProps {
   contextType: ScanContextType;
@@ -29,47 +25,25 @@ export function PairScannerControls({
   contextId,
   onScanResult,
 }: PairScannerControlsProps) {
-  const [session, setSession] = useState<ScanSession | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
+  const { session, isCreating, scanCount, lastResult, createSession, closeSession } = useScanSession();
   const [copied, setCopied] = useState(false);
-  const [scanCount, setScanCount] = useState(0);
+  const prevCountRef = useRef(scanCount);
 
-  useScanChannel(session?.id ?? null, (result) => {
-    setScanCount((c) => c + 1);
-    onScanResult(result);
-  });
+  // Forward new results to the page-level handler
+  useEffect(() => {
+    if (lastResult && scanCount > prevCountRef.current) {
+      prevCountRef.current = scanCount;
+      onScanResult(lastResult);
+    }
+  }, [scanCount, lastResult, onScanResult]);
 
   const handleCreate = useCallback(() => {
-    setError(null);
-    startTransition(async () => {
-      const res = await createPairedScanSession({ contextType, contextId });
-      if (res.success && res.session) {
-        setSession(res.session);
-        setScanCount(0);
-      } else {
-        setError(res.error ?? "Failed to create session");
-      }
-    });
-  }, [contextType, contextId]);
+    createSession(contextType, contextId);
+  }, [contextType, contextId, createSession]);
 
   const handleClose = useCallback(() => {
-    if (!session) return;
-    startTransition(async () => {
-      await closeScanSession(session.id);
-      setSession(null);
-      setScanCount(0);
-    });
-  }, [session]);
-
-  useEffect(() => {
-    return () => {
-      if (session) {
-        closeScanSession(session.id).catch(() => {});
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    closeSession();
+  }, [closeSession]);
 
   const handleCopy = useCallback(() => {
     if (!session) return;
@@ -98,11 +72,11 @@ export function PairScannerControls({
         </div>
         <Button
           onClick={handleCreate}
-          disabled={isPending}
+          disabled={isCreating}
           variant="outline"
           className="mx-auto"
         >
-          {isPending ? (
+          {isCreating ? (
             <>
               <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
               Creating...
@@ -114,9 +88,6 @@ export function PairScannerControls({
             </>
           )}
         </Button>
-        {error && (
-          <p className="text-xs text-red-600">{error}</p>
-        )}
       </div>
     );
   }
@@ -135,7 +106,7 @@ export function PairScannerControls({
           variant="ghost"
           size="sm"
           onClick={handleClose}
-          disabled={isPending}
+          disabled={isCreating}
           className="text-gray-500 hover:text-red-600"
         >
           <Link2Off className="h-4 w-4 mr-1" />

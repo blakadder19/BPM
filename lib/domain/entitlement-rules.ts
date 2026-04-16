@@ -25,7 +25,9 @@ export interface ValidEntitlement {
   classesPerTerm: number | null;
   remainingCredits: number | null;
   totalCredits: number | null;
+  validUntil: string | null;
   isBirthdayBenefit?: boolean;
+  isRecommended?: boolean;
 }
 
 function styleMatches(
@@ -37,29 +39,24 @@ function styleMatches(
     case "all":
       return true;
     case "fixed":
-      if (cls.styleId) return access.styleIds.includes(cls.styleId);
-      if (!cls.styleName) return false;
+      if (cls.styleId && access.styleIds.includes(cls.styleId)) return true;
+      if (cls.styleName && access.styleNames && access.styleNames.includes(cls.styleName)) return true;
       return false;
-    case "selected_style":
+    case "selected_style": {
       if (!cls.styleName && !cls.styleId) return false;
-      if (cls.styleId && sub.selectedStyleId) {
-        return cls.styleId === sub.selectedStyleId;
-      }
-      if (cls.styleId && sub.selectedStyleIds) {
-        return sub.selectedStyleIds.includes(cls.styleId);
-      }
-      if (sub.selectedStyleName === cls.styleName) return true;
-      if (sub.selectedStyleNames && cls.styleName && sub.selectedStyleNames.includes(cls.styleName)) return true;
+      // Try ID-based match first, then fall through to name-based
+      if (cls.styleId && sub.selectedStyleId && cls.styleId === sub.selectedStyleId) return true;
+      if (cls.styleId && sub.selectedStyleIds && sub.selectedStyleIds.includes(cls.styleId)) return true;
+      if (cls.styleName && sub.selectedStyleName && sub.selectedStyleName === cls.styleName) return true;
+      if (cls.styleName && sub.selectedStyleNames && sub.selectedStyleNames.includes(cls.styleName)) return true;
       return false;
-    case "course_group":
+    }
+    case "course_group": {
       if (!cls.styleName && !cls.styleId) return false;
-      if (cls.styleId && sub.selectedStyleIds && sub.selectedStyleIds.length > 0) {
-        return sub.selectedStyleIds.includes(cls.styleId);
-      }
-      if (sub.selectedStyleNames && sub.selectedStyleNames.length > 0 && cls.styleName) {
-        return sub.selectedStyleNames.includes(cls.styleName);
-      }
+      if (cls.styleId && sub.selectedStyleIds && sub.selectedStyleIds.includes(cls.styleId)) return true;
+      if (cls.styleName && sub.selectedStyleNames && sub.selectedStyleNames.includes(cls.styleName)) return true;
       return false;
+    }
     case "social_only":
       return false;
   }
@@ -135,6 +132,8 @@ export function diagnoseNoEntitlement(
     return "You don't have an active membership or pass. Browse the Catalog or visit reception to get started.";
   }
 
+  // Separate subscriptions into "currently in date window" vs "not yet active / expired"
+  // so that messages about current products are prioritised over future ones.
   let anyExhausted = false;
   let anyStyleMismatch = false;
   let anyLevelMismatch = false;
@@ -182,17 +181,11 @@ export function diagnoseNoEntitlement(
     }
   }
 
+  // Priority: issues from currently-active-window products first, then future/expired.
+  // This prevents a future subscription's "not yet valid" from masking a current product's
+  // real issue (e.g. exhausted credits or style mismatch).
   if (anyExhausted && exhaustedName) {
     return `${exhaustedName}: all classes/credits used. Upgrade or purchase a top-up.`;
-  }
-  if (anyNotYetValid && notYetValidName) {
-    return "This class belongs to an earlier term. Your plan starts in a later term and can't be used for this class.";
-  }
-  if (anyClassInFutureTerm) {
-    return "This class is in a future term. You need a plan for that term to book it.";
-  }
-  if (anyExpired) {
-    return "Your membership or pass has expired. Visit the Catalog or reception to renew.";
   }
   if (anyStyleMismatch) {
     const styleLabel = cls.styleName ?? "this style";
@@ -204,6 +197,15 @@ export function diagnoseNoEntitlement(
   }
   if (anyTypeMismatch) {
     return "Your current plan doesn't include this type of class.";
+  }
+  if (anyExpired) {
+    return "Your membership or pass has expired. Visit the Catalog or reception to renew.";
+  }
+  if (anyNotYetValid && notYetValidName) {
+    return `${notYetValidName} starts in a later term and can't be used for this class yet.`;
+  }
+  if (anyClassInFutureTerm) {
+    return "This class is in a future term. You need a plan for that term to book it.";
   }
   return "No matching entitlement for this class.";
 }
@@ -218,6 +220,7 @@ export function toValidEntitlement(sub: MockSubscription): ValidEntitlement {
     classesPerTerm: sub.classesPerTerm,
     remainingCredits: sub.remainingCredits,
     totalCredits: sub.totalCredits,
+    validUntil: sub.validUntil ?? null,
     isBirthdayBenefit: false,
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback, useRef } from "react";
+import { useState, useTransition, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   QrCode,
@@ -41,6 +41,7 @@ import {
 } from "@/lib/actions/qr-checkin";
 import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { PairScannerControls } from "@/components/scan/pair-scanner-controls";
+import { useScanSession } from "@/components/providers/scan-session-provider";
 import type { PairedScanResult } from "@/lib/domain/scan-session";
 import type { QrLookupResult as QrLookupResultType } from "@/lib/actions/qr-checkin";
 
@@ -83,6 +84,7 @@ function Overlay({ children, onClose }: { children: React.ReactNode; onClose: ()
 
 export function QrCheckInPanel() {
   const router = useRouter();
+  const { lastResult: globalLastResult, clearLastResult } = useScanSession();
   const [mode, setMode] = useState<InputMode>("paired");
   const [showFallback, setShowFallback] = useState(false);
   const [manualToken, setManualToken] = useState("");
@@ -96,6 +98,15 @@ export function QrCheckInPanel() {
   const [selectedPayMethod, setSelectedPayMethod] = useState<PaymentMethod>("cash");
   const [scannerPaused, setScannerPaused] = useState(false);
   const lastTokenRef = useRef<string | null>(null);
+
+  // Pick up pending scan result from global context (e.g. admin navigated back after a scan)
+  useEffect(() => {
+    if (globalLastResult && globalLastResult.payload.type === "attendance") {
+      handlePairedScanResult(globalLastResult);
+      clearLastResult();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [globalLastResult]);
 
   const doLookup = useCallback(
     (token: string) => {
