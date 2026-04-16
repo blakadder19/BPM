@@ -160,7 +160,6 @@ export const supabaseStudentRepo: IStudentRepository = {
       "op_attendance",
       "op_bookings",
       "op_waitlist",
-      "op_subscriptions",
     ];
     for (const table of opTables) {
       const { error } = await supabase.from(table).delete().eq("student_id", id);

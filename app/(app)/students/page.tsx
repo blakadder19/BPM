@@ -3,13 +3,14 @@ import {
   getBookingRepo,
   getPenaltyRepo,
   getAttendanceRepo,
+  getSpecialEventRepo,
 } from "@/lib/repositories";
 import {
   cachedGetTerms,
   cachedGetProducts,
   cachedGetAllStudents,
-  cachedGetAllSubs,
   cachedGetAllDanceStyles,
+  cachedGetAllSubs,
 } from "@/lib/server/cached-queries";
 import { getWalletTransactions } from "@/lib/services/wallet-service";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
@@ -19,7 +20,6 @@ import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { AdminStudents } from "@/components/students/admin-students";
 import { getAllRedemptionsForYear, type BirthdayRedemption } from "@/lib/services/birthday-benefit-store";
-import { getSpecialEventRepo } from "@/lib/repositories";
 import type { MockEventPurchase } from "@/lib/mock-data";
 
 export default async function StudentsPage({
@@ -36,14 +36,14 @@ export default async function StudentsPage({
   const _tHydrate = performance.now();
 
   const year = new Date().getFullYear();
-  const [students, subscriptions, walletTransactions, products, terms, danceStyles, birthdayMap] = await Promise.all([
+  const [students, walletTransactions, products, terms, danceStyles, birthdayMap, subscriptions] = await Promise.all([
     cachedGetAllStudents(),
-    cachedGetAllSubs(),
     getWalletTransactions(),
     cachedGetProducts(),
     cachedGetTerms(),
     cachedGetAllDanceStyles(),
     getAllRedemptionsForYear(year),
+    cachedGetAllSubs(),
   ]);
   const _tDb = performance.now();
 

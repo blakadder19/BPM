@@ -1,15 +1,19 @@
 /**
  * Supabase CRUD for operational tables (op_bookings, op_waitlist, op_attendance,
- * op_penalties, op_subscriptions).
+ * op_penalties).
  * Uses an untyped admin client since these tables are not in the generated Database type.
+ *
+ * Subscriptions are NOT managed here. The canonical subscription table is
+ * student_subscriptions, accessed exclusively via supabaseSubscriptionRepo.
+ * The legacy op_subscriptions table is no longer read or written at runtime
+ * and is retained only as inert historical data pending future removal.
  */
 
 import { createClient } from "@supabase/supabase-js";
 import type { StoredBooking, StoredWaitlistEntry } from "@/lib/services/booking-service";
 import type { StoredAttendance } from "@/lib/services/attendance-service";
 import type { StoredPenalty } from "@/lib/services/penalty-service";
-import type { MockSubscription } from "@/lib/mock-data";
-import type { BookingStatus, BookingSource, DanceRole, WaitlistStatus, AttendanceMark, CheckInMethod, PenaltyReason, PenaltyResolution, ProductType, SubscriptionStatus, PaymentMethod, SalePaymentStatus } from "@/types/domain";
+import type { BookingStatus, BookingSource, DanceRole, WaitlistStatus, AttendanceMark, CheckInMethod, PenaltyReason, PenaltyResolution } from "@/types/domain";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let _cachedClient: any = null;
@@ -332,108 +336,6 @@ export async function deletePenaltyFromDB(id: string): Promise<void> {
     if (error) console.warn("[op-persistence] deletePenalty:", error.message);
   } catch (e) {
     console.warn("[op-persistence] deletePenalty error:", e instanceof Error ? e.message : e);
-  }
-}
-
-// ── Subscriptions ──────────────────────────────────────────
-
-function rowToSubscription(r: Record<string, unknown>): MockSubscription {
-  return {
-    id: str(r.id),
-    studentId: str(r.student_id),
-    productId: str(r.product_id),
-    productName: str(r.product_name),
-    productType: (r.product_type as ProductType) ?? "membership",
-    status: (r.status as SubscriptionStatus) ?? "active",
-    totalCredits: (r.total_credits as number) ?? null,
-    remainingCredits: (r.remaining_credits as number) ?? null,
-    validFrom: str(r.valid_from, new Date().toISOString().slice(0, 10)),
-    validUntil: (r.valid_until as string) ?? null,
-    selectedStyleId: (r.selected_style_id as string) ?? null,
-    selectedStyleName: (r.selected_style_name as string) ?? null,
-    selectedStyleIds: r.selected_style_ids ? JSON.parse(str(r.selected_style_ids, "null")) : null,
-    selectedStyleNames: r.selected_style_names ? JSON.parse(str(r.selected_style_names, "null")) : null,
-    notes: (r.notes as string) ?? null,
-    termId: (r.term_id as string) ?? null,
-    paymentMethod: (r.payment_method as PaymentMethod) ?? "cash",
-    paymentStatus: (r.payment_status as SalePaymentStatus) ?? "paid",
-    assignedBy: (r.assigned_by as string) ?? null,
-    assignedAt: str(r.assigned_at) || new Date().toISOString(),
-    autoRenew: (r.auto_renew as boolean) ?? false,
-    classesUsed: (r.classes_used as number) ?? 0,
-    classesPerTerm: (r.classes_per_term as number) ?? null,
-    renewedFromId: (r.renewed_from_id as string) ?? null,
-    paidAt: (r.paid_at as string) ?? null,
-    paymentReference: (r.payment_reference as string) ?? null,
-    paymentNotes: (r.payment_notes as string) ?? null,
-    collectedBy: (r.collected_by as string) ?? null,
-    priceCentsAtPurchase: r.price_cents_at_purchase != null ? Number(r.price_cents_at_purchase) : null,
-    currencyAtPurchase: (r.currency_at_purchase as string) ?? "EUR",
-    refundedAt: (r.refunded_at as string) ?? null,
-    refundedBy: (r.refunded_by as string) ?? null,
-    refundReason: (r.refund_reason as string) ?? null,
-  };
-}
-
-function subscriptionToRow(s: MockSubscription) {
-  return {
-    id: s.id,
-    student_id: s.studentId,
-    product_id: s.productId,
-    product_name: s.productName,
-    product_type: s.productType,
-    status: s.status,
-    total_credits: s.totalCredits,
-    remaining_credits: s.remainingCredits,
-    valid_from: s.validFrom,
-    valid_until: s.validUntil,
-    selected_style_id: s.selectedStyleId,
-    selected_style_name: s.selectedStyleName,
-    selected_style_ids: s.selectedStyleIds ? JSON.stringify(s.selectedStyleIds) : null,
-    selected_style_names: s.selectedStyleNames ? JSON.stringify(s.selectedStyleNames) : null,
-    notes: s.notes,
-    term_id: s.termId,
-    payment_method: s.paymentMethod,
-    payment_status: s.paymentStatus,
-    assigned_by: s.assignedBy,
-    assigned_at: s.assignedAt,
-    auto_renew: s.autoRenew,
-    classes_used: s.classesUsed,
-    classes_per_term: s.classesPerTerm,
-    renewed_from_id: s.renewedFromId,
-    paid_at: s.paidAt,
-    payment_reference: s.paymentReference,
-    payment_notes: s.paymentNotes,
-    collected_by: s.collectedBy,
-    price_cents_at_purchase: s.priceCentsAtPurchase,
-    currency_at_purchase: s.currencyAtPurchase,
-    refunded_at: s.refundedAt,
-    refunded_by: s.refundedBy,
-    refund_reason: s.refundReason,
-  };
-}
-
-export async function loadSubscriptionsFromDB(): Promise<MockSubscription[]> {
-  const client = getClient();
-  if (!client) return [];
-  try {
-    const { data, error } = await client.from("op_subscriptions").select("*");
-    if (error) { console.warn("[op-persistence] loadSubscriptions:", error.message); return []; }
-    return (data ?? []).map(rowToSubscription);
-  } catch (e) {
-    console.warn("[op-persistence] loadSubscriptions error:", e instanceof Error ? e.message : e);
-    return [];
-  }
-}
-
-export async function saveSubscriptionToDB(s: MockSubscription): Promise<void> {
-  const client = getClient();
-  if (!client) return;
-  try {
-    const { error } = await client.from("op_subscriptions").upsert(subscriptionToRow(s), { onConflict: "id" });
-    if (error) console.warn("[op-persistence] saveSubscription:", error.message);
-  } catch (e) {
-    console.warn("[op-persistence] saveSubscription error:", e instanceof Error ? e.message : e);
   }
 }
 

@@ -66,8 +66,8 @@ export function getSubscriptionRepo(): ISubscriptionRepository {
     const { supabaseSubscriptionRepo } = require("./supabase/subscription-repository");
     return supabaseSubscriptionRepo;
   }
-  const { hybridSubscriptionRepo } = require("./hybrid-subscription-repository");
-  return hybridSubscriptionRepo;
+  const { memorySubscriptionRepo } = require("./memory/subscription-repository");
+  return memorySubscriptionRepo;
 }
 
 export function getCocRepo(): ICocRepository {

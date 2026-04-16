@@ -3,7 +3,7 @@
  *
  * Credits use the operational-persistence + hydration pattern:
  * credit operations go through the in-memory CreditService, and
- * subscription usage changes are persisted via op_subscriptions.
+ * subscription usage changes are persisted via student_subscriptions.
  *
  * This repo returns the hydrated in-memory service so that
  * DATA_PROVIDER=supabase resolves correctly.

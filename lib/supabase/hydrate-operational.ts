@@ -1,8 +1,11 @@
 /**
  * Hydration layer: loads operational data from Supabase into in-memory
  * services. Operational data (bookings, waitlist, attendance, penalties,
- * subscriptions, class instances) is re-read from Supabase on EVERY
- * request to guarantee consistency across Vercel serverless instances.
+ * class instances) is re-read from Supabase on EVERY request to guarantee
+ * consistency across Vercel serverless instances.
+ *
+ * Subscriptions are read directly via supabaseSubscriptionRepo — they are
+ * NOT part of this hydration layer.
  *
  * Reference data (settings, dance styles, templates) is cached per
  * instance lifecycle since it changes infrequently.
@@ -15,14 +18,12 @@ import { createClient } from "@supabase/supabase-js";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
-import { getSubscriptions } from "@/lib/services/subscription-store";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import {
   loadBookingsFromDB,
   loadWaitlistFromDB,
   loadAttendanceFromDB,
   loadPenaltiesFromDB,
-  loadSubscriptionsFromDB,
   loadStudioHiresFromDB,
   loadAuditLogFromDB,
 } from "./operational-persistence";
@@ -88,12 +89,11 @@ async function loadValidUserIdsCached(): Promise<Set<string>> {
  * Called on every request to ensure cross-instance consistency.
  */
 async function refreshOperationalData(): Promise<void> {
-  const [bookings, waitlist, attendance, penalties, subs, studioHires, auditEntries, validIds] = await Promise.all([
+  const [bookings, waitlist, attendance, penalties, studioHires, auditEntries, validIds] = await Promise.all([
     loadBookingsFromDB(),
     loadWaitlistFromDB(),
     loadAttendanceFromDB(),
     loadPenaltiesFromDB(),
-    loadSubscriptionsFromDB(),
     loadStudioHiresFromDB(),
     loadAuditLogFromDB(),
     loadValidUserIdsCached(),
@@ -112,10 +112,6 @@ async function refreshOperationalData(): Promise<void> {
   const penSvc = getPenaltyService();
   penSvc.penalties.length = 0;
   penSvc.penalties.push(...penalties.filter((p) => isValidStudentId(p.studentId, validIds)));
-
-  const subStore = getSubscriptions();
-  subStore.length = 0;
-  subStore.push(...subs.filter((s) => isValidStudentId(s.studentId, validIds)));
 
   const hireSvc = getStudioHireService();
   hireSvc.entries.length = 0;
@@ -164,8 +160,8 @@ const HYDRATE_THROTTLE_MS = 2_000;
  * per serverless instance lifecycle.
  *
  * Operational data (bookings, waitlist, attendance, penalties,
- * subscriptions, class instances) is re-read from Supabase, but
- * throttled to avoid redundant queries within the same request cycle.
+ * class instances) is re-read from Supabase, but throttled to avoid
+ * redundant queries within the same request cycle.
  */
 export async function ensureOperationalDataHydrated(): Promise<void> {
   if (!hasSupabaseConfig()) return;
