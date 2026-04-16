@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import {
   DollarSign,
   Clock,
@@ -83,6 +84,39 @@ const SOURCE_OPTIONS = [
   { value: "penalty", label: "Penalty" },
 ];
 
+// ── Date presets ─────────────────────────────────────────────
+
+function todayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysAgoStr(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+function monthStartStr(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+}
+
+interface DatePreset {
+  label: string;
+  from: string;
+  to: string;
+}
+
+function getDatePresets(): DatePreset[] {
+  const today = todayStr();
+  return [
+    { label: "Today", from: today, to: today },
+    { label: "Last 7 days", from: daysAgoStr(6), to: today },
+    { label: "This month", from: monthStartStr(), to: today },
+    { label: "All time", from: "", to: "" },
+  ];
+}
+
 // ── CSV export ──────────────────────────────────────────────
 
 function exportToCsv(rows: FinanceTransaction[]) {
@@ -140,6 +174,8 @@ export function FinanceClient({ transactions, metrics, auditLog = [] }: FinanceC
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  const datePresets = useMemo(() => getDatePresets(), []);
+
   const methodOptions = useMemo(() => {
     const methods = new Set(
       transactions.map((t) => t.paymentMethod).filter(Boolean) as string[],
@@ -176,6 +212,16 @@ export function FinanceClient({ transactions, metrics, auditLog = [] }: FinanceC
         .slice(0, 6),
     [metrics.byMethod],
   );
+
+  function applyDatePreset(preset: DatePreset) {
+    setDateFrom(preset.from);
+    setDateTo(preset.to);
+  }
+
+  const activePresetLabel = useMemo(() => {
+    const match = datePresets.find((p) => p.from === dateFrom && p.to === dateTo);
+    return match?.label ?? null;
+  }, [dateFrom, dateTo, datePresets]);
 
   return (
     <div className="space-y-6">
@@ -233,50 +279,92 @@ export function FinanceClient({ transactions, metrics, auditLog = [] }: FinanceC
         ))}
       </div>
 
-      {/* Revenue by source */}
-      <div className="grid grid-cols-3 gap-3">
-        <SourceCard source="subscription" label="Subscriptions" cents={metrics.bySource.subscription} />
-        <SourceCard source="event_purchase" label="Events" cents={metrics.bySource.event_purchase} />
-        <SourceCard source="penalty" label="Penalties" cents={metrics.bySource.penalty} />
+      {/* Revenue by source — Paid + Pending breakdown */}
+      <div>
+        <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400 mb-2">
+          Revenue by source
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          <SourceCard
+            source="subscription"
+            label="Subscriptions"
+            paidCents={metrics.bySource.subscription}
+            pendingCents={metrics.pendingBySource.subscription}
+          />
+          <SourceCard
+            source="event_purchase"
+            label="Events"
+            paidCents={metrics.bySource.event_purchase}
+            pendingCents={metrics.pendingBySource.event_purchase}
+          />
+          <SourceCard
+            source="penalty"
+            label="Penalties"
+            paidCents={metrics.bySource.penalty}
+            pendingCents={metrics.pendingBySource.penalty}
+          />
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="w-full sm:max-w-xs">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Search buyer, product, email or reference…"
-          />
+      <div className="space-y-3">
+        {/* Date presets row */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500">Quick:</span>
+          {datePresets.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => applyDatePreset(preset)}
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                activePresetLabel === preset.label
+                  ? "bg-bpm-600 text-white"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+              )}
+            >
+              {preset.label}
+            </button>
+          ))}
         </div>
-        <SelectFilter value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} placeholder="All types" />
-        <SelectFilter value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} placeholder="All statuses" />
-        <SelectFilter value={sourceFilter} onChange={setSourceFilter} options={SOURCE_OPTIONS} placeholder="All sources" />
-        <SelectFilter value={methodFilter} onChange={setMethodFilter} options={methodOptions} placeholder="All methods" />
-        <div className="flex items-center gap-1.5 text-xs">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-bpm-500 focus:ring-1 focus:ring-bpm-500"
-          />
-          <span className="text-gray-400">to</span>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-bpm-500 focus:ring-1 focus:ring-bpm-500"
-          />
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="w-full sm:max-w-xs">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              placeholder="Search buyer, product, email or reference…"
+            />
+          </div>
+          <SelectFilter value={typeFilter} onChange={setTypeFilter} options={TYPE_OPTIONS} placeholder="All types" />
+          <SelectFilter value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} placeholder="All statuses" />
+          <SelectFilter value={sourceFilter} onChange={setSourceFilter} options={SOURCE_OPTIONS} placeholder="All sources" />
+          <SelectFilter value={methodFilter} onChange={setMethodFilter} options={methodOptions} placeholder="All methods" />
+          <div className="flex items-center gap-1.5 text-xs">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-bpm-500 focus:ring-1 focus:ring-bpm-500"
+            />
+            <span className="text-gray-400">to</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-bpm-500 focus:ring-1 focus:ring-bpm-500"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => exportToCsv(filtered)}
+            disabled={filtered.length === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => exportToCsv(filtered)}
-          disabled={filtered.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Download className="h-3.5 w-3.5" />
-          Export CSV
-        </button>
       </div>
 
       {/* Transaction table */}
@@ -348,11 +436,13 @@ function MiniCard({ label, value }: { label: string; value: string }) {
 function SourceCard({
   source,
   label,
-  cents,
+  paidCents,
+  pendingCents,
 }: {
   source: FinanceSource;
   label: string;
-  cents: number;
+  paidCents: number;
+  pendingCents: number;
 }) {
   const icons: Record<FinanceSource, typeof DollarSign> = {
     subscription: CreditCard,
@@ -363,9 +453,12 @@ function SourceCard({
   return (
     <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center gap-3">
       <Icon className="h-5 w-5 text-gray-400 shrink-0" />
-      <div>
+      <div className="min-w-0">
         <p className="text-xs text-gray-500">{label}</p>
-        <p className="text-sm font-semibold text-gray-800">{formatCents(cents)}</p>
+        <p className="text-sm font-semibold text-gray-800">{formatCents(paidCents)}<span className="text-[10px] font-normal text-gray-400 ml-1">paid</span></p>
+        {pendingCents > 0 && (
+          <p className="text-xs text-amber-600">{formatCents(pendingCents)}<span className="text-[10px] text-amber-500 ml-1">pending</span></p>
+        )}
       </div>
     </div>
   );
@@ -382,10 +475,30 @@ function TxRow({ tx }: { tx: FinanceTransaction }) {
       ].filter(Boolean).join(" — ")
     : null;
 
+  const isPending = tx.status === "pending";
+  const isRefunded = tx.status === "refunded";
+  const isPendingManual = isPending && (tx.paymentMethod === "manual" || tx.paymentMethod === "cash" || tx.paymentMethod === "bank_transfer");
+
+  const rowClass = cn(
+    isRefunded && "bg-red-50/40",
+    isPendingManual && "bg-amber-50/40",
+  );
+
+  const buyerCell = tx.studentId ? (
+    <Link
+      href={`/students?search=${encodeURIComponent(tx.buyerName)}`}
+      className="font-medium text-bpm-700 hover:text-bpm-900 hover:underline"
+    >
+      {tx.buyerName}
+    </Link>
+  ) : (
+    <span className="font-medium text-gray-900">{tx.buyerName}</span>
+  );
+
   return (
-    <tr>
+    <tr className={rowClass}>
       <Td>{dateStr}</Td>
-      <Td className="font-medium text-gray-900 max-w-[180px] truncate">{tx.buyerName}</Td>
+      <Td className="max-w-[180px] truncate">{buyerCell}</Td>
       <Td className="max-w-[200px]">
         <div className="truncate">{tx.productName}</div>
         {refundInfo && (
@@ -404,6 +517,9 @@ function TxRow({ tx }: { tx: FinanceTransaction }) {
         <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", statusColor)}>
           {normalizeFinanceStatusLabel(tx.status)}
         </span>
+        {isPendingManual && (
+          <span className="ml-1 text-[10px] text-amber-600 font-medium">Action needed</span>
+        )}
       </Td>
       <Td className="font-medium tabular-nums">{formatCents(tx.amountCents)}</Td>
       <Td className="capitalize text-xs">{METHOD_LABELS[tx.paymentMethod ?? ""] ?? tx.paymentMethod ?? "—"}</Td>
@@ -485,7 +601,7 @@ function AuditTrailSection({ entries }: { entries: FinanceAuditEntry[] }) {
                       <span className="text-gray-400">{e.entityId}</span>
                       {e.previousValue && e.newValue && (
                         <span className="text-gray-400">
-                          {" "}— {e.previousValue} → {e.newValue}
+                          {" "}&mdash; {e.previousValue} &rarr; {e.newValue}
                         </span>
                       )}
                     </p>

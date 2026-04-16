@@ -45,6 +45,7 @@ export interface FinanceMetrics {
   refundCount: number;
   byMethod: Record<string, number>;
   bySource: Record<FinanceSource, number>;
+  pendingBySource: Record<FinanceSource, number>;
 }
 
 // ── Status mapping ───────────────────────────────────────────
@@ -228,6 +229,7 @@ export function computeMetrics(transactions: FinanceTransaction[]): FinanceMetri
     refundCount: 0,
     byMethod: {},
     bySource: { subscription: 0, event_purchase: 0, penalty: 0 },
+    pendingBySource: { subscription: 0, event_purchase: 0, penalty: 0 },
   };
 
   for (const tx of transactions) {
@@ -240,6 +242,7 @@ export function computeMetrics(transactions: FinanceTransaction[]): FinanceMetri
     } else if (tx.status === "pending") {
       metrics.totalPendingCents += tx.amountCents;
       metrics.pendingCount++;
+      metrics.pendingBySource[tx.source] += tx.amountCents;
     } else if (tx.status === "refunded") {
       metrics.totalRefundedCents += tx.amountCents;
       metrics.refundCount++;
