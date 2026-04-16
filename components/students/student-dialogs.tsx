@@ -920,6 +920,18 @@ export function AddSubscriptionDialog({
 
 // ── Edit Subscription Dialog ─────────────────────────────────
 
+/**
+ * Allowed payment status transitions.
+ * "refunded" is only reachable from "paid" — a pending item was never paid
+ * and therefore cannot be refunded.
+ */
+function getAllowedPaymentStatusOptions(currentStatus: string): typeof PAYMENT_STATUS_OPTIONS {
+  if (currentStatus === "pending") {
+    return PAYMENT_STATUS_OPTIONS.filter((o) => o.value !== "refunded");
+  }
+  return PAYMENT_STATUS_OPTIONS;
+}
+
 const SENSITIVE_PAYMENT_STATUSES = new Set(["refunded", "cancelled"]);
 
 export function EditSubscriptionDialog({
@@ -947,6 +959,11 @@ export function EditSubscriptionDialog({
   );
   const paidAtRef = useRef<HTMLInputElement>(null);
   const [paymentStatusValue, setPaymentStatusValue] = useState(sub.paymentStatus);
+
+  const allowedStatusOptions = useMemo(
+    () => getAllowedPaymentStatusOptions(sub.paymentStatus),
+    [sub.paymentStatus],
+  );
 
   // Confirmation flow state
   const [confirmStep, setConfirmStep] = useState<{
@@ -989,10 +1006,23 @@ export function EditSubscriptionDialog({
     e.preventDefault();
     const formData = buildFormData(e.currentTarget);
     const newPaymentStatus = formData.get("paymentStatus") as string;
-    const isSensitive =
-      SENSITIVE_PAYMENT_STATUSES.has(newPaymentStatus) &&
-      !SENSITIVE_PAYMENT_STATUSES.has(sub.paymentStatus) &&
+
+    const isSensitiveRefund =
+      newPaymentStatus === "refunded" &&
+      sub.paymentStatus === "paid" &&
       sub.status === "active";
+
+    const isSensitiveCancelPending =
+      newPaymentStatus === "cancelled" &&
+      sub.paymentStatus === "pending" &&
+      sub.status === "active";
+
+    const isSensitiveCancelPaid =
+      newPaymentStatus === "cancelled" &&
+      sub.paymentStatus === "paid" &&
+      sub.status === "active";
+
+    const isSensitive = isSensitiveRefund || isSensitiveCancelPending || isSensitiveCancelPaid;
 
     if (isSensitive) {
       startTransition(async () => {
@@ -1036,19 +1066,30 @@ export function EditSubscriptionDialog({
   }
 
   if (confirmStep) {
-    const label = confirmStep.newPaymentStatus === "refunded" ? "Refunded" : "Cancelled";
+    const isRefund = confirmStep.newPaymentStatus === "refunded";
+    const isCancelPending = confirmStep.newPaymentStatus === "cancelled" && sub.paymentStatus === "pending";
     const futureCount = confirmStep.impact?.futureBookingsCount ?? 0;
+
+    const title = isCancelPending
+      ? "Cancel Pending Payment"
+      : isRefund
+        ? "Confirm Refund"
+        : "Confirm Payment Change";
+
+    const label = isRefund ? "Refunded" : "Cancelled";
 
     return (
       <Dialog open onClose={onClose}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm Payment Change</DialogTitle>
+            <DialogTitle>{title}</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-4">
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
               <p className="font-medium text-amber-900">
-                You are marking payment as {label} for:
+                {isCancelPending
+                  ? "You are cancelling the pending payment for:"
+                  : `You are marking payment as ${label} for:`}
               </p>
               <p className="text-amber-800 mt-1">{sub.productName}</p>
             </div>
@@ -1056,8 +1097,9 @@ export function EditSubscriptionDialog({
             <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700 space-y-2">
               <p className="font-medium text-gray-900">Payment status and entitlement are separate.</p>
               <p>
-                Marking payment as <strong>{label.toLowerCase()}</strong> does not
-                automatically cancel the student&apos;s access to classes.
+                {isCancelPending
+                  ? "Cancelling the pending payment does not automatically cancel the student\u2019s access to classes."
+                  : <>Marking payment as <strong>{label.toLowerCase()}</strong> does not automatically cancel the student&apos;s access to classes.</>}
               </p>
               <p>
                 Choose what should happen to the entitlement:
@@ -1084,7 +1126,11 @@ export function EditSubscriptionDialog({
               disabled={isPending}
               onClick={() => handleConfirm(false)}
             >
-              {isPending ? "Saving…" : `Mark as ${label} — keep entitlement active`}
+              {isPending
+                ? "Saving…"
+                : isCancelPending
+                  ? "Cancel pending payment \u2014 keep entitlement active"
+                  : `Mark as ${label} \u2014 keep entitlement active`}
             </Button>
             <Button
               className="w-full justify-center"
@@ -1092,7 +1138,11 @@ export function EditSubscriptionDialog({
               disabled={isPending}
               onClick={() => handleConfirm(true)}
             >
-              {isPending ? "Saving…" : `Mark as ${label} — also cancel entitlement`}
+              {isPending
+                ? "Saving…"
+                : isCancelPending
+                  ? "Cancel pending payment \u2014 also cancel entitlement"
+                  : `Mark as ${label} \u2014 also cancel entitlement`}
             </Button>
             <Button
               className="w-full justify-center"
@@ -1169,7 +1219,7 @@ export function EditSubscriptionDialog({
                   onChange={(e) => setPaymentStatusValue(e.target.value as typeof paymentStatusValue)}
                   className={SELECT_CLASS}
                 >
-                  {PAYMENT_STATUS_OPTIONS.map((o) => (
+                  {allowedStatusOptions.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>

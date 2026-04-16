@@ -195,6 +195,16 @@ export async function updateSubscriptionAction(
     return { success: false, error: "Invalid payment status" };
   }
 
+  if (paymentStatusRaw === "refunded") {
+    const existing = await getSubscriptionRepo().getById(id);
+    if (existing && existing.paymentStatus !== "paid") {
+      return {
+        success: false,
+        error: "Only paid items can be refunded. A pending payment was never received.",
+      };
+    }
+  }
+
   const patch: Parameters<typeof updateSubscription>[1] = {
     status: statusRaw as SubscriptionStatus,
     notes,
@@ -296,6 +306,10 @@ export async function checkPaymentChangeImpactAction(
 /**
  * Apply a sensitive payment status change with optional entitlement cancellation.
  * Called from the confirmation modal after the admin has chosen what to do.
+ *
+ * Enforced transition rules:
+ * - "refunded" is only allowed from "paid" (a pending item was never paid)
+ * - "cancelled" is allowed from "pending" or "paid"
  */
 export async function applyPaymentChangeAction(params: {
   subscriptionId: string;
@@ -305,6 +319,18 @@ export async function applyPaymentChangeAction(params: {
   performedBy?: string;
 }): Promise<{ success: boolean; error?: string }> {
   await requireRole(["admin"]);
+
+  const sub = await getSubscriptionRepo().getById(params.subscriptionId);
+  if (!sub) return { success: false, error: "Subscription not found" };
+
+  const previousStatus = sub.paymentStatus;
+
+  if (params.newPaymentStatus === "refunded" && previousStatus !== "paid") {
+    return {
+      success: false,
+      error: "Only paid items can be refunded. A pending payment was never received.",
+    };
+  }
 
   const patch: Parameters<typeof updateSubscription>[1] = {
     paymentStatus: params.newPaymentStatus,
@@ -319,9 +345,6 @@ export async function applyPaymentChangeAction(params: {
     patch.refundedBy = params.performedBy ?? "admin";
     patch.refundReason = params.refundReason ?? null;
   }
-
-  const sub = await getSubscriptionRepo().getById(params.subscriptionId);
-  const previousStatus = sub?.paymentStatus ?? "unknown";
 
   const result = await updateSubscription(params.subscriptionId, patch);
 
