@@ -442,12 +442,12 @@ export function ClassBrowser({
 
       {/* Dialogs */}
       {bookDialogTarget && dialogClass && bookabilityForDialog && (
-        (bookabilityForDialog.status === "bookable" || bookabilityForDialog.status === "waitlistable") && (
+        (bookabilityForDialog.status === "bookable" || bookabilityForDialog.status === "needs_role" || bookabilityForDialog.status === "waitlistable") && (
           <StudentBookDialog
             cls={dialogClass}
             entitlements={bookabilityForDialog.entitlements}
             autoSelected={
-              bookabilityForDialog.status === "bookable"
+              (bookabilityForDialog.status === "bookable" || bookabilityForDialog.status === "needs_role")
                 ? bookabilityForDialog.autoSelected
                 : undefined
             }

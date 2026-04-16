@@ -24,8 +24,10 @@ import {
   loadPenaltiesFromDB,
   loadSubscriptionsFromDB,
   loadStudioHiresFromDB,
+  loadAuditLogFromDB,
 } from "./operational-persistence";
 import { getStudioHireService } from "@/lib/services/studio-hire-store";
+import { hydrateAuditLog } from "@/lib/services/finance-audit-log";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 import { hydrateSettings, resetSettingsHydration } from "@/lib/services/settings-store";
 
@@ -86,13 +88,14 @@ async function loadValidUserIdsCached(): Promise<Set<string>> {
  * Called on every request to ensure cross-instance consistency.
  */
 async function refreshOperationalData(): Promise<void> {
-  const [bookings, waitlist, attendance, penalties, subs, studioHires, validIds] = await Promise.all([
+  const [bookings, waitlist, attendance, penalties, subs, studioHires, auditEntries, validIds] = await Promise.all([
     loadBookingsFromDB(),
     loadWaitlistFromDB(),
     loadAttendanceFromDB(),
     loadPenaltiesFromDB(),
     loadSubscriptionsFromDB(),
     loadStudioHiresFromDB(),
+    loadAuditLogFromDB(),
     loadValidUserIdsCached(),
   ]);
 
@@ -117,6 +120,8 @@ async function refreshOperationalData(): Promise<void> {
   const hireSvc = getStudioHireService();
   hireSvc.entries.length = 0;
   hireSvc.entries.push(...studioHires);
+
+  hydrateAuditLog(auditEntries);
 }
 
 /**

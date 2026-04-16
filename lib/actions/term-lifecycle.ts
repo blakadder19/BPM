@@ -270,6 +270,8 @@ export async function renewSubscriptionAction(
       selectedStyleIds: source.selectedStyleIds,
       selectedStyleNames: source.selectedStyleNames,
       renewedFromId: source.id,
+      priceCentsAtPurchase: source.priceCentsAtPurchase,
+      currencyAtPurchase: source.currencyAtPurchase,
     });
 
     if (result.success && result.subscriptionId) {
@@ -349,6 +351,8 @@ async function prepareRenewal(inst: RenewalInstruction): Promise<boolean> {
       selectedStyleIds: source.selectedStyleIds,
       selectedStyleNames: source.selectedStyleNames,
       renewedFromId: source.id,
+      priceCentsAtPurchase: source.priceCentsAtPurchase,
+      currencyAtPurchase: source.currencyAtPurchase,
     });
     return result.success;
   } catch {

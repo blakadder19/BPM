@@ -631,6 +631,8 @@ export async function qrSellDropInAndCheckInAction(
     autoRenew: false,
     classesUsed: 0,
     classesPerTerm: null,
+    priceCentsAtPurchase: dropInProduct.priceCents,
+    currencyAtPurchase: "EUR",
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
   });

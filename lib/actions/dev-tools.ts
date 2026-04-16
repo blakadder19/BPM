@@ -187,6 +187,8 @@ export async function devAssignProduct(
     autoRenew: product.autoRenew,
     classesUsed: 0,
     classesPerTerm: product.classesPerTerm,
+    priceCentsAtPurchase: product.priceCents,
+    currencyAtPurchase: "EUR",
   });
 
   revalidateAll();

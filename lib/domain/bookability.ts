@@ -26,6 +26,7 @@ import { isBirthdayWeek } from "./member-benefits";
 export type BookabilityResult =
   | { status: "bookable"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
   | { status: "waitlistable"; reason: string; entitlements: ValidEntitlement[] }
+  | { status: "needs_role"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
   | { status: "blocked"; reason: string }
   | { status: "already_booked"; bookingId: string; bookingStatus: string }
   | { status: "already_waitlisted"; waitlistId: string; position: number }
@@ -287,6 +288,19 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
     currentFollowers: cls.currentFollowers,
     totalBooked: cls.totalBooked,
   };
+
+  // Defer capacity/role check for students who haven't set a preferred role yet.
+  // They'll pick a role in the booking dialog, and the server action will validate capacity then.
+  if (cls.danceStyleRequiresBalance && !ctx.studentPreferredRole) {
+    const autoSelected = validEntitlements.length === 1
+      ? validEntitlements[0]
+      : validEntitlements.find((e) => e.isRecommended);
+    return {
+      status: "needs_role",
+      entitlements: validEntitlements,
+      autoSelected,
+    };
+  }
 
   const role = cls.danceStyleRequiresBalance ? ctx.studentPreferredRole : null;
   const decision = canBook(capacity, role);

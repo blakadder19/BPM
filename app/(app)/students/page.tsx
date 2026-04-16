@@ -19,6 +19,8 @@ import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { AdminStudents } from "@/components/students/admin-students";
 import { getAllRedemptionsForYear, type BirthdayRedemption } from "@/lib/services/birthday-benefit-store";
+import { getSpecialEventRepo } from "@/lib/repositories";
+import type { MockEventPurchase } from "@/lib/mock-data";
 
 export default async function StudentsPage({
   searchParams,
@@ -122,6 +124,17 @@ export default async function StudentsPage({
   }
   const birthdayUsedIds = Object.keys(birthdayRedemptionMap);
 
+  let eventPurchases: MockEventPurchase[] = [];
+  try {
+    const eventRepo = getSpecialEventRepo();
+    const events = await eventRepo.getAllEvents();
+    eventPurchases = (
+      await Promise.all(events.map((e) => eventRepo.getPurchasesByEvent(e.id)))
+    ).flat();
+  } catch {
+    // Event module may not be active
+  }
+
   const _tEnd = performance.now();
   if (process.env.NODE_ENV === "development") console.info(`[perf /students] hydrate=${(_tHydrate-_t0).toFixed(0)}ms db=${(_tDb-_tHydrate).toFixed(0)}ms enrich=${(_tEnd-_tDb).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
@@ -135,6 +148,7 @@ export default async function StudentsPage({
       walletTransactions={walletTransactions}
       bookings={bookings}
       penalties={penalties}
+      eventPurchases={eventPurchases}
       attendanceRecords={attendanceRecords}
       initialSearch={params.search ?? ""}
       birthdayUsedStudentIds={birthdayUsedIds}

@@ -35,6 +35,7 @@ import type {
   MockPenalty,
   MockProduct,
   MockDanceStyle,
+  MockEventPurchase,
 } from "@/lib/mock-data";
 
 const ROLE_OPTIONS = [
@@ -80,6 +81,7 @@ interface AdminStudentsProps {
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
+  eventPurchases?: MockEventPurchase[];
   attendanceRecords?: AttendanceSlice[];
   initialSearch?: string;
   birthdayUsedStudentIds?: string[];
@@ -95,6 +97,7 @@ export function AdminStudents({
   walletTransactions,
   bookings,
   penalties,
+  eventPurchases,
   attendanceRecords,
   initialSearch,
   birthdayUsedStudentIds = [],
@@ -346,6 +349,7 @@ export function AdminStudents({
                     walletTransactions={walletTransactions}
                     bookings={bookings}
                     penalties={penalties}
+                    eventPurchases={eventPurchases}
                     attendanceRecords={attendanceRecords}
                     benefits={computeMemberBenefits({
                       dateOfBirth: s.dateOfBirth,

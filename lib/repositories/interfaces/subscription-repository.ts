@@ -34,6 +34,8 @@ export interface CreateSubscriptionData {
   paymentReference?: string | null;
   paymentNotes?: string | null;
   collectedBy?: string | null;
+  priceCentsAtPurchase?: number | null;
+  currencyAtPurchase?: string;
 }
 
 export interface SubscriptionPatch {
@@ -59,6 +61,9 @@ export interface SubscriptionPatch {
   paymentReference?: string | null;
   paymentNotes?: string | null;
   collectedBy?: string | null;
+  refundedAt?: string | null;
+  refundedBy?: string | null;
+  refundReason?: string | null;
 }
 
 export interface ISubscriptionRepository {

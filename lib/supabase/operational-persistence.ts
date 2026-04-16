@@ -367,6 +367,11 @@ function rowToSubscription(r: Record<string, unknown>): MockSubscription {
     paymentReference: (r.payment_reference as string) ?? null,
     paymentNotes: (r.payment_notes as string) ?? null,
     collectedBy: (r.collected_by as string) ?? null,
+    priceCentsAtPurchase: r.price_cents_at_purchase != null ? Number(r.price_cents_at_purchase) : null,
+    currencyAtPurchase: (r.currency_at_purchase as string) ?? "EUR",
+    refundedAt: (r.refunded_at as string) ?? null,
+    refundedBy: (r.refunded_by as string) ?? null,
+    refundReason: (r.refund_reason as string) ?? null,
   };
 }
 
@@ -400,6 +405,11 @@ function subscriptionToRow(s: MockSubscription) {
     payment_reference: s.paymentReference,
     payment_notes: s.paymentNotes,
     collected_by: s.collectedBy,
+    price_cents_at_purchase: s.priceCentsAtPurchase,
+    currency_at_purchase: s.currencyAtPurchase,
+    refunded_at: s.refundedAt,
+    refunded_by: s.refundedBy,
+    refund_reason: s.refundReason,
   };
 }
 
@@ -515,5 +525,67 @@ export async function deleteStudioHireFromDB(id: string): Promise<void> {
     if (error) console.warn("[op-persistence] deleteStudioHire:", error.message);
   } catch (e) {
     console.warn("[op-persistence] deleteStudioHire error:", e instanceof Error ? e.message : e);
+  }
+}
+
+// ── Finance Audit Log ──────────────────────────────────────
+
+import type { FinanceAuditEntry } from "@/lib/services/finance-audit-log";
+
+function rowToAuditEntry(r: Record<string, unknown>): FinanceAuditEntry {
+  return {
+    id: str(r.id),
+    entityType: str(r.entity_type) as FinanceAuditEntry["entityType"],
+    entityId: str(r.entity_id),
+    action: str(r.action) as FinanceAuditEntry["action"],
+    performedBy: (r.performed_by as string) ?? null,
+    detail: (r.detail as string) ?? null,
+    previousValue: (r.previous_value as string) ?? null,
+    newValue: (r.new_value as string) ?? null,
+    createdAt: str(r.created_at, new Date().toISOString()),
+  };
+}
+
+function auditEntryToRow(e: FinanceAuditEntry) {
+  return {
+    id: e.id,
+    entity_type: e.entityType,
+    entity_id: e.entityId,
+    action: e.action,
+    performed_by: e.performedBy,
+    detail: e.detail,
+    previous_value: e.previousValue,
+    new_value: e.newValue,
+    created_at: e.createdAt,
+  };
+}
+
+export async function loadAuditLogFromDB(): Promise<FinanceAuditEntry[]> {
+  const client = getClient();
+  if (!client) return [];
+  try {
+    const { data, error } = await client
+      .from("op_finance_audit_log")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(500);
+    if (error) { console.warn("[op-persistence] loadAuditLog:", error.message); return []; }
+    return (data ?? []).map(rowToAuditEntry);
+  } catch (e) {
+    console.warn("[op-persistence] loadAuditLog error:", e instanceof Error ? e.message : e);
+    return [];
+  }
+}
+
+export async function saveAuditEntryToDB(entry: FinanceAuditEntry): Promise<void> {
+  const client = getClient();
+  if (!client) return;
+  try {
+    const { error } = await client
+      .from("op_finance_audit_log")
+      .insert(auditEntryToRow(entry));
+    if (error) console.warn("[op-persistence] saveAuditEntry:", error.message);
+  } catch (e) {
+    console.warn("[op-persistence] saveAuditEntry error:", e instanceof Error ? e.message : e);
   }
 }

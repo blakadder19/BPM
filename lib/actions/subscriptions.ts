@@ -10,6 +10,7 @@ import { getProductRepo, getTermRepo, getSubscriptionRepo, getStudentRepo } from
 import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getBookingService } from "@/lib/services/booking-store";
+import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { paymentPendingEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
@@ -144,6 +145,8 @@ export async function createSubscriptionAction(
     selectedStyleName,
     selectedStyleIds,
     selectedStyleNames,
+    priceCentsAtPurchase: product.priceCents,
+    currencyAtPurchase: "EUR",
   });
 
   if (result.success && result.subscriptionId && paymentStatusRaw === "pending") {
@@ -298,6 +301,8 @@ export async function applyPaymentChangeAction(params: {
   subscriptionId: string;
   newPaymentStatus: SalePaymentStatus;
   cancelEntitlement: boolean;
+  refundReason?: string;
+  performedBy?: string;
 }): Promise<{ success: boolean; error?: string }> {
   await requireRole(["admin"]);
 
@@ -309,14 +314,40 @@ export async function applyPaymentChangeAction(params: {
     patch.status = "cancelled";
   }
 
+  if (params.newPaymentStatus === "refunded") {
+    patch.refundedAt = new Date().toISOString();
+    patch.refundedBy = params.performedBy ?? "admin";
+    patch.refundReason = params.refundReason ?? null;
+  }
+
+  const sub = await getSubscriptionRepo().getById(params.subscriptionId);
+  const previousStatus = sub?.paymentStatus ?? "unknown";
+
   const result = await updateSubscription(params.subscriptionId, patch);
 
   if (result.success) {
+    const action = params.newPaymentStatus === "refunded"
+      ? "refunded" as const
+      : params.newPaymentStatus === "paid"
+        ? "marked_paid" as const
+        : "status_changed" as const;
+
+    logFinanceEvent({
+      entityType: "subscription",
+      entityId: params.subscriptionId,
+      action,
+      performedBy: params.performedBy ?? "admin",
+      detail: params.refundReason ?? null,
+      previousValue: previousStatus,
+      newValue: params.newPaymentStatus,
+    });
+
     revalidatePath("/students");
     revalidatePath("/dashboard");
     revalidatePath("/catalog");
     revalidatePath("/classes");
     revalidatePath("/bookings");
+    revalidatePath("/finance");
   }
   return result;
 }

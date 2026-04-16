@@ -36,6 +36,11 @@ function toMockSubscription(row: SubRow): MockSubscription {
     paymentReference: (row as unknown as Record<string, unknown>).payment_reference as string | null ?? null,
     paymentNotes: (row as unknown as Record<string, unknown>).payment_notes as string | null ?? null,
     collectedBy: (row as unknown as Record<string, unknown>).collected_by as string | null ?? null,
+    priceCentsAtPurchase: (row as unknown as Record<string, unknown>).price_cents_at_purchase as number | null ?? null,
+    currencyAtPurchase: ((row as unknown as Record<string, unknown>).currency_at_purchase as string) ?? "EUR",
+    refundedAt: (row as unknown as Record<string, unknown>).refunded_at as string | null ?? null,
+    refundedBy: (row as unknown as Record<string, unknown>).refunded_by as string | null ?? null,
+    refundReason: (row as unknown as Record<string, unknown>).refund_reason as string | null ?? null,
   };
 }
 
@@ -126,6 +131,8 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
     const sub = toMockSubscription(data as SubRow);
     sub.productName = input.productName;
     sub.productType = input.productType;
+    if (input.priceCentsAtPurchase != null) sub.priceCentsAtPurchase = input.priceCentsAtPurchase;
+    if (input.currencyAtPurchase) sub.currencyAtPurchase = input.currencyAtPurchase;
     return sub;
   },
 
@@ -154,6 +161,9 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
     if (patch.paymentReference !== undefined) fields.payment_reference = patch.paymentReference;
     if (patch.paymentNotes !== undefined) fields.payment_notes = patch.paymentNotes;
     if (patch.collectedBy !== undefined) fields.collected_by = patch.collectedBy;
+    if (patch.refundedAt !== undefined) fields.refunded_at = patch.refundedAt;
+    if (patch.refundedBy !== undefined) fields.refunded_by = patch.refundedBy;
+    if (patch.refundReason !== undefined) fields.refund_reason = patch.refundReason;
 
     if (Object.keys(fields).length === 0) return this.getById(id);
 

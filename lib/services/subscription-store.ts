@@ -58,6 +58,8 @@ export function createSubscription(data: {
   paymentReference?: string | null;
   paymentNotes?: string | null;
   collectedBy?: string | null;
+  priceCentsAtPurchase?: number | null;
+  currencyAtPurchase?: string;
 }): MockSubscription {
   const list = init();
   const sub: MockSubscription = {
@@ -89,6 +91,11 @@ export function createSubscription(data: {
     paymentReference: data.paymentReference ?? null,
     paymentNotes: data.paymentNotes ?? null,
     collectedBy: data.collectedBy ?? null,
+    priceCentsAtPurchase: data.priceCentsAtPurchase ?? null,
+    currencyAtPurchase: data.currencyAtPurchase ?? "EUR",
+    refundedAt: null,
+    refundedBy: null,
+    refundReason: null,
   };
   list.push(sub);
   return sub;
@@ -119,6 +126,9 @@ export function updateSubscription(
     paymentReference?: string | null;
     paymentNotes?: string | null;
     collectedBy?: string | null;
+    refundedAt?: string | null;
+    refundedBy?: string | null;
+    refundReason?: string | null;
   }
 ): MockSubscription | null {
   const list = init();
@@ -147,6 +157,9 @@ export function updateSubscription(
   if (patch.paymentReference !== undefined) sub.paymentReference = patch.paymentReference;
   if (patch.paymentNotes !== undefined) sub.paymentNotes = patch.paymentNotes;
   if (patch.collectedBy !== undefined) sub.collectedBy = patch.collectedBy;
+  if (patch.refundedAt !== undefined) sub.refundedAt = patch.refundedAt;
+  if (patch.refundedBy !== undefined) sub.refundedBy = patch.refundedBy;
+  if (patch.refundReason !== undefined) sub.refundReason = patch.refundReason;
 
   return { ...sub };
 }

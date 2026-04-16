@@ -9,6 +9,7 @@ import { isRealUser } from "@/lib/utils/is-real-user";
 import { savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { requireRole } from "@/lib/auth";
+import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 
 const VALID_REASONS = new Set<string>(["late_cancel", "no_show"]);
 const VALID_RESOLUTIONS = new Set<string>(["credit_deducted", "waived", "monetary_pending"]);
@@ -27,15 +28,27 @@ export async function updatePenaltyResolution(
   }
 
   const svc = getPenaltyService();
+  const existing = svc.penalties.find((p) => p.id === penaltyId);
+  const previousResolution = existing?.resolution ?? "unknown";
   const result = svc.updateResolution(penaltyId, resolution);
 
   if (!result) return { success: false, error: "Penalty not found" };
+
+  logFinanceEvent({
+    entityType: "penalty",
+    entityId: penaltyId,
+    action: resolution === "waived" ? "waived" : "status_changed",
+    performedBy: "admin",
+    previousValue: previousResolution,
+    newValue: resolution,
+  });
 
   if (result && isRealUser(result.studentId)) {
     await updatePenaltyInDB(penaltyId, { resolution });
   }
 
   revalidatePath("/penalties");
+  revalidatePath("/finance");
   return { success: true };
 }
 
@@ -110,11 +123,21 @@ export async function createPenaltyAction(
     notes,
   });
 
+  logFinanceEvent({
+    entityType: "penalty",
+    entityId: result.id,
+    action: "created",
+    performedBy: "admin",
+    detail: `${reason} — ${classTitle} (${classDate})`,
+    newValue: resolution,
+  });
+
   if (isRealUser(studentId)) {
     await savePenaltyToDB(result);
   }
 
   revalidatePath("/penalties");
+  revalidatePath("/finance");
   return { success: true };
 }
 

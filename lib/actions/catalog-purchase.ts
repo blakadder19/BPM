@@ -238,6 +238,8 @@ export async function createPurchaseSubscription(
     selectedStyleNames: prepared.selectedStyleNames,
     paidAt: payment.paidAt ?? null,
     paymentReference: payment.reference ?? null,
+    priceCentsAtPurchase: product.priceCents,
+    currencyAtPurchase: "EUR",
   });
 }
 

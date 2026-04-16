@@ -7,6 +7,7 @@ import { createPurchase, updatePurchasePayment } from "@/lib/services/special-ev
 import { sendEventPurchaseEmail, type EmailSendResult } from "@/lib/communications/event-emails";
 import { sendPaymentConfirmationEmail } from "@/lib/actions/event-emails";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
+import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 
 function centsToEuros(c: number): string {
   return `€${(c / 100).toFixed(2)}`;
@@ -375,10 +376,21 @@ export async function fulfillPendingEventPurchase(
     ...(paidAmountCents != null ? { paidAmountCents } : {}),
   });
 
-  if (result.success && eventId) {
-    sendPaymentConfirmationEmail(purchaseId, eventId).catch((err) =>
-      console.error("[event-purchase] Post-payment email threw:", err instanceof Error ? err.message : err),
-    );
+  if (result.success) {
+    logFinanceEvent({
+      entityType: "event_purchase",
+      entityId: purchaseId,
+      action: "marked_paid",
+      detail: `Stripe session ${sessionId}`,
+      previousValue: "pending",
+      newValue: "paid",
+    });
+
+    if (eventId) {
+      sendPaymentConfirmationEmail(purchaseId, eventId).catch((err) =>
+        console.error("[event-purchase] Post-payment email threw:", err instanceof Error ? err.message : err),
+      );
+    }
   }
 
   return result;
@@ -419,6 +431,16 @@ export async function markEventPurchasePaidAction(input: {
   });
 
   if (result.success) {
+    logFinanceEvent({
+      entityType: "event_purchase",
+      entityId: input.purchaseId,
+      action: "marked_paid",
+      performedBy: "admin",
+      detail: `Reception method: ${input.receptionMethod}`,
+      previousValue: purchase.paymentStatus,
+      newValue: "paid",
+    });
+
     revalidateEventPaths(input.eventId);
 
     if (isGuestPurchase && purchase.guestEmail) {

@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/utils";
-import type { MockProduct } from "@/lib/mock-data";
+import type { MockProduct, MockEventPurchase } from "@/lib/mock-data";
+import { normalizeFinanceStatusLabel, FINANCE_STATUS_COLORS } from "@/lib/domain/finance";
 import { deriveDisplayStatus } from "@/lib/domain/subscription-display-status";
 import { isRenewalEligible } from "@/lib/domain/term-lifecycle";
 import { renewSubscriptionAction } from "@/lib/actions/term-lifecycle";
@@ -38,6 +39,7 @@ interface StudentDetailPanelProps {
   walletTransactions: MockWalletTx[];
   bookings: MockBooking[];
   penalties: MockPenalty[];
+  eventPurchases?: MockEventPurchase[];
   attendanceRecords?: AttendanceRecord[];
   benefits?: MemberBenefitsSummary | null;
   onAddSub: () => void;
@@ -63,6 +65,7 @@ export function StudentDetailPanel({
   walletTransactions,
   bookings,
   penalties,
+  eventPurchases,
   attendanceRecords,
   benefits,
   onAddSub,
@@ -288,6 +291,16 @@ export function StudentDetailPanel({
               <PaginatedPenalties penalties={studentPenalties} />
             </Section>
           )}
+
+          {/* ── Financial History section ── */}
+          <Section title="Financial History" className="md:col-span-2">
+            <StudentFinancialHistory
+              subscriptions={subs}
+              products={products}
+              penalties={studentPenalties}
+              eventPurchases={(eventPurchases ?? []).filter((ep) => ep.studentId === student.id)}
+            />
+          </Section>
         </div>
         {removeTarget && (
           <RemoveSubscriptionDialog
@@ -492,6 +505,135 @@ function PaginatedPenalties({ penalties }: { penalties: MockPenalty[] }) {
           className="text-xs font-medium text-bpm-600 hover:text-bpm-700 pt-1"
         >
           View all {penalties.length} penalties
+        </button>
+      )}
+    </div>
+  );
+}
+
+function StudentFinancialHistory({
+  subscriptions: subs,
+  products,
+  penalties,
+  eventPurchases,
+}: {
+  subscriptions: MockSubscription[];
+  products: MockProduct[];
+  penalties: MockPenalty[];
+  eventPurchases: MockEventPurchase[];
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
+
+  type FinRow = {
+    id: string;
+    date: string;
+    name: string;
+    type: string;
+    status: string;
+    amountCents: number;
+    method: string;
+    refundNote: string | null;
+  };
+
+  const rows: FinRow[] = useMemo(() => {
+    const subRows: FinRow[] = subs.map((s) => ({
+      id: s.id,
+      date: s.paidAt ?? s.assignedAt,
+      name: s.productName,
+      type: s.productType,
+      status: s.paymentStatus,
+      amountCents: s.priceCentsAtPurchase ?? productMap.get(s.productId)?.priceCents ?? 0,
+      method: s.paymentMethod,
+      refundNote: s.refundReason ?? null,
+    }));
+    const evtRows: FinRow[] = eventPurchases.map((ep) => {
+      const amount = ep.paymentStatus === "paid"
+        ? (ep.paidAmountCents ?? ep.originalAmountCents ?? 0)
+        : (ep.originalAmountCents ?? 0) - (ep.discountAmountCents ?? 0);
+      return {
+        id: ep.id,
+        date: ep.paidAt ?? ep.purchasedAt,
+        name: ep.productNameSnapshot ?? "Event purchase",
+        type: "event",
+        status: ep.paymentStatus,
+        amountCents: Math.abs(amount),
+        method: ep.paymentMethod,
+        refundNote: null,
+      };
+    });
+    const penRows: FinRow[] = penalties.map((p) => ({
+      id: p.id,
+      date: p.createdAt,
+      name: `${p.reason === "late_cancel" ? "Late cancel" : "No-show"} — ${p.classTitle}`,
+      type: "penalty",
+      status: p.resolution,
+      amountCents: p.amountCents,
+      method: "",
+      refundNote: null,
+    }));
+    return [...subRows, ...evtRows, ...penRows].sort((a, b) => b.date.localeCompare(a.date));
+  }, [subs, eventPurchases, penalties, productMap]);
+
+  if (rows.length === 0) {
+    return <p className="text-xs text-gray-400">No financial records.</p>;
+  }
+
+  const visible = showAll ? rows : rows.slice(0, 8);
+  const hasMore = rows.length > 8;
+
+  const FIN_STATUS_COLOR = FINANCE_STATUS_COLORS;
+
+  return (
+    <div className="overflow-x-auto -mx-1">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-left text-[10px] uppercase tracking-wider text-gray-400 border-b border-gray-200">
+            <th className="pb-1.5 pr-3 font-medium">Date</th>
+            <th className="pb-1.5 pr-3 font-medium">Product</th>
+            <th className="pb-1.5 pr-3 font-medium">Type</th>
+            <th className="pb-1.5 pr-3 font-medium">Status</th>
+            <th className="pb-1.5 pr-3 font-medium text-right">Amount</th>
+            <th className="pb-1.5 font-medium">Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((r) => (
+            <tr key={r.id} className="border-b border-gray-100 last:border-0">
+              <td className="py-1.5 pr-3 text-gray-500 whitespace-nowrap">
+                {formatDate(r.date.includes("T") ? r.date.slice(0, 10) : r.date)}
+              </td>
+              <td className="py-1.5 pr-3 text-gray-800 max-w-[180px]">
+                <div className="truncate">{r.name}</div>
+                {r.refundNote && (
+                  <div className="text-[10px] text-red-500 truncate" title={r.refundNote}>{r.refundNote}</div>
+                )}
+              </td>
+              <td className="py-1.5 pr-3">
+                <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 capitalize">
+                  {r.type.replace("_", " ")}
+                </span>
+              </td>
+              <td className="py-1.5 pr-3">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${FIN_STATUS_COLOR[r.status] ?? "bg-gray-100 text-gray-600"}`}>
+                  {normalizeFinanceStatusLabel(r.status)}
+                </span>
+              </td>
+              <td className="py-1.5 pr-3 text-right font-medium tabular-nums text-gray-800">
+                €{(r.amountCents / 100).toFixed(2)}
+              </td>
+              <td className="py-1.5 text-gray-500 capitalize">{r.method.replace("_", " ") || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {hasMore && !showAll && (
+        <button
+          type="button"
+          onClick={() => setShowAll(true)}
+          className="text-xs font-medium text-bpm-600 hover:text-bpm-700 pt-2"
+        >
+          View all {rows.length} records
         </button>
       )}
     </div>

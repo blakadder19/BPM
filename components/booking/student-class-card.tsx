@@ -32,6 +32,7 @@ export interface ClassCardData {
 export type SerializedBookability =
   | { status: "bookable"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
   | { status: "waitlistable"; reason: string; entitlements: ValidEntitlement[] }
+  | { status: "needs_role"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
   | { status: "blocked"; reason: string }
   | { status: "already_booked"; bookingId: string; bookingStatus: string }
   | { status: "already_waitlisted"; waitlistId: string; position: number }
@@ -118,10 +119,13 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
         }
         extra={
           <>
-            {(b.status === "bookable" || b.status === "waitlistable") && b.entitlements.length > 0 && (
+            {(b.status === "bookable" || b.status === "needs_role" || b.status === "waitlistable") && b.entitlements.length > 0 && (
               <div className="mt-1.5">
-                <EntitlementHint entitlements={b.entitlements} autoSelected={b.status === "bookable" ? b.autoSelected : undefined} />
+                <EntitlementHint entitlements={b.entitlements} autoSelected={(b.status === "bookable" || b.status === "needs_role") ? b.autoSelected : undefined} />
               </div>
+            )}
+            {b.status === "needs_role" && (
+              <p className="mt-1 text-[10px] text-violet-600">Select your dance role when booking</p>
             )}
             {b.status === "waitlistable" && (
               <p className="mt-1 text-[10px] text-amber-600">{b.reason}</p>
@@ -153,6 +157,8 @@ function CompactActionEl({
 }) {
   switch (b.status) {
     case "bookable":
+      return <ActionPill variant="primary" onClick={onBook}>Book</ActionPill>;
+    case "needs_role":
       return <ActionPill variant="primary" onClick={onBook}>Book</ActionPill>;
     case "waitlistable":
       return <ActionPill variant="waitlist" onClick={onBook}>Waitlist</ActionPill>;

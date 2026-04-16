@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { formatDate, formatTime } from "@/lib/utils";
 import { createStudentBooking } from "@/lib/actions/booking";
+import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
 import type { DanceRole } from "@/types/domain";
 
@@ -60,6 +61,7 @@ export function StudentBookDialog({
     autoSelected?.subscriptionId ?? entitlements[0]?.subscriptionId ?? ""
   );
   const [danceRole, setDanceRole] = useState<DanceRole | null>(defaultDanceRole ?? null);
+  const [saveAsPreferred, setSaveAsPreferred] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{
     status: "confirmed" | "waitlisted";
@@ -90,6 +92,9 @@ export function StudentBookDialog({
         useBirthdayBenefit: useBirthday,
       });
       if (res.success) {
+        if (saveAsPreferred && danceRole) {
+          await updateOwnPreferredRoleAction(danceRole).catch(() => {});
+        }
         setResult({
           status: res.status!,
           className: res.className ?? cls.title,
@@ -286,6 +291,19 @@ export function StudentBookDialog({
                     <p className="text-xs text-gray-400">
                       Pre-selected from your profile. You can change it for this booking.
                     </p>
+                  )}
+                  {!defaultDanceRole && danceRole && (
+                    <label className="flex items-center gap-2 mt-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={saveAsPreferred}
+                        onChange={(e) => setSaveAsPreferred(e.target.checked)}
+                        className="rounded border-gray-300 text-bpm-600 accent-bpm-600"
+                      />
+                      <span className="text-xs text-gray-500">
+                        Save as my preferred role for future bookings
+                      </span>
+                    </label>
                   )}
                 </div>
               )}

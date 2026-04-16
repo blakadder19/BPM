@@ -55,6 +55,8 @@ export async function createSubscription(data: {
   paymentReference?: string | null;
   paymentNotes?: string | null;
   collectedBy?: string | null;
+  priceCentsAtPurchase?: number | null;
+  currencyAtPurchase?: string;
 }): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
   try {
     const sub = await getSubscriptionRepo().create(data);
@@ -93,6 +95,9 @@ export async function updateSubscription(
     paymentReference?: string | null;
     paymentNotes?: string | null;
     collectedBy?: string | null;
+    refundedAt?: string | null;
+    refundedBy?: string | null;
+    refundReason?: string | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const result = await getSubscriptionRepo().update(id, patch);
