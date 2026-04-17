@@ -1,15 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 /* eslint-disable @next/next/no-img-element */
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { provisionCurrentUser } from "@/lib/actions/auth-provision";
 
 export default function UpdatePasswordPage() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, setIsPending] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -46,6 +45,12 @@ export default function UpdatePasswordPage() {
       return;
     }
 
+    // Provision profile after password update — sets auth_linked_at for
+    // admin-created students claiming their account via password reset.
+    await provisionCurrentUser().catch((e) => {
+      console.warn("[update-password] provisionCurrentUser:", e);
+    });
+
     setSuccess(true);
     setIsPending(false);
   }
@@ -66,8 +71,7 @@ export default function UpdatePasswordPage() {
             <Button
               className="mt-6"
               onClick={() => {
-                router.push("/dashboard");
-                router.refresh();
+                window.location.href = "/dashboard";
               }}
             >
               Go to dashboard

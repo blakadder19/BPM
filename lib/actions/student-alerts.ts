@@ -118,8 +118,23 @@ export async function fetchStudentAlerts(): Promise<AdminAlert[]> {
           ];
         }
 
+        if (n.type === "admin_broadcast") {
+          const bp = n.payload as { title?: string; body?: string };
+          const title = bp?.title || "Academy notice";
+          const body = bp?.body || "You have a new notice from the academy.";
+          return [
+            {
+              id: n.id,
+              severity: "info" as const,
+              title,
+              message: body,
+              href: "/dashboard",
+            },
+          ];
+        }
+
         const msg = buildMessage(
-          n.type as Exclude<typeof n.type, "birthday_benefit_available">,
+          n.type as Exclude<typeof n.type, "birthday_benefit_available" | "admin_broadcast">,
           n.payload as never
         );
         return [

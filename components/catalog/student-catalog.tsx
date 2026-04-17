@@ -180,6 +180,8 @@ function ProductCard({
   onSelect: (p: CatalogProduct) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const NEGATIVE_PAYMENT = new Set(["refunded", "cancelled"]);
+  const isCurrentNegative = p.currentEntitlement && NEGATIVE_PAYMENT.has(p.currentEntitlement.paymentStatus);
   const hasOwnership = !!(p.currentEntitlement || p.renewalEntitlement);
 
   const summaryParts: string[] = [];
@@ -224,14 +226,18 @@ function ProductCard({
       }
       border={
         p.currentEntitlement
-          ? "border-emerald-200"
+          ? isCurrentNegative
+            ? "border-red-200"
+            : "border-emerald-200"
           : p.renewalEntitlement
             ? "border-amber-200"
             : "border-gray-200"
       }
       bg={
         p.currentEntitlement
-          ? "bg-emerald-50/60"
+          ? isCurrentNegative
+            ? "bg-red-50/40"
+            : "bg-emerald-50/60"
           : p.renewalEntitlement
             ? "bg-amber-50/40"
             : "bg-white"

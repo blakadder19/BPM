@@ -332,7 +332,11 @@ export default async function DashboardPage() {
 
     const evtRepo = getSpecialEventRepo();
     const studentEventPurchases = student ? await evtRepo.getPurchasesByStudent(student.id) : [];
-    const activePurchases = studentEventPurchases.filter((p) => p.paymentStatus !== "refunded");
+    const EXCLUDED_PURCHASE_STATUSES = new Set(["refunded", "cancelled"]);
+    const SETTLED_PURCHASE_STATUSES = new Set(["paid", "complimentary", "waived"]);
+    const activePurchases = studentEventPurchases.filter(
+      (p) => !EXCLUDED_PURCHASE_STATUSES.has(p.paymentStatus ?? "")
+    );
 
     const ownedEventIds = new Set(activePurchases.map((p) => p.eventId));
     const dashboardEventsMap = new Map<string, DashboardEvent>();
@@ -351,7 +355,7 @@ export default async function DashboardPage() {
         dashboardEventsMap.set(evt.id, {
           event: evt,
           reason: "owned",
-          purchaseStatus: pur.paymentStatus === "paid" ? "paid" : "pending",
+          purchaseStatus: SETTLED_PURCHASE_STATUSES.has(pur.paymentStatus ?? "") ? "paid" : "pending",
           purchaseProductName: product?.name ?? null,
         });
       }

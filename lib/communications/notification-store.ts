@@ -48,6 +48,14 @@ export async function saveGenericNotificationToDB(
     ? (event.payload as ClassCancelledPayload)
     : null;
 
+  // For admin_broadcast, extract title/body for redundant storage
+  // in legacy columns so the data survives even if JSONB payload
+  // is lost (e.g. column not yet migrated, schema-cache lag).
+  const isBroadcast = event.type === "admin_broadcast";
+  const bcPayload = isBroadcast
+    ? (event.payload as { title?: string; body?: string })
+    : null;
+
   // Ensure payload is a plain object for JSONB serialization.
   // Supabase JS normally handles this, but guard against edge cases
   // where the payload might already be stringified or null.
@@ -58,8 +66,10 @@ export async function saveGenericNotificationToDB(
     } catch {
       safePayload = {};
     }
+  } else if (event.payload == null) {
+    safePayload = {};
   } else {
-    safePayload = (event.payload as unknown as Record<string, unknown>) ?? {};
+    safePayload = { ...(event.payload as unknown as Record<string, unknown>) };
   }
 
   const row = {
@@ -69,8 +79,8 @@ export async function saveGenericNotificationToDB(
     type: event.type,
     payload: safePayload,
     idempotency_key: event.idempotencyKey ?? null,
-    class_title: ccPayload?.classTitle ?? "",
-    class_date: ccPayload?.classDate ?? "",
+    class_title: ccPayload?.classTitle ?? bcPayload?.title ?? "",
+    class_date: ccPayload?.classDate ?? bcPayload?.body ?? "",
     start_time: ccPayload?.startTime ?? "",
     credit_reverted: ccPayload?.creditReverted ?? false,
     created_at: event.createdAt,
@@ -177,6 +187,14 @@ function mapRow(r: any): StoredNotification {
       startTime: r.start_time ?? "",
       creditReverted: !!r.credit_reverted,
     } as ClassCancelledPayload;
+  } else if (type === "admin_broadcast") {
+    // Fallback: title/body were stored in class_title/class_date columns
+    // for resilience when JSONB payload is empty or missing.
+    payload = {
+      broadcastId: "",
+      title: r.class_title ?? "",
+      body: r.class_date ?? "",
+    } as unknown as CommEventPayloadMap[CommEventType];
   } else {
     payload = {} as CommEventPayloadMap[CommEventType];
   }

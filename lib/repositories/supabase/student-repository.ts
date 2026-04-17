@@ -1,4 +1,3 @@
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAcademyId } from "@/lib/supabase/academy";
 import { generateStudentQrToken } from "@/lib/domain/checkin-token";
@@ -10,7 +9,11 @@ import type { IStudentRepository, CreateStudentData, StudentPatch } from "../int
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type ProfileRow = Database["public"]["Tables"]["student_profiles"]["Row"];
 
-function toMockStudent(user: UserRow, profile?: ProfileRow | null): MockStudent {
+function toMockStudent(
+  user: UserRow,
+  profile?: ProfileRow | null,
+  authLastSignIn?: string | null,
+): MockStudent {
   const qrRaw = (profile as Record<string, unknown> | null)?.qr_token;
   return {
     id: user.id,
@@ -27,7 +30,7 @@ function toMockStudent(user: UserRow, profile?: ProfileRow | null): MockStudent 
     remainingCredits: null,
     joinedAt: user.created_at,
     qrToken: typeof qrRaw === "string" && qrRaw ? qrRaw : generateStudentQrToken(),
-    authLinkedAt: profile?.auth_linked_at ?? null,
+    authLinkedAt: profile?.auth_linked_at ?? authLastSignIn ?? null,
   };
 }
 
@@ -53,7 +56,46 @@ export const supabaseStudentRepo: IStudentRepository = {
       ((profiles ?? []) as ProfileRow[]).map((p) => [p.id, p])
     );
 
-    return typed.map((u) => toMockStudent(u, profileMap.get(u.id)));
+    // Fallback: fetch auth.users last_sign_in_at for students missing
+    // auth_linked_at. This makes claimed status reliable even when the
+    // provisioning call failed to set auth_linked_at.
+    const unclaimedIds = typed.filter(
+      (u) => !profileMap.get(u.id)?.auth_linked_at
+    ).map((u) => u.id);
+
+    let signInMap = new Map<string, string | null>();
+    if (unclaimedIds.length > 0) {
+      try {
+        const { data: authData } = await supabase.auth.admin.listUsers({
+          perPage: 1000,
+        });
+        if (authData?.users) {
+          for (const au of authData.users) {
+            if (au.last_sign_in_at && unclaimedIds.includes(au.id)) {
+              signInMap.set(au.id, au.last_sign_in_at);
+            }
+          }
+          // Fire-and-forget backfill for any unclaimed students that
+          // actually have a last_sign_in_at in auth.users.
+          for (const [id, ts] of signInMap) {
+            supabase
+              .from("student_profiles")
+              .update({ auth_linked_at: ts } as never)
+              .eq("id", id)
+              .is("auth_linked_at" as never, null)
+              .then(({ error: bfErr }) => {
+                if (bfErr) console.warn(`[student-repo] auth_linked_at backfill ${id}:`, bfErr.message);
+              });
+          }
+        }
+      } catch (e) {
+        console.warn("[student-repo] auth fallback failed:", e instanceof Error ? e.message : e);
+      }
+    }
+
+    return typed.map((u) =>
+      toMockStudent(u, profileMap.get(u.id), signInMap.get(u.id))
+    );
   },
 
   async getById(id) {
@@ -71,7 +113,31 @@ export const supabaseStudentRepo: IStudentRepository = {
       .eq("id", id)
       .single();
 
-    return toMockStudent(user as UserRow, profile as ProfileRow | null);
+    const prof = profile as ProfileRow | null;
+    let authLastSignIn: string | null = null;
+
+    // Fallback: if auth_linked_at is missing, check auth.users
+    if (!prof?.auth_linked_at) {
+      try {
+        const { data: authData } = await supabase.auth.admin.getUserById(id);
+        if (authData?.user?.last_sign_in_at) {
+          authLastSignIn = authData.user.last_sign_in_at;
+          // Backfill auth_linked_at asynchronously
+          supabase
+            .from("student_profiles")
+            .update({ auth_linked_at: authLastSignIn } as never)
+            .eq("id", id)
+            .is("auth_linked_at" as never, null)
+            .then(({ error: bfErr }) => {
+              if (bfErr) console.warn(`[student-repo] auth_linked_at backfill ${id}:`, bfErr.message);
+            });
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+    }
+
+    return toMockStudent(user as UserRow, prof, authLastSignIn);
   },
 
   async create(data: CreateStudentData) {

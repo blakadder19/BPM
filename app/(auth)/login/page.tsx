@@ -157,8 +157,20 @@ export default function LoginPage() {
           )}
 
           {error && (
-            <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
+            <div className="mb-4 space-y-2">
+              <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+                {error}
+              </div>
+              <div className="rounded-lg bg-blue-50 px-4 py-3 text-sm text-blue-700">
+                Were you added by BPM?{" "}
+                <Link
+                  href="/reset-password"
+                  className="font-semibold underline hover:text-blue-900"
+                >
+                  Set your password here
+                </Link>{" "}
+                to get started.
+              </div>
             </div>
           )}
 

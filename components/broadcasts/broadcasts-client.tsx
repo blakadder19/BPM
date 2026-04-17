@@ -127,6 +127,22 @@ function BroadcastTableRow({
   const [sending, startSend] = useTransition();
   const [deleting, startDelete] = useTransition();
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  function handleDelete() {
+    if (b.status === "sent" && !confirmDelete) {
+      setConfirmDelete(true);
+      return;
+    }
+    setConfirmDelete(false);
+    startDelete(async () => {
+      const res = await deleteBroadcastAction(b.id);
+      if (!res.success) {
+        setResult({ ok: false, msg: res.error ?? "Delete failed" });
+      }
+      onRefresh();
+    });
+  }
 
   return (
     <>
@@ -158,41 +174,64 @@ function BroadcastTableRow({
         <Td className="w-24">
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             {b.status === "draft" && (
-              <>
-                <button
-                  disabled={sending}
-                  onClick={() => {
-                    startSend(async () => {
-                      const res = await sendBroadcastAction(b.id);
-                      setResult(res.success
-                        ? { ok: true, msg: `Sent to ${res.recipientCount} students` }
-                        : { ok: false, msg: res.error ?? "Failed" });
-                      onRefresh();
-                    });
-                  }}
-                  className="rounded-lg p-1.5 text-green-500 hover:bg-green-50 hover:text-green-700 disabled:opacity-50"
-                  title="Send now"
-                >
-                  {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
-                <button
-                  disabled={deleting}
-                  onClick={() => {
-                    startDelete(async () => {
-                      await deleteBroadcastAction(b.id);
-                      onRefresh();
-                    });
-                  }}
-                  className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-                  title="Delete draft"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </>
+              <button
+                disabled={sending}
+                onClick={() => {
+                  startSend(async () => {
+                    const res = await sendBroadcastAction(b.id);
+                    setResult(res.success
+                      ? { ok: true, msg: `Sent to ${res.recipientCount} students` }
+                      : { ok: false, msg: res.error ?? "Failed" });
+                    onRefresh();
+                  });
+                }}
+                className="rounded-lg p-1.5 text-green-500 hover:bg-green-50 hover:text-green-700 disabled:opacity-50"
+                title="Send now"
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </button>
             )}
+            <button
+              disabled={deleting}
+              onClick={handleDelete}
+              className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
+              title={b.status === "sent" ? "Delete broadcast and remove from student notifications" : "Delete draft"}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            </button>
           </div>
         </Td>
       </tr>
+      {confirmDelete && (
+        <tr>
+          <td colSpan={8} className="bg-red-50 px-8 py-3">
+            <div className="flex items-center justify-between max-w-xl">
+              <p className="text-sm text-red-700">
+                This broadcast was already sent to {b.recipientCount} student{b.recipientCount !== 1 ? "s" : ""}.
+                Deleting will also remove it from their in-app notifications.
+              </p>
+              <div className="flex items-center gap-2 ml-4 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={deleting}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+                >
+                  {deleting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+                  Delete
+                </Button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
       {isExpanded && (
         <tr>
           <td colSpan={8} className="bg-gray-50 px-8 py-4">

@@ -256,7 +256,7 @@ export async function listBroadcastsAction(): Promise<BroadcastRow[]> {
   return ((data ?? []) as Record<string, unknown>[]).map(mapRow);
 }
 
-// ── Delete draft ─────────────────────────────────────────────
+// ── Delete broadcast ─────────────────────────────────────────
 
 export async function deleteBroadcastAction(
   broadcastId: string
@@ -271,8 +271,32 @@ export async function deleteBroadcastAction(
     .single();
 
   if (!row) return { success: false, error: "Not found." };
-  if ((row as { status: string }).status === "sent") {
-    return { success: false, error: "Cannot delete a sent broadcast." };
+
+  const wasSent = (row as { status: string }).status === "sent";
+
+  // If the broadcast was sent, also clean up delivered student notifications
+  if (wasSent) {
+    const idempotencyPrefix = `admin_broadcast:`;
+    const idempotencySuffix = `:${broadcastId}`;
+    try {
+      const { data: notifs } = await supabase
+        .from("student_notifications")
+        .select("id, idempotency_key")
+        .eq("type", "admin_broadcast")
+        .like("idempotency_key", `${idempotencyPrefix}%${idempotencySuffix}`);
+      if (notifs && notifs.length > 0) {
+        const ids = (notifs as { id: string }[]).map((n) => n.id);
+        await supabase
+          .from("student_notifications")
+          .delete()
+          .in("id", ids);
+      }
+    } catch (e) {
+      console.warn(
+        "[broadcasts] cleanup notifications:",
+        e instanceof Error ? e.message : e
+      );
+    }
   }
 
   const { error } = await supabase

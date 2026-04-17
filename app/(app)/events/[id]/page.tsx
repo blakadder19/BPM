@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import {
   cachedGetEventById,
@@ -7,7 +7,9 @@ import {
   cachedGetEventPurchases,
   cachedGetStudentEventPurchases,
   cachedGetAllStudents,
+  cachedCocCheck,
 } from "@/lib/server/cached-queries";
+import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { AdminEventDetail } from "@/components/events/admin-event-detail";
 import { StudentEventDetail } from "@/components/events/student-event-detail";
@@ -31,6 +33,8 @@ export default async function EventDetailPage({
   ]);
 
   if (user.role === "student") {
+    const cocDone = await cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version);
+    if (!cocDone) redirect("/onboarding");
     if (event.status !== "published" || !event.isVisible) notFound();
     const myPurchases = await cachedGetStudentEventPurchases(user.id);
     const eventPurchases = myPurchases.filter((p) => p.eventId === id);

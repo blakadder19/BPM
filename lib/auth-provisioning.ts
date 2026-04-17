@@ -49,13 +49,35 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       const existingUser = existingUserRaw as { id: string; role: string };
       if (existingUser.role === "student") {
         step = "set auth_linked_at";
-        const { error: linkErr } = await admin
+        const now = new Date().toISOString();
+        const { data: updated, error: linkErr } = await admin
           .from("student_profiles")
-          .update({ auth_linked_at: new Date().toISOString() } as never)
+          .update({ auth_linked_at: now } as never)
           .eq("id", authUser.id)
-          .is("auth_linked_at" as never, null);
+          .is("auth_linked_at" as never, null)
+          .select("id");
         if (linkErr) {
-          console.warn(`[ensureProfile] auth_linked_at: ${linkErr.message}`);
+          console.warn(`[ensureProfile] auth_linked_at update: ${linkErr.message}`);
+        }
+        // If UPDATE matched no rows, the profile row may not exist yet
+        // (trigger failure). Upsert to ensure it exists with auth_linked_at.
+        if (!linkErr && (!updated || (updated as unknown[]).length === 0)) {
+          const { data: existing } = await admin
+            .from("student_profiles")
+            .select("id, auth_linked_at")
+            .eq("id", authUser.id)
+            .maybeSingle();
+          if (!existing) {
+            const { error: upsertErr } = await admin
+              .from("student_profiles")
+              .upsert(
+                { id: authUser.id, auth_linked_at: now } as never,
+                { onConflict: "id" }
+              );
+            if (upsertErr) {
+              console.warn(`[ensureProfile] auth_linked_at upsert: ${upsertErr.message}`);
+            }
+          }
         }
       }
 

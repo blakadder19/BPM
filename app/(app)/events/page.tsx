@@ -1,8 +1,11 @@
+import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import {
   cachedGetAllEvents,
   cachedGetStudentEventPurchases,
+  cachedCocCheck,
 } from "@/lib/server/cached-queries";
+import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { AdminEvents } from "@/components/events/admin-events";
 import { StudentEvents } from "@/components/events/student-events";
@@ -13,9 +16,13 @@ export default async function EventsPage() {
   await ensureOperationalDataHydrated();
 
   if (user.role === "student") {
-    const events = await cachedGetAllEvents();
+    const [cocDone, events, myPurchases] = await Promise.all([
+      cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
+      cachedGetAllEvents(),
+      cachedGetStudentEventPurchases(user.id),
+    ]);
+    if (!cocDone) redirect("/onboarding");
     const published = events.filter((e) => e.status === "published" && e.isVisible);
-    const myPurchases = await cachedGetStudentEventPurchases(user.id);
     return <StudentEvents events={published} purchases={myPurchases} />;
   }
 

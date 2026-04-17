@@ -64,6 +64,12 @@ export default function AuthCallbackPage() {
     }
 
     async function handleConfirmation() {
+      // Provision BEFORE signing out so auth_linked_at is set for
+      // self-signup students (the login-page provisioning can fail
+      // if session cookies aren't propagated in time).
+      await provisionCurrentUser().catch((e) => {
+        console.error("[auth-callback] provisionCurrentUser (confirmation):", e);
+      });
       await supabase.auth.signOut().catch(() => {});
       goToLogin();
     }
