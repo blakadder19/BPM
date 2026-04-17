@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 /**
  * Checks for Supabase auth cookies set by the browser client during login.
@@ -29,17 +29,39 @@ function ejectToLogin() {
  * hides the page first (to prevent stale content flash), then checks. If
  * cookies are gone, hard-navigates to /login via window.location.replace()
  * so the back button cannot return to the protected page.
+ *
+ * Soft checks use a small retry window: during token refresh the browser
+ * client may momentarily clear cookies before setting new ones. A single
+ * missing-cookie read is not enough to eject — we re-check after a short
+ * delay to avoid false positives.
  */
 export function SessionGuard() {
+  const ejectingRef = useRef(false);
+
   useEffect(() => {
     function softCheck() {
-      if (!hasSupabaseCookies()) ejectToLogin();
+      if (ejectingRef.current) return;
+      if (!hasSupabaseCookies()) {
+        // Re-check after a short delay to guard against token-refresh
+        // race conditions where cookies are briefly absent.
+        setTimeout(() => {
+          if (!hasSupabaseCookies()) ejectToLogin();
+        }, 500);
+      }
     }
 
     function hardCheck() {
+      if (ejectingRef.current) return;
       document.documentElement.style.visibility = "hidden";
       if (!hasSupabaseCookies()) {
-        ejectToLogin();
+        setTimeout(() => {
+          if (!hasSupabaseCookies()) {
+            ejectingRef.current = true;
+            ejectToLogin();
+          } else {
+            document.documentElement.style.visibility = "visible";
+          }
+        }, 500);
       } else {
         document.documentElement.style.visibility = "visible";
       }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { provisionCurrentUser } from "@/lib/actions/auth-provision";
@@ -15,7 +15,6 @@ import { provisionCurrentUser } from "@/lib/actions/auth-provision";
  */
 export default function AuthCallbackPage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
   const handled = useRef(false);
 
   useEffect(() => {
@@ -35,13 +34,12 @@ export default function AuthCallbackPage() {
     }
 
     async function goToRecovery() {
-      // Provision even for recovery — records auth_linked_at for
-      // admin-created students claiming their account via password reset.
       await provisionCurrentUser().catch((e) => {
         console.error("[auth-callback] provisionCurrentUser (recovery):", e);
       });
-      router.push("/update-password");
-      router.refresh();
+      // Hard navigation avoids RSC re-render conflicts that cause a brief
+      // error flash when using router.push + router.refresh across route groups.
+      window.location.href = "/update-password";
     }
 
     async function goToApp() {
@@ -53,14 +51,15 @@ export default function AuthCallbackPage() {
       if (!provResult.success) {
         console.warn("[auth-callback] provisioning failed:", provResult.error);
       }
-      router.push(next);
-      router.refresh();
+      // Hard navigation ensures the protected layout loads with a fresh
+      // server render and avoids stale RSC payloads from the auth shell.
+      window.location.href = next;
     }
 
     const isEmailConfirmation = type === "signup" || type === "email" || type === "email_change";
 
     function goToLogin() {
-      router.push("/login?confirmed=1");
+      window.location.href = "/login?confirmed=1";
     }
 
     async function handleConfirmation() {
@@ -147,7 +146,7 @@ export default function AuthCallbackPage() {
     }
 
     handle();
-  }, [searchParams, router]);
+  }, [searchParams]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 bpm-auth-bg">

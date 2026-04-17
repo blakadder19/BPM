@@ -271,6 +271,10 @@ export function adminBroadcastEvent(input: {
   broadcastId: string;
   title: string;
   body: string;
+  imageUrl?: string | null;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+  category?: string | null;
 }): CommEvent<"admin_broadcast"> {
   return {
     id: generateId("abr"),
@@ -281,6 +285,10 @@ export function adminBroadcastEvent(input: {
       broadcastId: input.broadcastId,
       title: input.title,
       body: input.body,
+      imageUrl: input.imageUrl ?? null,
+      ctaLabel: input.ctaLabel ?? null,
+      ctaUrl: input.ctaUrl ?? null,
+      category: input.category ?? null,
     },
     createdAt: new Date().toISOString(),
     idempotencyKey: `admin_broadcast:${input.studentId}:${input.broadcastId}`,

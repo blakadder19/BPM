@@ -12,6 +12,11 @@ import { NextResponse, type NextRequest } from "next/server";
  * getUser() HTTP call and use getSession() instead (local cookie read).
  * This is safe because the JWT was literally just issued — no refresh or
  * server-side validation is necessary within the first few seconds.
+ *
+ * Resilience: if getUser() fails due to a transient error (network hiccup,
+ * Supabase cold start, rate limit), the middleware falls back to
+ * getSession() to avoid destroying a valid session. signOut() is only
+ * called when the session is genuinely unrecoverable (no fallback user).
  */
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -46,25 +51,49 @@ export async function updateSession(request: NextRequest) {
   let user = null;
 
   if (freshJwt) {
-    // JWT was just issued by signInWithPassword — skip the HTTP roundtrip
-    // to the Supabase Auth server and read the session locally instead.
     const { data: { session } } = await supabase.auth.getSession();
     user = session?.user ?? null;
 
-    // Clear the signal so subsequent navigations use the full getUser()
     supabaseResponse.cookies.set("bpm_fresh_jwt", "", {
       path: "/",
       maxAge: 0,
     });
   } else {
-    const { data } = await supabase.auth.getUser();
+    const { data, error } = await supabase.auth.getUser();
     user = data.user;
+
+    // Graceful fallback: if getUser() failed (transient network error,
+    // Supabase cold start, rate limit) but the request has auth cookies,
+    // try a local session read instead of immediately destroying the
+    // session. This prevents valid sessions from being killed by brief
+    // outages. The local JWT may be slightly stale but is good enough
+    // for middleware gating — server components will re-validate.
+    if (!user && error) {
+      const hasAuthCookies = request.cookies.getAll().some(
+        (c) => c.name.includes("-auth-token")
+      );
+      if (hasAuthCookies) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            user = session.user;
+            if (process.env.NODE_ENV === "development") {
+              console.warn(
+                `[middleware] getUser() failed (${error.message}) — fell back to getSession()`
+              );
+            }
+          }
+        } catch {
+          // getSession also failed — session is truly unrecoverable
+        }
+      }
+    }
   }
 
-  // Stale session recovery: if getUser() returned null but the request
-  // carried Supabase auth cookies, the tokens are invalid/expired.
-  // Sign out server-side to clear the stale cookies from the response,
-  // preventing an infinite redirect loop with the login page.
+  // Only sign out when the session is genuinely unrecoverable:
+  // getUser() returned no user, the fallback also returned no user,
+  // but auth cookies are still present. Clear them to prevent the
+  // login page from seeing stale cookies in an infinite loop.
   if (!user) {
     const hasAuthCookies = request.cookies.getAll().some(
       (c) => c.name.includes("-auth-token")

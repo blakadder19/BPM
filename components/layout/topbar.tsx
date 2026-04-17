@@ -10,9 +10,12 @@ import {
   Info,
   X,
   ChevronRight,
+  ExternalLink,
+  Megaphone,
   Menu,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
 import { switchDevRole, switchDevStudent } from "@/lib/actions/auth";
 import { dismissStudentNoticeAction } from "@/lib/actions/student-notifications";
 import { fetchStudentAlerts } from "@/lib/actions/student-alerts";
@@ -124,6 +127,7 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [detailAlert, setDetailAlert] = useState<AdminAlert | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -153,6 +157,31 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
+
+  function handleView(alert: AdminAlert) {
+    if (alert.broadcast) {
+      setOpen(false);
+      setDetailAlert(alert);
+      return;
+    }
+    setOpen(false);
+    const target = alert.href;
+    if (!target) return;
+    if (target.includes("#") && window.location.pathname === target.split("#")[0]) {
+      const hash = target.split("#")[1];
+      window.location.hash = `#${hash}`;
+      const el = document.getElementById(hash);
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.classList.add("ring-2", "ring-amber-400", "ring-offset-2");
+          setTimeout(() => el.classList.remove("ring-2", "ring-amber-400", "ring-offset-2"), 4000);
+        }, 100);
+      }
+    } else {
+      router.push(target);
+    }
+  }
 
   return (
     <div className="relative">
@@ -241,30 +270,13 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
                             <X className="h-3.5 w-3.5" />
                           </button>
                         </div>
-                        <p className="mt-0.5 text-xs leading-relaxed text-gray-500">
+                        <p className="mt-0.5 text-xs leading-relaxed text-gray-500 line-clamp-2">
                           {alert.message}
                         </p>
-                        {alert.href && (
+                        {(alert.href || alert.broadcast) && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setOpen(false);
-                              const target = alert.href!;
-                              if (target.includes("#") && window.location.pathname === target.split("#")[0]) {
-                                const hash = target.split("#")[1];
-                                window.location.hash = `#${hash}`;
-                                const el = document.getElementById(hash);
-                                if (el) {
-                                  setTimeout(() => {
-                                    el.scrollIntoView({ behavior: "smooth", block: "center" });
-                                    el.classList.add("ring-2", "ring-amber-400", "ring-offset-2");
-                                    setTimeout(() => el.classList.remove("ring-2", "ring-amber-400", "ring-offset-2"), 4000);
-                                  }, 100);
-                                }
-                              } else {
-                                router.push(target);
-                              }
-                            }}
+                            onClick={() => handleView(alert)}
                             className="mt-1.5 inline-flex items-center gap-0.5 text-xs font-medium text-bpm-600 hover:text-bpm-700"
                           >
                             View
@@ -280,7 +292,89 @@ function AlertBell({ alerts, isStudent }: { alerts: AdminAlert[]; isStudent?: bo
           </div>
         </div>
       )}
+
+      {detailAlert && (
+        <NotificationDetailModal
+          alert={detailAlert}
+          onClose={() => setDetailAlert(null)}
+        />
+      )}
     </div>
+  );
+}
+
+// ── Notification Detail Modal ────────────────────────────────
+
+function NotificationDetailModal({
+  alert,
+  onClose,
+}: {
+  alert: AdminAlert;
+  onClose: () => void;
+}) {
+  const bc = alert.broadcast;
+  const sentDate = bc?.sentAt
+    ? new Date(bc.sentAt).toLocaleDateString("en-IE", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Megaphone className="h-5 w-5 text-bpm-600 shrink-0" />
+            <span className="truncate">{alert.title}</span>
+          </DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <div className="space-y-4">
+            {bc?.category && (
+              <div>
+                <Badge variant="default">{bc.category}</Badge>
+              </div>
+            )}
+
+            {bc?.imageUrl && (
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={bc.imageUrl}
+                  alt=""
+                  className="w-full max-h-48 object-cover"
+                />
+              </div>
+            )}
+
+            <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+              {alert.message}
+            </p>
+
+            {bc?.ctaLabel && bc?.ctaUrl && (
+              <a
+                href={bc.ctaUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-700 transition-colors"
+              >
+                {bc.ctaLabel}
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
+
+            <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-gray-100 pt-3 text-xs text-gray-400">
+              <span>From BPM Academy</span>
+              {sentDate && <span>{sentDate}</span>}
+            </div>
+          </div>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
   );
 }
 

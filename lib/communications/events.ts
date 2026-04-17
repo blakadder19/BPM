@@ -105,6 +105,10 @@ export interface AdminBroadcastPayload {
   broadcastId: string;
   title: string;
   body: string;
+  imageUrl?: string | null;
+  ctaLabel?: string | null;
+  ctaUrl?: string | null;
+  category?: string | null;
 }
 
 // ── Discriminated union for all payloads ─────────────────────

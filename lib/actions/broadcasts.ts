@@ -26,6 +26,10 @@ export interface BroadcastRow {
   sentAt: string | null;
   recipientCount: number;
   emailSentCount: number;
+  imageUrl: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+  category: string | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -44,6 +48,10 @@ function mapRow(r: Record<string, unknown>): BroadcastRow {
     sentAt: (r.sent_at as string) ?? null,
     recipientCount: (r.recipient_count as number) ?? 0,
     emailSentCount: (r.email_sent_count as number) ?? 0,
+    imageUrl: (r.image_url as string) ?? null,
+    ctaLabel: (r.cta_label as string) ?? null,
+    ctaUrl: (r.cta_url as string) ?? null,
+    category: (r.category as string) ?? null,
   };
 }
 
@@ -69,6 +77,10 @@ export async function createBroadcastAction(input: {
   channels: BroadcastChannel[];
   audienceType: AudienceType;
   audienceParams?: AudienceParams;
+  imageUrl?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  category?: string;
 }): Promise<{ success: boolean; error?: string; id?: string }> {
   const user = await requireRole(["admin"]);
   const supabase = createAdminClient();
@@ -79,6 +91,9 @@ export async function createBroadcastAction(input: {
   }
   if (input.channels.length === 0) {
     return { success: false, error: "At least one delivery channel is required." };
+  }
+  if (input.ctaUrl && !input.ctaLabel) {
+    return { success: false, error: "CTA button needs a label when a URL is provided." };
   }
 
   const { data, error } = await supabase
@@ -92,6 +107,10 @@ export async function createBroadcastAction(input: {
       audience_params: input.audienceParams ?? {},
       status: "draft",
       created_by: user.fullName,
+      image_url: input.imageUrl?.trim() || null,
+      cta_label: input.ctaLabel?.trim() || null,
+      cta_url: input.ctaUrl?.trim() || null,
+      category: input.category?.trim() || null,
     } as never)
     .select("id")
     .single();
@@ -132,6 +151,10 @@ export async function sendBroadcastAction(
   const channels = (broadcast.channels as BroadcastChannel[]) ?? ["in_app"];
   const title = broadcast.title as string;
   const body = broadcast.body as string;
+  const imageUrl = (broadcast.image_url as string) || null;
+  const ctaLabel = (broadcast.cta_label as string) || null;
+  const ctaUrl = (broadcast.cta_url as string) || null;
+  const category = (broadcast.category as string) || null;
 
   const audience = await resolveAudience(audienceType, audienceParams);
   if (audience.students.length === 0) {
@@ -148,6 +171,10 @@ export async function sendBroadcastAction(
       broadcastId,
       title,
       body,
+      imageUrl,
+      ctaLabel,
+      ctaUrl,
+      category,
     })
   );
 

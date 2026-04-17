@@ -15,6 +15,14 @@ export interface AdminAlert {
   message: string;
   /** Suggested navigation path, if applicable */
   href?: string;
+  /** Optional rich broadcast metadata for the detail view */
+  broadcast?: {
+    imageUrl?: string | null;
+    ctaLabel?: string | null;
+    ctaUrl?: string | null;
+    category?: string | null;
+    sentAt?: string | null;
+  };
 }
 
 export interface AlertTypeMeta {

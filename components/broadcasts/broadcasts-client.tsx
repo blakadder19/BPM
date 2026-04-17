@@ -15,6 +15,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
+  Image as ImageIcon,
+  ExternalLink,
+  Tag,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
@@ -32,6 +35,16 @@ import {
   type BroadcastChannel,
 } from "@/lib/actions/broadcasts";
 import { type AudienceType, AUDIENCE_LABELS } from "@/lib/domain/broadcast-types";
+
+const CATEGORY_OPTIONS = [
+  { value: "", label: "No category" },
+  { value: "announcement", label: "Announcement" },
+  { value: "schedule", label: "Schedule update" },
+  { value: "event", label: "Event" },
+  { value: "payment", label: "Payment reminder" },
+  { value: "product", label: "Product / Offer" },
+  { value: "general", label: "General" },
+];
 
 const CHANNEL_OPTIONS: { value: BroadcastChannel; label: string; icon: typeof Mail }[] = [
   { value: "in_app", label: "In-app notification", icon: BellRing },
@@ -235,8 +248,28 @@ function BroadcastTableRow({
       {isExpanded && (
         <tr>
           <td colSpan={8} className="bg-gray-50 px-8 py-4">
-            <div className="max-w-xl space-y-2">
+            <div className="max-w-xl space-y-3">
+              {b.category && (
+                <Badge variant="default">{b.category}</Badge>
+              )}
+              {b.imageUrl && (
+                <div className="overflow-hidden rounded-lg border border-gray-200 max-w-xs">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={b.imageUrl} alt="" className="w-full max-h-40 object-cover" />
+                </div>
+              )}
               <p className="text-sm text-gray-500 whitespace-pre-wrap">{b.body}</p>
+              {b.ctaLabel && b.ctaUrl && (
+                <a
+                  href={b.ctaUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-bpm-700 transition-colors"
+                >
+                  {b.ctaLabel}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-400 pt-2">
                 <span>Created by {b.createdBy}</span>
                 <span>Created {formatDate(b.createdAt)}</span>
@@ -279,6 +312,11 @@ function ComposerDialog({
   const [saving, startSave] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"compose" | "confirm">("compose");
+  const [showExtras, setShowExtras] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
+  const [ctaLabel, setCtaLabel] = useState("");
+  const [ctaUrl, setCtaUrl] = useState("");
+  const [category, setCategory] = useState("");
 
   function toggleChannel(ch: BroadcastChannel) {
     setChannels((prev) => {
@@ -312,6 +350,9 @@ function ComposerDialog({
     setError(null);
     if (!title.trim()) { setError("Title is required."); return; }
     if (!body.trim()) { setError("Message body is required."); return; }
+    if (ctaUrl.trim() && !ctaLabel.trim()) {
+      setError("CTA button needs a label when a URL is provided."); return;
+    }
     if (audienceType === "specific_students" && selectedStudents.size === 0) {
       setError("Select at least one student."); return;
     }
@@ -330,6 +371,10 @@ function ComposerDialog({
         channels: [...channels],
         audienceType,
         audienceParams: params,
+        imageUrl: imageUrl.trim() || undefined,
+        ctaLabel: ctaLabel.trim() || undefined,
+        ctaUrl: ctaUrl.trim() || undefined,
+        category: category || undefined,
       });
       if (!res.success) {
         setError(res.error ?? "Failed to create broadcast.");
@@ -383,6 +428,73 @@ function ComposerDialog({
                   placeholder="Write your message to students..."
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100 resize-y"
                 />
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowExtras(!showExtras)}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  {showExtras ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {showExtras ? "Hide extras" : "Add image, CTA button, or category"}
+                </button>
+
+                {showExtras && (
+                  <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        <ImageIcon className="inline h-3.5 w-3.5 mr-1" />
+                        Image URL (optional)
+                      </label>
+                      <input
+                        value={imageUrl}
+                        onChange={(e) => setImageUrl(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          CTA button label
+                        </label>
+                        <input
+                          value={ctaLabel}
+                          onChange={(e) => setCtaLabel(e.target.value)}
+                          placeholder="e.g. Book now"
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          CTA button URL
+                        </label>
+                        <input
+                          value={ctaUrl}
+                          onChange={(e) => setCtaUrl(e.target.value)}
+                          placeholder="https://..."
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        <Tag className="inline h-3.5 w-3.5 mr-1" />
+                        Category (optional)
+                      </label>
+                      <select
+                        value={category}
+                        onChange={(e) => setCategory(e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                      >
+                        {CATEGORY_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -468,9 +580,22 @@ function ComposerDialog({
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-2">
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
+                {category && <Badge variant="default">{category}</Badge>}
                 <h4 className="font-semibold text-gray-900">{title}</h4>
+                {imageUrl && (
+                  <div className="overflow-hidden rounded-lg border border-gray-200 max-w-[200px]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={imageUrl} alt="" className="w-full max-h-32 object-cover" />
+                  </div>
+                )}
                 <p className="text-sm text-gray-600 whitespace-pre-wrap">{body}</p>
+                {ctaLabel && ctaUrl && (
+                  <div className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-xs font-medium text-white">
+                    {ctaLabel}
+                    <ExternalLink className="h-3 w-3" />
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
                 <div>

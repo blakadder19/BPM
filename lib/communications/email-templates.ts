@@ -283,12 +283,33 @@ function adminBroadcast(
   p: AdminBroadcastPayload
 ): EmailContent {
   const appUrl = getAppUrl();
-  const bodyHtml = p.body
+
+  const parts: string[] = [];
+
+  if (p.category) {
+    parts.push(
+      `<div style="margin:0 0 12px;"><span style="display:inline-block;padding:4px 12px;background:${B.ZINC_100};color:${B.ZINC_700};border-radius:16px;font-size:12px;font-weight:600;letter-spacing:0.3px;">${p.category}</span></div>`
+    );
+  }
+
+  if (p.imageUrl) {
+    parts.push(
+      `<div style="margin:0 0 16px;text-align:center;"><img src="${p.imageUrl}" alt="" style="max-width:100%;height:auto;border-radius:8px;display:block;margin:0 auto;" /></div>`
+    );
+  }
+
+  const bodyLines = p.body
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => paragraph(line))
     .join("");
+
+  parts.push(bodyLines || paragraph(p.body));
+
+  if (p.ctaLabel && p.ctaUrl) {
+    parts.push(bpmCtaButton(p.ctaUrl, p.ctaLabel));
+  }
 
   return {
     subject: p.title,
@@ -296,7 +317,7 @@ function adminBroadcast(
       appUrl,
       recipientName: studentName,
       heading: p.title,
-      bodyHtml: bodyHtml || paragraph(p.body),
+      bodyHtml: parts.join("\n"),
     }),
   };
 }

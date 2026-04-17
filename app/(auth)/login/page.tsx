@@ -51,8 +51,13 @@ export default function LoginPage() {
     supabase.auth.getUser().then(({ data: { user }, error: err }) => {
       if (user && !err) {
         window.location.href = destination;
-      } else {
-        supabase.auth.signOut().catch(() => {});
+      } else if (err) {
+        // Only clear cookies when there's an explicit auth error and
+        // stale cookies are present. Avoids destroying a session that
+        // might still be valid after a transient middleware failure.
+        if (/sb-.+-auth-token/.test(document.cookie)) {
+          supabase.auth.signOut().catch(() => {});
+        }
       }
     });
   }, [destination]);

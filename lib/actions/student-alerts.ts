@@ -119,7 +119,14 @@ export async function fetchStudentAlerts(): Promise<AdminAlert[]> {
         }
 
         if (n.type === "admin_broadcast") {
-          const bp = n.payload as { title?: string; body?: string };
+          const bp = n.payload as {
+            title?: string;
+            body?: string;
+            imageUrl?: string | null;
+            ctaLabel?: string | null;
+            ctaUrl?: string | null;
+            category?: string | null;
+          };
           const title = bp?.title || "Academy notice";
           const body = bp?.body || "You have a new notice from the academy.";
           return [
@@ -128,7 +135,14 @@ export async function fetchStudentAlerts(): Promise<AdminAlert[]> {
               severity: "info" as const,
               title,
               message: body,
-              href: "/dashboard",
+              href: bp?.ctaUrl || "/dashboard",
+              broadcast: {
+                imageUrl: bp?.imageUrl ?? null,
+                ctaLabel: bp?.ctaLabel ?? null,
+                ctaUrl: bp?.ctaUrl ?? null,
+                category: bp?.category ?? null,
+                sentAt: n.createdAt ?? null,
+              },
             },
           ];
         }
