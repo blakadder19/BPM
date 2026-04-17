@@ -307,8 +307,9 @@ function adminBroadcast(
 
   parts.push(bodyLines || paragraph(p.body));
 
-  if (p.ctaLabel && p.ctaUrl) {
-    parts.push(bpmCtaButton(p.ctaUrl, p.ctaLabel));
+  const emailCtaUrl = p.ctaEmailUrl || p.ctaUrl;
+  if (p.ctaLabel && emailCtaUrl) {
+    parts.push(bpmCtaButton(emailCtaUrl, p.ctaLabel));
   }
 
   return {

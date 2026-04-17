@@ -15,16 +15,24 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Image as ImageIcon,
   ExternalLink,
   Tag,
+  MousePointerClick,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogBody,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
+import { MediaPicker } from "@/components/media/media-picker";
 import { formatDate } from "@/lib/utils";
 import {
   createBroadcastAction,
@@ -35,6 +43,13 @@ import {
   type BroadcastChannel,
 } from "@/lib/actions/broadcasts";
 import { type AudienceType, AUDIENCE_LABELS } from "@/lib/domain/broadcast-types";
+import {
+  type CtaDestinationType,
+  CTA_DESTINATION_LABELS,
+  resolveCtaPath,
+} from "@/lib/domain/cta-types";
+
+// ── Constants ────────────────────────────────────────────────
 
 const CATEGORY_OPTIONS = [
   { value: "", label: "No category" },
@@ -61,12 +76,35 @@ const AUDIENCE_OPTIONS: { value: AudienceType; label: string }[] = [
   { value: "specific_students", label: AUDIENCE_LABELS.specific_students },
 ];
 
-interface Props {
-  broadcasts: BroadcastRow[];
-  studentOptions: { id: string; name: string }[];
+const CTA_DEST_OPTIONS: { value: CtaDestinationType | ""; label: string }[] = [
+  { value: "", label: "No CTA button" },
+  { value: "product", label: CTA_DESTINATION_LABELS.product },
+  { value: "event", label: CTA_DESTINATION_LABELS.event },
+  { value: "classes", label: CTA_DESTINATION_LABELS.classes },
+  { value: "dashboard", label: CTA_DESTINATION_LABELS.dashboard },
+  { value: "external_url", label: CTA_DESTINATION_LABELS.external_url },
+];
+
+interface EntityOption {
+  id: string;
+  name: string;
 }
 
-export function BroadcastsClient({ broadcasts, studentOptions }: Props) {
+// ── Main component ───────────────────────────────────────────
+
+interface Props {
+  broadcasts: BroadcastRow[];
+  studentOptions: EntityOption[];
+  productOptions: EntityOption[];
+  eventOptions: EntityOption[];
+}
+
+export function BroadcastsClient({
+  broadcasts,
+  studentOptions,
+  productOptions,
+  eventOptions,
+}: Props) {
   const router = useRouter();
   const [showComposer, setShowComposer] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -113,6 +151,8 @@ export function BroadcastsClient({ broadcasts, studentOptions }: Props) {
       {showComposer && (
         <ComposerDialog
           studentOptions={studentOptions}
+          productOptions={productOptions}
+          eventOptions={eventOptions}
           onClose={() => setShowComposer(false)}
           onCreated={() => {
             setShowComposer(false);
@@ -157,23 +197,37 @@ function BroadcastTableRow({
     });
   }
 
+  const ctaDestLabel = b.ctaDestinationType
+    ? CTA_DESTINATION_LABELS[b.ctaDestinationType]
+    : null;
+
   return (
     <>
       <tr className="cursor-pointer hover:bg-gray-50" onClick={onToggle}>
         <Td className="w-8">
-          {isExpanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+          {isExpanded ? (
+            <ChevronUp className="h-4 w-4 text-gray-400" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-gray-400" />
+          )}
         </Td>
         <Td className="font-medium text-gray-900 max-w-[220px] truncate">{b.title}</Td>
         <Td>
-          <span className="text-xs text-gray-600">{AUDIENCE_LABELS[b.audienceType] ?? b.audienceType}</span>
+          <span className="text-xs text-gray-600">
+            {AUDIENCE_LABELS[b.audienceType] ?? b.audienceType}
+          </span>
         </Td>
         <Td>
           <div className="flex items-center gap-1">
             {b.channels.includes("in_app") && (
-              <span title="In-app"><BellRing className="h-3.5 w-3.5 text-blue-500" /></span>
+              <span title="In-app">
+                <BellRing className="h-3.5 w-3.5 text-blue-500" />
+              </span>
             )}
             {b.channels.includes("email") && (
-              <span title="Email"><Mail className="h-3.5 w-3.5 text-amber-500" /></span>
+              <span title="Email">
+                <Mail className="h-3.5 w-3.5 text-amber-500" />
+              </span>
             )}
           </div>
         </Td>
@@ -192,25 +246,39 @@ function BroadcastTableRow({
                 onClick={() => {
                   startSend(async () => {
                     const res = await sendBroadcastAction(b.id);
-                    setResult(res.success
-                      ? { ok: true, msg: `Sent to ${res.recipientCount} students` }
-                      : { ok: false, msg: res.error ?? "Failed" });
+                    setResult(
+                      res.success
+                        ? { ok: true, msg: `Sent to ${res.recipientCount} students` }
+                        : { ok: false, msg: res.error ?? "Failed" },
+                    );
                     onRefresh();
                   });
                 }}
                 className="rounded-lg p-1.5 text-green-500 hover:bg-green-50 hover:text-green-700 disabled:opacity-50"
                 title="Send now"
               >
-                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {sending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </button>
             )}
             <button
               disabled={deleting}
               onClick={handleDelete}
               className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
-              title={b.status === "sent" ? "Delete broadcast and remove from student notifications" : "Delete draft"}
+              title={
+                b.status === "sent"
+                  ? "Delete broadcast and remove from student notifications"
+                  : "Delete draft"
+              }
             >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {deleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
             </button>
           </div>
         </Td>
@@ -220,14 +288,18 @@ function BroadcastTableRow({
           <td colSpan={8} className="bg-red-50 px-8 py-3">
             <div className="flex items-center justify-between max-w-xl">
               <p className="text-sm text-red-700">
-                This broadcast was already sent to {b.recipientCount} student{b.recipientCount !== 1 ? "s" : ""}.
-                Deleting will also remove it from their in-app notifications.
+                This broadcast was already sent to {b.recipientCount} student
+                {b.recipientCount !== 1 ? "s" : ""}. Deleting will also remove it from
+                their in-app notifications.
               </p>
               <div className="flex items-center gap-2 ml-4 shrink-0">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setConfirmDelete(false);
+                  }}
                 >
                   Cancel
                 </Button>
@@ -235,7 +307,10 @@ function BroadcastTableRow({
                   variant="danger"
                   size="sm"
                   disabled={deleting}
-                  onClick={(e) => { e.stopPropagation(); handleDelete(); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete();
+                  }}
                 >
                   {deleting ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
                   Delete
@@ -249,26 +324,33 @@ function BroadcastTableRow({
         <tr>
           <td colSpan={8} className="bg-gray-50 px-8 py-4">
             <div className="max-w-xl space-y-3">
-              {b.category && (
-                <Badge variant="default">{b.category}</Badge>
-              )}
+              {b.category && <Badge variant="default">{b.category}</Badge>}
               {b.imageUrl && (
                 <div className="overflow-hidden rounded-lg border border-gray-200 max-w-xs">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={b.imageUrl} alt="" className="w-full max-h-40 object-cover" />
+                  <img
+                    src={b.imageUrl}
+                    alt=""
+                    className="w-full max-h-40 object-cover"
+                  />
                 </div>
               )}
               <p className="text-sm text-gray-500 whitespace-pre-wrap">{b.body}</p>
               {b.ctaLabel && b.ctaUrl && (
-                <a
-                  href={b.ctaUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-bpm-700 transition-colors"
-                >
-                  {b.ctaLabel}
-                  <ExternalLink className="h-3 w-3" />
-                </a>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={b.ctaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-bpm-700 transition-colors"
+                  >
+                    {b.ctaLabel}
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                  {ctaDestLabel && (
+                    <span className="text-[10px] text-gray-400">({ctaDestLabel})</span>
+                  )}
+                </div>
               )}
               <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-400 pt-2">
                 <span>Created by {b.createdBy}</span>
@@ -277,8 +359,14 @@ function BroadcastTableRow({
                 {b.emailSentCount > 0 && <span>{b.emailSentCount} emails sent</span>}
               </div>
               {result && (
-                <div className={`mt-2 flex items-center gap-1.5 text-xs ${result.ok ? "text-green-600" : "text-red-600"}`}>
-                  {result.ok ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
+                <div
+                  className={`mt-2 flex items-center gap-1.5 text-xs ${result.ok ? "text-green-600" : "text-red-600"}`}
+                >
+                  {result.ok ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <AlertCircle className="h-3.5 w-3.5" />
+                  )}
                   {result.msg}
                 </div>
               )}
@@ -294,10 +382,14 @@ function BroadcastTableRow({
 
 function ComposerDialog({
   studentOptions,
+  productOptions,
+  eventOptions,
   onClose,
   onCreated,
 }: {
-  studentOptions: { id: string; name: string }[];
+  studentOptions: EntityOption[];
+  productOptions: EntityOption[];
+  eventOptions: EntityOption[];
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -312,11 +404,17 @@ function ComposerDialog({
   const [saving, startSave] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState<"compose" | "confirm">("compose");
+
+  // Extras
   const [showExtras, setShowExtras] = useState(false);
-  const [imageUrl, setImageUrl] = useState("");
-  const [ctaLabel, setCtaLabel] = useState("");
-  const [ctaUrl, setCtaUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [category, setCategory] = useState("");
+
+  // CTA destination
+  const [ctaLabel, setCtaLabel] = useState("");
+  const [ctaDestType, setCtaDestType] = useState<CtaDestinationType | "">("");
+  const [ctaTargetId, setCtaTargetId] = useState("");
+  const [ctaExternalUrl, setCtaExternalUrl] = useState("");
 
   function toggleChannel(ch: BroadcastChannel) {
     setChannels((prev) => {
@@ -334,9 +432,10 @@ function ComposerDialog({
   async function loadPreview() {
     setPreviewLoading(true);
     try {
-      const params = audienceType === "specific_students"
-        ? { studentIds: [...selectedStudents] }
-        : {};
+      const params =
+        audienceType === "specific_students"
+          ? { studentIds: [...selectedStudents] }
+          : {};
       const res = await previewAudienceAction(audienceType, params);
       setPreview({ count: res.count, names: res.sampleNames });
     } catch {
@@ -346,15 +445,42 @@ function ComposerDialog({
     }
   }
 
+  const needsTarget = ctaDestType === "product" || ctaDestType === "event";
+  const resolvedCtaPreview = ctaDestType
+    ? resolveCtaPath({
+        type: ctaDestType,
+        targetId: ctaTargetId || undefined,
+        externalUrl: ctaExternalUrl || undefined,
+      })
+    : null;
+
   function handleNext() {
     setError(null);
-    if (!title.trim()) { setError("Title is required."); return; }
-    if (!body.trim()) { setError("Message body is required."); return; }
-    if (ctaUrl.trim() && !ctaLabel.trim()) {
-      setError("CTA button needs a label when a URL is provided."); return;
+    if (!title.trim()) {
+      setError("Title is required.");
+      return;
+    }
+    if (!body.trim()) {
+      setError("Message body is required.");
+      return;
+    }
+    if (ctaDestType && !ctaLabel.trim()) {
+      setError("CTA button needs a label.");
+      return;
+    }
+    if (ctaDestType === "external_url" && !ctaExternalUrl.trim()) {
+      setError("External URL is required for this CTA type.");
+      return;
+    }
+    if (needsTarget && !ctaTargetId) {
+      setError(
+        `Select a ${ctaDestType === "product" ? "product" : "event"} for the CTA button.`,
+      );
+      return;
     }
     if (audienceType === "specific_students" && selectedStudents.size === 0) {
-      setError("Select at least one student."); return;
+      setError("Select at least one student.");
+      return;
     }
     loadPreview();
     setStep("confirm");
@@ -362,18 +488,24 @@ function ComposerDialog({
 
   function handleCreate() {
     startSave(async () => {
-      const params = audienceType === "specific_students"
-        ? { studentIds: [...selectedStudents] }
-        : {};
+      const params =
+        audienceType === "specific_students"
+          ? { studentIds: [...selectedStudents] }
+          : {};
+
+      const ctaUrl = ctaDestType === "external_url" ? ctaExternalUrl.trim() : undefined;
+
       const res = await createBroadcastAction({
         title: title.trim(),
         body: body.trim(),
         channels: [...channels],
         audienceType,
         audienceParams: params,
-        imageUrl: imageUrl.trim() || undefined,
+        imageUrl: imageUrl || undefined,
         ctaLabel: ctaLabel.trim() || undefined,
-        ctaUrl: ctaUrl.trim() || undefined,
+        ctaUrl,
+        ctaDestinationType: ctaDestType || undefined,
+        ctaDestinationId: needsTarget ? ctaTargetId : undefined,
         category: category || undefined,
       });
       if (!res.success) {
@@ -381,7 +513,6 @@ function ComposerDialog({
         setStep("compose");
         return;
       }
-      // Immediately send
       if (res.id) {
         const sendRes = await sendBroadcastAction(res.id);
         if (!sendRes.success) {
@@ -393,24 +524,35 @@ function ComposerDialog({
   }
 
   const filteredStudents = studentSearch
-    ? studentOptions.filter((s) => s.name.toLowerCase().includes(studentSearch.toLowerCase()))
+    ? studentOptions.filter((s) =>
+        s.name.toLowerCase().includes(studentSearch.toLowerCase()),
+      )
     : studentOptions;
+
+  const targetOptions = ctaDestType === "product" ? productOptions : eventOptions;
 
   return (
     <Dialog open onClose={onClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{step === "compose" ? "New Broadcast" : "Confirm & Send"}</DialogTitle>
+          <DialogTitle>
+            {step === "compose" ? "New Broadcast" : "Confirm & Send"}
+          </DialogTitle>
         </DialogHeader>
         <DialogBody>
           {step === "compose" ? (
             <div className="space-y-4">
               {error && (
-                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </div>
               )}
 
+              {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Title
+                </label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -419,8 +561,11 @@ function ComposerDialog({
                 />
               </div>
 
+              {/* Message */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Message
+                </label>
                 <textarea
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
@@ -430,57 +575,114 @@ function ComposerDialog({
                 />
               </div>
 
+              {/* Extras toggle */}
               <div>
                 <button
                   type="button"
                   onClick={() => setShowExtras(!showExtras)}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-700 transition-colors"
                 >
-                  {showExtras ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {showExtras ? (
+                    <ChevronUp className="h-3.5 w-3.5" />
+                  ) : (
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  )}
                   {showExtras ? "Hide extras" : "Add image, CTA button, or category"}
                 </button>
 
                 {showExtras && (
-                  <div className="mt-3 space-y-3 rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+                  <div className="mt-3 space-y-4 rounded-lg border border-gray-200 bg-gray-50/50 p-3">
+                    {/* Image picker */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        <ImageIcon className="inline h-3.5 w-3.5 mr-1" />
-                        Image URL (optional)
+                      <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                        Image (optional)
                       </label>
-                      <input
+                      <MediaPicker
+                        kind="broadcasts"
                         value={imageUrl}
-                        onChange={(e) => setImageUrl(e.target.value)}
-                        placeholder="https://example.com/image.jpg"
-                        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                        onChange={setImageUrl}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">
-                          CTA button label
-                        </label>
-                        <input
-                          value={ctaLabel}
-                          onChange={(e) => setCtaLabel(e.target.value)}
-                          placeholder="e.g. Book now"
-                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
-                        />
+
+                    {/* CTA destination */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-1 text-xs font-medium text-gray-600">
+                        <MousePointerClick className="h-3.5 w-3.5" />
+                        CTA button (optional)
+                      </label>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <select
+                            value={ctaDestType}
+                            onChange={(e) => {
+                              setCtaDestType(
+                                e.target.value as CtaDestinationType | "",
+                              );
+                              setCtaTargetId("");
+                              setCtaExternalUrl("");
+                            }}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                          >
+                            {CTA_DEST_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <input
+                            value={ctaLabel}
+                            onChange={(e) => setCtaLabel(e.target.value)}
+                            placeholder="Button label"
+                            disabled={!ctaDestType}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100 disabled:opacity-50"
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">
-                          CTA button URL
-                        </label>
+
+                      {/* Target selector for product/event */}
+                      {needsTarget && (
+                        <select
+                          value={ctaTargetId}
+                          onChange={(e) => setCtaTargetId(e.target.value)}
+                          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                        >
+                          <option value="">
+                            Select{" "}
+                            {ctaDestType === "product" ? "a product" : "an event"}...
+                          </option>
+                          {targetOptions.map((opt) => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.name}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {/* External URL input */}
+                      {ctaDestType === "external_url" && (
                         <input
-                          value={ctaUrl}
-                          onChange={(e) => setCtaUrl(e.target.value)}
+                          value={ctaExternalUrl}
+                          onChange={(e) => setCtaExternalUrl(e.target.value)}
                           placeholder="https://..."
                           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                         />
-                      </div>
+                      )}
+
+                      {/* Resolved preview */}
+                      {ctaDestType && resolvedCtaPreview && (
+                        <div className="rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-500 font-mono truncate">
+                          {resolvedCtaPreview}
+                        </div>
+                      )}
                     </div>
+
+                    {/* Category */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        <Tag className="inline h-3.5 w-3.5 mr-1" />
+                      <label className="flex items-center gap-1 text-xs font-medium text-gray-600 mb-1">
+                        <Tag className="h-3.5 w-3.5" />
                         Category (optional)
                       </label>
                       <select
@@ -489,7 +691,9 @@ function ComposerDialog({
                         className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                       >
                         {CATEGORY_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -497,8 +701,11 @@ function ComposerDialog({
                 )}
               </div>
 
+              {/* Channels */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Delivery channels</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Delivery channels
+                </label>
                 <div className="flex gap-2">
                   {CHANNEL_OPTIONS.map((ch) => {
                     const Icon = ch.icon;
@@ -522,8 +729,11 @@ function ComposerDialog({
                 </div>
               </div>
 
+              {/* Audience */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Audience
+                </label>
                 <select
                   value={audienceType}
                   onChange={(e) => {
@@ -533,11 +743,14 @@ function ComposerDialog({
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
                   {AUDIENCE_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
               </div>
 
+              {/* Student multi-select */}
               {audienceType === "specific_students" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -551,7 +764,9 @@ function ComposerDialog({
                   />
                   <div className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 bg-white">
                     {filteredStudents.length === 0 ? (
-                      <div className="px-3 py-2 text-xs text-gray-400">No students match</div>
+                      <div className="px-3 py-2 text-xs text-gray-400">
+                        No students match
+                      </div>
                     ) : (
                       filteredStudents.map((s) => (
                         <label
@@ -579,6 +794,7 @@ function ComposerDialog({
               )}
             </div>
           ) : (
+            /* ── Confirm step ── */
             <div className="space-y-4">
               <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 space-y-3">
                 {category && <Badge variant="default">{category}</Badge>}
@@ -586,14 +802,25 @@ function ComposerDialog({
                 {imageUrl && (
                   <div className="overflow-hidden rounded-lg border border-gray-200 max-w-[200px]">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={imageUrl} alt="" className="w-full max-h-32 object-cover" />
+                    <img
+                      src={imageUrl}
+                      alt=""
+                      className="w-full max-h-32 object-cover"
+                    />
                   </div>
                 )}
                 <p className="text-sm text-gray-600 whitespace-pre-wrap">{body}</p>
-                {ctaLabel && ctaUrl && (
-                  <div className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-xs font-medium text-white">
-                    {ctaLabel}
-                    <ExternalLink className="h-3 w-3" />
+                {ctaDestType && ctaLabel && (
+                  <div className="space-y-1">
+                    <div className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-xs font-medium text-white">
+                      {ctaLabel}
+                      <ExternalLink className="h-3 w-3" />
+                    </div>
+                    {resolvedCtaPreview && (
+                      <div className="text-[10px] text-gray-400 font-mono">
+                        → {resolvedCtaPreview}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -601,7 +828,9 @@ function ComposerDialog({
                 <div>
                   <span className="text-gray-500">Channels: </span>
                   <span className="font-medium text-gray-800">
-                    {[...channels].map((c) => c === "in_app" ? "In-app" : "Email").join(", ")}
+                    {[...channels]
+                      .map((c) => (c === "in_app" ? "In-app" : "Email"))
+                      .join(", ")}
                   </span>
                 </div>
                 <div>
@@ -620,18 +849,22 @@ function ComposerDialog({
                 <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
                   <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
                     <Users className="h-4 w-4" />
-                    {preview.count} student{preview.count !== 1 ? "s" : ""} will receive this broadcast
+                    {preview.count} student{preview.count !== 1 ? "s" : ""} will receive
+                    this broadcast
                   </div>
                   {preview.names.length > 0 && (
                     <p className="mt-1 text-xs text-blue-600">
                       {preview.names.join(", ")}
-                      {preview.count > preview.names.length && `, and ${preview.count - preview.names.length} more`}
+                      {preview.count > preview.names.length &&
+                        `, and ${preview.count - preview.names.length} more`}
                     </p>
                   )}
                 </div>
               ) : null}
               {error && (
-                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+                <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </div>
               )}
             </div>
           )}
@@ -639,14 +872,16 @@ function ComposerDialog({
         <DialogFooter>
           {step === "compose" ? (
             <>
-              <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button onClick={handleNext}>
-                Review &amp; send
+              <Button variant="outline" onClick={onClose}>
+                Cancel
               </Button>
+              <Button onClick={handleNext}>Review &amp; send</Button>
             </>
           ) : (
             <>
-              <Button variant="outline" onClick={() => setStep("compose")}>Back</Button>
+              <Button variant="outline" onClick={() => setStep("compose")}>
+                Back
+              </Button>
               <Button onClick={handleCreate} disabled={saving}>
                 {saving ? (
                   <>

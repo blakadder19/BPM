@@ -274,6 +274,7 @@ export function adminBroadcastEvent(input: {
   imageUrl?: string | null;
   ctaLabel?: string | null;
   ctaUrl?: string | null;
+  ctaEmailUrl?: string | null;
   category?: string | null;
 }): CommEvent<"admin_broadcast"> {
   return {
@@ -288,6 +289,7 @@ export function adminBroadcastEvent(input: {
       imageUrl: input.imageUrl ?? null,
       ctaLabel: input.ctaLabel ?? null,
       ctaUrl: input.ctaUrl ?? null,
+      ctaEmailUrl: input.ctaEmailUrl ?? null,
       category: input.category ?? null,
     },
     createdAt: new Date().toISOString(),

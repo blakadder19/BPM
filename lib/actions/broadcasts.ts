@@ -7,6 +7,13 @@ import { getAcademyId } from "@/lib/supabase/academy";
 import { resolveAudience, type AudienceType, type AudienceParams } from "@/lib/services/broadcast-audience";
 import { adminBroadcastEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
+import { getAppUrl } from "@/lib/utils/app-url";
+import {
+  resolveCtaAbsoluteUrl,
+  resolveCtaPath,
+  type CtaDestinationType,
+  type CtaDestination,
+} from "@/lib/domain/cta-types";
 import type { CommEvent } from "@/lib/communications/events";
 
 // ── Types ────────────────────────────────────────────────────
@@ -29,6 +36,8 @@ export interface BroadcastRow {
   imageUrl: string | null;
   ctaLabel: string | null;
   ctaUrl: string | null;
+  ctaDestinationType: CtaDestinationType | null;
+  ctaDestinationId: string | null;
   category: string | null;
 }
 
@@ -51,7 +60,36 @@ function mapRow(r: Record<string, unknown>): BroadcastRow {
     imageUrl: (r.image_url as string) ?? null,
     ctaLabel: (r.cta_label as string) ?? null,
     ctaUrl: (r.cta_url as string) ?? null,
+    ctaDestinationType: (r.cta_destination_type as CtaDestinationType) ?? null,
+    ctaDestinationId: (r.cta_destination_id as string) ?? null,
     category: (r.category as string) ?? null,
+  };
+}
+
+/**
+ * Resolve CTA URLs from a broadcast's structured destination metadata.
+ * Falls back to the legacy ctaUrl for older broadcasts.
+ */
+function resolveCtaUrls(broadcast: {
+  ctaDestinationType: CtaDestinationType | null;
+  ctaDestinationId: string | null;
+  ctaUrl: string | null;
+}): { inAppUrl: string | null; emailUrl: string | null } {
+  if (broadcast.ctaDestinationType) {
+    const dest: CtaDestination = {
+      type: broadcast.ctaDestinationType,
+      targetId: broadcast.ctaDestinationId,
+      externalUrl: broadcast.ctaUrl,
+    };
+    return {
+      inAppUrl: resolveCtaPath(dest),
+      emailUrl: resolveCtaAbsoluteUrl(dest, getAppUrl()),
+    };
+  }
+  // Legacy: raw URL stored directly
+  return {
+    inAppUrl: broadcast.ctaUrl,
+    emailUrl: broadcast.ctaUrl,
   };
 }
 
@@ -80,6 +118,8 @@ export async function createBroadcastAction(input: {
   imageUrl?: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  ctaDestinationType?: CtaDestinationType;
+  ctaDestinationId?: string;
   category?: string;
 }): Promise<{ success: boolean; error?: string; id?: string }> {
   const user = await requireRole(["admin"]);
@@ -92,8 +132,20 @@ export async function createBroadcastAction(input: {
   if (input.channels.length === 0) {
     return { success: false, error: "At least one delivery channel is required." };
   }
-  if (input.ctaUrl && !input.ctaLabel) {
-    return { success: false, error: "CTA button needs a label when a URL is provided." };
+  const hasCtaDest = !!input.ctaDestinationType;
+  const hasCtaLabel = !!input.ctaLabel?.trim();
+  if (hasCtaDest && !hasCtaLabel) {
+    return { success: false, error: "CTA button needs a label." };
+  }
+
+  // For structured destinations, resolve and store the URL too (for legacy consumers)
+  let resolvedCtaUrl = input.ctaUrl?.trim() || null;
+  if (input.ctaDestinationType && input.ctaDestinationType !== "external_url") {
+    const dest: CtaDestination = {
+      type: input.ctaDestinationType,
+      targetId: input.ctaDestinationId,
+    };
+    resolvedCtaUrl = resolveCtaAbsoluteUrl(dest, getAppUrl());
   }
 
   const { data, error } = await supabase
@@ -109,7 +161,9 @@ export async function createBroadcastAction(input: {
       created_by: user.fullName,
       image_url: input.imageUrl?.trim() || null,
       cta_label: input.ctaLabel?.trim() || null,
-      cta_url: input.ctaUrl?.trim() || null,
+      cta_url: resolvedCtaUrl,
+      cta_destination_type: input.ctaDestinationType || null,
+      cta_destination_id: input.ctaDestinationId?.trim() || null,
       category: input.category?.trim() || null,
     } as never)
     .select("id")
@@ -153,8 +207,13 @@ export async function sendBroadcastAction(
   const body = broadcast.body as string;
   const imageUrl = (broadcast.image_url as string) || null;
   const ctaLabel = (broadcast.cta_label as string) || null;
-  const ctaUrl = (broadcast.cta_url as string) || null;
   const category = (broadcast.category as string) || null;
+
+  const ctaUrls = resolveCtaUrls({
+    ctaDestinationType: (broadcast.cta_destination_type as CtaDestinationType) ?? null,
+    ctaDestinationId: (broadcast.cta_destination_id as string) ?? null,
+    ctaUrl: (broadcast.cta_url as string) ?? null,
+  });
 
   const audience = await resolveAudience(audienceType, audienceParams);
   if (audience.students.length === 0) {
@@ -173,7 +232,8 @@ export async function sendBroadcastAction(
       body,
       imageUrl,
       ctaLabel,
-      ctaUrl,
+      ctaUrl: ctaUrls.inAppUrl,
+      ctaEmailUrl: ctaUrls.emailUrl,
       category,
     })
   );

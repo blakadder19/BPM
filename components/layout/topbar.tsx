@@ -355,17 +355,19 @@ function NotificationDetailModal({
               {alert.message}
             </p>
 
-            {bc?.ctaLabel && bc?.ctaUrl && (
-              <a
-                href={bc.ctaUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-700 transition-colors"
-              >
-                {bc.ctaLabel}
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            )}
+            {bc?.ctaLabel && bc?.ctaUrl && (() => {
+              const isExternal = bc.ctaUrl!.startsWith("http");
+              return (
+                <a
+                  href={bc.ctaUrl!}
+                  {...(isExternal ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-bpm-600 px-4 py-2 text-sm font-medium text-white hover:bg-bpm-700 transition-colors"
+                >
+                  {bc.ctaLabel}
+                  {isExternal && <ExternalLink className="h-3.5 w-3.5" />}
+                </a>
+              );
+            })()}
 
             <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-gray-100 pt-3 text-xs text-gray-400">
               <span>From BPM Academy</span>

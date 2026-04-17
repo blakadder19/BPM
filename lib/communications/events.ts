@@ -107,7 +107,10 @@ export interface AdminBroadcastPayload {
   body: string;
   imageUrl?: string | null;
   ctaLabel?: string | null;
+  /** In-app relative URL for the CTA button */
   ctaUrl?: string | null;
+  /** Absolute URL for the CTA in email rendering */
+  ctaEmailUrl?: string | null;
   category?: string | null;
 }
 
