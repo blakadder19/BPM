@@ -176,7 +176,10 @@ export function StudentDashboard({
   const hasUsableEntitlement = entitlements.some(
     (e) => e.status === "active" && (USABLE_PAYMENT.has(e.paymentStatus ?? "") || !e.paymentStatus)
   );
-  const hasOnlyPendingEntitlements = entitlements.length > 0 && !hasUsableEntitlement;
+  const hasPendingPayment = entitlements.some(
+    (e) => e.status === "active" && e.paymentStatus === "pending"
+  );
+  const hasOnlyPendingEntitlements = hasPendingPayment && !hasUsableEntitlement;
   const isGetStartedState = !hasUsableEntitlement && !hasOnlyPendingEntitlements;
   const onboarding = useOnboardingAutoOpen(isGetStartedState);
 

@@ -121,8 +121,8 @@ const buildEventAnnouncement: MessageBuilder<"event_announcement"> = (
 const buildAdminBroadcast: MessageBuilder<"admin_broadcast"> = (
   p: AdminBroadcastPayload
 ) => ({
-  title: p.title,
-  body: p.body,
+  title: p.title || "Academy notice",
+  body: p.body || "You have a new notice from the academy.",
   href: "/dashboard",
 });
 
@@ -154,7 +154,21 @@ export function buildMessage<T extends CommEventType>(
 ): CommMessage {
   const builder = BUILDERS[type] as MessageBuilder<T> | undefined;
   if (!builder) {
-    return { title: "Notification", body: "You have a new notification.", href: "/dashboard" };
+    const raw = payload as unknown as Record<string, unknown> | null;
+    return {
+      title: (typeof raw?.title === "string" && raw.title) || "Notification",
+      body: (typeof raw?.body === "string" && raw.body) || "You have a new notification.",
+      href: "/dashboard",
+    };
   }
-  return builder(payload);
+  const msg = builder(payload);
+  if (!msg.title && !msg.body) {
+    const raw = payload as unknown as Record<string, unknown> | null;
+    return {
+      title: (typeof raw?.title === "string" && raw.title) || "Notification",
+      body: (typeof raw?.body === "string" && raw.body) || "You have a new notification.",
+      href: msg.href ?? "/dashboard",
+    };
+  }
+  return msg;
 }

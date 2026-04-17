@@ -48,12 +48,26 @@ export async function saveGenericNotificationToDB(
     ? (event.payload as ClassCancelledPayload)
     : null;
 
+  // Ensure payload is a plain object for JSONB serialization.
+  // Supabase JS normally handles this, but guard against edge cases
+  // where the payload might already be stringified or null.
+  let safePayload: Record<string, unknown>;
+  if (typeof event.payload === "string") {
+    try {
+      safePayload = JSON.parse(event.payload as string);
+    } catch {
+      safePayload = {};
+    }
+  } else {
+    safePayload = (event.payload as unknown as Record<string, unknown>) ?? {};
+  }
+
   const row = {
     id: event.id,
     student_id: event.studentId,
     student_name: event.studentName,
     type: event.type,
-    payload: event.payload,
+    payload: safePayload,
     idempotency_key: event.idempotencyKey ?? null,
     class_title: ccPayload?.classTitle ?? "",
     class_date: ccPayload?.classDate ?? "",
@@ -122,13 +136,40 @@ export async function getNotificationsForStudent(
   }
 }
 
+/**
+ * Parse JSONB payload robustly.
+ * PostgREST usually returns JSONB as a parsed object, but edge cases
+ * (schema-cache lag, client version quirks) can produce a JSON string
+ * or null instead. Handle all variants so downstream builders always
+ * receive a real JS object.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parsePayload(raw: unknown): Record<string, unknown> | null {
+  if (raw != null && typeof raw === "object" && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>;
+  }
+  if (typeof raw === "string" && raw.length > 2) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      /* not valid JSON — fall through */
+    }
+  }
+  return null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapRow(r: any): StoredNotification {
   const type = r.type as CommEventType;
 
   let payload: CommEventPayloadMap[CommEventType];
-  if (r.payload && typeof r.payload === "object") {
-    payload = r.payload;
+  const parsed = parsePayload(r.payload);
+
+  if (parsed && Object.keys(parsed).length > 0) {
+    payload = parsed as unknown as CommEventPayloadMap[CommEventType];
   } else if (type === "class_cancelled") {
     payload = {
       classTitle: r.class_title ?? "",

@@ -10,6 +10,7 @@ import { formatTime } from "@/lib/utils";
 import { getAppUrl } from "@/lib/utils/app-url";
 import {
   bpmEmailWrap,
+  bpmStatusBadge,
   bpmDetailsCard,
   bpmNotice,
   bpmCtaButton,
@@ -53,11 +54,11 @@ function classCancelled(
 
   const bodyHtml = [
     bpmDetailsCard([
-      { label: "Class", valueHtml: p.classTitle },
+      { label: "Class", valueHtml: `<strong>${p.classTitle}</strong>` },
       { label: "Date", valueHtml: p.classDate },
       { label: "Time", valueHtml: formatTime(p.startTime) },
     ], "Cancelled class"),
-    paragraph("This class was cancelled by the academy. We apologise for any inconvenience."),
+    bpmNotice("warning", "This class was cancelled by the academy. We apologise for any inconvenience."),
     creditHtml,
     bpmCtaButton(`${appUrl}/bookings`, "View your bookings"),
   ].join("\n");
@@ -74,9 +75,10 @@ function paymentPending(
 ): EmailContent {
   const appUrl = getAppUrl();
   const rows = [
-    { label: "Plan", valueHtml: p.productName },
+    { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
     ...(p.termName ? [{ label: "Term", valueHtml: p.termName }] : []),
-    ...(p.amountLabel ? [{ label: "Amount", valueHtml: p.amountLabel }] : []),
+    ...(p.amountLabel ? [{ label: "Amount", valueHtml: `<strong>${p.amountLabel}</strong>` }] : []),
+    { label: "Status", valueHtml: bpmStatusBadge("pending") },
   ];
 
   const bodyHtml = [
@@ -97,15 +99,15 @@ function paymentConfirmed(
 ): EmailContent {
   const appUrl = getAppUrl();
   const rows = [
-    { label: "Plan", valueHtml: p.productName },
-    ...(p.amountLabel ? [{ label: "Amount", valueHtml: p.amountLabel }] : []),
+    { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
+    ...(p.amountLabel ? [{ label: "Amount", valueHtml: `<strong>${p.amountLabel}</strong>` }] : []),
     ...(p.paymentMethod ? [{ label: "Method", valueHtml: p.paymentMethod }] : []),
+    { label: "Status", valueHtml: bpmStatusBadge("paid") },
   ];
 
   const bodyHtml = [
-    bpmNotice("info", "Your payment has been received. Thank you!"),
     bpmDetailsCard(rows, "Payment details"),
-    paragraph("Your plan is now fully active. If you have any questions, please contact us at reception."),
+    bpmNotice("info", "Your payment has been received and your plan is now fully active. Thank you!"),
     bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
   ].join("\n");
 
@@ -121,15 +123,16 @@ function subscriptionRefunded(
 ): EmailContent {
   const appUrl = getAppUrl();
   const rows = [
-    { label: "Plan", valueHtml: p.productName },
-    ...(p.amountLabel ? [{ label: "Amount", valueHtml: p.amountLabel }] : []),
+    { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
+    ...(p.amountLabel ? [{ label: "Refunded", valueHtml: `<strong>${p.amountLabel}</strong>` }] : []),
+    { label: "Status", valueHtml: `<span style="color:${B.BPM_500};font-weight:600;">Refunded</span>` },
     ...(p.refundReason ? [{ label: "Reason", valueHtml: p.refundReason }] : []),
     { label: "Entitlement", valueHtml: p.entitlementCancelled ? "Cancelled" : "Still active" },
   ];
 
   const bodyHtml = [
     bpmDetailsCard(rows, "Refund details"),
-    paragraph("A refund has been processed for your plan. If you have any questions, please contact us at reception."),
+    bpmNotice("warning", "A refund has been processed for your plan. If you have any questions, please contact us at reception."),
     bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
   ].join("\n");
 
@@ -148,11 +151,12 @@ function renewalPrepared(
 
   const bodyHtml = [
     bpmDetailsCard([
-      { label: "Plan", valueHtml: p.productName },
+      { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
       { label: "Term", valueHtml: p.termName },
       { label: "Period", valueHtml: period },
+      { label: "Status", valueHtml: bpmStatusBadge("pending") },
     ], "Renewal details"),
-    paragraph("Your membership has been automatically renewed for the upcoming term. Payment is pending — please arrange payment at reception to keep your membership active."),
+    bpmNotice("warning", "Your membership has been automatically renewed. Payment is pending — please arrange payment at reception to keep your membership active."),
     bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
   ].join("\n");
 
@@ -171,9 +175,10 @@ function renewalDueSoon(
 
   const bodyHtml = [
     bpmDetailsCard([
-      { label: "Plan", valueHtml: p.productName },
+      { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
       { label: "Term", valueHtml: p.termName },
-      { label: "Starts in", valueHtml: `${p.daysUntilStart} ${dayWord}` },
+      { label: "Starts in", valueHtml: `<strong>${p.daysUntilStart} ${dayWord}</strong>` },
+      { label: "Status", valueHtml: bpmStatusBadge("pending") },
     ], "Renewal details"),
     bpmNotice("warning", "The new term is approaching. Please arrange payment at reception to ensure uninterrupted access to your classes."),
     bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
@@ -192,11 +197,11 @@ function waitlistPromoted(
   const appUrl = getAppUrl();
   const bodyHtml = [
     bpmDetailsCard([
-      { label: "Class", valueHtml: p.classTitle },
+      { label: "Class", valueHtml: `<strong>${p.classTitle}</strong>` },
       { label: "Date", valueHtml: p.classDate },
       { label: "Time", valueHtml: formatTime(p.startTime) },
     ], "Booking confirmed"),
-    paragraph("A spot opened up and you've been automatically moved from the waitlist to a confirmed booking. No action needed — just show up and enjoy the class!"),
+    bpmNotice("info", "A spot opened up and you've been automatically moved from the waitlist to a confirmed booking. No action needed — just show up and enjoy the class!"),
     bpmCtaButton(`${appUrl}/bookings`, "View your bookings"),
   ].join("\n");
 
@@ -215,12 +220,12 @@ function bookingReminder(
 
   const bodyHtml = [
     bpmDetailsCard([
-      { label: "Class", valueHtml: p.classTitle },
+      { label: "Class", valueHtml: `<strong>${p.classTitle}</strong>` },
       { label: "Date", valueHtml: p.classDate },
       { label: "Time", valueHtml: formatTime(p.startTime) },
-      { label: "Starts in", valueHtml: `${p.hoursUntilStart} ${hourWord}` },
+      { label: "Starts in", valueHtml: `<strong>${p.hoursUntilStart} ${hourWord}</strong>` },
     ], "Class reminder"),
-    paragraph("If you can no longer attend, please cancel in advance to avoid a late cancellation penalty."),
+    bpmNotice("info", "If you can no longer attend, please cancel in advance to avoid a late cancellation penalty."),
     bpmCtaButton(`${appUrl}/bookings`, "View your bookings"),
   ].join("\n");
 
@@ -236,12 +241,11 @@ function birthdayBenefitAvailable(
 ): EmailContent {
   const appUrl = getAppUrl();
   const bodyHtml = [
-    paragraph("As a BPM member, you get a <strong>free class</strong> during your birthday week."),
     bpmDetailsCard([
-      { label: "Benefit", valueHtml: p.benefitDescription },
-      { label: "Valid until", valueHtml: p.expiresDate },
+      { label: "Benefit", valueHtml: `<strong>${p.benefitDescription}</strong>` },
+      { label: "Valid until", valueHtml: `<strong>${p.expiresDate}</strong>` },
     ], "Birthday benefit"),
-    paragraph('Book any class by the date above and select "Birthday Free Class" as your entitlement to redeem this benefit. Enjoy your special week!'),
+    bpmNotice("coral", 'As a BPM member, you get a <strong>free class</strong> during your birthday week. Book any class by the date above and select "Birthday Free Class" as your entitlement. Enjoy your special week!'),
     bpmCtaButton(`${appUrl}/classes`, "Book a class"),
   ].join("\n");
 
@@ -258,13 +262,13 @@ function eventAnnouncement(
   const appUrl = getAppUrl();
   const eventUrl = `${appUrl}/event/${p.eventId}`;
   const rows = [
-    ...(p.dates ? [{ label: "When", valueHtml: p.dates }] : []),
+    ...(p.dates ? [{ label: "When", valueHtml: `<strong>${p.dates}</strong>` }] : []),
     ...(p.location ? [{ label: "Where", valueHtml: p.location }] : []),
   ];
 
   const bodyHtml = [
-    paragraph(p.shortDescription),
     ...(rows.length > 0 ? [bpmDetailsCard(rows, "Event details")] : []),
+    bpmNotice("coral", p.shortDescription),
     bpmCtaButton(eventUrl, "View event & tickets"),
   ].join("\n");
 

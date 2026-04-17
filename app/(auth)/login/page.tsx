@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { provisionCurrentUser } from "@/lib/actions/auth-provision";
 
 const DEMO_USERS = [
   { label: "Admin", email: "admin@bpm.dance" },
@@ -87,6 +88,13 @@ export default function LoginPage() {
 
     if (process.env.NODE_ENV === "development") console.info(`[perf login] signIn=${(t1-t0).toFixed(0)}ms — navigating to ${destination}`);
     setIsNavigating(true);
+
+    // Provision profile (sets auth_linked_at for admin-created students
+    // claiming their account via direct login). Awaited so the DB update
+    // completes before the hard navigation renders the dashboard.
+    await provisionCurrentUser().catch((e) =>
+      console.warn("[login] provisionCurrentUser:", e),
+    );
 
     // Signal to middleware that the JWT was just issued and doesn't need
     // the expensive getUser() HTTP validation. Short-lived (10s) cookie

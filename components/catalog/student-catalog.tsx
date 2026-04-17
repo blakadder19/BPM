@@ -201,9 +201,14 @@ function ProductCard({
             <InlineBadge className={
               p.currentEntitlement.paymentStatus === "pending"
                 ? "bg-amber-100 text-amber-700"
-                : "bg-green-100 text-green-700"
+                : p.currentEntitlement.paymentStatus === "refunded" || p.currentEntitlement.paymentStatus === "cancelled"
+                  ? "bg-red-100 text-red-700"
+                  : "bg-green-100 text-green-700"
             }>
-              {p.currentEntitlement.paymentStatus === "pending" ? "Pending" : "Active"}
+              {p.currentEntitlement.paymentStatus === "pending" ? "Pending"
+                : p.currentEntitlement.paymentStatus === "refunded" ? "Refunded"
+                : p.currentEntitlement.paymentStatus === "cancelled" ? "Payment cancelled"
+                : "Active"}
             </InlineBadge>
           )}
           {p.renewalEntitlement && !p.currentEntitlement && (
@@ -297,10 +302,18 @@ function ProductCard({
             {p.currentEntitlement || p.renewalEntitlement ? (
               <div className="space-y-1 text-center text-xs font-medium pt-1">
                 {p.currentEntitlement && (
-                  <p className={p.currentEntitlement.paymentStatus === "pending" ? "text-amber-700" : "text-green-700"}>
+                  <p className={
+                    p.currentEntitlement.paymentStatus === "pending" ? "text-amber-700"
+                      : p.currentEntitlement.paymentStatus === "refunded" || p.currentEntitlement.paymentStatus === "cancelled" ? "text-red-700"
+                      : "text-green-700"
+                  }>
                     {p.currentEntitlement.paymentStatus === "pending"
                       ? "Active · Complete payment at reception"
-                      : "Already active"}
+                      : p.currentEntitlement.paymentStatus === "refunded"
+                        ? "Refunded"
+                        : p.currentEntitlement.paymentStatus === "cancelled"
+                          ? "Payment cancelled"
+                          : "Already active"}
                   </p>
                 )}
                 {p.renewalEntitlement && (
