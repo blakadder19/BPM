@@ -121,6 +121,9 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       productTypeSnapshot: data.productTypeSnapshot ?? null,
       checkedInAt: null,
       checkedInBy: null,
+      refundedAt: null,
+      refundedBy: null,
+      refundReason: null,
       lastEmailType: null,
       lastEmailSentAt: null,
       lastEmailSuccess: null,
@@ -143,6 +146,16 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       checkedInAt: patch.checkedInAt,
       checkedInBy: patch.checkedInBy,
     });
+  },
+
+  async refundPurchase(id, patch: { refundedAt: string; refundedBy: string; refundReason: string | null }) {
+    const p = store.patchPurchase(id, {
+      paymentStatus: "refunded" as const,
+      refundedAt: patch.refundedAt,
+      refundedBy: patch.refundedBy,
+      refundReason: patch.refundReason,
+    });
+    return p ?? null;
   },
 
   async updatePurchaseEmailTracking(id, patch: { lastEmailType: string; lastEmailSentAt: string; lastEmailSuccess: boolean }) {

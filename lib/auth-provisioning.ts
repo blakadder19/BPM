@@ -36,15 +36,31 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       // repeat callback. Only sync the email in case it changed; do NOT
       // overwrite full_name, phone, notes, or any other admin-set data.
       step = "sync email for existing user";
+      const normalizedEmail = (authUser.email ?? "").toLowerCase().trim();
       const { error: syncErr } = await admin
         .from("users")
-        .update({ email: authUser.email ?? "" } as never)
+        .update({ email: normalizedEmail } as never)
         .eq("id", authUser.id);
       if (syncErr) {
         console.warn(`[ensureProfile] email sync: ${syncErr.message}`);
       }
+
+      // Record account claiming timestamp (idempotent — only sets once).
+      const existingUser = existingUserRaw as { id: string; role: string };
+      if (existingUser.role === "student") {
+        step = "set auth_linked_at";
+        const { error: linkErr } = await admin
+          .from("student_profiles")
+          .update({ auth_linked_at: new Date().toISOString() } as never)
+          .eq("id", authUser.id)
+          .is("auth_linked_at" as never, null);
+        if (linkErr) {
+          console.warn(`[ensureProfile] auth_linked_at: ${linkErr.message}`);
+        }
+      }
+
       console.info(
-        `[ensureProfile] Existing profile found — skipped full provisioning (claim-safe).`
+        `[ensureProfile] Existing profile found — claim-safe sync complete.`
       );
       return { success: true };
     }
@@ -86,12 +102,13 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
     const role = (meta.role as string) ?? "student";
     const fullName = (meta.full_name as string) ?? authUser.email ?? "New User";
     const phone = (meta.phone as string) ?? null;
+    const normalizedNewEmail = (authUser.email ?? "").toLowerCase().trim();
 
     const { error: userErr } = await admin.from("users").upsert(
       {
         id: authUser.id,
         academy_id: academyId,
-        email: authUser.email ?? "",
+        email: normalizedNewEmail,
         full_name: fullName,
         role,
         phone,
@@ -115,6 +132,7 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
           id: authUser.id,
           preferred_role: preferredRole,
           date_of_birth: dateOfBirth,
+          auth_linked_at: new Date().toISOString(),
         } as never,
         { onConflict: "id" }
       );

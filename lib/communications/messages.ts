@@ -15,12 +15,15 @@ import type {
   CommEventPayloadMap,
   ClassCancelledPayload,
   PaymentPendingPayload,
+  PaymentConfirmedPayload,
+  SubscriptionRefundedPayload,
   RenewalPreparedPayload,
   RenewalDueSoonPayload,
   WaitlistPromotedPayload,
   BookingReminderPayload,
   BirthdayBenefitAvailablePayload,
   EventAnnouncementPayload,
+  AdminBroadcastPayload,
 } from "./events";
 
 export interface CommMessage {
@@ -49,6 +52,22 @@ const buildPaymentPending: MessageBuilder<"payment_pending"> = (
   title: "Payment pending",
   body: `Your "${p.productName}"${p.termName ? ` (${p.termName})` : ""} is awaiting payment.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Pay online or at reception.`,
   href: `/dashboard#entitlement-${p.subscriptionId}`,
+});
+
+const buildPaymentConfirmed: MessageBuilder<"payment_confirmed"> = (
+  p: PaymentConfirmedPayload
+) => ({
+  title: "Payment received",
+  body: `Your payment for "${p.productName}" has been confirmed.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Thank you!`,
+  href: "/dashboard",
+});
+
+const buildSubscriptionRefunded: MessageBuilder<"subscription_refunded"> = (
+  p: SubscriptionRefundedPayload
+) => ({
+  title: "Refund processed",
+  body: `Your "${p.productName}" has been refunded.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""}${p.entitlementCancelled ? " The entitlement has been cancelled." : " Your entitlement remains active."}`,
+  href: "/dashboard",
 });
 
 const buildRenewalPrepared: MessageBuilder<"renewal_prepared"> = (
@@ -99,6 +118,14 @@ const buildEventAnnouncement: MessageBuilder<"event_announcement"> = (
   href: `/events/${p.eventId}`,
 });
 
+const buildAdminBroadcast: MessageBuilder<"admin_broadcast"> = (
+  p: AdminBroadcastPayload
+) => ({
+  title: p.title,
+  body: p.body,
+  href: "/dashboard",
+});
+
 // ── Registry ─────────────────────────────────────────────────
 
 const BUILDERS: {
@@ -106,12 +133,15 @@ const BUILDERS: {
 } = {
   class_cancelled: buildClassCancelled,
   payment_pending: buildPaymentPending,
+  payment_confirmed: buildPaymentConfirmed,
+  subscription_refunded: buildSubscriptionRefunded,
   renewal_prepared: buildRenewalPrepared,
   renewal_due_soon: buildRenewalDueSoon,
   waitlist_promoted: buildWaitlistPromoted,
   booking_reminder: buildBookingReminder,
   birthday_benefit_available: buildBirthdayBenefitAvailable,
   event_announcement: buildEventAnnouncement,
+  admin_broadcast: buildAdminBroadcast,
 };
 
 /**

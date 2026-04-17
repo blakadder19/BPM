@@ -132,13 +132,15 @@ export function buildEventPurchaseTransactions(
     const buyerEmail = student?.email ?? p.guestEmail ?? null;
     const status = mapEventStatus(p.paymentStatus);
 
-    const amount = status === "paid"
+    const amount = status === "refunded"
       ? (p.paidAmountCents ?? p.originalAmountCents ?? 0)
-      : (p.originalAmountCents ?? 0) - (p.discountAmountCents ?? 0);
+      : status === "paid"
+        ? (p.paidAmountCents ?? p.originalAmountCents ?? 0)
+        : (p.originalAmountCents ?? 0) - (p.discountAmountCents ?? 0);
 
     return {
       id: `evt-${p.id}`,
-      date: p.paidAt ?? p.purchasedAt,
+      date: p.refundedAt ?? p.paidAt ?? p.purchasedAt,
       buyerName,
       buyerEmail,
       studentId: p.studentId,
@@ -151,10 +153,10 @@ export function buildEventPurchaseTransactions(
       currency: p.currency ?? "EUR",
       paymentMethod: p.paymentMethod,
       reference: p.paymentReference,
-      performedBy: p.checkedInBy,
-      refundedAt: null,
-      refundedBy: null,
-      refundReason: null,
+      performedBy: p.refundedBy ?? p.checkedInBy,
+      refundedAt: p.refundedAt ?? null,
+      refundedBy: p.refundedBy ?? null,
+      refundReason: p.refundReason ?? null,
     };
   });
 }

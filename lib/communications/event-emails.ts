@@ -18,6 +18,7 @@ import {
   bpmNotice,
   bpmCtaButton,
   bpmQrBlock,
+  B,
 } from "./email-brand";
 
 // ── Public types ──────────────────────────────────────────────
@@ -126,6 +127,79 @@ export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Prom
     return { sent: true };
   } else {
     const reason = "Brevo API did not accept the email (check server logs for details)";
+    console.error(`${tag} FAILED — ${reason}.`);
+    return { sent: false, reason };
+  }
+}
+
+// ── Refund confirmation email ──────────────────────────────────
+
+export interface EventRefundEmailData {
+  studentId: string | null;
+  recipientName: string;
+  directEmail?: string;
+  eventTitle: string;
+  eventId: string;
+  productName: string;
+  amountLabel: string;
+  refundReason: string | null;
+}
+
+export async function sendEventRefundEmail(data: EventRefundEmailData): Promise<EmailSendResult> {
+  const tag = `[event-refund-email ${data.eventTitle}]`;
+
+  if (!isEmailEnabled()) {
+    const reason = "BREVO_API_KEY not configured";
+    console.warn(`${tag} ${reason} — email NOT sent.`);
+    return { sent: false, reason };
+  }
+
+  let email: string | null = data.directEmail ?? null;
+  if (!email && data.studentId) {
+    email = await resolveStudentEmail(data.studentId);
+  }
+  if (!email) {
+    const reason = "Could not resolve recipient email";
+    console.warn(`${tag} ${reason} — email NOT sent.`);
+    return { sent: false, reason };
+  }
+
+  const appUrl = getAppUrl();
+  const subject = `Refund processed: ${data.productName} — ${data.eventTitle}`;
+
+  const detailRows = [
+    { label: "Event", valueHtml: `<strong>${data.eventTitle}</strong>` },
+    { label: "Product", valueHtml: data.productName },
+    { label: "Refunded amount", valueHtml: `<strong>${data.amountLabel}</strong>` },
+    { label: "Status", valueHtml: `<span style="color:${B.BPM_500};font-weight:600;">Refunded</span>` },
+  ];
+  if (data.refundReason) {
+    detailRows.push({ label: "Reason", valueHtml: data.refundReason });
+  }
+  const detailsHtml = bpmDetailsCard(detailRows);
+
+  const noticeHtml = bpmNotice(
+    "warning",
+    "This purchase has been refunded. It is no longer valid for event entry or check-in.",
+  );
+
+  const ctaHtml = bpmCtaButton(`${appUrl}/event/${data.eventId}`, "View event details");
+  const bodyHtml = `${detailsHtml}${noticeHtml}${ctaHtml}`;
+
+  const html = bpmEmailWrap({
+    appUrl,
+    recipientName: data.recipientName,
+    heading: "Your event purchase has been refunded",
+    bodyHtml,
+    eventTitle: data.eventTitle,
+  });
+
+  const ok = await sendEmail({ to: email, subject, html });
+  if (ok) {
+    console.info(`${tag} SUCCESS — refund email delivered to ${email}.`);
+    return { sent: true };
+  } else {
+    const reason = "Brevo API did not accept the email";
     console.error(`${tag} FAILED — ${reason}.`);
     return { sent: false, reason };
   }

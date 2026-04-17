@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useTransition, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { ChevronDown, ChevronUp, Pencil, Plus, Users, Power, Trash2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Users, Power, Trash2, RefreshCw, UserCheck, UserX } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
@@ -51,6 +51,11 @@ const ACTIVE_OPTIONS = [
 const SUB_STATUS_OPTIONS = [
   { value: "has_active", label: "Has active sub" },
   { value: "no_active", label: "No active sub" },
+];
+
+const ACCOUNT_STATUS_OPTIONS = [
+  { value: "claimed", label: "Claimed" },
+  { value: "unclaimed", label: "Not claimed" },
 ];
 
 const TABLE_HEADERS = [
@@ -109,6 +114,7 @@ export function AdminStudents({
   const [roleFilter, setRoleFilter] = useState("");
   const [activeFilter, setActiveFilter] = useState("");
   const [subStatusFilter, setSubStatusFilter] = useState("");
+  const [accountFilter, setAccountFilter] = useState("");
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -156,6 +162,8 @@ export function AdminStudents({
       if (activeFilter === "inactive" && s.isActive) return false;
       if (subStatusFilter === "has_active" && !activeSubStudentIds.has(s.id)) return false;
       if (subStatusFilter === "no_active" && activeSubStudentIds.has(s.id)) return false;
+      if (accountFilter === "claimed" && !s.authLinkedAt) return false;
+      if (accountFilter === "unclaimed" && s.authLinkedAt) return false;
       return true;
     })
     .sort((a, b) => (b.joinedAt ?? "").localeCompare(a.joinedAt ?? ""));
@@ -259,6 +267,7 @@ export function AdminStudents({
         <SelectFilter value={roleFilter} onChange={setRoleFilter} options={ROLE_OPTIONS} placeholder="All roles" />
         <SelectFilter value={activeFilter} onChange={setActiveFilter} options={ACTIVE_OPTIONS} placeholder="All statuses" />
         <SelectFilter value={subStatusFilter} onChange={setSubStatusFilter} options={SUB_STATUS_OPTIONS} placeholder="All subs" />
+        <SelectFilter value={accountFilter} onChange={setAccountFilter} options={ACCOUNT_STATUS_OPTIONS} placeholder="All accounts" />
       </div>
 
       {filtered.length === 0 ? (
@@ -285,7 +294,20 @@ export function AdminStudents({
                       <ChevronDown className="h-4 w-4 text-gray-400" />
                     )}
                   </Td>
-                  <Td className="font-medium text-gray-900">{s.fullName}</Td>
+                  <Td className="font-medium text-gray-900">
+                    <span className="inline-flex items-center gap-1.5">
+                      {s.fullName}
+                      {s.authLinkedAt ? (
+                        <span title={`Account claimed ${formatDate(s.authLinkedAt)}`}>
+                          <UserCheck className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                        </span>
+                      ) : (
+                        <span title="Account not yet claimed">
+                          <UserX className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                        </span>
+                      )}
+                    </span>
+                  </Td>
                   <Td>{s.email}</Td>
                   <Td>{s.phone ?? "—"}</Td>
                   <Td>

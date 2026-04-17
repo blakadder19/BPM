@@ -59,6 +59,7 @@ export interface Database {
           date_of_birth: string | null;
           preferred_role: "leader" | "follower" | null;
           notes: string | null;
+          auth_linked_at: string | null;
           created_at: string;
           updated_at: string;
         };

@@ -13,12 +13,15 @@
 export const COMM_EVENT_TYPES = [
   "class_cancelled",
   "payment_pending",
+  "payment_confirmed",
+  "subscription_refunded",
   "renewal_prepared",
   "renewal_due_soon",
   "waitlist_promoted",
   "booking_reminder",
   "birthday_benefit_available",
   "event_announcement",
+  "admin_broadcast",
 ] as const;
 
 export type CommEventType = (typeof COMM_EVENT_TYPES)[number];
@@ -83,17 +86,41 @@ export interface EventAnnouncementPayload {
   location: string;
 }
 
+export interface PaymentConfirmedPayload {
+  productName: string;
+  subscriptionId: string;
+  amountLabel: string | null;
+  paymentMethod: string | null;
+}
+
+export interface SubscriptionRefundedPayload {
+  productName: string;
+  subscriptionId: string;
+  amountLabel: string | null;
+  refundReason: string | null;
+  entitlementCancelled: boolean;
+}
+
+export interface AdminBroadcastPayload {
+  broadcastId: string;
+  title: string;
+  body: string;
+}
+
 // ── Discriminated union for all payloads ─────────────────────
 
 export type CommEventPayloadMap = {
   class_cancelled: ClassCancelledPayload;
   payment_pending: PaymentPendingPayload;
+  payment_confirmed: PaymentConfirmedPayload;
+  subscription_refunded: SubscriptionRefundedPayload;
   renewal_prepared: RenewalPreparedPayload;
   renewal_due_soon: RenewalDueSoonPayload;
   waitlist_promoted: WaitlistPromotedPayload;
   booking_reminder: BookingReminderPayload;
   birthday_benefit_available: BirthdayBenefitAvailablePayload;
   event_announcement: EventAnnouncementPayload;
+  admin_broadcast: AdminBroadcastPayload;
 };
 
 // ── The full communication event ─────────────────────────────

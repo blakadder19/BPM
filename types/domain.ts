@@ -56,6 +56,8 @@ export interface StudentListItem {
   /** PROVISIONAL — will be derived from student_subscriptions join */
   remainingCredits: number | null;
   joinedAt: string;
+  /** When the student first authenticated (claimed their account). Null = unclaimed. */
+  authLinkedAt: string | null;
 }
 
 export interface TeacherProfile {

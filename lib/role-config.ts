@@ -14,6 +14,7 @@ import {
   ShoppingBag,
   Sparkles,
   Wallet,
+  Megaphone,
 } from "lucide-react";
 
 export interface NavItem {
@@ -35,6 +36,7 @@ export const NAVIGATION: NavItem[] = [
   { name: "Products", href: "/products", icon: Package, roles: ["admin"] },
   { name: "Penalties", href: "/penalties", icon: AlertTriangle, roles: ["admin"] },
   { name: "Finance", href: "/finance", icon: Wallet, roles: ["admin"] },
+  { name: "Broadcasts", href: "/broadcasts", icon: Megaphone, roles: ["admin"] },
   { name: "Studio Hire", href: "/studio-hire", icon: Building2, roles: ["admin"] },
   { name: "Settings", href: "/settings", icon: Settings, roles: ["admin"] },
 ];
@@ -55,6 +57,7 @@ const ROUTE_ACCESS: { prefix: string; roles: UserRole[] }[] = [
   { prefix: "/products", roles: ["admin"] },
   { prefix: "/penalties", roles: ["admin"] },
   { prefix: "/finance", roles: ["admin"] },
+  { prefix: "/broadcasts", roles: ["admin"] },
   { prefix: "/studio-hire", roles: ["admin"] },
   { prefix: "/settings", roles: ["admin"] },
 ];

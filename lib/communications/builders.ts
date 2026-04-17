@@ -69,6 +69,60 @@ export function paymentPendingEvent(input: {
   };
 }
 
+// ── payment_confirmed ─────────────────────────────────────────
+
+export function paymentConfirmedEvent(input: {
+  studentId: string;
+  studentName: string;
+  productName: string;
+  subscriptionId: string;
+  amountLabel?: string | null;
+  paymentMethod?: string | null;
+}): CommEvent<"payment_confirmed"> {
+  return {
+    id: generateId("pcn"),
+    studentId: input.studentId,
+    studentName: input.studentName,
+    type: "payment_confirmed",
+    payload: {
+      productName: input.productName,
+      subscriptionId: input.subscriptionId,
+      amountLabel: input.amountLabel ?? null,
+      paymentMethod: input.paymentMethod ?? null,
+    },
+    createdAt: new Date().toISOString(),
+    idempotencyKey: `payment_confirmed:${input.studentId}:${input.subscriptionId}`,
+  };
+}
+
+// ── subscription_refunded ─────────────────────────────────────
+
+export function subscriptionRefundedEvent(input: {
+  studentId: string;
+  studentName: string;
+  productName: string;
+  subscriptionId: string;
+  amountLabel?: string | null;
+  refundReason?: string | null;
+  entitlementCancelled: boolean;
+}): CommEvent<"subscription_refunded"> {
+  return {
+    id: generateId("srf"),
+    studentId: input.studentId,
+    studentName: input.studentName,
+    type: "subscription_refunded",
+    payload: {
+      productName: input.productName,
+      subscriptionId: input.subscriptionId,
+      amountLabel: input.amountLabel ?? null,
+      refundReason: input.refundReason ?? null,
+      entitlementCancelled: input.entitlementCancelled,
+    },
+    createdAt: new Date().toISOString(),
+    idempotencyKey: `subscription_refunded:${input.studentId}:${input.subscriptionId}`,
+  };
+}
+
 // ── renewal_prepared ─────────────────────────────────────────
 
 export function renewalPreparedEvent(input: {
@@ -206,6 +260,30 @@ export function eventAnnouncementEvent(input: {
     },
     createdAt: new Date().toISOString(),
     idempotencyKey: `event_announcement:${input.studentId}:${input.eventId}`,
+  };
+}
+
+// ── admin_broadcast ──────────────────────────────────────────
+
+export function adminBroadcastEvent(input: {
+  studentId: string;
+  studentName: string;
+  broadcastId: string;
+  title: string;
+  body: string;
+}): CommEvent<"admin_broadcast"> {
+  return {
+    id: generateId("abr"),
+    studentId: input.studentId,
+    studentName: input.studentName,
+    type: "admin_broadcast",
+    payload: {
+      broadcastId: input.broadcastId,
+      title: input.title,
+      body: input.body,
+    },
+    createdAt: new Date().toISOString(),
+    idempotencyKey: `admin_broadcast:${input.studentId}:${input.broadcastId}`,
   };
 }
 

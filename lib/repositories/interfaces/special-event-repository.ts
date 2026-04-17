@@ -177,6 +177,11 @@ export interface ISpecialEventRepository {
     patch: { checkedInAt: string | null; checkedInBy: string | null },
   ): Promise<MockEventPurchase | null>;
 
+  refundPurchase(
+    id: string,
+    patch: { refundedAt: string; refundedBy: string; refundReason: string | null },
+  ): Promise<MockEventPurchase | null>;
+
   updatePurchaseEmailTracking(
     id: string,
     patch: { lastEmailType: string; lastEmailSentAt: string; lastEmailSuccess: boolean },

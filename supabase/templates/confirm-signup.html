@@ -1,57 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
   <title>Confirm your email — BPM</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;padding:40px 0;">
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-text-size-adjust:100%;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:24px 12px 40px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background-color:#ffffff;border-radius:12px;overflow:hidden;">
           <!-- Header -->
           <tr>
-            <td style="padding:20px 32px;text-align:center;background-color:#ffffff;">
+            <td align="center" style="padding:28px 32px 20px;background-color:#ffffff;">
               <img src="{{ .SiteURL }}/branding/bpm-logo-full.jpg"
-                   alt="BPM — Balance · Power · Motion"
-                   width="140" height="auto"
-                   style="display:inline-block;max-width:140px;max-height:70px;width:auto;height:auto;" />
+                   alt="BPM — Balance Power Motion"
+                   width="160"
+                   style="display:block;max-width:160px;height:auto;border:0;" />
             </td>
           </tr>
+          <tr><td style="height:4px;background-color:#d4542c;font-size:0;line-height:0;">&nbsp;</td></tr>
           <!-- Body -->
           <tr>
-            <td style="padding:32px;">
-              <h1 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#111827;">
+            <td style="padding:36px 32px 0;">
+              <p style="margin:0 0 8px;color:#71717a;font-size:14px;line-height:1.5;">Welcome to BPM!</p>
+              <h1 style="margin:0 0 16px;color:#18181b;font-size:22px;font-weight:700;line-height:1.3;">
                 Confirm your email
               </h1>
-              <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#4b5563;">
-                Welcome to BPM! Click the button below to confirm your email address and start booking dance classes.
+              <table role="presentation" width="60" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+                <tr><td style="height:3px;background-color:#d4542c;font-size:0;line-height:0;border-radius:2px;">&nbsp;</td></tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 32px;">
+              <p style="margin:0 0 16px;color:#3f3f46;font-size:14px;line-height:1.6;">
+                Click the button below to confirm your email address and start booking dance classes.
               </p>
               <!-- CTA Button -->
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 24px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:12px 0 8px;">
                 <tr>
-                  <td style="border-radius:8px;background-color:#4f46e5;">
+                  <td align="center">
                     <a href="{{ .ConfirmationURL }}"
                        target="_blank"
-                       style="display:inline-block;padding:12px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">
+                       style="display:inline-block;padding:14px 36px;background-color:#d4542c;color:#ffffff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;letter-spacing:0.3px;">
                       Confirm email address
                     </a>
                   </td>
                 </tr>
               </table>
-              <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
-              <p style="margin:0;font-size:12px;color:#9ca3af;">
+              <p style="margin:20px 0 0;font-size:12px;color:#a1a1aa;line-height:1.5;">
                 If you didn't create an account with BPM, you can safely ignore this email.
               </p>
             </td>
           </tr>
+          <tr><td style="height:40px;font-size:0;line-height:0;">&nbsp;</td></tr>
           <!-- Footer -->
+          <tr><td style="height:3px;background-color:#d4542c;font-size:0;line-height:0;">&nbsp;</td></tr>
           <tr>
-            <td style="padding:16px 32px;background-color:#f9fafb;text-align:center;">
-              <p style="margin:0;font-size:11px;color:#9ca3af;">
-                BPM Dance Academy · Dublin
-              </p>
+            <td style="background-color:#18181b;padding:28px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding-bottom:14px;">
+                    <span style="color:#ffffff;font-size:16px;font-weight:800;letter-spacing:2px;">BPM</span>
+                    <span style="color:#a1a1aa;font-size:11px;font-weight:500;margin-left:8px;letter-spacing:1px;">balance &middot; power &middot; motion</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td align="center" style="border-top:1px solid #333338;padding-top:14px;">
+                    <p style="margin:0 0 6px;color:#a1a1aa;font-size:12px;line-height:1.5;">
+                      Dublin's social dance academy
+                    </p>
+                    <p style="margin:0;color:#71717a;font-size:11px;line-height:1.5;">
+                      This is an automated message from <a href="{{ .SiteURL }}" style="color:#a1a1aa;text-decoration:underline;">BPM</a>. Please do not reply directly.
+                    </p>
+                  </td>
+                </tr>
+              </table>
             </td>
           </tr>
         </table>

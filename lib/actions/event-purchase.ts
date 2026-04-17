@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth";
 import { getSpecialEventRepo } from "@/lib/repositories";
-import { createPurchase, updatePurchasePayment } from "@/lib/services/special-event-service";
-import { sendEventPurchaseEmail, type EmailSendResult } from "@/lib/communications/event-emails";
+import { createPurchase, updatePurchasePayment, refundPurchase } from "@/lib/services/special-event-service";
+import { sendEventPurchaseEmail, sendEventRefundEmail, type EmailSendResult } from "@/lib/communications/event-emails";
 import { sendPaymentConfirmationEmail } from "@/lib/actions/event-emails";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
@@ -484,4 +484,131 @@ export async function markEventPurchasePaidAction(input: {
   }
 
   return result;
+}
+
+/**
+ * Admin refunds a paid event purchase.
+ *
+ * Guards:
+ * - Only "paid" purchases can be refunded.
+ * - Pending / already-refunded purchases are rejected both here and in the UI.
+ */
+export async function refundEventPurchaseAction(input: {
+  purchaseId: string;
+  eventId: string;
+  refundReason: string | null;
+}): Promise<{ success: boolean; error?: string }> {
+  const user = await requireRole(["admin"]);
+
+  const repo = getSpecialEventRepo();
+  const purchases = await repo.getPurchasesByEvent(input.eventId);
+  const purchase = purchases.find((p) => p.id === input.purchaseId);
+
+  if (!purchase) return { success: false, error: "Purchase not found" };
+
+  if (purchase.paymentStatus === "pending") {
+    return { success: false, error: "Cannot refund a pending purchase — it was never paid" };
+  }
+  if (purchase.paymentStatus === "refunded") {
+    return { success: false, error: "This purchase has already been refunded" };
+  }
+  if (purchase.paymentStatus !== "paid") {
+    return { success: false, error: `Cannot refund a purchase with status "${purchase.paymentStatus}"` };
+  }
+
+  const refundedAt = new Date().toISOString();
+
+  const result = await refundPurchase(input.purchaseId, {
+    refundedAt,
+    refundedBy: user.id,
+    refundReason: input.refundReason?.trim() || null,
+  });
+
+  if (!result.success) return result;
+
+  logFinanceEvent({
+    entityType: "event_purchase",
+    entityId: input.purchaseId,
+    action: "refunded",
+    performedBy: user.id,
+    detail: input.refundReason?.trim() || "Admin refund",
+    previousValue: "paid",
+    newValue: "refunded",
+  });
+
+  revalidateEventPaths(input.eventId);
+
+  const isGuest = !purchase.studentId;
+  const buyerEmail = isGuest ? purchase.guestEmail : null;
+  const buyerName = isGuest ? (purchase.guestName ?? "Guest") : null;
+
+  if (!isGuest && purchase.studentId) {
+    const studentRepo = await import("@/lib/repositories").then((m) => m.getStudentRepo());
+    const student = await studentRepo.getById(purchase.studentId).catch(() => null);
+    sendRefundNotification({
+      studentId: purchase.studentId,
+      recipientName: student?.fullName ?? "Student",
+      directEmail: undefined,
+      eventTitle: (await repo.getEventById(input.eventId))?.title ?? "Event",
+      eventId: input.eventId,
+      productName: purchase.productNameSnapshot ?? "Event product",
+      amountCents: purchase.paidAmountCents ?? purchase.originalAmountCents ?? 0,
+      currency: purchase.currency ?? "eur",
+      refundReason: input.refundReason?.trim() || null,
+      purchaseId: input.purchaseId,
+    });
+  } else if (buyerEmail) {
+    sendRefundNotification({
+      studentId: null,
+      recipientName: buyerName ?? "Guest",
+      directEmail: buyerEmail,
+      eventTitle: (await repo.getEventById(input.eventId))?.title ?? "Event",
+      eventId: input.eventId,
+      productName: purchase.productNameSnapshot ?? "Event product",
+      amountCents: purchase.paidAmountCents ?? purchase.originalAmountCents ?? 0,
+      currency: purchase.currency ?? "eur",
+      refundReason: input.refundReason?.trim() || null,
+      purchaseId: input.purchaseId,
+    });
+  }
+
+  return { success: true };
+}
+
+function sendRefundNotification(params: {
+  studentId: string | null;
+  recipientName: string;
+  directEmail?: string;
+  eventTitle: string;
+  eventId: string;
+  productName: string;
+  amountCents: number;
+  currency: string;
+  refundReason: string | null;
+  purchaseId: string;
+}) {
+  const amountLabel = `€${(params.amountCents / 100).toFixed(2)}`;
+
+  sendEventRefundEmail({
+    studentId: params.studentId,
+    recipientName: params.recipientName,
+    directEmail: params.directEmail,
+    eventTitle: params.eventTitle,
+    eventId: params.eventId,
+    productName: params.productName,
+    amountLabel,
+    refundReason: params.refundReason,
+  }).then((emailResult) => {
+    if (!emailResult.sent) {
+      console.warn(`[event-refund] Email not sent for purchase ${params.purchaseId}: ${emailResult.reason}`);
+    }
+    const repo = getSpecialEventRepo();
+    repo.updatePurchaseEmailTracking(params.purchaseId, {
+      lastEmailType: "refund_confirmation",
+      lastEmailSentAt: new Date().toISOString(),
+      lastEmailSuccess: emailResult.sent,
+    }).catch(() => {});
+  }).catch((err) => {
+    console.error("[event-refund] Email send threw:", err instanceof Error ? err.message : err);
+  });
 }

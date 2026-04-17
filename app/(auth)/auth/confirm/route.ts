@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { EmailOtpType } from "@supabase/supabase-js";
+import { ensureSupabaseProfile } from "@/lib/auth-provisioning";
 
 /**
  * Server-side route handler for Supabase email-link verification.
@@ -11,6 +12,9 @@ import type { EmailOtpType } from "@supabase/supabase-js";
  *
  * For password recovery, always redirects to /update-password so the student
  * can set their new password with an active recovery session.
+ *
+ * After verification, calls ensureSupabaseProfile() to record account
+ * claiming (auth_linked_at) for admin-created students.
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -56,6 +60,20 @@ export async function GET(request: NextRequest) {
   if (!verified && code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) verified = true;
+  }
+
+  // Provision profile (claim-safe) after successful verification.
+  if (verified) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await ensureSupabaseProfile(user).catch((e) =>
+          console.error("[auth/confirm] ensureSupabaseProfile:", e)
+        );
+      }
+    } catch {
+      // Non-blocking — provisioning failure should not break auth flow
+    }
   }
 
   let destination: URL;

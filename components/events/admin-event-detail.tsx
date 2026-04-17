@@ -30,6 +30,7 @@ import {
   ScanLine,
   Mail,
   Send,
+  Undo2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminTable, Td } from "@/components/ui/admin-table";
@@ -51,7 +52,7 @@ import {
   ConfirmDeleteDialog,
 } from "./event-dialogs";
 import { EventAnnouncementDialog } from "./event-announcement-dialog";
-import { markEventPurchasePaidAction } from "@/lib/actions/event-purchase";
+import { markEventPurchasePaidAction, refundEventPurchaseAction } from "@/lib/actions/event-purchase";
 import { resendEventPurchaseEmailAction, sendEventReminderAction } from "@/lib/actions/event-emails";
 import {
   updateEventAction,
@@ -161,6 +162,11 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
   const [payMethod, setPayMethod] = useState<"cash" | "revolut">("cash");
   const [payPending, startPayTransition] = useTransition();
   const [payError, setPayError] = useState<string | null>(null);
+
+  const [refundPurchase, setRefundPurchase] = useState<MockEventPurchase | null>(null);
+  const [refundReason, setRefundReason] = useState("");
+  const [refundPending, startRefundTransition] = useTransition();
+  const [refundError, setRefundError] = useState<string | null>(null);
 
   const [emailPending, startEmailTransition] = useTransition();
   const [emailFeedback, setEmailFeedback] = useState<{ id: string; ok: boolean; msg: string } | null>(null);
@@ -680,6 +686,14 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                           Mark as paid
                         </button>
                       )}
+                      {pur.paymentStatus === "paid" && (
+                        <button
+                          onClick={() => { setRefundPurchase(pur); setRefundReason(""); setRefundError(null); }}
+                          className="text-xs font-medium text-red-600 hover:underline inline-flex items-center gap-0.5"
+                        >
+                          <Undo2 className="h-3 w-3" /> Refund
+                        </button>
+                      )}
                       {canResend && (
                         <button
                           onClick={() => handleResendEmail(pur.id, buyerEmail)}
@@ -829,6 +843,66 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                 className="px-3 py-1.5 text-sm rounded-md bg-bpm-600 text-white hover:bg-bpm-700 disabled:opacity-50"
               >
                 {payPending ? "Confirming…" : "Confirm Payment"}
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ── Refund dialog ──────────────────────────────────────── */}
+      {refundPurchase && (
+        <Dialog open={!!refundPurchase} onClose={() => setRefundPurchase(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Refund Event Purchase</DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <p className="text-sm text-gray-600 mb-2">
+                Refund <span className="font-medium">{refundPurchase.studentId ? (studentInfoMap[refundPurchase.studentId]?.fullName ?? refundPurchase.studentId) : (refundPurchase.guestName ?? "Guest")}</span>&apos;s purchase
+                of <span className="font-medium">{products.find((p) => p.id === refundPurchase.eventProductId)?.name ?? "product"}</span>?
+              </p>
+              <p className="text-sm font-semibold text-gray-800 mb-3">
+                Amount: {centsToEuros(refundPurchase.paidAmountCents ?? refundPurchase.originalAmountCents ?? 0)}
+              </p>
+              <div className="rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700 mb-4">
+                <strong>Warning:</strong> This purchase will no longer be valid for event entry or check-in. A refund confirmation email will be sent to the buyer.
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Reason (optional)</label>
+                <input
+                  type="text"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder="e.g. Event cancelled, duplicate purchase…"
+                  className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-bpm-500"
+                />
+              </div>
+              {refundError && <p className="text-sm text-red-600 mt-2">{refundError}</p>}
+            </DialogBody>
+            <DialogFooter>
+              <button onClick={() => setRefundPurchase(null)} className="px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-50" disabled={refundPending}>
+                Cancel
+              </button>
+              <button
+                disabled={refundPending}
+                onClick={() => {
+                  startRefundTransition(async () => {
+                    const res = await refundEventPurchaseAction({
+                      purchaseId: refundPurchase.id,
+                      eventId: event.id,
+                      refundReason: refundReason.trim() || null,
+                    });
+                    if (res.success) {
+                      setRefundPurchase(null);
+                      router.refresh();
+                    } else {
+                      setRefundError(res.error ?? "Failed to process refund");
+                    }
+                  });
+                }}
+                className="px-3 py-1.5 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {refundPending ? "Processing…" : "Confirm Refund"}
               </button>
             </DialogFooter>
           </DialogContent>

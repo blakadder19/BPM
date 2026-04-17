@@ -12,7 +12,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { getBookingService } from "@/lib/services/booking-store";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import { getTodayStr } from "@/lib/domain/datetime";
-import { paymentPendingEvent } from "@/lib/communications/builders";
+import { paymentPendingEvent, paymentConfirmedEvent, subscriptionRefundedEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
@@ -253,6 +253,23 @@ export async function updateSubscriptionAction(
         if (sub) {
           const { dismissNotificationsForSubscription } = await import("@/lib/communications/notification-store");
           await dismissNotificationsForSubscription(sub.studentId, id);
+
+          const student = await getStudentRepo().getById(sub.studentId);
+          if (student) {
+            const amountLabel = sub.priceCentsAtPurchase != null
+              ? `€${(sub.priceCentsAtPurchase / 100).toFixed(2)}`
+              : null;
+            await dispatchCommEvents([
+              paymentConfirmedEvent({
+                studentId: sub.studentId,
+                studentName: student.fullName,
+                productName: sub.productName,
+                subscriptionId: id,
+                amountLabel,
+                paymentMethod: sub.paymentMethod,
+              }),
+            ]).catch(() => {});
+          }
         }
       } catch { /* best-effort */ }
     }
@@ -364,6 +381,47 @@ export async function applyPaymentChangeAction(params: {
       previousValue: previousStatus,
       newValue: params.newPaymentStatus,
     });
+
+    // Notify the student about the payment state change
+    try {
+      const updatedSub = await getSubscriptionRepo().getById(params.subscriptionId);
+      if (updatedSub) {
+        const student = await getStudentRepo().getById(updatedSub.studentId);
+        const amountLabel = updatedSub.priceCentsAtPurchase != null
+          ? `€${(updatedSub.priceCentsAtPurchase / 100).toFixed(2)}`
+          : null;
+
+        if (params.newPaymentStatus === "paid" && student) {
+          await dispatchCommEvents([
+            paymentConfirmedEvent({
+              studentId: updatedSub.studentId,
+              studentName: student.fullName,
+              productName: updatedSub.productName,
+              subscriptionId: params.subscriptionId,
+              amountLabel,
+              paymentMethod: updatedSub.paymentMethod,
+            }),
+          ]).catch(() => {});
+
+          const { dismissNotificationsForSubscription } = await import("@/lib/communications/notification-store");
+          await dismissNotificationsForSubscription(updatedSub.studentId, params.subscriptionId);
+        }
+
+        if (params.newPaymentStatus === "refunded" && student) {
+          await dispatchCommEvents([
+            subscriptionRefundedEvent({
+              studentId: updatedSub.studentId,
+              studentName: student.fullName,
+              productName: updatedSub.productName,
+              subscriptionId: params.subscriptionId,
+              amountLabel,
+              refundReason: params.refundReason ?? null,
+              entitlementCancelled: params.cancelEntitlement,
+            }),
+          ]).catch(() => {});
+        }
+      }
+    } catch { /* best-effort notification */ }
 
     revalidatePath("/students");
     revalidatePath("/dashboard");

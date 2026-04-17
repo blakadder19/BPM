@@ -34,7 +34,12 @@ export default function AuthCallbackPage() {
       document.cookie = "dev_student_id=; path=/; max-age=0";
     }
 
-    function goToRecovery() {
+    async function goToRecovery() {
+      // Provision even for recovery — records auth_linked_at for
+      // admin-created students claiming their account via password reset.
+      await provisionCurrentUser().catch((e) => {
+        console.error("[auth-callback] provisionCurrentUser (recovery):", e);
+      });
       router.push("/update-password");
       router.refresh();
     }

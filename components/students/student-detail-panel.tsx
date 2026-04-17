@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw, ChevronDown, ChevronRight } from "lucide-react";
+import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw, ChevronDown, ChevronRight, UserCheck, UserX } from "lucide-react";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -135,6 +135,22 @@ export function StudentDetailPanel({
               value={student.preferredRole ? student.preferredRole.charAt(0).toUpperCase() + student.preferredRole.slice(1) : "—"}
             />
             <DL label="Joined" value={formatDate(student.joinedAt)} />
+            <DL
+              label="Account"
+              value={
+                student.authLinkedAt ? (
+                  <span className="inline-flex items-center gap-1 text-green-700">
+                    <UserCheck className="h-3.5 w-3.5" />
+                    Claimed {formatDate(student.authLinkedAt)}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-amber-600">
+                    <UserX className="h-3.5 w-3.5" />
+                    Not yet claimed
+                  </span>
+                )
+              }
+            />
             <DL
               label="Birthday"
               value={
@@ -348,7 +364,7 @@ function Section({
   );
 }
 
-function DL({ label, value }: { label: string; value: string }) {
+function DL({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2 text-sm">
       <span className="w-36 shrink-0 text-gray-500">{label}</span>
@@ -548,18 +564,20 @@ function StudentFinancialHistory({
       refundNote: s.refundReason ?? null,
     }));
     const evtRows: FinRow[] = eventPurchases.map((ep) => {
-      const amount = ep.paymentStatus === "paid"
+      const amount = ep.paymentStatus === "refunded"
         ? (ep.paidAmountCents ?? ep.originalAmountCents ?? 0)
-        : (ep.originalAmountCents ?? 0) - (ep.discountAmountCents ?? 0);
+        : ep.paymentStatus === "paid"
+          ? (ep.paidAmountCents ?? ep.originalAmountCents ?? 0)
+          : (ep.originalAmountCents ?? 0) - (ep.discountAmountCents ?? 0);
       return {
         id: ep.id,
-        date: ep.paidAt ?? ep.purchasedAt,
+        date: ep.refundedAt ?? ep.paidAt ?? ep.purchasedAt,
         name: ep.productNameSnapshot ?? "Event purchase",
         type: "event",
         status: ep.paymentStatus,
         amountCents: Math.abs(amount),
         method: ep.paymentMethod,
-        refundNote: null,
+        refundNote: ep.refundReason ?? null,
       };
     });
     const penRows: FinRow[] = penalties.map((p) => ({

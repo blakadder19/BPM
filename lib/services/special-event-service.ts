@@ -114,6 +114,17 @@ export async function updatePurchasePayment(
   } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }
 }
 
+export async function refundPurchase(
+  id: string,
+  patch: { refundedAt: string; refundedBy: string; refundReason: string | null },
+): Promise<Result> {
+  try {
+    const result = await getSpecialEventRepo().refundPurchase(id, patch);
+    if (!result) return { success: false, error: "Purchase not found" };
+    return { success: true };
+  } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }
+}
+
 export async function updatePurchaseCheckIn(
   id: string,
   patch: { checkedInAt: string | null; checkedInBy: string | null },

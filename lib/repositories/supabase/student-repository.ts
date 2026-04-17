@@ -27,6 +27,7 @@ function toMockStudent(user: UserRow, profile?: ProfileRow | null): MockStudent 
     remainingCredits: null,
     joinedAt: user.created_at,
     qrToken: typeof qrRaw === "string" && qrRaw ? qrRaw : generateStudentQrToken(),
+    authLinkedAt: profile?.auth_linked_at ?? null,
   };
 }
 
@@ -76,10 +77,26 @@ export const supabaseStudentRepo: IStudentRepository = {
   async create(data: CreateStudentData) {
     const supabase = createAdminClient();
     const academyId = await getAcademyId();
+    const normalizedEmail = data.email.toLowerCase().trim();
+
+    // Check for existing student with same email before creating auth user
+    const { data: existingUser } = await supabase
+      .from("users")
+      .select("id, email, full_name")
+      .ilike("email", normalizedEmail)
+      .eq("role", "student" as never)
+      .maybeSingle();
+
+    if (existingUser) {
+      throw new Error(
+        `A student with email "${normalizedEmail}" already exists (${(existingUser as { full_name: string }).full_name}). ` +
+        `Use the existing record instead of creating a duplicate.`
+      );
+    }
 
     const tempPassword = `BPM-temp-${crypto.randomUUID().slice(0, 8)}`;
     const { data: authResult, error: authError } = await supabase.auth.admin.createUser({
-      email: data.email,
+      email: normalizedEmail,
       password: tempPassword,
       email_confirm: true,
       user_metadata: {
@@ -90,7 +107,15 @@ export const supabaseStudentRepo: IStudentRepository = {
         date_of_birth: data.dateOfBirth ?? undefined,
       },
     });
-    if (authError) throw new Error(`Auth user creation failed: ${authError.message}`);
+    if (authError) {
+      if (authError.message.toLowerCase().includes("already been registered")) {
+        throw new Error(
+          `An auth account with email "${normalizedEmail}" already exists. ` +
+          `This student may already be in the system.`
+        );
+      }
+      throw new Error(`Auth user creation failed: ${authError.message}`);
+    }
     const userId = authResult.user.id;
 
     // The handle_new_user trigger already inserts into public.users and
@@ -99,7 +124,7 @@ export const supabaseStudentRepo: IStudentRepository = {
     const { error: userError } = await supabase.from("users").upsert({
       id: userId,
       academy_id: academyId,
-      email: data.email,
+      email: normalizedEmail,
       full_name: data.fullName,
       role: "student",
       phone: data.phone,
@@ -126,7 +151,7 @@ export const supabaseStudentRepo: IStudentRepository = {
     type UserUpdate = Database["public"]["Tables"]["users"]["Update"];
     const userFields: UserUpdate = {};
     if (patch.fullName !== undefined) userFields.full_name = patch.fullName;
-    if (patch.email !== undefined) userFields.email = patch.email;
+    if (patch.email !== undefined) userFields.email = patch.email.toLowerCase().trim();
     if (patch.phone !== undefined) userFields.phone = patch.phone;
 
     if (Object.keys(userFields).length > 0) {

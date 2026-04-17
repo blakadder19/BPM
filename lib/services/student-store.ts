@@ -58,6 +58,7 @@ export function createStudent(data: {
     remainingCredits: null,
     joinedAt: new Date().toISOString().slice(0, 10),
     qrToken: generateStudentQrToken(),
+    authLinkedAt: null,
   };
   list.push(student);
   return student;

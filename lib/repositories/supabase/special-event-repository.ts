@@ -123,6 +123,9 @@ function toPurchase(r: any): MockEventPurchase {
     productTypeSnapshot: r.product_type_snapshot ?? null,
     checkedInAt: r.checked_in_at ?? null,
     checkedInBy: r.checked_in_by ?? null,
+    refundedAt: r.refunded_at ?? null,
+    refundedBy: r.refunded_by ?? null,
+    refundReason: r.refund_reason ?? null,
     lastEmailType: r.last_email_type ?? null,
     lastEmailSentAt: r.last_email_sent_at ?? null,
     lastEmailSuccess: r.last_email_success ?? null,
@@ -392,6 +395,19 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     const { error } = await sb.from("event_purchases").update({
       checked_in_at: patch.checkedInAt,
       checked_in_by: patch.checkedInBy,
+    } as never).eq("id", id);
+    if (error) throw new Error(error.message);
+    const { data } = await sb.from("event_purchases").select("*").eq("id", id).single();
+    return data ? toPurchase(data) : null;
+  },
+
+  async refundPurchase(id, patch) {
+    const sb = createAdminClient();
+    const { error } = await sb.from("event_purchases").update({
+      payment_status: "refunded",
+      refunded_at: patch.refundedAt,
+      refunded_by: patch.refundedBy,
+      refund_reason: patch.refundReason,
     } as never).eq("id", id);
     if (error) throw new Error(error.message);
     const { data } = await sb.from("event_purchases").select("*").eq("id", id).single();

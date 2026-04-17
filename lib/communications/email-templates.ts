@@ -1,23 +1,34 @@
 /**
  * Email template builders for each communication event type.
  *
- * Produces { subject, html } pairs. Templates use inline styles
- * for maximum email-client compatibility. No external CSS.
+ * Uses the shared BPM branded design system (email-brand.ts) so all
+ * outgoing emails — whether triggered by system events, admin actions,
+ * or broadcasts — share the same logo, palette, layout, and footer.
  */
 
 import { formatTime } from "@/lib/utils";
 import { getAppUrl } from "@/lib/utils/app-url";
+import {
+  bpmEmailWrap,
+  bpmDetailsCard,
+  bpmNotice,
+  bpmCtaButton,
+  B,
+} from "./email-brand";
 import type {
   CommEventType,
   CommEventPayloadMap,
   ClassCancelledPayload,
   PaymentPendingPayload,
+  PaymentConfirmedPayload,
+  SubscriptionRefundedPayload,
   RenewalPreparedPayload,
   RenewalDueSoonPayload,
   WaitlistPromotedPayload,
   BookingReminderPayload,
   BirthdayBenefitAvailablePayload,
   EventAnnouncementPayload,
+  AdminBroadcastPayload,
 } from "./events";
 
 export interface EmailContent {
@@ -25,40 +36,8 @@ export interface EmailContent {
   html: string;
 }
 
-function wrap(studentName: string, heading: string, bodyHtml: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px;">
-<tr><td align="center">
-<table width="100%" style="max-width:560px;background:#ffffff;border-radius:8px;overflow:hidden;">
-  <tr><td style="background:#18181b;padding:20px 24px;">
-    <span style="color:#ffffff;font-size:18px;font-weight:600;">BPM Dance Academy</span>
-  </td></tr>
-  <tr><td style="padding:24px;">
-    <p style="margin:0 0 4px;color:#71717a;font-size:14px;">Hi ${studentName},</p>
-    <h2 style="margin:8px 0 16px;color:#18181b;font-size:20px;font-weight:600;">${heading}</h2>
-    ${bodyHtml}
-  </td></tr>
-  <tr><td style="padding:16px 24px;background:#fafafa;border-top:1px solid #e4e4e7;">
-    <p style="margin:0;color:#a1a1aa;font-size:12px;">
-      Balance Power Motion — Dublin's social dance academy.<br>
-      This is an automated message. Please do not reply directly.
-    </p>
-  </td></tr>
-</table>
-</td></tr>
-</table>
-</body>
-</html>`;
-}
-
-function infoRow(label: string, value: string): string {
-  return `<tr>
-    <td style="padding:6px 0;color:#71717a;font-size:14px;width:120px;vertical-align:top;">${label}</td>
-    <td style="padding:6px 0;color:#18181b;font-size:14px;font-weight:500;">${value}</td>
-  </tr>`;
+function paragraph(text: string): string {
+  return `<p style="margin:0 0 16px;color:${B.ZINC_700};font-size:14px;line-height:1.6;">${text}</p>`;
 }
 
 // ── Per-event templates ──────────────────────────────────────
@@ -67,25 +46,25 @@ function classCancelled(
   studentName: string,
   p: ClassCancelledPayload
 ): EmailContent {
-  const creditNote = p.creditReverted
-    ? `<p style="margin:16px 0 0;padding:12px;background:#f0fdf4;border-radius:6px;color:#166534;font-size:14px;">Your class credit has been returned automatically.</p>`
+  const appUrl = getAppUrl();
+  const creditHtml = p.creditReverted
+    ? bpmNotice("info", "Your class credit has been returned automatically.")
     : "";
+
+  const bodyHtml = [
+    bpmDetailsCard([
+      { label: "Class", valueHtml: p.classTitle },
+      { label: "Date", valueHtml: p.classDate },
+      { label: "Time", valueHtml: formatTime(p.startTime) },
+    ], "Cancelled class"),
+    paragraph("This class was cancelled by the academy. We apologise for any inconvenience."),
+    creditHtml,
+    bpmCtaButton(`${appUrl}/bookings`, "View your bookings"),
+  ].join("\n");
 
   return {
     subject: `Class cancelled: ${p.classTitle} on ${p.classDate}`,
-    html: wrap(
-      studentName,
-      "A class has been cancelled",
-      `<table style="width:100%;" cellpadding="0" cellspacing="0">
-        ${infoRow("Class", p.classTitle)}
-        ${infoRow("Date", p.classDate)}
-        ${infoRow("Time", formatTime(p.startTime))}
-      </table>
-      <p style="margin:16px 0 0;color:#52525b;font-size:14px;">
-        This class was cancelled by the academy. We apologise for any inconvenience.
-      </p>
-      ${creditNote}`
-    ),
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "A class has been cancelled", bodyHtml }),
   };
 }
 
@@ -93,24 +72,70 @@ function paymentPending(
   studentName: string,
   p: PaymentPendingPayload
 ): EmailContent {
-  const amountRow = p.amountLabel ? infoRow("Amount", p.amountLabel) : "";
-  const termRow = p.termName ? infoRow("Term", p.termName) : "";
+  const appUrl = getAppUrl();
+  const rows = [
+    { label: "Plan", valueHtml: p.productName },
+    ...(p.termName ? [{ label: "Term", valueHtml: p.termName }] : []),
+    ...(p.amountLabel ? [{ label: "Amount", valueHtml: p.amountLabel }] : []),
+  ];
+
+  const bodyHtml = [
+    bpmDetailsCard(rows, "Subscription details"),
+    bpmNotice("warning", "Your plan is active and awaiting payment. Please complete payment at reception or contact us to arrange an alternative."),
+    bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
+  ].join("\n");
 
   return {
     subject: `Payment pending: ${p.productName}`,
-    html: wrap(
-      studentName,
-      "Payment pending for your plan",
-      `<table style="width:100%;" cellpadding="0" cellspacing="0">
-        ${infoRow("Plan", p.productName)}
-        ${termRow}
-        ${amountRow}
-      </table>
-      <p style="margin:16px 0 0;color:#52525b;font-size:14px;">
-        Your plan is active and awaiting payment. Please complete payment at reception
-        or contact us to arrange an alternative.
-      </p>`
-    ),
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "Payment pending for your plan", bodyHtml }),
+  };
+}
+
+function paymentConfirmed(
+  studentName: string,
+  p: PaymentConfirmedPayload
+): EmailContent {
+  const appUrl = getAppUrl();
+  const rows = [
+    { label: "Plan", valueHtml: p.productName },
+    ...(p.amountLabel ? [{ label: "Amount", valueHtml: p.amountLabel }] : []),
+    ...(p.paymentMethod ? [{ label: "Method", valueHtml: p.paymentMethod }] : []),
+  ];
+
+  const bodyHtml = [
+    bpmNotice("info", "Your payment has been received. Thank you!"),
+    bpmDetailsCard(rows, "Payment details"),
+    paragraph("Your plan is now fully active. If you have any questions, please contact us at reception."),
+    bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
+  ].join("\n");
+
+  return {
+    subject: `Payment confirmed: ${p.productName}`,
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "Payment received — thank you!", bodyHtml }),
+  };
+}
+
+function subscriptionRefunded(
+  studentName: string,
+  p: SubscriptionRefundedPayload
+): EmailContent {
+  const appUrl = getAppUrl();
+  const rows = [
+    { label: "Plan", valueHtml: p.productName },
+    ...(p.amountLabel ? [{ label: "Amount", valueHtml: p.amountLabel }] : []),
+    ...(p.refundReason ? [{ label: "Reason", valueHtml: p.refundReason }] : []),
+    { label: "Entitlement", valueHtml: p.entitlementCancelled ? "Cancelled" : "Still active" },
+  ];
+
+  const bodyHtml = [
+    bpmDetailsCard(rows, "Refund details"),
+    paragraph("A refund has been processed for your plan. If you have any questions, please contact us at reception."),
+    bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
+  ].join("\n");
+
+  return {
+    subject: `Refund processed: ${p.productName}`,
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "Refund processed", bodyHtml }),
   };
 }
 
@@ -118,26 +143,22 @@ function renewalPrepared(
   studentName: string,
   p: RenewalPreparedPayload
 ): EmailContent {
-  const period = p.validUntil
-    ? `${p.validFrom} – ${p.validUntil}`
-    : `From ${p.validFrom}`;
+  const appUrl = getAppUrl();
+  const period = p.validUntil ? `${p.validFrom} – ${p.validUntil}` : `From ${p.validFrom}`;
+
+  const bodyHtml = [
+    bpmDetailsCard([
+      { label: "Plan", valueHtml: p.productName },
+      { label: "Term", valueHtml: p.termName },
+      { label: "Period", valueHtml: period },
+    ], "Renewal details"),
+    paragraph("Your membership has been automatically renewed for the upcoming term. Payment is pending — please arrange payment at reception to keep your membership active."),
+    bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
+  ].join("\n");
 
   return {
     subject: `Membership renewed: ${p.productName} for ${p.termName}`,
-    html: wrap(
-      studentName,
-      "Your membership has been renewed",
-      `<table style="width:100%;" cellpadding="0" cellspacing="0">
-        ${infoRow("Plan", p.productName)}
-        ${infoRow("Term", p.termName)}
-        ${infoRow("Period", period)}
-      </table>
-      <p style="margin:16px 0 0;color:#52525b;font-size:14px;">
-        Your membership has been automatically renewed for the upcoming term.
-        Payment is pending — please arrange payment at reception to keep your
-        membership active.
-      </p>`
-    ),
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "Your membership has been renewed", bodyHtml }),
   };
 }
 
@@ -145,23 +166,22 @@ function renewalDueSoon(
   studentName: string,
   p: RenewalDueSoonPayload
 ): EmailContent {
+  const appUrl = getAppUrl();
   const dayWord = p.daysUntilStart === 1 ? "day" : "days";
+
+  const bodyHtml = [
+    bpmDetailsCard([
+      { label: "Plan", valueHtml: p.productName },
+      { label: "Term", valueHtml: p.termName },
+      { label: "Starts in", valueHtml: `${p.daysUntilStart} ${dayWord}` },
+    ], "Renewal details"),
+    bpmNotice("warning", "The new term is approaching. Please arrange payment at reception to ensure uninterrupted access to your classes."),
+    bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
+  ].join("\n");
 
   return {
     subject: `Renewal payment due soon: ${p.productName}`,
-    html: wrap(
-      studentName,
-      "Your renewal payment is due soon",
-      `<table style="width:100%;" cellpadding="0" cellspacing="0">
-        ${infoRow("Plan", p.productName)}
-        ${infoRow("Term", p.termName)}
-        ${infoRow("Starts in", `${p.daysUntilStart} ${dayWord}`)}
-      </table>
-      <p style="margin:16px 0 0;color:#52525b;font-size:14px;">
-        The new term is approaching. Please arrange payment at reception to ensure
-        uninterrupted access to your classes.
-      </p>`
-    ),
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "Your renewal payment is due soon", bodyHtml }),
   };
 }
 
@@ -169,21 +189,20 @@ function waitlistPromoted(
   studentName: string,
   p: WaitlistPromotedPayload
 ): EmailContent {
+  const appUrl = getAppUrl();
+  const bodyHtml = [
+    bpmDetailsCard([
+      { label: "Class", valueHtml: p.classTitle },
+      { label: "Date", valueHtml: p.classDate },
+      { label: "Time", valueHtml: formatTime(p.startTime) },
+    ], "Booking confirmed"),
+    paragraph("A spot opened up and you've been automatically moved from the waitlist to a confirmed booking. No action needed — just show up and enjoy the class!"),
+    bpmCtaButton(`${appUrl}/bookings`, "View your bookings"),
+  ].join("\n");
+
   return {
     subject: `You're in! Spot confirmed for ${p.classTitle}`,
-    html: wrap(
-      studentName,
-      "A spot opened up — you're confirmed!",
-      `<table style="width:100%;" cellpadding="0" cellspacing="0">
-        ${infoRow("Class", p.classTitle)}
-        ${infoRow("Date", p.classDate)}
-        ${infoRow("Time", formatTime(p.startTime))}
-      </table>
-      <p style="margin:16px 0 0;color:#52525b;font-size:14px;">
-        A spot opened up and you've been automatically moved from the waitlist
-        to a confirmed booking. No action needed — just show up and enjoy the class!
-      </p>`
-    ),
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "A spot opened up — you're confirmed!", bodyHtml }),
   };
 }
 
@@ -191,23 +210,23 @@ function bookingReminder(
   studentName: string,
   p: BookingReminderPayload
 ): EmailContent {
+  const appUrl = getAppUrl();
   const hourWord = p.hoursUntilStart === 1 ? "hour" : "hours";
+
+  const bodyHtml = [
+    bpmDetailsCard([
+      { label: "Class", valueHtml: p.classTitle },
+      { label: "Date", valueHtml: p.classDate },
+      { label: "Time", valueHtml: formatTime(p.startTime) },
+      { label: "Starts in", valueHtml: `${p.hoursUntilStart} ${hourWord}` },
+    ], "Class reminder"),
+    paragraph("If you can no longer attend, please cancel in advance to avoid a late cancellation penalty."),
+    bpmCtaButton(`${appUrl}/bookings`, "View your bookings"),
+  ].join("\n");
 
   return {
     subject: `Reminder: ${p.classTitle} in ${p.hoursUntilStart} ${hourWord}`,
-    html: wrap(
-      studentName,
-      "Your class is coming up",
-      `<table style="width:100%;" cellpadding="0" cellspacing="0">
-        ${infoRow("Class", p.classTitle)}
-        ${infoRow("Date", p.classDate)}
-        ${infoRow("Time", formatTime(p.startTime))}
-        ${infoRow("Starts in", `${p.hoursUntilStart} ${hourWord}`)}
-      </table>
-      <p style="margin:16px 0 0;color:#52525b;font-size:14px;">
-        If you can no longer attend, please cancel in advance to avoid a late cancellation penalty.
-      </p>`
-    ),
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "Your class is coming up", bodyHtml }),
   };
 }
 
@@ -215,23 +234,20 @@ function birthdayBenefitAvailable(
   studentName: string,
   p: BirthdayBenefitAvailablePayload
 ): EmailContent {
+  const appUrl = getAppUrl();
+  const bodyHtml = [
+    paragraph("As a BPM member, you get a <strong>free class</strong> during your birthday week."),
+    bpmDetailsCard([
+      { label: "Benefit", valueHtml: p.benefitDescription },
+      { label: "Valid until", valueHtml: p.expiresDate },
+    ], "Birthday benefit"),
+    paragraph('Book any class by the date above and select "Birthday Free Class" as your entitlement to redeem this benefit. Enjoy your special week!'),
+    bpmCtaButton(`${appUrl}/classes`, "Book a class"),
+  ].join("\n");
+
   return {
     subject: "Happy birthday from BPM! Your free class is waiting",
-    html: wrap(
-      studentName,
-      "Happy birthday! 🎂",
-      `<p style="margin:0 0 16px;color:#52525b;font-size:14px;">
-        As a BPM member, you get a <strong>free class</strong> during your birthday week.
-      </p>
-      <table style="width:100%;" cellpadding="0" cellspacing="0">
-        ${infoRow("Benefit", p.benefitDescription)}
-        ${infoRow("Available until", p.expiresDate)}
-      </table>
-      <p style="margin:16px 0 0;color:#52525b;font-size:14px;">
-        Book any class by the date above and select "Birthday Free Class" as your
-        entitlement to redeem this benefit. Enjoy your special week!
-      </p>`
-    ),
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: "Happy birthday! 🎂", bodyHtml }),
   };
 }
 
@@ -239,24 +255,45 @@ function eventAnnouncement(
   studentName: string,
   p: EventAnnouncementPayload
 ): EmailContent {
-  const eventUrl = `${getAppUrl()}/event/${p.eventId}`;
+  const appUrl = getAppUrl();
+  const eventUrl = `${appUrl}/event/${p.eventId}`;
+  const rows = [
+    ...(p.dates ? [{ label: "When", valueHtml: p.dates }] : []),
+    ...(p.location ? [{ label: "Where", valueHtml: p.location }] : []),
+  ];
+
+  const bodyHtml = [
+    paragraph(p.shortDescription),
+    ...(rows.length > 0 ? [bpmDetailsCard(rows, "Event details")] : []),
+    bpmCtaButton(eventUrl, "View event & tickets"),
+  ].join("\n");
 
   return {
     subject: `Special Event: ${p.eventTitle}`,
-    html: wrap(
-      studentName,
-      p.eventTitle,
-      `<p style="margin:0 0 16px;color:#52525b;font-size:14px;">
-        ${p.shortDescription}
-      </p>
-      <table style="width:100%;" cellpadding="0" cellspacing="0">
-        ${p.dates ? infoRow("When", p.dates) : ""}
-        ${p.location ? infoRow("Where", p.location) : ""}
-      </table>
-      <p style="margin:16px 0 0;">
-        <a href="${eventUrl}" style="display:inline-block;padding:10px 20px;background:#18181b;color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:500;">View event & tickets</a>
-      </p>`
-    ),
+    html: bpmEmailWrap({ appUrl, recipientName: studentName, heading: p.eventTitle, bodyHtml }),
+  };
+}
+
+function adminBroadcast(
+  studentName: string,
+  p: AdminBroadcastPayload
+): EmailContent {
+  const appUrl = getAppUrl();
+  const bodyHtml = p.body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => paragraph(line))
+    .join("");
+
+  return {
+    subject: p.title,
+    html: bpmEmailWrap({
+      appUrl,
+      recipientName: studentName,
+      heading: p.title,
+      bodyHtml: bodyHtml || paragraph(p.body),
+    }),
   };
 }
 
@@ -272,12 +309,15 @@ const TEMPLATES: {
 } = {
   class_cancelled: classCancelled,
   payment_pending: paymentPending,
+  payment_confirmed: paymentConfirmed,
+  subscription_refunded: subscriptionRefunded,
   renewal_prepared: renewalPrepared,
   renewal_due_soon: renewalDueSoon,
   waitlist_promoted: waitlistPromoted,
   booking_reminder: bookingReminder,
   birthday_benefit_available: birthdayBenefitAvailable,
   event_announcement: eventAnnouncement,
+  admin_broadcast: adminBroadcast,
 };
 
 /**
