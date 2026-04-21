@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useMemo, useTransition, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useMemo, useTransition, useEffect, useRef, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Inbox,
   ChevronLeft,
@@ -95,6 +95,8 @@ export function ClassBrowser({
   termInfo,
 }: ClassBrowserProps) {
   const todayStr = today ?? new Date().toISOString().slice(0, 10);
+  const searchParams = useSearchParams();
+  const highlightTemplateId = searchParams.get("highlight");
 
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [weekStart, setWeekStart] = useState(() => getMonday(todayStr));
@@ -108,6 +110,27 @@ export function ClassBrowser({
   const [showCocDialog, setShowCocDialog] = useState(false);
   const [cocAccepted, setCocAccepted] = useState(codeOfConductAccepted);
   const [pendingBookTarget, setPendingBookTarget] = useState<ClassCardData | null>(null);
+
+  const highlightedRef = useRef(false);
+  const highlightCardRef = useCallback((node: HTMLDivElement | null) => {
+    if (node && !highlightedRef.current) {
+      highlightedRef.current = true;
+      setTimeout(() => {
+        node.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!highlightTemplateId) return;
+    const firstMatch = classes.find(
+      (c) => c.classId === highlightTemplateId && c.date >= todayStr,
+    );
+    if (firstMatch) {
+      setSelectedDate(firstMatch.date);
+      setWeekStart(getMonday(firstMatch.date));
+    }
+  }, [highlightTemplateId, classes, todayStr]);
 
   const restoreClassData = useMemo(() => {
     if (!restoreBookingId) return null;
@@ -428,15 +451,28 @@ export function ClassBrowser({
         </div>
       ) : (
         <div className="space-y-1.5">
-          {dayClasses.map((c) => (
-            <StudentClassCard
-              key={c.id}
-              data={c}
-              onBook={handleBook}
-              onRestore={handleRestore}
-              onAcceptCoc={!cocAccepted ? () => setShowCocDialog(true) : undefined}
-            />
-          ))}
+          {dayClasses.map((c) => {
+            const isHighlighted =
+              !!highlightTemplateId && c.classId === highlightTemplateId;
+            return (
+              <div
+                key={c.id}
+                ref={isHighlighted ? highlightCardRef : undefined}
+                className={
+                  isHighlighted
+                    ? "rounded-lg ring-2 ring-bpm-500 ring-offset-2 transition-shadow duration-500"
+                    : undefined
+                }
+              >
+                <StudentClassCard
+                  data={c}
+                  onBook={handleBook}
+                  onRestore={handleRestore}
+                  onAcceptCoc={!cocAccepted ? () => setShowCocDialog(true) : undefined}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
 

@@ -641,6 +641,66 @@ const HELP: Record<string, AdminHelpEntry> = {
       },
     ],
   },
+  /* ────────────────────────────────────────────────────────────── */
+  /*  BROADCASTS                                                   */
+  /* ────────────────────────────────────────────────────────────── */
+  broadcasts: {
+    title: "Broadcasts",
+    intro:
+      "Send operational notices and announcements to your students via in-app notifications, email, or both. Use broadcasts for schedule updates, new product announcements, event reminders, payment nudges, or any general academy message.",
+    sections: [
+      {
+        heading: "When to use each delivery channel",
+        items: [
+          "In-app — appears in the student's notification bell. Best for non-urgent updates the student will see next time they open the app.",
+          "Email — sent to the student's email address. Best for important or time-sensitive notices (payment reminders, schedule changes, event announcements).",
+          "Both — use when the message is important enough to reach students whether or not they're currently using the app.",
+        ],
+      },
+      {
+        heading: "CTA button destinations",
+        items: [
+          "Browse classes — sends the student to the general classes page to browse all upcoming classes. Use for schedule announcements or general class promotions.",
+          "Specific class — highlights one particular class. Use when announcing a new class, a schedule change, or promoting a specific course. The student lands on the classes page.",
+          "Product page — sends the student to the catalog. Use when launching a new membership, pass, or promo offer.",
+          "Event page — sends the student to a specific event with tickets and details. Use for event announcements and reminders.",
+          "Student dashboard — sends the student to their home screen. Use for general account or academy-wide updates.",
+          "External URL — links to any website outside the app. Use for partner promotions, external booking forms, or social media links.",
+        ],
+      },
+      {
+        heading: "Audience targeting",
+        items: [
+          "All students — reaches every active student. Use for academy-wide announcements.",
+          "Students with active subscription — only those currently enrolled. Good for schedule updates or class changes.",
+          "Students with pending payment — only those who haven't completed payment. Useful for payment reminders.",
+          "Students with membership / with pass — target by product type for relevant promotions.",
+          "Without subscription — students who don't have any active product. Use to promote new offers or re-engagement messages.",
+          "Specific students — hand-pick individual students for targeted messages.",
+        ],
+      },
+      {
+        heading: "Image, category, and CTA tips",
+        items: [
+          "Adding an image makes the broadcast more visually engaging — especially useful for event announcements and promotions.",
+          "Upload images directly to the media library or paste an external URL. Uploaded images can be reused across future broadcasts.",
+          "Categories help students quickly understand the type of notice (schedule update, payment reminder, event, etc.).",
+          "CTA buttons drive action — always give the button a clear label like 'Book now', 'View event', or 'Complete payment'.",
+        ],
+      },
+      {
+        heading: "Best practices",
+        items: [
+          "Keep titles short and clear — students see the title first in their notification bell.",
+          "Write the message body as if speaking directly to the student.",
+          "Avoid sending too many broadcasts in a short period — it reduces engagement.",
+          "Use the audience filter to keep messages relevant. A payment reminder sent to students who already paid creates confusion.",
+          "Preview the audience count before sending to make sure the targeting looks right.",
+          "Deleting a sent broadcast also removes it from students' in-app notifications.",
+        ],
+      },
+    ],
+  },
 };
 
 export function getAdminHelp(pageKey: string): AdminHelpEntry | null {

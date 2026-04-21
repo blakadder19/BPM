@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useTransition, useEffect } from "react";
+import { useState, useRef, useTransition, useEffect, useCallback } from "react";
 import {
   Upload,
   X,
@@ -15,8 +15,8 @@ import {
   uploadMediaAction,
   listMediaAction,
   deleteMediaAction,
-  type MediaItem,
 } from "@/lib/actions/admin-media";
+import type { MediaItem } from "@/lib/domain/media-types";
 
 interface MediaPickerProps {
   kind?: string;
@@ -47,7 +47,9 @@ export function MediaPicker({
   const [deleting, setDeleting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [externalUrl, setExternalUrl] = useState("");
+  const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dragCounter = useRef(0);
 
   useEffect(() => {
     if (open) loadLibrary();
@@ -83,6 +85,54 @@ export function MediaPicker({
       }
     });
   }
+
+  const ACCEPTED_TYPES = new Set([
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+  ]);
+
+  const onDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    setDragOver(true);
+  }, []);
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current <= 0) {
+      dragCounter.current = 0;
+      setDragOver(false);
+    }
+  }, []);
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current = 0;
+      setDragOver(false);
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+      if (!ACCEPTED_TYPES.has(file.type)) {
+        setError("Unsupported file type. Use JPG, PNG, WebP, or GIF.");
+        return;
+      }
+      handleUpload(file);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [kind],
+  );
 
   async function handleDelete(item: MediaItem) {
     setDeleting(item.id);
@@ -249,7 +299,15 @@ export function MediaPicker({
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-8 text-gray-400 hover:border-bpm-400 hover:text-bpm-500 transition-colors disabled:opacity-50"
+              onDragEnter={onDragEnter}
+              onDragLeave={onDragLeave}
+              onDragOver={onDragOver}
+              onDrop={onDrop}
+              className={`flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 transition-colors disabled:opacity-50 ${
+                dragOver
+                  ? "border-bpm-500 bg-bpm-50 text-bpm-600"
+                  : "border-gray-300 text-gray-400 hover:border-bpm-400 hover:text-bpm-500"
+              }`}
             >
               {uploading ? (
                 <Loader2 className="h-6 w-6 animate-spin" />
@@ -257,7 +315,11 @@ export function MediaPicker({
                 <Upload className="h-6 w-6" />
               )}
               <span className="text-xs font-medium">
-                {uploading ? "Uploading..." : "Click to choose a file"}
+                {uploading
+                  ? "Uploading..."
+                  : dragOver
+                    ? "Drop to upload"
+                    : "Drag and drop an image here, or click to upload"}
               </span>
               <span className="text-[10px]">JPG, PNG, WebP, GIF — max 5 MB</span>
             </button>

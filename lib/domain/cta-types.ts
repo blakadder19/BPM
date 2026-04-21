@@ -9,13 +9,16 @@
 export type CtaDestinationType =
   | "product"
   | "event"
-  | "classes"
+  | "browse_classes"
+  | "class"
   | "dashboard"
-  | "external_url";
+  | "external_url"
+  // Legacy alias — kept so older DB rows still resolve correctly
+  | "classes";
 
 export interface CtaDestination {
   type: CtaDestinationType;
-  /** Target entity ID — required for product/event, unused for others */
+  /** Target entity ID — required for product/event/class, unused for others */
   targetId?: string | null;
   /** Only used when type === "external_url" */
   externalUrl?: string | null;
@@ -24,9 +27,21 @@ export interface CtaDestination {
 export const CTA_DESTINATION_LABELS: Record<CtaDestinationType, string> = {
   product: "Product page",
   event: "Event page",
-  classes: "Classes page",
+  browse_classes: "Browse classes",
+  class: "Specific class",
   dashboard: "Student dashboard",
   external_url: "External URL",
+  classes: "Browse classes",
+};
+
+export const CTA_DESTINATION_DESCRIPTIONS: Record<CtaDestinationType, string> = {
+  product: "Opens the catalog so the student can view or purchase a product.",
+  event: "Opens a specific event page with tickets and details.",
+  browse_classes: "Opens the student classes page to browse all upcoming classes.",
+  class: "Opens the classes page and highlights the next upcoming instance of a specific class.",
+  dashboard: "Opens the student home/account area for general updates.",
+  external_url: "Links to any external website or resource.",
+  classes: "Opens the student classes page to browse all upcoming classes.",
 };
 
 /**
@@ -36,11 +51,14 @@ export const CTA_DESTINATION_LABELS: Record<CtaDestinationType, string> = {
 export function resolveCtaPath(dest: CtaDestination): string | null {
   switch (dest.type) {
     case "product":
-      return dest.targetId ? `/catalog` : "/catalog";
+      return "/catalog";
     case "event":
       return dest.targetId ? `/events/${dest.targetId}` : "/events";
+    case "browse_classes":
     case "classes":
       return "/classes";
+    case "class":
+      return dest.targetId ? `/classes?highlight=${dest.targetId}` : "/classes";
     case "dashboard":
       return "/dashboard";
     case "external_url":

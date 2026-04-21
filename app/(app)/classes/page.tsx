@@ -186,6 +186,7 @@ export default async function ClassesPage() {
 
       return {
         id: rawCls.id,
+        classId: rawCls.classId,
         title: rawCls.title,
         classType: rawCls.classType,
         styleName: rawCls.styleName,

@@ -1,6 +1,7 @@
 "use client";
 
-import { Users } from "lucide-react";
+import Link from "next/link";
+import { Users, ShoppingBag } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import { getClassLevelDescription } from "@/config/class-levels";
 import {
@@ -15,6 +16,8 @@ import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
 
 export interface ClassCardData {
   id: string;
+  /** Template (recurring class) ID — null for ad-hoc instances */
+  classId: string | null;
   title: string;
   classType: string;
   styleName: string | null;
@@ -33,7 +36,7 @@ export type SerializedBookability =
   | { status: "bookable"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
   | { status: "waitlistable"; reason: string; entitlements: ValidEntitlement[] }
   | { status: "needs_role"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
-  | { status: "blocked"; reason: string }
+  | { status: "blocked"; reason: string; needsProduct?: boolean }
   | { status: "already_booked"; bookingId: string; bookingStatus: string }
   | { status: "already_waitlisted"; waitlistId: string; position: number }
   | { status: "restore_available"; bookingId: string; bookingStatus: string }
@@ -52,10 +55,13 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
     data.maxCapacity != null ? data.maxCapacity - data.totalBooked : null;
 
   const isBlocked = b.status === "blocked" || b.status === "not_bookable";
+  const isEntitlementBlocked = b.status === "blocked" && b.needsProduct;
 
-  const borderColor = isBlocked
-    ? "border-gray-200"
-    : b.status === "already_booked" && b.bookingStatus === "checked_in"
+  const borderColor = isEntitlementBlocked
+    ? "border-amber-200"
+    : isBlocked
+      ? "border-gray-200"
+      : b.status === "already_booked" && b.bookingStatus === "checked_in"
       ? "border-green-200"
       : b.status === "already_booked"
         ? "border-blue-200"
@@ -65,9 +71,11 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
             ? "border-orange-200"
             : "border-gray-200";
 
-  const bgColor = isBlocked
-    ? "bg-gray-50/80"
-    : b.status === "already_booked" && b.bookingStatus === "checked_in"
+  const bgColor = isEntitlementBlocked
+    ? "bg-amber-50/40"
+    : isBlocked
+      ? "bg-gray-50/80"
+      : b.status === "already_booked" && b.bookingStatus === "checked_in"
       ? "bg-green-50/50"
       : b.status === "already_booked"
         ? "bg-blue-50/50"
@@ -78,7 +86,7 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
             : "bg-white";
 
   return (
-    <ClassListItem border={borderColor} bg={bgColor} className={isBlocked ? "opacity-70" : ""}
+    <ClassListItem border={borderColor} bg={bgColor} className={isBlocked && !isEntitlementBlocked ? "opacity-70" : ""}
       name={data.title}
       badges={
           <>
@@ -130,8 +138,22 @@ export function StudentClassCard({ data, onBook, onRestore, onAcceptCoc }: Stude
             {b.status === "waitlistable" && (
               <p className="mt-1 text-[10px] text-amber-600">{b.reason}</p>
             )}
-            {isBlocked && (
-              <p className="mt-1.5 text-[11px] text-gray-600">{b.reason}</p>
+            {b.status === "blocked" && b.needsProduct && (
+              <div className="mt-1.5 space-y-1.5">
+                <p className="text-[11px] text-gray-600">{b.reason}</p>
+                <Link
+                  href="/catalog"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium text-bpm-600 hover:text-bpm-700 hover:underline"
+                >
+                  <ShoppingBag className="h-3 w-3" />
+                  Browse memberships, passes & drop-ins
+                </Link>
+              </div>
+            )}
+            {isBlocked && !(b.status === "blocked" && b.needsProduct) && (
+              <p className="mt-1.5 text-[11px] text-gray-600">
+                {(b.status === "blocked" || b.status === "not_bookable") ? b.reason : ""}
+              </p>
             )}
             {b.status === "restore_available" && (
               <p className="mt-1 text-[10px] text-orange-600">Cancelled — tap Restore to rebook</p>
@@ -179,6 +201,17 @@ function CompactActionEl({
     case "blocked":
       if (onAcceptCoc && COC_REASON_MATCH.test(b.reason)) {
         return <ActionPill variant="coc" onClick={onAcceptCoc}>Accept CoC</ActionPill>;
+      }
+      if (b.needsProduct) {
+        return (
+          <Link
+            href="/catalog"
+            className="shrink-0 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold bg-bpm-100 text-bpm-700 hover:bg-bpm-200 transition-colors"
+          >
+            <ShoppingBag className="h-3 w-3" />
+            Get a plan
+          </Link>
+        );
       }
       return <InlineBadge className="bg-gray-100 text-gray-500">Blocked</InlineBadge>;
     case "not_bookable":

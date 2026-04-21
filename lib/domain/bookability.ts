@@ -27,7 +27,7 @@ export type BookabilityResult =
   | { status: "bookable"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
   | { status: "waitlistable"; reason: string; entitlements: ValidEntitlement[] }
   | { status: "needs_role"; entitlements: ValidEntitlement[]; autoSelected?: ValidEntitlement }
-  | { status: "blocked"; reason: string }
+  | { status: "blocked"; reason: string; needsProduct?: boolean }
   | { status: "already_booked"; bookingId: string; bookingStatus: string }
   | { status: "already_waitlisted"; waitlistId: string; position: number }
   | { status: "restore_available"; bookingId: string; bookingStatus: string }
@@ -264,7 +264,7 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
       classCtx,
       ctx.accessRulesMap
     );
-    return { status: "blocked", reason };
+    return { status: "blocked", reason, needsProduct: true };
   }
 
   // 8c. Multi-entitlement recommendation — nearest expiry, preferring passes over memberships

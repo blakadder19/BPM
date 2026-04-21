@@ -7,10 +7,8 @@ import {
   uploadMediaImage,
   listMediaImages,
   deleteMediaImage,
-  type MediaItem,
 } from "@/lib/services/admin-media-storage";
-
-export type { MediaItem };
+import type { MediaItem } from "@/lib/domain/media-types";
 
 export async function uploadMediaAction(
   formData: FormData,

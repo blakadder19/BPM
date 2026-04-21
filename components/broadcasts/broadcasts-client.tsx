@@ -22,6 +22,7 @@ import {
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,7 @@ import { type AudienceType, AUDIENCE_LABELS } from "@/lib/domain/broadcast-types
 import {
   type CtaDestinationType,
   CTA_DESTINATION_LABELS,
+  CTA_DESTINATION_DESCRIPTIONS,
   resolveCtaPath,
 } from "@/lib/domain/cta-types";
 
@@ -76,13 +78,14 @@ const AUDIENCE_OPTIONS: { value: AudienceType; label: string }[] = [
   { value: "specific_students", label: AUDIENCE_LABELS.specific_students },
 ];
 
-const CTA_DEST_OPTIONS: { value: CtaDestinationType | ""; label: string }[] = [
-  { value: "", label: "No CTA button" },
-  { value: "product", label: CTA_DESTINATION_LABELS.product },
-  { value: "event", label: CTA_DESTINATION_LABELS.event },
-  { value: "classes", label: CTA_DESTINATION_LABELS.classes },
-  { value: "dashboard", label: CTA_DESTINATION_LABELS.dashboard },
-  { value: "external_url", label: CTA_DESTINATION_LABELS.external_url },
+const CTA_DEST_OPTIONS: { value: CtaDestinationType | ""; label: string; hint: string }[] = [
+  { value: "", label: "No CTA button", hint: "" },
+  { value: "browse_classes", label: "Browse classes", hint: "Opens the student classes page" },
+  { value: "class", label: "Specific class", hint: "Highlights one class for students to find" },
+  { value: "product", label: "Product page", hint: "Opens the catalog to view or buy a product" },
+  { value: "event", label: "Event page", hint: "Opens a specific event with tickets" },
+  { value: "dashboard", label: "Student dashboard", hint: "Opens the student home screen" },
+  { value: "external_url", label: "External URL", hint: "Links to any external website" },
 ];
 
 interface EntityOption {
@@ -97,6 +100,7 @@ interface Props {
   studentOptions: EntityOption[];
   productOptions: EntityOption[];
   eventOptions: EntityOption[];
+  classOptions: EntityOption[];
 }
 
 export function BroadcastsClient({
@@ -104,6 +108,7 @@ export function BroadcastsClient({
   studentOptions,
   productOptions,
   eventOptions,
+  classOptions,
 }: Props) {
   const router = useRouter();
   const [showComposer, setShowComposer] = useState(false);
@@ -115,10 +120,13 @@ export function BroadcastsClient({
         title="Broadcasts"
         description="Create and send alerts to students via in-app notifications and email."
         actions={
-          <Button onClick={() => setShowComposer(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            New broadcast
-          </Button>
+          <>
+            <AdminHelpButton pageKey="broadcasts" />
+            <Button onClick={() => setShowComposer(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              New broadcast
+            </Button>
+          </>
         }
       />
 
@@ -153,6 +161,7 @@ export function BroadcastsClient({
           studentOptions={studentOptions}
           productOptions={productOptions}
           eventOptions={eventOptions}
+          classOptions={classOptions}
           onClose={() => setShowComposer(false)}
           onCreated={() => {
             setShowComposer(false);
@@ -198,7 +207,7 @@ function BroadcastTableRow({
   }
 
   const ctaDestLabel = b.ctaDestinationType
-    ? CTA_DESTINATION_LABELS[b.ctaDestinationType]
+    ? (CTA_DESTINATION_LABELS[b.ctaDestinationType] ?? b.ctaDestinationType)
     : null;
 
   return (
@@ -384,12 +393,14 @@ function ComposerDialog({
   studentOptions,
   productOptions,
   eventOptions,
+  classOptions,
   onClose,
   onCreated,
 }: {
   studentOptions: EntityOption[];
   productOptions: EntityOption[];
   eventOptions: EntityOption[];
+  classOptions: EntityOption[];
   onClose: () => void;
   onCreated: () => void;
 }) {
@@ -445,7 +456,8 @@ function ComposerDialog({
     }
   }
 
-  const needsTarget = ctaDestType === "product" || ctaDestType === "event";
+  const needsTarget =
+    ctaDestType === "product" || ctaDestType === "event" || ctaDestType === "class";
   const resolvedCtaPreview = ctaDestType
     ? resolveCtaPath({
         type: ctaDestType,
@@ -453,6 +465,7 @@ function ComposerDialog({
         externalUrl: ctaExternalUrl || undefined,
       })
     : null;
+  const selectedCtaOption = CTA_DEST_OPTIONS.find((o) => o.value === ctaDestType);
 
   function handleNext() {
     setError(null);
@@ -473,9 +486,9 @@ function ComposerDialog({
       return;
     }
     if (needsTarget && !ctaTargetId) {
-      setError(
-        `Select a ${ctaDestType === "product" ? "product" : "event"} for the CTA button.`,
-      );
+      const label =
+        ctaDestType === "product" ? "product" : ctaDestType === "class" ? "class" : "event";
+      setError(`Select a ${label} for the CTA button.`);
       return;
     }
     if (audienceType === "specific_students" && selectedStudents.size === 0) {
@@ -529,7 +542,12 @@ function ComposerDialog({
       )
     : studentOptions;
 
-  const targetOptions = ctaDestType === "product" ? productOptions : eventOptions;
+  const targetOptions =
+    ctaDestType === "product"
+      ? productOptions
+      : ctaDestType === "class"
+        ? classOptions
+        : eventOptions;
 
   return (
     <Dialog open onClose={onClose}>
@@ -651,7 +669,12 @@ function ComposerDialog({
                         >
                           <option value="">
                             Select{" "}
-                            {ctaDestType === "product" ? "a product" : "an event"}...
+                            {ctaDestType === "product"
+                              ? "a product"
+                              : ctaDestType === "class"
+                                ? "a class"
+                                : "an event"}
+                            ...
                           </option>
                           {targetOptions.map((opt) => (
                             <option key={opt.id} value={opt.id}>
@@ -671,10 +694,17 @@ function ComposerDialog({
                         />
                       )}
 
+                      {/* Inline description for selected CTA type */}
+                      {selectedCtaOption?.hint && (
+                        <p className="text-[11px] text-gray-400 leading-tight">
+                          {selectedCtaOption.hint}
+                        </p>
+                      )}
+
                       {/* Resolved preview */}
                       {ctaDestType && resolvedCtaPreview && (
                         <div className="rounded bg-gray-100 px-2 py-1 text-[11px] text-gray-500 font-mono truncate">
-                          {resolvedCtaPreview}
+                          → {resolvedCtaPreview}
                         </div>
                       )}
                     </div>

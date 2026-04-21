@@ -5,6 +5,8 @@ import {
   cachedGetProducts,
   cachedGetAllEvents,
 } from "@/lib/server/cached-queries";
+import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { getTemplates } from "@/lib/services/class-store";
 import { BroadcastsClient } from "@/components/broadcasts/broadcasts-client";
 
 export default async function BroadcastsPage() {
@@ -15,6 +17,7 @@ export default async function BroadcastsPage() {
     cachedGetAllStudents(),
     cachedGetProducts(),
     cachedGetAllEvents(),
+    ensureOperationalDataHydrated(),
   ]);
 
   const studentOptions = students
@@ -32,12 +35,22 @@ export default async function BroadcastsPage() {
     .map((e) => ({ id: e.id, name: e.title }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  const classTemplates = getTemplates();
+  const classOptions = classTemplates
+    .filter((c) => c.isActive && c.classType === "class")
+    .map((c) => ({
+      id: c.id,
+      name: [c.title, c.styleName, c.level].filter(Boolean).join(" — "),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <BroadcastsClient
       broadcasts={broadcasts}
       studentOptions={studentOptions}
       productOptions={productOptions}
       eventOptions={eventOptions}
+      classOptions={classOptions}
     />
   );
 }

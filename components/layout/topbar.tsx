@@ -341,12 +341,12 @@ function NotificationDetailModal({
             )}
 
             {bc?.imageUrl && (
-              <div className="overflow-hidden rounded-lg border border-gray-200">
+              <div className="mx-auto w-full max-w-[420px] overflow-hidden rounded-xl border border-gray-200">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={bc.imageUrl}
                   alt=""
-                  className="w-full max-h-48 object-cover"
+                  className="aspect-[4/5] w-full object-cover"
                 />
               </div>
             )}

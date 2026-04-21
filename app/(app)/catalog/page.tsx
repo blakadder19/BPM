@@ -137,6 +137,12 @@ export default async function CatalogPage() {
 
       const curSub = currentSubByProduct.get(p.id);
       const renSub = renewalSubByProduct.get(p.id);
+      const isDropIn = p.productType === "drop_in";
+
+      // Drop-ins are stackable: count active ones instead of blocking purchase
+      const activeDropInCount = isDropIn
+        ? studentSubs.filter((s) => s.productId === p.id).length
+        : 0;
 
       return {
         id: p.id,
@@ -155,10 +161,11 @@ export default async function CatalogPage() {
         recurring: p.recurring,
         spanTerms: p.spanTerms,
         termName,
-        currentEntitlement: curSub ? { paymentStatus: curSub.paymentStatus } : null,
-        renewalEntitlement: renSub
+        currentEntitlement: isDropIn ? null : curSub ? { paymentStatus: curSub.paymentStatus } : null,
+        renewalEntitlement: isDropIn ? null : renSub
           ? { paymentStatus: renSub.paymentStatus, termName: renSub.termId ? termsById.get(renSub.termId)?.name ?? null : null, isRenewal: !!renSub.renewedFromId }
           : null,
+        activeDropInCount,
         styleSelectionMode: mode,
         selectableStyles: selectable,
         pickCount,

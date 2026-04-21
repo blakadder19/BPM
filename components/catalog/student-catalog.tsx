@@ -65,6 +65,8 @@ export interface CatalogProduct {
   termName: string | null;
   currentEntitlement: { paymentStatus: string } | null;
   renewalEntitlement: { paymentStatus: string; termName: string | null; isRenewal: boolean } | null;
+  /** Number of active drop-in subscriptions the student already has for this product */
+  activeDropInCount: number;
   styleSelectionMode: StyleSelectionMode;
   selectableStyles: StyleOption[];
   pickCount: number;
@@ -335,9 +337,16 @@ function ProductCard({
                 )}
               </div>
             ) : (
-              <Button className="w-full" size="sm" onClick={(e) => { e.stopPropagation(); onSelect(p); }}>
-                Get Started
-              </Button>
+              <div className="space-y-2 pt-1">
+                {p.activeDropInCount > 0 && (
+                  <p className="text-center text-xs font-medium text-green-700">
+                    {p.activeDropInCount} active drop-in{p.activeDropInCount !== 1 ? "s" : ""}
+                  </p>
+                )}
+                <Button className="w-full" size="sm" onClick={(e) => { e.stopPropagation(); onSelect(p); }}>
+                  {p.activeDropInCount > 0 ? "Buy Another" : "Get Started"}
+                </Button>
+              </div>
             )}
           </div>
         ) : undefined

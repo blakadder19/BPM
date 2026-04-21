@@ -1,6 +1,9 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import type { MediaItem } from "@/lib/domain/media-types";
+
+export type { MediaItem };
 
 const BUCKET = "admin-media";
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"]);
@@ -33,20 +36,6 @@ function extFromMime(mime: string): string {
     "image/gif": "gif",
   };
   return map[mime] ?? "jpg";
-}
-
-export interface MediaItem {
-  id: string;
-  path: string;
-  publicUrl: string;
-  filename: string;
-  mimeType: string;
-  sizeBytes: number;
-  title: string | null;
-  altText: string | null;
-  kind: string;
-  uploadedBy: string;
-  createdAt: string;
 }
 
 /**

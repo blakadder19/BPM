@@ -158,19 +158,22 @@ export async function validateAndPreparePurchase(
       assignedTermName = `${assignedTerm.name} + ${next.name}`;
     }
 
-    const hasDuplicate = studentSubs.some((s) => {
-      if (s.productId !== product.id) return false;
-      if (spanTerms >= 2) {
-        return s.validFrom <= validUntil! && (s.validUntil ?? s.validFrom) >= validFrom;
+    // Drop-ins are stackable — students can buy multiples of the same drop-in
+    if (product.productType !== "drop_in") {
+      const hasDuplicate = studentSubs.some((s) => {
+        if (s.productId !== product.id) return false;
+        if (spanTerms >= 2) {
+          return s.validFrom <= validUntil! && (s.validUntil ?? s.validFrom) >= validFrom;
+        }
+        return s.termId === assignedTerm!.id;
+      });
+      if (hasDuplicate) {
+        return {
+          error: spanTerms >= 2
+            ? `You already have ${product.name} that covers this period.`
+            : `You already have ${product.name} for ${assignedTerm.name}.`,
+        };
       }
-      return s.termId === assignedTerm!.id;
-    });
-    if (hasDuplicate) {
-      return {
-        error: spanTerms >= 2
-          ? `You already have ${product.name} that covers this period.`
-          : `You already have ${product.name} for ${assignedTerm.name}.`,
-      };
     }
   } else if (product.durationDays) {
     validFrom = todayStr;

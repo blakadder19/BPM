@@ -129,7 +129,7 @@ export function diagnoseNoEntitlement(
   accessRulesMap: Map<string, ProductAccessRule>
 ): string {
   if (subscriptions.length === 0) {
-    return "You don't have an active membership or pass. Browse the Catalog or visit reception to get started.";
+    return "You need a membership, pass, or drop-in to book classes.";
   }
 
   // Separate subscriptions into "currently in date window" vs "not yet active / expired"
@@ -185,21 +185,21 @@ export function diagnoseNoEntitlement(
   // This prevents a future subscription's "not yet valid" from masking a current product's
   // real issue (e.g. exhausted credits or style mismatch).
   if (anyExhausted && exhaustedName) {
-    return `${exhaustedName}: all classes/credits used. Upgrade or purchase a top-up.`;
+    return `${exhaustedName}: all classes used. You can buy a drop-in or upgrade your plan.`;
   }
   if (anyStyleMismatch) {
     const styleLabel = cls.styleName ?? "this style";
-    return `Your current plan doesn't cover ${styleLabel} classes.`;
+    return `Your current plan doesn't cover ${styleLabel}. You need a plan or drop-in that includes this style.`;
   }
   if (anyLevelMismatch) {
     const levelLabel = cls.level ?? "this level";
-    return `Your current plan doesn't include ${levelLabel} classes.`;
+    return `Your current plan doesn't include ${levelLabel} classes. Check available plans for this level.`;
   }
   if (anyTypeMismatch) {
-    return "Your current plan doesn't include this type of class.";
+    return "Your current plan doesn't include this type of class. Check available products.";
   }
   if (anyExpired) {
-    return "Your membership or pass has expired. Visit the Catalog or reception to renew.";
+    return "Your membership or pass has expired. Renew or get a new plan to continue booking.";
   }
   if (anyNotYetValid && notYetValidName) {
     return `${notYetValidName} starts in a later term and can't be used for this class yet.`;
@@ -207,7 +207,7 @@ export function diagnoseNoEntitlement(
   if (anyClassInFutureTerm) {
     return "This class is in a future term. You need a plan for that term to book it.";
   }
-  return "No matching entitlement for this class.";
+  return "No matching plan for this class. Browse available products to get started.";
 }
 
 export function toValidEntitlement(sub: MockSubscription): ValidEntitlement {
