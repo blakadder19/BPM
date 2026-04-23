@@ -285,6 +285,19 @@ export async function eventCollectPaymentAndCheckInAction(input: {
     checkedInBy: user.id,
   });
 
+  try {
+    const { logFinanceEvent } = await import("@/lib/services/finance-audit-log");
+    logFinanceEvent({
+      entityType: "event_purchase",
+      entityId: input.purchaseId,
+      action: "marked_paid",
+      performer: { userId: user.id, email: user.email, name: user.fullName },
+      detail: `Reception collected — ${input.receptionMethod}`,
+      previousValue: purchase.paymentStatus,
+      newValue: "paid",
+    });
+  } catch { /* best-effort */ }
+
   sendPaymentConfirmationEmail(input.purchaseId, input.eventId, qrToken).catch((err) =>
     console.error("[event-checkin] Post-payment email threw:", err instanceof Error ? err.message : err),
   );

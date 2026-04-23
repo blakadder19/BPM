@@ -8,15 +8,40 @@ import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getInstances } from "@/lib/services/schedule-store";
 import { isValidStudentQrToken } from "@/lib/domain/checkin-token";
 import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensureOperationalDataHydrated, invalidateHydration } from "@/lib/supabase/hydrate-operational";
 import { saveBookingToDB, saveAttendanceToDB } from "@/lib/supabase/operational-persistence";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { isCheckableStatus } from "@/lib/domain/checkin-rules";
-import { isEntitlementValidForClass } from "@/lib/domain/entitlement-rules";
+import { isEntitlementValidForClass, diagnoseNoEntitlement } from "@/lib/domain/entitlement-rules";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { createSubscription, updateSubscription } from "@/lib/services/subscription-service";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { logFinanceEvent } from "@/lib/services/finance-audit-log";
+import type { AuthUser } from "@/lib/auth";
 import type { CheckInMethod, DanceRole } from "@/types/domain";
+
+function qrPerformer(user: AuthUser) {
+  return { userId: user.id, email: user.email, name: user.fullName };
+}
+
+/**
+ * Single place to refresh every admin surface that can be affected by a QR
+ * operation. Includes classes/bookable and finance because:
+ *  - Check-in mutates attendance + booking counts rendered in the classes list
+ *  - Sell-drop-in + mark-paid create/mutate subscriptions and finance entries
+ * Also calls invalidateHydration() so the next render skips the 2s throttle
+ * and re-reads operational data from Supabase.
+ */
+function revalidateQrAdminSurfaces(): void {
+  invalidateHydration();
+  revalidatePath("/attendance");
+  revalidatePath("/bookings");
+  revalidatePath("/dashboard");
+  revalidatePath("/students");
+  revalidatePath("/classes/bookable");
+  revalidatePath("/classes");
+  revalidatePath("/finance");
+}
 
 async function consumeCredit(subscriptionId: string): Promise<void> {
   if (!subscriptionId) return;
@@ -60,6 +85,8 @@ export interface QrStudentBooking {
   entitlement: QrEntitlementDetail | null;
   isCheckedIn: boolean;
   canCheckIn: boolean;
+  /** Human-readable reason when canCheckIn is false and isCheckedIn is false. */
+  blockedReason: string | null;
 }
 
 export interface QrTodayClass {
@@ -74,6 +101,13 @@ export interface QrTodayClass {
   matchingSubscriptionName: string | null;
   paymentStatus: string | null;
   hasEntitlement: boolean;
+  /**
+   * When `hasEntitlement` is false, a precise explanation from the domain
+   * entitlement rules (future term / wrong style / no plan / exhausted / etc).
+   * When `hasEntitlement` is true but the entitlement cannot be used right now
+   * (e.g. already checked in, class cancelled), this still carries the reason.
+   */
+  blockedReason: string | null;
 }
 
 /** @deprecated kept temporarily — use QrTodayClass instead */
@@ -178,6 +212,19 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
     const attRecord = attSvc.getRecord(b.bookableClassId, b.studentId);
     const isCheckedIn = b.status === "checked_in" || attRecord?.status === "present" || attRecord?.status === "late";
     const sub = b.subscriptionId ? subMap.get(b.subscriptionId) : undefined;
+    const canCheckIn = isCheckableStatus(b.status);
+
+    let blockedReason: string | null = null;
+    if (!isCheckedIn && !canCheckIn) {
+      if (b.status === "cancelled" || b.status === "late_cancelled") {
+        blockedReason = "Booking was cancelled — cannot check in.";
+      } else if (b.status === "no_show") {
+        blockedReason = "Booking was marked as no-show.";
+      } else {
+        blockedReason = `Booking status "${b.status}" does not allow check-in.`;
+      }
+    }
+
     return {
       bookingId: b.id,
       classId: b.bookableClassId,
@@ -190,7 +237,8 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
       subscriptionName: b.subscriptionName,
       entitlement: sub ? buildEntitlementDetail(sub) : null,
       isCheckedIn: !!isCheckedIn,
-      canCheckIn: isCheckableStatus(b.status),
+      canCheckIn,
+      blockedReason,
     };
   });
 
@@ -267,6 +315,15 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
       }
     }
 
+    let blockedReason: string | null = null;
+    if (!matchedSub) {
+      // Include ALL subs (not just active) so diagnoseNoEntitlement can
+      // mention scheduled future memberships and expired products alike.
+      blockedReason = diagnoseNoEntitlement(studentSubs, classCtx, accessRulesMap);
+    } else if (matchedSub.paymentStatus === "pending") {
+      blockedReason = `Payment pending for ${matchedSub.productName} — confirm payment to check in.`;
+    }
+
     todayClasses.push({
       classId: cls.id,
       classTitle: cls.title,
@@ -278,6 +335,7 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
       matchingSubscriptionName: matchedSub?.productName ?? null,
       paymentStatus: matchedSub?.paymentStatus ?? null,
       hasEntitlement: !!matchedSub,
+      blockedReason,
     });
   }
 
@@ -434,10 +492,7 @@ export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheck
     if (attRecord) await saveAttendanceToDB(attRecord);
   }
 
-  revalidatePath("/attendance");
-  revalidatePath("/bookings");
-  revalidatePath("/dashboard");
-  revalidatePath("/students");
+  revalidateQrAdminSurfaces();
 
   return { success: true, classTitle: cls.title };
 }
@@ -515,10 +570,7 @@ export async function qrWalkInCheckInAction(
     if (attRecord) await saveAttendanceToDB(attRecord);
   }
 
-  revalidatePath("/attendance");
-  revalidatePath("/bookings");
-  revalidatePath("/dashboard");
-  revalidatePath("/students");
+  revalidateQrAdminSurfaces();
 
   return { success: true, classTitle: cls.title };
 }
@@ -535,11 +587,24 @@ export async function qrMarkPaidAndCheckInAction(
 
   await ensureOperationalDataHydrated();
 
+  const prevSub = await getSubscriptionRepo().getById(subscriptionId);
+
   await updateSubscription(subscriptionId, {
     paymentStatus: "paid",
     paymentMethod,
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
+    collectedBy: user.fullName,
+  });
+
+  logFinanceEvent({
+    entityType: "subscription",
+    entityId: subscriptionId,
+    action: "marked_paid",
+    performer: qrPerformer(user),
+    detail: `QR check-in — ${paymentMethod}`,
+    previousValue: prevSub?.paymentStatus ?? null,
+    newValue: "paid",
   });
 
   try {
@@ -566,11 +631,24 @@ export async function qrMarkPaidAndWalkInAction(
 
   await ensureOperationalDataHydrated();
 
+  const prevSub = await getSubscriptionRepo().getById(subscriptionId);
+
   await updateSubscription(subscriptionId, {
     paymentStatus: "paid",
     paymentMethod,
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
+    collectedBy: user.fullName,
+  });
+
+  logFinanceEvent({
+    entityType: "subscription",
+    entityId: subscriptionId,
+    action: "marked_paid",
+    performer: qrPerformer(user),
+    detail: `QR walk-in — ${paymentMethod}`,
+    previousValue: prevSub?.paymentStatus ?? null,
+    newValue: "paid",
   });
 
   try {
@@ -592,14 +670,26 @@ export async function qrMarkSubscriptionPaidAction(
 
   await ensureOperationalDataHydrated();
 
+  const prevSub = await getSubscriptionRepo().getById(subscriptionId);
+
   const result = await updateSubscription(subscriptionId, {
     paymentStatus: "paid",
     paymentMethod,
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
+    collectedBy: user.fullName,
   });
 
   if (result.success) {
+    logFinanceEvent({
+      entityType: "subscription",
+      entityId: subscriptionId,
+      action: "marked_paid",
+      performer: qrPerformer(user),
+      detail: `QR mark paid — ${paymentMethod}`,
+      previousValue: prevSub?.paymentStatus ?? null,
+      newValue: "paid",
+    });
     try {
       const sub = await getSubscriptionRepo().getById(subscriptionId);
       if (sub) {
@@ -607,9 +697,7 @@ export async function qrMarkSubscriptionPaidAction(
         await dismissNotificationsForSubscription(sub.studentId, subscriptionId);
       }
     } catch { /* best-effort */ }
-    revalidatePath("/attendance");
-    revalidatePath("/dashboard");
-    revalidatePath("/students");
+    revalidateQrAdminSurfaces();
   }
 
   return result;
@@ -647,7 +735,7 @@ export async function qrSellDropInAndCheckInAction(
     termId: null,
     paymentMethod: "cash" as const,
     paymentStatus: "paid" as const,
-    assignedBy: null,
+    assignedBy: user.fullName,
     assignedAt: new Date().toISOString(),
     autoRenew: false,
     classesUsed: 0,
@@ -656,11 +744,21 @@ export async function qrSellDropInAndCheckInAction(
     currencyAtPurchase: "EUR",
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
+    collectedBy: user.fullName,
   });
 
   if (!subResult.success || !subResult.subscriptionId) {
     return { success: false, error: subResult.error ?? "Failed to create drop-in subscription" };
   }
+
+  logFinanceEvent({
+    entityType: "subscription",
+    entityId: subResult.subscriptionId,
+    action: "created",
+    performer: qrPerformer(user),
+    detail: `Drop-in sold via QR — ${dropInProduct.name}`,
+    newValue: "paid",
+  });
 
   return qrWalkInCheckInAction(studentId, classId, subResult.subscriptionId);
 }

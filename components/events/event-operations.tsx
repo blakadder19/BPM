@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   ArrowLeft,
   Search,
-  QrCode,
   CheckCircle2,
   XCircle,
   Clock,
@@ -16,6 +15,7 @@ import {
   ChevronDown,
   Banknote,
   Lock,
+  Info,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
@@ -25,16 +25,8 @@ import type { MockSpecialEvent, MockEventProduct, MockEventPurchase } from "@/li
 import {
   eventCheckInAction,
   eventUndoCheckInAction,
-  eventQrLookupAction,
   eventCollectPaymentAndCheckInAction,
 } from "@/lib/actions/event-checkin";
-import type { EventQrPurchaseInfo, EventQrLookupResult } from "@/lib/actions/event-checkin";
-
-import dynamic from "next/dynamic";
-const QrScanner = dynamic(
-  () => import("@/components/attendance/qr-scanner").then((m) => m.QrScanner),
-  { ssr: false },
-);
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -92,11 +84,6 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
   const [filterCheckIn, setFilterCheckIn] = useState<FilterCheckIn>("all");
   const [filterPerson, setFilterPerson] = useState<FilterPerson>("all");
   const [filterProduct, setFilterProduct] = useState<string>("all");
-
-  const [scannerMode, setScannerMode] = useState<"closed" | "camera">("closed");
-  const [qrResult, setQrResult] = useState<{ purchases: EventQrPurchaseInfo[]; personName: string; personType: string } | null>(null);
-  const [qrError, setQrError] = useState<string | null>(null);
-  const [qrPending, startQrTransition] = useTransition();
 
   // Check-in action state
   const [actionPending, startActionTransition] = useTransition();
@@ -187,38 +174,11 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
       });
       if (result.success) {
         showSuccess("Payment collected & checked in");
-        setQrResult(null);
       } else {
         setActionError(result.error ?? "Failed");
       }
     });
   }, [event.id, showSuccess]);
-
-  const handleQrScan = useCallback((code: string) => {
-    setQrError(null);
-    setQrResult(null);
-    startQrTransition(async () => {
-      const result = await eventQrLookupAction(code, event.id);
-      if (result.success && result.purchases) {
-        setQrResult({
-          purchases: result.purchases,
-          personName: result.personName ?? "Unknown",
-          personType: result.personType ?? "guest",
-        });
-        const autoChecked = result.purchases.filter((p) => p.entryStatus === "auto_checked_in");
-        if (autoChecked.length > 0) {
-          showSuccess(`${result.personName} checked in`);
-        }
-      } else {
-        setQrError(result.error ?? "Unknown error");
-      }
-    });
-  }, [event.id, showSuccess]);
-
-  const clearQrResult = useCallback(() => {
-    setQrResult(null);
-    setQrError(null);
-  }, []);
 
   return (
     <div className="space-y-5">
@@ -231,21 +191,6 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
           <PageHeader
             title="Reception Mode"
             description={event.title}
-            actions={
-              isLive ? (
-                <button
-                  onClick={() => { setScannerMode(scannerMode === "closed" ? "camera" : "closed"); clearQrResult(); }}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
-                    scannerMode !== "closed"
-                      ? "bg-gray-700 text-white hover:bg-gray-800"
-                      : "bg-bpm-600 text-white hover:bg-bpm-700"
-                  }`}
-                >
-                  <QrCode className="h-4 w-4" />
-                  {scannerMode !== "closed" ? "Close scanner" : "Laptop camera scanner"}
-                </button>
-              ) : undefined
-            }
           />
         </div>
       </div>
@@ -279,60 +224,13 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
         <StatPill label="Guests" value={stats.guests} />
       </div>
 
-      {/* ── Scanner Panel (paired = primary, camera = fallback) ── */}
-      {scannerMode === "camera" && isLive && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-4">
-          <div className="max-w-sm mx-auto">
-            <QrScanner onScan={handleQrScan} active={scannerMode === "camera"} />
-          </div>
-
-          {/* Shared result display */}
-          {qrPending && (
-            <div className="text-center text-sm text-gray-500">Looking up...</div>
-          )}
-
-          {qrError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-              <div className="flex items-center gap-2">
-                <XCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-red-800">Not valid</p>
-                  <p className="text-sm text-red-600">{qrError}</p>
-                </div>
-              </div>
-              <button onClick={clearQrResult} className="mt-2 text-xs text-red-500 hover:text-red-700 underline">
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {qrResult && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className={`rounded-full p-1 ${qrResult.personType === "student" ? "bg-blue-100" : "bg-purple-100"}`}>
-                  {qrResult.personType === "student" ? <User className="h-4 w-4 text-blue-600" /> : <Users className="h-4 w-4 text-purple-600" />}
-                </div>
-                <div>
-                  <p className="font-medium text-gray-900">{qrResult.personName}</p>
-                  <p className="text-xs text-gray-500">{qrResult.personType === "student" ? "Internal student" : "Guest"}</p>
-                </div>
-                <button onClick={clearQrResult} className="ml-auto text-xs text-gray-400 hover:text-gray-600 underline">
-                  Clear
-                </button>
-              </div>
-
-              {qrResult.purchases.map((p) => (
-                <QrPurchaseCard
-                  key={p.purchaseId}
-                  info={p}
-                  onCheckIn={handleCheckIn}
-                  onUndoCheckIn={handleUndoCheckIn}
-                  onCollectPaymentAndCheckIn={handleCollectPaymentAndCheckIn}
-                  actionPending={actionPending}
-                />
-              ))}
-            </div>
-          )}
+      {/* ── Scanning notice ───────────────────────────────── */}
+      {isLive && (
+        <div className="rounded-xl border border-bpm-200 bg-bpm-50/60 px-4 py-3 flex items-start gap-3 text-sm">
+          <Info className="h-4 w-4 text-bpm-600 mt-0.5 flex-shrink-0" />
+          <p className="text-bpm-800">
+            QR scanning now runs from the global reception flow: open <span className="font-mono text-xs rounded bg-white px-1.5 py-0.5 border border-bpm-200">/scan</span> on your phone while signed in with the same admin account to check guests in. This page handles manual check-in, payment collection, and stats.
+          </p>
         </div>
       )}
 

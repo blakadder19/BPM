@@ -38,6 +38,7 @@ import {
   type QrEntitlementDetail,
   type QrTodayClass,
   type QrEventPurchase,
+  type QrEntitlementGroup,
   type QrGroupedEntitlement,
   type GuestPurchaseQrResult,
 } from "@/lib/actions/qr-checkin";
@@ -768,6 +769,13 @@ export function BookingCheckInCard({
         </p>
       ) : null}
 
+      {!checkedIn && !b.canCheckIn && b.blockedReason && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 flex items-start gap-1.5">
+          <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0" />
+          <span>{b.blockedReason}</span>
+        </div>
+      )}
+
       {result && !result.success && (
         <div className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
           {result.message}
@@ -863,14 +871,23 @@ export function TodayClassCard({
       {incompatible && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
           <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" />
-          Current product is not valid for this class.{cls.styleName ? ` Style: ${cls.styleName}.` : ""}
+          {cls.blockedReason ?? (
+            <>Current product is not valid for this class.{cls.styleName ? ` Style: ${cls.styleName}.` : ""}</>
+          )}
         </div>
       )}
 
       {noProduct && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800">
           <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" />
-          No active product. Sell a drop-in or add a subscription.
+          {cls.blockedReason ?? "No active product. Sell a drop-in or add a subscription."}
+        </div>
+      )}
+
+      {cls.hasEntitlement && cls.paymentStatus === "pending" && cls.blockedReason && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" />
+          {cls.blockedReason}
         </div>
       )}
 
@@ -1021,7 +1038,14 @@ function EntitlementGroupBlock({
               key={ent.subscriptionId}
               ent={ent}
               compact
-              onMarkPaid={ent.effectiveGroup === "active" || ent.effectiveGroup === "pending_payment" ? onMarkPaid : undefined}
+              group={ent.effectiveGroup}
+              onMarkPaid={
+                ent.effectiveGroup === "active" ||
+                ent.effectiveGroup === "pending_payment" ||
+                ent.effectiveGroup === "scheduled"
+                  ? onMarkPaid
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -1033,16 +1057,20 @@ function EntitlementGroupBlock({
 function EntitlementRow({
   ent,
   compact,
+  group,
   onMarkPaid,
 }: {
   ent: QrEntitlementDetail;
   compact?: boolean;
+  /** Effective group; used to clarify that "Mark as paid" does NOT imply "usable today". */
+  group?: QrEntitlementGroup;
   onMarkPaid?: (subscriptionId: string, method: PaymentMethod) => void;
 }) {
   const [showPay, setShowPay] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const balance = formatBalance(ent);
   const badge = PAYMENT_BADGE[ent.paymentStatus] ?? null;
+  const isScheduled = group === "scheduled";
 
   return (
     <div className={`rounded-lg bg-gray-50 px-3 py-2 text-xs ${compact ? "" : "border border-gray-100"}`}>
@@ -1066,14 +1094,21 @@ function EntitlementRow({
         </div>
       )}
       {ent.paymentStatus === "pending" && onMarkPaid && !showPay && (
-        <button
-          type="button"
-          onClick={() => setShowPay(true)}
-          className="mt-1.5 inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-amber-700 transition-colors"
-        >
-          <Banknote className="h-3 w-3" />
-          Mark as paid
-        </button>
+        <div className="mt-1.5 space-y-1">
+          <button
+            type="button"
+            onClick={() => setShowPay(true)}
+            className="inline-flex items-center gap-1 rounded bg-amber-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-amber-700 transition-colors"
+          >
+            <Banknote className="h-3 w-3" />
+            Mark as paid
+          </button>
+          {isScheduled && (
+            <p className="text-[10px] text-blue-700">
+              Marks payment only. Product is not active yet — cannot be used for today&apos;s class until it starts.
+            </p>
+          )}
+        </div>
       )}
       {showPay && onMarkPaid && (
         <div className="mt-2 space-y-2 border-t border-gray-200 pt-2">

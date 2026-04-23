@@ -91,7 +91,6 @@ export default async function AttendancePage({
       initialClassFilter={params.classTitle ?? ""}
       initialDateFilter={params.date ?? ""}
       initialStudentSearch={params.student ?? ""}
-      initialTab={params.tab === "qr" ? "qr" : undefined}
       currentUserName={user.fullName}
     />
   );

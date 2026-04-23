@@ -15,7 +15,6 @@ import {
   Plus,
   Trash2,
   QrCode,
-  ScanLine,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
@@ -41,7 +40,6 @@ import type { AttendanceMark, ClassType } from "@/types/domain";
 import type { StoredAttendance } from "@/lib/services/attendance-service";
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
 import { checkStudentPracticePayment } from "@/lib/domain/student-practice-rules";
-import { QrCheckInPanel } from "./qr-checkin-panel";
 
 // ── Prop types (serializable slices of mock data) ────────────
 
@@ -127,7 +125,6 @@ interface AttendanceClientProps {
   initialClassFilter?: string;
   initialDateFilter?: string;
   initialStudentSearch?: string;
-  initialTab?: "qr";
   currentUserName?: string;
 }
 
@@ -143,13 +140,12 @@ export function AttendanceClient({
   initialClassFilter,
   initialDateFilter,
   initialStudentSearch,
-  initialTab,
   currentUserName,
 }: AttendanceClientProps) {
   const router = useRouter();
   const hasContextFilter = !!(initialClassFilter || initialStudentSearch);
-  const [activeTab, setActiveTab] = useState<"today" | "qr" | "history">(
-    initialTab === "qr" ? "qr" : hasContextFilter ? "history" : "today"
+  const [activeTab, setActiveTab] = useState<"today" | "history">(
+    hasContextFilter ? "history" : "today"
   );
   const [showAddAttendance, setShowAddAttendance] = useState(false);
 
@@ -177,12 +173,6 @@ export function AttendanceClient({
             onClick={() => setActiveTab("today")}
           />
           <TabButton
-            label="QR Scan"
-            icon={<ScanLine className="h-3.5 w-3.5" />}
-            active={activeTab === "qr"}
-            onClick={() => setActiveTab("qr")}
-          />
-          <TabButton
             label="History"
             active={activeTab === "history"}
             onClick={() => setActiveTab("history")}
@@ -190,9 +180,7 @@ export function AttendanceClient({
         </nav>
       </div>
 
-      {activeTab === "qr" ? (
-        <QrCheckInPanel />
-      ) : activeTab === "today" ? (
+      {activeTab === "today" ? (
         <>
           <TokenCheckInPanel />
           <TodayView

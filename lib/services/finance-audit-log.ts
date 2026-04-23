@@ -27,11 +27,37 @@ export interface FinanceAuditEntry {
   entityType: "subscription" | "event_purchase" | "penalty";
   entityId: string;
   action: AuditAction;
+  /**
+   * Free-text display of who performed the action.
+   * Prefers name, then email, then user id. Retained as a legacy display
+   * field so existing rows still render correctly; new writes also populate
+   * the structured identity fields below.
+   */
   performedBy: string | null;
+  /** Auth user id of whoever performed the action (structured attribution). */
+  performedByUserId: string | null;
+  /** Email captured at the time of the action. */
+  performedByEmail: string | null;
+  /** Display name captured at the time of the action. */
+  performedByName: string | null;
+  /** Explicit performed timestamp. Falls back to createdAt in legacy rows. */
+  performedAt: string | null;
   detail: string | null;
   previousValue: string | null;
   newValue: string | null;
   createdAt: string;
+}
+
+export interface AuditPerformer {
+  userId?: string | null;
+  email?: string | null;
+  name?: string | null;
+}
+
+/** Build a display string from structured identity, preferring name → email → id. */
+export function displayPerformer(p: AuditPerformer | null | undefined): string | null {
+  if (!p) return null;
+  return p.name?.trim() || p.email?.trim() || p.userId?.trim() || null;
 }
 
 const g = globalThis as unknown as { __bpm_finance_audit?: FinanceAuditEntry[] };
@@ -55,21 +81,31 @@ export function logFinanceEvent(params: {
   entityType: FinanceAuditEntry["entityType"];
   entityId: string;
   action: AuditAction;
+  /** Legacy free-text; if omitted it is derived from performer. */
   performedBy?: string | null;
+  performer?: AuditPerformer | null;
   detail?: string | null;
   previousValue?: string | null;
   newValue?: string | null;
 }): FinanceAuditEntry {
+  const now = new Date().toISOString();
+  const performer = params.performer ?? null;
+  const derivedLegacy = params.performedBy ?? displayPerformer(performer);
+
   const entry: FinanceAuditEntry = {
     id: generateId("fal"),
     entityType: params.entityType,
     entityId: params.entityId,
     action: params.action,
-    performedBy: params.performedBy ?? null,
+    performedBy: derivedLegacy,
+    performedByUserId: performer?.userId ?? null,
+    performedByEmail: performer?.email ?? null,
+    performedByName: performer?.name ?? null,
+    performedAt: now,
     detail: params.detail ?? null,
     previousValue: params.previousValue ?? null,
     newValue: params.newValue ?? null,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
   };
   store().push(entry);
 

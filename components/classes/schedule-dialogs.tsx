@@ -116,6 +116,12 @@ export function AddInstanceDialog({
                   <option key={t.id} value={t.id}>{t.title} ({t.styleName ?? t.classType})</option>
                 ))}
               </select>
+              {isManual && (
+                <p className="mt-1 text-xs text-gray-500">
+                  Manual entry creates a standalone one-off class. No template linkage.
+                  Term linking stays only if you explicitly select one below.
+                </p>
+              )}
             </div>
 
             {allTerms && allTerms.length > 0 && (

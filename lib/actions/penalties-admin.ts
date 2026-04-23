@@ -8,8 +8,17 @@ import type { PenaltyReason, PenaltyResolution, ClassType } from "@/types/domain
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { requireRole } from "@/lib/auth";
-import { logFinanceEvent } from "@/lib/services/finance-audit-log";
+import { requireRole, getAuthUser } from "@/lib/auth";
+import { logFinanceEvent, type AuditPerformer } from "@/lib/services/finance-audit-log";
+
+async function currentPerformer(): Promise<AuditPerformer> {
+  const u = await getAuthUser();
+  return {
+    userId: u?.id ?? null,
+    email: u?.email ?? null,
+    name: u?.fullName ?? null,
+  };
+}
 
 const VALID_REASONS = new Set<string>(["late_cancel", "no_show"]);
 const VALID_RESOLUTIONS = new Set<string>(["credit_deducted", "waived", "monetary_pending"]);
@@ -38,7 +47,7 @@ export async function updatePenaltyResolution(
     entityType: "penalty",
     entityId: penaltyId,
     action: resolution === "waived" ? "waived" : "status_changed",
-    performedBy: "admin",
+    performer: await currentPerformer(),
     previousValue: previousResolution,
     newValue: resolution,
   });
@@ -127,7 +136,7 @@ export async function createPenaltyAction(
     entityType: "penalty",
     entityId: result.id,
     action: "created",
-    performedBy: "admin",
+    performer: await currentPerformer(),
     detail: `${reason} — ${classTitle} (${classDate})`,
     newValue: resolution,
   });

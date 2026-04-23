@@ -1,13 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireRole, type AuthUser } from "@/lib/auth";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { createPurchase, updatePurchasePayment, refundPurchase } from "@/lib/services/special-event-service";
 import { sendEventPurchaseEmail, sendEventRefundEmail, type EmailSendResult } from "@/lib/communications/event-emails";
 import { sendPaymentConfirmationEmail } from "@/lib/actions/event-emails";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
-import { logFinanceEvent } from "@/lib/services/finance-audit-log";
+import { logFinanceEvent, type AuditPerformer } from "@/lib/services/finance-audit-log";
+
+function performerFromUser(u: AuthUser): AuditPerformer {
+  return { userId: u.id, email: u.email, name: u.fullName };
+}
 
 function centsToEuros(c: number): string {
   return `€${(c / 100).toFixed(2)}`;
@@ -405,7 +409,7 @@ export async function markEventPurchasePaidAction(input: {
   eventId: string;
   receptionMethod: "cash" | "revolut";
 }): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  const admin = await requireRole(["admin"]);
 
   const repo = getSpecialEventRepo();
   const purchases = await repo.getPurchasesByEvent(input.eventId);
@@ -435,7 +439,7 @@ export async function markEventPurchasePaidAction(input: {
       entityType: "event_purchase",
       entityId: input.purchaseId,
       action: "marked_paid",
-      performedBy: "admin",
+      performer: performerFromUser(admin),
       detail: `Reception method: ${input.receptionMethod}`,
       previousValue: purchase.paymentStatus,
       newValue: "paid",
@@ -530,7 +534,7 @@ export async function refundEventPurchaseAction(input: {
     entityType: "event_purchase",
     entityId: input.purchaseId,
     action: "refunded",
-    performedBy: user.id,
+    performer: performerFromUser(user),
     detail: input.refundReason?.trim() || "Admin refund",
     previousValue: "paid",
     newValue: "refunded",

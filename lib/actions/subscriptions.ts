@@ -335,7 +335,7 @@ export async function applyPaymentChangeAction(params: {
   refundReason?: string;
   performedBy?: string;
 }): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  const admin = await requireRole(["admin"]);
 
   const sub = await getSubscriptionRepo().getById(params.subscriptionId);
   if (!sub) return { success: false, error: "Subscription not found" };
@@ -359,7 +359,7 @@ export async function applyPaymentChangeAction(params: {
 
   if (params.newPaymentStatus === "refunded") {
     patch.refundedAt = new Date().toISOString();
-    patch.refundedBy = params.performedBy ?? "admin";
+    patch.refundedBy = params.performedBy ?? admin.fullName ?? admin.email;
     patch.refundReason = params.refundReason ?? null;
   }
 
@@ -376,7 +376,8 @@ export async function applyPaymentChangeAction(params: {
       entityType: "subscription",
       entityId: params.subscriptionId,
       action,
-      performedBy: params.performedBy ?? "admin",
+      performer: { userId: admin.id, email: admin.email, name: admin.fullName },
+      performedBy: params.performedBy,
       detail: params.refundReason ?? null,
       previousValue: previousStatus,
       newValue: params.newPaymentStatus,

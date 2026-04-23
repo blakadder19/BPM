@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useTransition, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
   DollarSign,
@@ -14,6 +14,7 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
@@ -30,6 +31,13 @@ import {
   type FinanceSource,
 } from "@/lib/domain/finance";
 import type { FinanceAuditEntry } from "@/lib/services/finance-audit-log";
+import {
+  type FinanceSuperAdminStatus,
+  type FinanceTestCandidate,
+  FINANCE_TEST_DELETE_CONFIRMATION,
+  deleteFinanceTestRecordsAction,
+  listFinanceTestCandidatesAction,
+} from "@/lib/actions/finance-admin";
 
 // ── Props ────────────────────────────────────────────────────
 
@@ -37,6 +45,7 @@ interface FinanceClientProps {
   transactions: FinanceTransaction[];
   metrics: FinanceMetrics;
   auditLog?: FinanceAuditEntry[];
+  superAdminStatus?: FinanceSuperAdminStatus | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -165,7 +174,7 @@ function exportToCsv(rows: FinanceTransaction[]) {
 
 // ── Component ───────────────────────────────────────────────
 
-export function FinanceClient({ transactions, metrics, auditLog = [] }: FinanceClientProps) {
+export function FinanceClient({ transactions, metrics, auditLog = [], superAdminStatus }: FinanceClientProps) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -394,6 +403,9 @@ export function FinanceClient({ transactions, metrics, auditLog = [] }: FinanceC
 
       {/* Audit Trail */}
       {auditLog.length > 0 && <AuditTrailSection entries={auditLog} />}
+
+      {/* Super-admin danger zone */}
+      {superAdminStatus?.canDelete && <FinanceDangerZone />}
     </div>
   );
 }
@@ -626,6 +638,223 @@ function AuditTrailSection({ entries }: { entries: FinanceAuditEntry[] }) {
           {entries.length > 25 && (
             <p className="text-[11px] text-gray-400 pt-1">
               Showing latest 25 of {entries.length} events.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Finance Danger Zone (super-admin) ────────────────────────
+
+function FinanceDangerZone() {
+  const [expanded, setExpanded] = useState(false);
+  const [candidates, setCandidates] = useState<FinanceTestCandidate[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmation, setConfirmation] = useState("");
+  const [result, setResult] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [isLoading, startLoadTransition] = useTransition();
+
+  const loadCandidates = useCallback(() => {
+    setLoadError(null);
+    startLoadTransition(async () => {
+      const r = await listFinanceTestCandidatesAction();
+      if (r.success && r.candidates) {
+        setCandidates(r.candidates);
+        setSelectedIds(new Set());
+      } else {
+        setCandidates([]);
+        setLoadError(r.error ?? "Failed to load candidates");
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (expanded && candidates === null) loadCandidates();
+  }, [expanded, candidates, loadCandidates]);
+
+  function toggle(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (!candidates) return;
+    if (selectedIds.size === candidates.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(candidates.map((c) => c.id)));
+  }
+
+  function handleDelete() {
+    if (confirmation !== FINANCE_TEST_DELETE_CONFIRMATION) return;
+    if (selectedIds.size === 0) return;
+    setResult(null);
+    startTransition(async () => {
+      const r = await deleteFinanceTestRecordsAction({
+        confirmation,
+        ids: [...selectedIds],
+      });
+      if (r.success) {
+        const parts = [
+          `${r.deletedSubscriptions ?? 0} subscription(s)`,
+          `${r.deletedPenalties ?? 0} penalty/ies`,
+        ];
+        let msg = `Deleted: ${parts.join(", ")}.`;
+        if (r.skipped && r.skipped > 0) {
+          msg += ` Skipped ${r.skipped}.`;
+        }
+        setResult(msg);
+        setConfirmation("");
+        setSelectedIds(new Set());
+        loadCandidates();
+      } else {
+        setResult(`Error: ${r.error}`);
+      }
+    });
+  }
+
+  const canSubmit =
+    !isPending &&
+    confirmation === FINANCE_TEST_DELETE_CONFIRMATION &&
+    selectedIds.size > 0;
+
+  return (
+    <div className="rounded-xl border border-red-200 bg-red-50">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <div className="flex items-center gap-2">
+          <Trash2 className="h-4 w-4 text-red-500" />
+          <span className="text-sm font-semibold text-red-700">Danger Zone — Super Admin</span>
+        </div>
+        {expanded
+          ? <ChevronDown className="h-4 w-4 text-red-400" />
+          : <ChevronRight className="h-4 w-4 text-red-400" />
+        }
+      </button>
+
+      {expanded && (
+        <div className="border-t border-red-200 px-4 pb-4 pt-3 space-y-3">
+          <div className="rounded-lg bg-white/60 border border-red-200 px-3 py-2 text-[11px] text-red-800 space-y-1">
+            <p>
+              Lists only subscriptions and penalties whose <span className="font-mono">paymentNotes</span>,{" "}
+              <span className="font-mono">notes</span>, <span className="font-mono">paymentReference</span>,
+              or <span className="font-mono">refundReason</span> contain an explicit test marker:
+              <span className="font-mono"> [test]</span>, <span className="font-mono">#test</span>, or{" "}
+              <span className="font-mono">TEST:</span>.
+            </p>
+            <p>
+              Event purchases are <strong>never</strong> deleted. Nothing is deleted without
+              your explicit per-row selection. This action cannot be undone.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-red-700">
+              Test candidates {candidates ? `(${candidates.length})` : ""}
+            </p>
+            <button
+              type="button"
+              onClick={loadCandidates}
+              disabled={isLoading}
+              className="text-xs text-red-700 hover:text-red-900 underline disabled:opacity-40"
+            >
+              {isLoading ? "Refreshing…" : "Refresh"}
+            </button>
+          </div>
+
+          {loadError && (
+            <p className="text-xs rounded bg-red-100 text-red-800 px-3 py-2">{loadError}</p>
+          )}
+
+          {candidates && candidates.length === 0 && !loadError && (
+            <p className="text-xs text-red-600 italic">
+              No records carry a test marker. Tag a record&apos;s notes with{" "}
+              <span className="font-mono">[test]</span> to make it deletable here.
+            </p>
+          )}
+
+          {candidates && candidates.length > 0 && (
+            <div className="rounded-lg border border-red-200 bg-white max-h-64 overflow-y-auto">
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-red-100 bg-red-50/50 sticky top-0">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size === candidates.length && candidates.length > 0}
+                  onChange={toggleAll}
+                  className="h-3.5 w-3.5 accent-red-600"
+                />
+                <span className="text-[11px] font-medium text-red-700">
+                  Select all ({selectedIds.size}/{candidates.length} selected)
+                </span>
+              </div>
+              <ul className="divide-y divide-red-100">
+                {candidates.map((c) => (
+                  <li key={`${c.kind}:${c.id}`} className="px-3 py-2 flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(c.id)}
+                      onChange={() => toggle(c.id)}
+                      className="h-3.5 w-3.5 accent-red-600 mt-0.5"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
+                          {c.kind}
+                        </span>
+                        <span className="text-xs font-medium text-gray-900 truncate">{c.label}</span>
+                      </div>
+                      {c.detail && (
+                        <p className="text-[11px] text-gray-500 truncate" title={c.detail}>
+                          {c.detail}
+                        </p>
+                      )}
+                      <p className="text-[10px] text-gray-400 font-mono">{c.id}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-red-800 mb-1">
+              Type <span className="font-mono font-bold">{FINANCE_TEST_DELETE_CONFIRMATION}</span> to confirm
+            </label>
+            <input
+              type="text"
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+              placeholder={FINANCE_TEST_DELETE_CONFIRMATION}
+              className="w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm text-red-900 placeholder-red-300 focus:outline-none focus:ring-2 focus:ring-red-400"
+              disabled={isPending}
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={!canSubmit}
+            className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <Trash2 className="h-4 w-4" />
+            {isPending
+              ? "Deleting…"
+              : selectedIds.size === 0
+                ? "Delete selected"
+                : `Delete ${selectedIds.size} selected`}
+          </button>
+
+          {result && (
+            <p className={cn("text-xs rounded px-3 py-2", result.startsWith("Error") ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800")}>
+              {result}
             </p>
           )}
         </div>
