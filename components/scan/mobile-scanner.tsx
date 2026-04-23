@@ -47,6 +47,16 @@ export function MobileScanner({ userId }: MobileScannerProps) {
     checkReceiver();
   }, []);
 
+  // While in no_receiver state, poll every 3s so the phone auto-reconnects
+  // as soon as the laptop finishes registration on its side.
+  useEffect(() => {
+    if (phase !== "no_receiver") return;
+    const t = setInterval(() => {
+      checkReceiver();
+    }, 3_000);
+    return () => clearInterval(t);
+  }, [phase]);
+
   // Set up broadcast channel when we enter scanning phase
   useEffect(() => {
     if (phase !== "scanning") return;

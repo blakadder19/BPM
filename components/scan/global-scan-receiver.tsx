@@ -15,6 +15,7 @@ import {
   heartbeatReceiverAction,
   unregisterReceiverAction,
 } from "@/lib/actions/scan-receiver";
+import { useScanReceiverStatus } from "@/components/providers/scan-receiver-status-provider";
 import { GlobalScanOverlay } from "./global-scan-overlay";
 
 interface GlobalScanReceiverProps {
@@ -50,7 +51,16 @@ function getResultKey(result: GlobalScanResult): string {
  */
 export function GlobalScanReceiver({ userId }: GlobalScanReceiverProps) {
   const pathname = usePathname();
-  if (pathname?.startsWith("/scan")) return null;
+  const { setStatus } = useScanReceiverStatus();
+  const gated = pathname?.startsWith("/scan");
+
+  // Ensure status reflects "not-mounted" reality on /scan. Without this, a
+  // prior "ready" state from /dashboard would linger after navigation.
+  useEffect(() => {
+    if (gated) setStatus("idle");
+  }, [gated, setStatus]);
+
+  if (gated) return null;
   return <GlobalScanReceiverInner userId={userId} />;
 }
 
@@ -67,12 +77,39 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
   const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastKeyRef = useRef<string | null>(null);
   const lastKeyAtRef = useRef<number>(0);
+  const { setStatus } = useScanReceiverStatus();
+
+  const tryRegister = useCallback(
+    async (rid: string) => {
+      try {
+        const res = await registerReceiverAction(rid);
+        if (res?.success) {
+          setStatus("ready", { receiverId: rid });
+          return true;
+        }
+        setStatus("error", {
+          receiverId: rid,
+          errorMessage: res?.error ?? "Registration failed",
+        });
+        return false;
+      } catch (err) {
+        console.error("[GlobalScanReceiver] register threw:", err);
+        setStatus("error", {
+          receiverId: rid,
+          errorMessage: err instanceof Error ? err.message : "Registration threw",
+        });
+        return false;
+      }
+    },
+    [setStatus],
+  );
 
   useEffect(() => {
     const rid = generateReceiverId();
     receiverIdRef.current = rid;
+    setStatus("connecting", { receiverId: rid });
 
-    registerReceiverAction(rid);
+    void tryRegister(rid);
 
     const supabase = createClient();
     const channelName = globalScanChannelName(userId);
@@ -109,12 +146,31 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
 
     channelRef.current = channel;
 
-    heartbeatRef.current = setInterval(() => {
-      heartbeatReceiverAction(rid);
+    heartbeatRef.current = setInterval(async () => {
+      try {
+        const res = await heartbeatReceiverAction(rid);
+        if (res?.orphaned) {
+          // Row was deleted or overwritten — reclaim the slot.
+          await tryRegister(rid);
+          return;
+        }
+        if (!res?.success) {
+          setStatus("error", {
+            receiverId: rid,
+            errorMessage: res?.error ?? "Heartbeat failed",
+          });
+        }
+      } catch (err) {
+        console.error("[GlobalScanReceiver] heartbeat threw:", err);
+        setStatus("error", {
+          receiverId: rid,
+          errorMessage: err instanceof Error ? err.message : "Heartbeat threw",
+        });
+      }
     }, HEARTBEAT_INTERVAL_MS);
 
     function handleFocus() {
-      registerReceiverAction(rid);
+      void tryRegister(rid);
     }
     window.addEventListener("focus", handleFocus);
 
@@ -136,8 +192,9 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
         channelRef.current = null;
       }
       unregisterReceiverAction(rid);
+      setStatus("idle", { receiverId: null });
     };
-  }, [userId]);
+  }, [userId, setStatus, tryRegister]);
 
   const handleClose = useCallback(() => {
     setScanResult(null);

@@ -24,6 +24,7 @@ import { dismissStudentNoticeAction } from "@/lib/actions/student-notifications"
 import { fetchStudentAlerts } from "@/lib/actions/student-alerts";
 import { useDevUnlock } from "@/lib/hooks/use-dev-unlock";
 import { useSidebar } from "@/components/providers/sidebar-provider";
+import { useScanReceiverStatus } from "@/components/providers/scan-receiver-status-provider";
 import type { AuthUser } from "@/lib/auth";
 import type { AdminAlert, AlertSeverity } from "@/lib/domain/admin-alerts";
 
@@ -397,6 +398,7 @@ function ScanLauncher() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const { status, errorMessage, receiverId } = useScanReceiverStatus();
 
   useEffect(() => {
     if (!open) return;
@@ -408,6 +410,17 @@ function ScanLauncher() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
+
+  // Visual cue on the icon itself so admins see at-a-glance state even
+  // without opening the popover.
+  const dotClass =
+    status === "ready"
+      ? "bg-green-500"
+      : status === "connecting"
+      ? "bg-amber-400 animate-pulse"
+      : status === "error"
+      ? "bg-red-500"
+      : "bg-gray-300";
 
   return (
     <div className="relative">
@@ -426,12 +439,16 @@ function ScanLauncher() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="hidden md:inline-flex rounded-lg p-2 text-gray-700 hover:bg-gray-100 transition-colors"
+        className="hidden md:inline-flex relative rounded-lg p-2 text-gray-700 hover:bg-gray-100 transition-colors"
         title="Scanner status"
         aria-label="Scanner status"
         aria-expanded={open}
       >
         <QrCode className="h-5 w-5" />
+        <span
+          className={`absolute right-1.5 top-1.5 h-2 w-2 rounded-full ring-2 ring-white ${dotClass}`}
+          aria-hidden
+        />
       </button>
 
       {open && (
@@ -443,17 +460,7 @@ function ScanLauncher() {
             <h3 className="text-sm font-semibold text-gray-800">QR Scanner</h3>
           </div>
           <div className="space-y-3 px-4 py-3">
-            <div className="flex items-start gap-2.5 rounded-lg bg-green-50 border border-green-100 px-3 py-2">
-              <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-green-800">
-                  This laptop is ready to receive scans
-                </p>
-                <p className="mt-0.5 text-xs text-green-700/80">
-                  Scan results from your phone will appear here automatically.
-                </p>
-              </div>
-            </div>
+            <StatusRow status={status} errorMessage={errorMessage} />
 
             <div className="flex items-start gap-2.5 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
               <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
@@ -464,6 +471,12 @@ function ScanLauncher() {
                 any QR code.
               </div>
             </div>
+
+            {receiverId && (
+              <p className="text-[10px] text-gray-400 font-mono break-all">
+                receiver_id: {receiverId}
+              </p>
+            )}
 
             <button
               type="button"
@@ -478,6 +491,82 @@ function ScanLauncher() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function StatusRow({
+  status,
+  errorMessage,
+}: {
+  status: ReturnType<typeof useScanReceiverStatus>["status"];
+  errorMessage: string | null;
+}) {
+  if (status === "ready") {
+    return (
+      <div className="flex items-start gap-2.5 rounded-lg bg-green-50 border border-green-100 px-3 py-2">
+        <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-green-800">
+            This laptop is ready to receive scans
+          </p>
+          <p className="mt-0.5 text-xs text-green-700/80">
+            Scan results from your phone will appear here automatically.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "connecting") {
+    return (
+      <div className="flex items-start gap-2.5 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2">
+        <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-amber-800">
+            Connecting laptop receiver…
+          </p>
+          <p className="mt-0.5 text-xs text-amber-700/80">
+            Registering this tab as the active receiver.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <div className="flex items-start gap-2.5 rounded-lg bg-red-50 border border-red-100 px-3 py-2">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-red-800">
+            Receiver registration failed
+          </p>
+          <p className="mt-0.5 text-xs text-red-700/80">
+            {errorMessage ?? "The laptop could not register with the scan server."}
+          </p>
+          <p className="mt-1 text-[11px] text-red-700/70">
+            Your phone will see “No active laptop session” until this is fixed.
+            Try reloading this page; if the problem persists, check that the
+            database migration for <span className="font-mono">scan_receivers</span>{" "}
+            has been applied.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-2.5 rounded-lg bg-gray-50 border border-gray-200 px-3 py-2">
+      <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
+      <div className="min-w-0">
+        <p className="text-sm font-medium text-gray-700">
+          No active receiver yet
+        </p>
+        <p className="mt-0.5 text-xs text-gray-500">
+          Open any admin page on this laptop to register as a receiver.
+        </p>
+      </div>
     </div>
   );
 }

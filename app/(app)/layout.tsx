@@ -6,6 +6,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { UserProvider } from "@/components/providers/user-provider";
 import { SidebarProvider } from "@/components/providers/sidebar-provider";
+import { ScanReceiverStatusProvider } from "@/components/providers/scan-receiver-status-provider";
 import { DevPanelGate } from "@/components/dev/dev-panel-gate";
 import { SessionGuard } from "@/components/layout/session-guard";
 import { GlobalScanReceiver } from "@/components/scan/global-scan-receiver";
@@ -87,6 +88,7 @@ export default async function AppLayout({
 
   return (
     <SidebarProvider>
+    <ScanReceiverStatusProvider>
       <div className="flex h-[100dvh] bg-gray-50">
         <SessionGuard />
         <Sidebar user={user} />
@@ -112,6 +114,7 @@ export default async function AppLayout({
           <DevPanelGate studentId={panelStudentId} studentName={panelStudentName} />
         )}
       </div>
+    </ScanReceiverStatusProvider>
     </SidebarProvider>
   );
 }

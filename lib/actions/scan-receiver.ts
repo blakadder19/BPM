@@ -67,15 +67,29 @@ export async function registerReceiverAction(receiverId: string): Promise<{
 
 export async function heartbeatReceiverAction(receiverId: string): Promise<{
   success: boolean;
+  error?: string;
+  /** True when 0 rows were updated — caller should re-register to reclaim receiver slot. */
+  orphaned?: boolean;
 }> {
   const user = await getAuthUser();
-  if (!user) return { success: false };
+  if (!user) return { success: false, error: "Not authenticated" };
 
-  await db()
+  const { data, error } = await db()
     .from("scan_receivers")
     .update({ last_heartbeat: new Date().toISOString() })
     .eq("user_id", user.id)
-    .eq("receiver_id", receiverId);
+    .eq("receiver_id", receiverId)
+    .select("id");
+
+  if (error) {
+    console.error("[scan-receiver] Failed to heartbeat:", error.message);
+    return { success: false, error: "Failed to send heartbeat" };
+  }
+
+  if (!data || data.length === 0) {
+    // Row was deleted (stale cleanup) or overwritten by another tab.
+    return { success: false, orphaned: true };
+  }
 
   return { success: true };
 }
