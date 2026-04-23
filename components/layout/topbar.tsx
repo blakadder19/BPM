@@ -13,6 +13,9 @@ import {
   ExternalLink,
   Megaphone,
   Menu,
+  QrCode,
+  Smartphone,
+  Monitor,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
@@ -92,6 +95,7 @@ export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps)
       </div>
 
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
+        {(user.role === "admin" || user.role === "teacher") && <ScanLauncher />}
         <AlertBell alerts={visibleAlerts} isStudent={user.role === "student"} />
         <span className="hidden sm:inline text-sm text-gray-600 truncate max-w-[200px]">
           {user.role === "student" && devStudentId
@@ -377,6 +381,104 @@ function NotificationDetailModal({
         </DialogBody>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Scan Launcher ───────────────────────────────────────────
+//
+// Restored QR entry point. This does NOT reintroduce the old local
+// topbar scanner — it only launches the existing global scan flow:
+//   - On mobile (<md): navigates to /scan, which is sender-only.
+//   - On desktop (>=md): opens a lightweight helper popover explaining
+//     that the laptop is ready to receive scans and to open /scan on
+//     the phone signed in to the same admin account.
+
+function ScanLauncher() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  return (
+    <div className="relative">
+      {/* Mobile: navigate to /scan */}
+      <button
+        type="button"
+        onClick={() => router.push("/scan")}
+        className="md:hidden rounded-lg p-2 text-gray-700 hover:bg-gray-100 transition-colors"
+        title="Open scanner"
+        aria-label="Open scanner"
+      >
+        <QrCode className="h-5 w-5" />
+      </button>
+
+      {/* Desktop: open helper popover (does NOT scan locally) */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="hidden md:inline-flex rounded-lg p-2 text-gray-700 hover:bg-gray-100 transition-colors"
+        title="Scanner status"
+        aria-label="Scanner status"
+        aria-expanded={open}
+      >
+        <QrCode className="h-5 w-5" />
+      </button>
+
+      {open && (
+        <div
+          ref={panelRef}
+          className="absolute right-0 top-full z-50 mt-1 w-80 rounded-xl border border-gray-200 bg-white shadow-lg"
+        >
+          <div className="border-b border-gray-100 px-4 py-2.5">
+            <h3 className="text-sm font-semibold text-gray-800">QR Scanner</h3>
+          </div>
+          <div className="space-y-3 px-4 py-3">
+            <div className="flex items-start gap-2.5 rounded-lg bg-green-50 border border-green-100 px-3 py-2">
+              <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-green-800">
+                  This laptop is ready to receive scans
+                </p>
+                <p className="mt-0.5 text-xs text-green-700/80">
+                  Scan results from your phone will appear here automatically.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 rounded-lg bg-gray-50 border border-gray-100 px-3 py-2">
+              <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-gray-500" />
+              <div className="min-w-0 text-xs text-gray-600 leading-relaxed">
+                On your phone, open{" "}
+                <span className="font-mono text-gray-800">/scan</span> while
+                signed in to the same admin account, then point the camera at
+                any QR code.
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                window.open("/scan", "_blank");
+              }}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors text-center"
+            >
+              Open /scan in a new tab
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
