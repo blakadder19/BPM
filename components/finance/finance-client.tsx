@@ -35,6 +35,8 @@ import {
   type FinanceSuperAdminStatus,
   type FinanceTestCandidate,
   FINANCE_TEST_DELETE_CONFIRMATION,
+} from "@/lib/domain/finance-admin";
+import {
   deleteFinanceTestRecordsAction,
   listFinanceTestCandidatesAction,
 } from "@/lib/actions/finance-admin";

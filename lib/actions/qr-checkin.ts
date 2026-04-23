@@ -218,8 +218,8 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
     if (!isCheckedIn && !canCheckIn) {
       if (b.status === "cancelled" || b.status === "late_cancelled") {
         blockedReason = "Booking was cancelled — cannot check in.";
-      } else if (b.status === "no_show") {
-        blockedReason = "Booking was marked as no-show.";
+      } else if (b.status === "missed") {
+        blockedReason = "Booking was marked as missed.";
       } else {
         blockedReason = `Booking status "${b.status}" does not allow check-in.`;
       }

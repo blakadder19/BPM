@@ -3,6 +3,8 @@
 /**
  * Super-admin only finance test data deletion (narrow + explicit).
  *
+ * See `lib/domain/finance-admin.ts` for constants and types shared with UI.
+ *
  * Design (G5 — narrowed):
  *   Broad filters like "manual payment method" are NOT a test signal on their
  *   own (real reception payments are also cash/revolut/etc.), and wiping every
@@ -21,7 +23,7 @@
  * Test-marker predicate:
  *   A record qualifies as test data only when any of the following text fields
  *   contains one of the explicit markers `[test]`, `#test`, or `TEST:`
- *   (case-insensitive, whole-token match for `TEST:`):
+ *   (case-insensitive):
  *     - subscription: paymentNotes, notes, paymentReference, refundReason
  *     - penalty: notes
  *
@@ -41,8 +43,13 @@ import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import { invalidateHydration } from "@/lib/supabase/hydrate-operational";
 import { deletePenaltyFromDB } from "@/lib/supabase/operational-persistence";
 import { isRealUser } from "@/lib/utils/is-real-user";
-
-export const FINANCE_TEST_DELETE_CONFIRMATION = "DELETE TEST DATA";
+import {
+  FINANCE_TEST_DELETE_CONFIRMATION,
+  type FinanceSuperAdminStatus,
+  type FinanceTestCandidate,
+  type ListFinanceTestCandidatesResult,
+  type DeleteFinanceTestResult,
+} from "@/lib/domain/finance-admin";
 
 /** Explicit markers a record must carry to qualify as test data. */
 const TEST_MARKERS = ["[test]", "#test", "test:"] as const;
@@ -56,15 +63,6 @@ function hasTestMarker(...fields: (string | null | undefined)[]): boolean {
     }
   }
   return false;
-}
-
-export interface FinanceSuperAdminStatus {
-  /** The current authenticated admin matches `BPM_SUPER_ADMIN_EMAIL`. */
-  isSuperAdmin: boolean;
-  /** `BPM_ALLOW_FINANCE_TEST_DELETE === "true"` in this environment. */
-  envEnabled: boolean;
-  /** Convenience: true iff both gates pass and danger UI should be rendered. */
-  canDelete: boolean;
 }
 
 /**
@@ -86,22 +84,6 @@ export async function getFinanceSuperAdminStatus(): Promise<FinanceSuperAdminSta
     envEnabled,
     canDelete: isSuperAdmin && envEnabled,
   };
-}
-
-// ── Candidate listing ───────────────────────────────────────
-
-export interface FinanceTestCandidate {
-  kind: "subscription" | "penalty";
-  id: string;
-  label: string;
-  detail: string | null;
-  createdAt: string | null;
-}
-
-export interface ListFinanceTestCandidatesResult {
-  success: boolean;
-  error?: string;
-  candidates?: FinanceTestCandidate[];
 }
 
 /**
@@ -152,17 +134,6 @@ export async function listFinanceTestCandidatesAction(): Promise<ListFinanceTest
   candidates.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return { success: true, candidates };
-}
-
-// ── Deletion ────────────────────────────────────────────────
-
-export interface DeleteFinanceTestResult {
-  success: boolean;
-  error?: string;
-  deletedSubscriptions?: number;
-  deletedPenalties?: number;
-  skipped?: number;
-  skippedReasons?: string[];
 }
 
 export async function deleteFinanceTestRecordsAction(input: {
