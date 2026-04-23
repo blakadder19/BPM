@@ -258,10 +258,9 @@ export async function createTemplateAction(
     const memTpl = createTemplate(templateData);
     if (dbTpl) memTpl.id = dbTpl.id;
     const finalId = memTpl.id;
-    const allTemplates = getTemplates();
-    const exists = allTemplates.some((t) => t.id === finalId);
+    const exists = !!getTemplate(finalId);
     console.info(
-      `[createTemplateAction] Created "${title}" id=${finalId} dbOk=${!!dbTpl} inMemory=${exists} total=${allTemplates.length}`
+      `[createTemplateAction] Created "${title}" id=${finalId} dbOk=${!!dbTpl} inMemory=${exists}`
     );
   } catch (err) {
     console.error("[createTemplateAction] DB write failed:", err);
@@ -1372,10 +1371,9 @@ export async function bulkCreateInstancesAction(
     }
   }
 
-  const postGenTemplateCount = getTemplates().length;
-  const templateStillExists = selectedTemplates.every((t) => getTemplates().some((m) => m.id === t.id));
+  const templateStillExists = selectedTemplates.every((t) => !!getTemplate(t.id));
   console.info(
-    `[bulkCreateInstancesAction] Done: created=${created} skipped=${skipped} failed=${failed} templates=${postGenTemplateCount} allExist=${templateStillExists}`
+    `[bulkCreateInstancesAction] Done: created=${created} skipped=${skipped} failed=${failed} allExist=${templateStillExists}`
   );
 
   revalidateClasses();
