@@ -74,9 +74,16 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [scanResult, setScanResult] = useState<GlobalScanResult | null>(null);
-  const autoDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [suppressedCount, setSuppressedCount] = useState(0);
   const lastKeyRef = useRef<string | null>(null);
   const lastKeyAtRef = useRef<number>(0);
+  // Mirror of scanResult for the broadcast callback closure; keeps the
+  // broadcast handler free of stale-state bugs without having to re-subscribe
+  // every time `scanResult` changes.
+  const scanResultRef = useRef<GlobalScanResult | null>(null);
+  useEffect(() => {
+    scanResultRef.current = scanResult;
+  }, [scanResult]);
   const { setStatus } = useScanReceiverStatus();
 
   const tryRegister = useCallback(
@@ -123,6 +130,16 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
           return;
         }
 
+        // While an overlay is already open the admin is mid-operation for a
+        // specific student. Silently replacing the modal would lose that
+        // context, so we block new scans until the admin explicitly clicks
+        // "Next scan" or "Close". This is the simplest safe behavior
+        // (block + counter) — no queue, no auto-replace.
+        if (scanResultRef.current) {
+          setSuppressedCount((n) => n + 1);
+          return;
+        }
+
         // Duplicate suppression: latest-scan-wins, but ignore the same
         // resolved entity arriving within DUPLICATE_SUPPRESS_MS.
         const key = getResultKey(broadcast.result);
@@ -138,9 +155,7 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
         lastKeyAtRef.current = now;
 
         setScanResult(broadcast.result);
-
-        if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
-        autoDismissRef.current = setTimeout(() => setScanResult(null), 30_000);
+        // No auto-dismiss — admin stays in control until Close/Next scan.
       })
       .subscribe();
 
@@ -186,7 +201,6 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("beforeunload", handleBeforeUnload);
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-      if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -198,10 +212,27 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
 
   const handleClose = useCallback(() => {
     setScanResult(null);
-    if (autoDismissRef.current) clearTimeout(autoDismissRef.current);
+    setSuppressedCount(0);
+    // Reset duplicate-suppression window so the NEXT scan (even if it's the
+    // same entity) is not treated as a repeat after the admin closed the
+    // modal.
+    lastKeyRef.current = null;
+    lastKeyAtRef.current = 0;
   }, []);
 
-  if (!scanResult) return null;
+  const handleNextScan = useCallback(() => {
+    setScanResult(null);
+    setSuppressedCount(0);
+    lastKeyRef.current = null;
+    lastKeyAtRef.current = 0;
+  }, []);
 
-  return <GlobalScanOverlay result={scanResult} onClose={handleClose} />;
+  return (
+    <GlobalScanOverlay
+      result={scanResult}
+      onClose={handleClose}
+      onNextScan={handleNextScan}
+      suppressedCount={suppressedCount}
+    />
+  );
 }

@@ -63,7 +63,7 @@ type NoEntitlementTarget = {
 
 type PaymentMethod = "cash" | "revolut";
 
-function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+export function Overlay({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
       <div className="relative w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
@@ -720,7 +720,7 @@ export function QrCheckInPanel() {
   );
 }
 
-function BookingCheckInCard({
+export function BookingCheckInCard({
   booking: b,
   result,
   onCheckIn,
@@ -794,7 +794,7 @@ function BookingCheckInCard({
   );
 }
 
-function TodayClassCard({
+export function TodayClassCard({
   cls,
   result,
   onAction,
@@ -954,7 +954,7 @@ const ENTITLEMENT_GROUP_CONFIG: Record<string, { label: string; borderColor: str
   ended: { label: "Expired / Ended", borderColor: "border-gray-200", dotColor: "bg-gray-400", defaultOpen: false },
 };
 
-function AllEntitlementsSection({
+export function AllEntitlementsSection({
   entitlements,
   onMarkPaid,
 }: {
@@ -1137,7 +1137,7 @@ const EVENT_PAYMENT_BADGE: Record<string, { label: string; className: string }> 
   pending: { label: "Pending", className: "bg-amber-100 text-amber-700" },
 };
 
-function EventPurchaseCard({ purchase }: { purchase: QrEventPurchase }) {
+export function EventPurchaseCard({ purchase }: { purchase: QrEventPurchase }) {
   const badge = EVENT_PAYMENT_BADGE[purchase.paymentStatus] ?? { label: purchase.paymentStatus, className: "bg-gray-200 text-gray-600" };
 
   return (

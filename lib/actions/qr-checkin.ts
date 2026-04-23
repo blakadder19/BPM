@@ -101,6 +101,7 @@ export interface QrLookupResult {
     id: string;
     name: string;
     email: string;
+    phone?: string | null;
   };
   todayBookings?: QrStudentBooking[];
   todayClasses?: QrTodayClass[];
@@ -313,6 +314,7 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
       id: student.id,
       name: student.fullName,
       email: student.email,
+      phone: student.phone ?? null,
     },
     todayBookings,
     todayClasses,
@@ -333,6 +335,25 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
   }
 
   return lookupStudentByQr(token);
+}
+
+/**
+ * Refresh a student lookup by student id (used by the global scan overlay,
+ * which receives a resolved result but not the original QR token).
+ */
+export async function lookupStudentByIdAction(studentId: string): Promise<QrLookupResult> {
+  const user = await getAuthUser();
+  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
+    return { success: false, error: "Not authorized" };
+  }
+
+  await ensureOperationalDataHydrated();
+  const students = await getStudentRepo().getAll();
+  const student = students.find((s) => s.id === studentId);
+  if (!student?.qrToken) {
+    return { success: false, error: "Student not found" };
+  }
+  return lookupStudentByQr(student.qrToken);
 }
 
 export interface QrCheckInResult {
