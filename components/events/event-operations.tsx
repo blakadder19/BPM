@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition, useCallback, useEffect } from "react";
+import { useState, useMemo, useTransition, useCallback } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -16,7 +16,6 @@ import {
   ChevronDown,
   Banknote,
   Lock,
-  Smartphone,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "@/components/ui/page-header";
@@ -30,9 +29,6 @@ import {
   eventCollectPaymentAndCheckInAction,
 } from "@/lib/actions/event-checkin";
 import type { EventQrPurchaseInfo, EventQrLookupResult } from "@/lib/actions/event-checkin";
-import { PairScannerControls } from "@/components/scan/pair-scanner-controls";
-import { useScanSession } from "@/components/providers/scan-session-provider";
-import type { PairedScanResult } from "@/lib/domain/scan-session";
 
 import dynamic from "next/dynamic";
 const QrScanner = dynamic(
@@ -80,7 +76,6 @@ interface Props {
 // ── Component ────────────────────────────────────────────────
 
 export function EventOperations({ event, products, purchases, studentInfoMap }: Props) {
-  const { lastResult: globalLastResult, clearLastResult, session: globalSession } = useScanSession();
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   // Event window check (calendar-day span: check-in enabled for all days covered by the event)
@@ -98,25 +93,10 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
   const [filterPerson, setFilterPerson] = useState<FilterPerson>("all");
   const [filterProduct, setFilterProduct] = useState<string>("all");
 
-  // Auto-open scanner when a global paired session exists for this event
-  const [scannerMode, setScannerMode] = useState<"closed" | "paired" | "camera">(
-    globalSession && globalSession.contextType === "event_reception" && globalSession.contextId === event.id
-      ? "paired"
-      : "closed"
-  );
+  const [scannerMode, setScannerMode] = useState<"closed" | "camera">("closed");
   const [qrResult, setQrResult] = useState<{ purchases: EventQrPurchaseInfo[]; personName: string; personType: string } | null>(null);
   const [qrError, setQrError] = useState<string | null>(null);
   const [qrPending, startQrTransition] = useTransition();
-
-  // Pick up pending scan result from global context
-  useEffect(() => {
-    if (globalLastResult && globalLastResult.payload.type === "event_reception") {
-      handlePairedScanResult(globalLastResult);
-      clearLastResult();
-      if (scannerMode === "closed") setScannerMode("paired");
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [globalLastResult]);
 
   // Check-in action state
   const [actionPending, startActionTransition] = useTransition();
@@ -240,27 +220,6 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
     setQrError(null);
   }, []);
 
-  const handlePairedScanResult = useCallback((result: PairedScanResult) => {
-    if (result.payload.type !== "event_reception") return;
-    setQrError(null);
-    if (result.payload.success && result.payload.data) {
-      const data = result.payload.data as EventQrLookupResult;
-      if (data.purchases) {
-        setQrResult({
-          purchases: data.purchases,
-          personName: data.personName ?? "Unknown",
-          personType: data.personType ?? "guest",
-        });
-        const autoChecked = data.purchases.filter((p) => p.entryStatus === "auto_checked_in");
-        if (autoChecked.length > 0) {
-          showSuccess(`${data.personName} checked in`);
-        }
-      }
-    } else {
-      setQrError(result.payload.error ?? "Unknown error from mobile scan");
-    }
-  }, [showSuccess]);
-
   return (
     <div className="space-y-5">
       {/* ── Header ────────────────────────────────────────── */}
@@ -275,15 +234,15 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
             actions={
               isLive ? (
                 <button
-                  onClick={() => { setScannerMode(scannerMode === "closed" ? "paired" : "closed"); clearQrResult(); }}
+                  onClick={() => { setScannerMode(scannerMode === "closed" ? "camera" : "closed"); clearQrResult(); }}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium ${
                     scannerMode !== "closed"
                       ? "bg-gray-700 text-white hover:bg-gray-800"
                       : "bg-bpm-600 text-white hover:bg-bpm-700"
                   }`}
                 >
-                  <Smartphone className="h-4 w-4" />
-                  {scannerMode !== "closed" ? "Close scanner" : "Start scanner"}
+                  <QrCode className="h-4 w-4" />
+                  {scannerMode !== "closed" ? "Close scanner" : "Laptop camera scanner"}
                 </button>
               ) : undefined
             }
@@ -321,45 +280,11 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
       </div>
 
       {/* ── Scanner Panel (paired = primary, camera = fallback) ── */}
-      {scannerMode !== "closed" && isLive && (
+      {scannerMode === "camera" && isLive && (
         <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-4">
-          {/* Primary: Paired mobile scanner */}
-          {scannerMode === "paired" && (
-            <PairScannerControls
-              contextType="event_reception"
-              contextId={event.id}
-              onScanResult={handlePairedScanResult}
-            />
-          )}
-
-          {/* Fallback: Local camera */}
-          {scannerMode === "camera" && (
-            <div className="space-y-3">
-              <div className="max-w-sm mx-auto">
-                <QrScanner onScan={handleQrScan} active={scannerMode === "camera"} />
-              </div>
-              <button
-                onClick={() => { setScannerMode("paired"); clearQrResult(); }}
-                className="flex items-center gap-1.5 text-xs text-bpm-600 hover:text-bpm-700 font-medium"
-              >
-                <Smartphone className="h-3.5 w-3.5" />
-                Back to paired scanner
-              </button>
-            </div>
-          )}
-
-          {/* Fallback toggle (only when in paired mode, no result showing) */}
-          {scannerMode === "paired" && !qrResult && !qrError && (
-            <div className="border-t border-gray-100 pt-3">
-              <button
-                onClick={() => { setScannerMode("camera"); clearQrResult(); }}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <QrCode className="h-3.5 w-3.5" />
-                Use laptop camera instead
-              </button>
-            </div>
-          )}
+          <div className="max-w-sm mx-auto">
+            <QrScanner onScan={handleQrScan} active={scannerMode === "camera"} />
+          </div>
 
           {/* Shared result display */}
           {qrPending && (

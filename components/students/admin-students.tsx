@@ -132,12 +132,12 @@ export function AdminStudents({
   useEffect(() => {
     const highlightId = searchParams.get("highlight");
     const action = searchParams.get("action");
-    if (highlightId && action === "add-subscription") {
-      const exists = students.some((s) => s.id === highlightId);
-      if (exists) {
-        setExpandedId(highlightId);
-        setAddSubStudentId(highlightId);
-      }
+    if (!highlightId) return;
+    const exists = students.some((s) => s.id === highlightId);
+    if (!exists) return;
+    setExpandedId(highlightId);
+    if (action === "add-subscription") {
+      setAddSubStudentId(highlightId);
     }
   }, [searchParams, students]);
 

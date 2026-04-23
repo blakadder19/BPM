@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useEffect, useRef, useTransition, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { useScanSessionSafe } from "@/components/providers/scan-session-provider";
 import {
   ClipboardCheck,
   Clock,
@@ -148,22 +147,11 @@ export function AttendanceClient({
   currentUserName,
 }: AttendanceClientProps) {
   const router = useRouter();
-  const scanCtx = useScanSessionSafe();
   const hasContextFilter = !!(initialClassFilter || initialStudentSearch);
   const [activeTab, setActiveTab] = useState<"today" | "qr" | "history">(
     initialTab === "qr" ? "qr" : hasContextFilter ? "history" : "today"
   );
   const [showAddAttendance, setShowAddAttendance] = useState(false);
-
-  // Auto-switch to QR tab when a paired scan result arrives for attendance
-  const scanCountRef = useRef(scanCtx?.scanCount ?? 0);
-  useEffect(() => {
-    if (!scanCtx) return;
-    if (scanCtx.scanCount > scanCountRef.current && scanCtx.lastResult?.payload?.type === "attendance") {
-      setActiveTab("qr");
-    }
-    scanCountRef.current = scanCtx.scanCount;
-  }, [scanCtx?.scanCount, scanCtx?.lastResult, scanCtx]);
 
   return (
     <div className="space-y-6">
