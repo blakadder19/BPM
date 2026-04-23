@@ -69,7 +69,7 @@ export default function AuthCallbackPage() {
       await provisionCurrentUser().catch((e) => {
         console.error("[auth-callback] provisionCurrentUser (confirmation):", e);
       });
-      await supabase.auth.signOut().catch(() => {});
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
       goToLogin();
     }
 

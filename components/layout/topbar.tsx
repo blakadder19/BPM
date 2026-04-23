@@ -13,9 +13,21 @@ import {
   ExternalLink,
   Megaphone,
   Menu,
+  ScanLine,
+  User,
+  Ticket,
+  Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from "@/components/ui/dialog";
+import dynamic from "next/dynamic";
+import { lookupStudentByQrAction, lookupGuestPurchaseByQrAction, type QrLookupResult, type GuestPurchaseQrResult } from "@/lib/actions/qr-checkin";
+import { classifyQrToken } from "@/lib/domain/qr-resolver";
+
+const QrScanner = dynamic(
+  () => import("@/components/attendance/qr-scanner").then((m) => m.QrScanner),
+  { ssr: false },
+);
 import { switchDevRole, switchDevStudent } from "@/lib/actions/auth";
 import { dismissStudentNoticeAction } from "@/lib/actions/student-notifications";
 import { fetchStudentAlerts } from "@/lib/actions/student-alerts";
@@ -92,6 +104,7 @@ export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps)
       </div>
 
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
+        {(user.role === "admin" || user.role === "teacher") && <UnifiedScanner />}
         <AlertBell alerts={visibleAlerts} isStudent={user.role === "student"} />
         <span className="hidden sm:inline text-sm text-gray-600 truncate max-w-[200px]">
           {user.role === "student" && devStudentId
@@ -100,6 +113,177 @@ export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps)
         </span>
       </div>
     </header>
+  );
+}
+
+// ── Unified QR Scanner ──────────────────────────────────────
+
+type ScanResult =
+  | { type: "student"; data: QrLookupResult }
+  | { type: "event"; data: GuestPurchaseQrResult }
+  | { type: "error"; message: string };
+
+function UnifiedScanner() {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<ScanResult | null>(null);
+
+  function reset() {
+    setResult(null);
+    setLoading(false);
+    setScanning(true);
+  }
+
+  function handleClose() {
+    setOpen(false);
+    setScanning(false);
+    setResult(null);
+    setLoading(false);
+  }
+
+  async function handleScan(code: string) {
+    if (loading) return;
+    setLoading(true);
+    setScanning(false);
+
+    const tokenType = classifyQrToken(code);
+    if (tokenType === "student") {
+      const res = await lookupStudentByQrAction(code);
+      setResult({ type: "student", data: res });
+    } else if (tokenType === "event_guest") {
+      const res = await lookupGuestPurchaseByQrAction(code);
+      setResult({ type: "event", data: res });
+    } else {
+      setResult({ type: "error", message: "Unknown QR code format" });
+    }
+    setLoading(false);
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => { setOpen(true); setScanning(true); setResult(null); }}
+        className="relative rounded-lg p-2 text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+        title="Scan QR code"
+      >
+        <ScanLine className="h-5 w-5" />
+      </button>
+
+      {open && (
+        <Dialog open onClose={handleClose}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ScanLine className="h-5 w-5 text-bpm-600" />
+                Scan QR Code
+              </DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <div className="space-y-4">
+                {scanning && !loading && (
+                  <QrScanner onScan={handleScan} active={scanning} />
+                )}
+
+                {loading && (
+                  <div className="flex flex-col items-center justify-center py-10 gap-3 text-gray-500">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <p className="text-sm">Looking up…</p>
+                  </div>
+                )}
+
+                {result?.type === "student" && result.data.success && result.data.student && (
+                  <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-bpm-100 text-bpm-600">
+                        <User className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">{result.data.student.name}</p>
+                        <p className="text-xs text-gray-500">{result.data.student.email}</p>
+                      </div>
+                    </div>
+                    {result.data.todayBookings && result.data.todayBookings.length > 0 && (
+                      <p className="text-xs text-gray-500">
+                        {result.data.todayBookings.length} booking{result.data.todayBookings.length !== 1 ? "s" : ""} today
+                      </p>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        onClick={() => { handleClose(); router.push(`/students?highlight=${result.data.student!.id}`); }}
+                        className="flex-1 rounded-lg bg-bpm-600 px-3 py-2 text-sm font-medium text-white hover:bg-bpm-700 transition-colors text-center"
+                      >
+                        View profile
+                      </button>
+                      <button
+                        onClick={() => { handleClose(); router.push("/attendance?tab=qr"); }}
+                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors text-center"
+                      >
+                        Attendance
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {result?.type === "student" && !result.data.success && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center">
+                    <p className="text-sm font-medium text-red-700">{result.data.error}</p>
+                  </div>
+                )}
+
+                {result?.type === "event" && result.data.success && result.data.purchase && (
+                  <div className="rounded-xl border border-gray-200 p-4 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-600">
+                        <Ticket className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-gray-900">{result.data.purchase.guestName}</p>
+                        <p className="text-xs text-gray-500">{result.data.purchase.eventTitle}</p>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+                      <span>{result.data.purchase.productName}</span>
+                      <span className={`font-medium ${result.data.purchase.paymentStatus === "paid" ? "text-green-600" : "text-amber-600"}`}>
+                        {result.data.purchase.paymentStatus}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => { handleClose(); router.push(`/events/${result.data.purchase!.eventId}/operations`); }}
+                      className="w-full rounded-lg bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors text-center"
+                    >
+                      Event operations
+                    </button>
+                  </div>
+                )}
+
+                {result?.type === "event" && !result.data.success && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-center">
+                    <p className="text-sm font-medium text-red-700">{result.data.error}</p>
+                  </div>
+                )}
+
+                {result?.type === "error" && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center">
+                    <p className="text-sm font-medium text-amber-700">{result.message}</p>
+                  </div>
+                )}
+
+                {result && (
+                  <button
+                    onClick={reset}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Scan another
+                  </button>
+                )}
+              </div>
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }
 

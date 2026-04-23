@@ -273,6 +273,8 @@ export async function adminCreateBookingAction(
   }
 
   revalidatePath("/bookings");
+  revalidatePath("/classes");
+  revalidatePath("/dashboard");
   revalidatePath("/students");
   return { success: true, outcome: result.type };
 }
@@ -460,6 +462,7 @@ export async function adminCheckInBookingAction(
 
   revalidatePath("/bookings");
   revalidatePath("/attendance");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
@@ -533,6 +536,7 @@ export async function adminRemoveFromWaitlistAction(
   await deleteWaitlistFromDB(waitlistId);
 
   revalidatePath("/bookings");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 

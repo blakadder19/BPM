@@ -56,7 +56,7 @@ export default function LoginPage() {
         // stale cookies are present. Avoids destroying a session that
         // might still be valid after a transient middleware failure.
         if (/sb-.+-auth-token/.test(document.cookie)) {
-          supabase.auth.signOut().catch(() => {});
+          supabase.auth.signOut({ scope: "local" }).catch(() => {});
         }
       }
     });

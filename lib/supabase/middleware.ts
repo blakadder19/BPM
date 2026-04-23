@@ -99,7 +99,7 @@ export async function updateSession(request: NextRequest) {
       (c) => c.name.includes("-auth-token")
     );
     if (hasAuthCookies) {
-      await supabase.auth.signOut().catch(() => {});
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
     }
   }
 

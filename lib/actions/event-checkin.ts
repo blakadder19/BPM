@@ -5,6 +5,7 @@ import { getAuthUser } from "@/lib/auth";
 import { getSpecialEventRepo, getStudentRepo } from "@/lib/repositories";
 import { updatePurchaseCheckIn, updatePurchasePayment } from "@/lib/services/special-event-service";
 import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
+import { classifyQrToken } from "@/lib/domain/qr-resolver";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { isWithinEventCheckInWindow } from "@/lib/domain/datetime";
 import { sendPaymentConfirmationEmail } from "@/lib/actions/event-emails";
@@ -128,7 +129,9 @@ export async function eventQrLookup(
     return result.success;
   }
 
-  if (isValidGuestPurchaseQrToken(token)) {
+  const tokenType = classifyQrToken(token);
+
+  if (tokenType === "event_guest") {
     const purchase = await repo.getPurchaseByQrToken(token);
     if (!purchase) return { success: false, error: "No purchase found for this QR code" };
     if (purchase.eventId !== eventId) {
@@ -147,7 +150,7 @@ export async function eventQrLookup(
     };
   }
 
-  if (isValidStudentQrToken(token)) {
+  if (tokenType === "student") {
     const allStudents = await getStudentRepo().getAll();
     const student = allStudents.find((s) => s.qrToken === token);
     if (!student) return { success: false, error: "Student not found for this QR code" };

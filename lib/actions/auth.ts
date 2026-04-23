@@ -23,7 +23,7 @@ export async function signOut(): Promise<void> {
         "@/lib/supabase/server"
       );
       const supabase = await createServerSupabaseClient();
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: "local" });
     } catch {
       // Supabase unreachable — fall through to manual cookie cleanup
     }

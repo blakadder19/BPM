@@ -42,6 +42,7 @@ import {
   type GuestPurchaseQrResult,
 } from "@/lib/actions/qr-checkin";
 import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
+import { classifyQrToken } from "@/lib/domain/qr-resolver";
 import { PairScannerControls } from "@/components/scan/pair-scanner-controls";
 import { useScanSession } from "@/components/providers/scan-session-provider";
 import type { PairedScanResult } from "@/lib/domain/scan-session";
@@ -112,7 +113,8 @@ export function QrCheckInPanel() {
 
   const doLookup = useCallback(
     (token: string) => {
-      if (isValidGuestPurchaseQrToken(token)) {
+      const tokenType = classifyQrToken(token);
+      if (tokenType === "event_guest") {
         setScannerPaused(true);
         lastTokenRef.current = token;
         setLookupResult(null);
@@ -123,7 +125,7 @@ export function QrCheckInPanel() {
         });
         return;
       }
-      if (!isValidStudentQrToken(token)) {
+      if (tokenType === "unknown") {
         setLookupResult({ success: false, error: "Not a valid QR code. Please try scanning again." });
         setGuestResult(null);
         return;
@@ -143,7 +145,7 @@ export function QrCheckInPanel() {
   const refreshStudent = useCallback(async () => {
     const token = lastTokenRef.current;
     if (!token) return;
-    if (isValidGuestPurchaseQrToken(token)) {
+    if (classifyQrToken(token) === "event_guest") {
       const res = await lookupGuestPurchaseByQrAction(token);
       setGuestResult(res);
     } else {
@@ -545,6 +547,8 @@ export function QrCheckInPanel() {
                   <div className="min-w-0 flex-1">
                     <Link
                       href={`/students?highlight=${lookupResult.student!.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-lg font-semibold text-bpm-600 hover:text-bpm-700 hover:underline"
                     >
                       {lookupResult.student!.name}
@@ -647,6 +651,7 @@ export function QrCheckInPanel() {
                       result={checkInResults.get(`walkin-${cls.classId}`)}
                       onAction={() => handleWalkIn(cls)}
                       isPending={isCheckingIn}
+                      studentHasAnyProduct={!!lookupResult.hasActiveEntitlement}
                     />
                   ))}
                 </div>
@@ -849,13 +854,18 @@ function TodayClassCard({
   result,
   onAction,
   isPending,
+  studentHasAnyProduct,
 }: {
   cls: QrTodayClass;
   result?: { success: boolean; message: string };
   onAction: () => void;
   isPending: boolean;
+  studentHasAnyProduct: boolean;
 }) {
   const done = result?.success;
+  const noProduct = !cls.hasEntitlement && !studentHasAnyProduct;
+  const incompatible = !cls.hasEntitlement && studentHasAnyProduct;
+
   return (
     <div
       className={`rounded-xl border p-3 shadow-sm space-y-2 ${
@@ -863,12 +873,12 @@ function TodayClassCard({
           ? "border-green-200 bg-green-50"
           : cls.hasEntitlement
             ? "border-gray-200 bg-white"
-            : "border-dashed border-gray-300 bg-gray-50"
+            : "border-dashed border-amber-300 bg-amber-50/30"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="font-medium text-gray-900">{cls.classTitle}</p>
+          <p className={`font-medium ${cls.hasEntitlement ? "text-gray-900" : "text-gray-600"}`}>{cls.classTitle}</p>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-gray-500 mt-0.5">
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5" />
@@ -887,9 +897,13 @@ function TodayClassCard({
                 Payment pending
               </span>
             ) : null
-          ) : (
+          ) : noProduct ? (
             <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-red-100 text-red-700">
               No product
+            </span>
+          ) : (
+            <span className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-700">
+              Incompatible
             </span>
           )}
         </div>
@@ -899,6 +913,20 @@ function TodayClassCard({
         <p className="text-xs text-gray-500">
           Using: <span className="font-medium text-gray-700">{cls.matchingSubscriptionName}</span>
         </p>
+      )}
+
+      {incompatible && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+          <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" />
+          Current product is not valid for this class.{cls.styleName ? ` Style: ${cls.styleName}.` : ""}
+        </div>
+      )}
+
+      {noProduct && (
+        <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-800">
+          <AlertTriangle className="inline h-3 w-3 mr-1 -mt-0.5" />
+          No active product. Sell a drop-in or add a subscription.
+        </div>
       )}
 
       {result && !result.success && (
@@ -923,18 +951,28 @@ function TodayClassCard({
           <Banknote className="h-4 w-4 mr-1.5" />
           {isPending ? "Processing…" : "Confirm payment and check in"}
         </Button>
+      ) : cls.hasEntitlement ? (
+        <Button
+          onClick={onAction}
+          disabled={isPending}
+          variant="primary"
+          className="w-full"
+        >
+          {isPending ? "Processing…" : "Walk-in Check In"}
+        </Button>
       ) : (
         <Button
           onClick={onAction}
           disabled={isPending}
-          variant={cls.hasEntitlement ? "primary" : "outline"}
-          className="w-full"
+          variant="outline"
+          className="w-full border-amber-300 text-amber-700 hover:bg-amber-50"
         >
+          <ShoppingCart className="h-4 w-4 mr-1.5" />
           {isPending
             ? "Processing…"
-            : cls.hasEntitlement
-              ? "Walk-in Check In"
-              : "Check In (no product)…"}
+            : noProduct
+              ? "Sell drop-in or add product"
+              : "Resolve — buy compatible product"}
         </Button>
       )}
     </div>
