@@ -167,6 +167,9 @@ export interface ISpecialEventRepository {
   getPurchasesByEvent(eventId: string): Promise<MockEventPurchase[]>;
   getPurchasesByStudent(studentId: string): Promise<MockEventPurchase[]>;
   getPurchaseByQrToken(token: string): Promise<MockEventPurchase | null>;
+  getPurchaseById(id: string): Promise<MockEventPurchase | null>;
+  /** Used by Finance super-admin tooling to enumerate all rows for the candidate scan. */
+  getAllPurchases(): Promise<MockEventPurchase[]>;
   createPurchase(data: CreatePurchaseData): Promise<MockEventPurchase>;
   updatePurchasePayment(
     id: string,
@@ -181,6 +184,18 @@ export interface ISpecialEventRepository {
     id: string,
     patch: { refundedAt: string; refundedBy: string; refundReason: string | null },
   ): Promise<MockEventPurchase | null>;
+
+  /**
+   * Update only the free-text fields used by the super-admin test-marking flow.
+   * Reserved for that flow — not for general-purpose notes editing.
+   */
+  updatePurchaseTestFields(
+    id: string,
+    patch: { notes?: string | null; paymentReference?: string | null; refundReason?: string | null },
+  ): Promise<MockEventPurchase | null>;
+
+  /** Permanently delete a purchase row. Used only by the Finance danger zone. */
+  deletePurchase(id: string): Promise<boolean>;
 
   updatePurchaseEmailTracking(
     id: string,

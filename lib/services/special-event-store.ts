@@ -149,3 +149,19 @@ export function patchPurchase(id: string, patch: Partial<MockEventPurchase>): Mo
   Object.assign(p, patch);
   return { ...p };
 }
+
+export function getPurchaseById(id: string): MockEventPurchase | null {
+  return initPurchases().find((x) => x.id === id) ?? null;
+}
+
+export function getAllPurchases(): MockEventPurchase[] {
+  return initPurchases().slice();
+}
+
+export function removePurchase(id: string): boolean {
+  const arr = initPurchases();
+  const idx = arr.findIndex((x) => x.id === id);
+  if (idx === -1) return false;
+  arr.splice(idx, 1);
+  return true;
+}

@@ -345,6 +345,22 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     return data ? toPurchase(data) : null;
   },
 
+  async getPurchaseById(id) {
+    const sb = createAdminClient();
+    const { data } = await sb.from("event_purchases").select("*").eq("id", id).maybeSingle();
+    return data ? toPurchase(data) : null;
+  },
+
+  async getAllPurchases() {
+    const sb = createAdminClient();
+    const { data, error } = await sb
+      .from("event_purchases")
+      .select("*")
+      .order("purchased_at", { ascending: false });
+    if (error) throw new Error(error.message);
+    return (data ?? []).map(toPurchase);
+  },
+
   async createPurchase(input: CreatePurchaseData) {
     const sb = createAdminClient();
     const { data, error } = await sb
@@ -412,6 +428,29 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     if (error) throw new Error(error.message);
     const { data } = await sb.from("event_purchases").select("*").eq("id", id).single();
     return data ? toPurchase(data) : null;
+  },
+
+  async updatePurchaseTestFields(id, patch) {
+    const sb = createAdminClient();
+    const fields: Record<string, unknown> = {};
+    if (patch.notes !== undefined) fields.notes = patch.notes;
+    if (patch.paymentReference !== undefined) fields.payment_reference = patch.paymentReference;
+    if (patch.refundReason !== undefined) fields.refund_reason = patch.refundReason;
+    if (Object.keys(fields).length === 0) {
+      const { data } = await sb.from("event_purchases").select("*").eq("id", id).maybeSingle();
+      return data ? toPurchase(data) : null;
+    }
+    const { error } = await sb.from("event_purchases").update(fields as never).eq("id", id);
+    if (error) throw new Error(error.message);
+    const { data } = await sb.from("event_purchases").select("*").eq("id", id).maybeSingle();
+    return data ? toPurchase(data) : null;
+  },
+
+  async deletePurchase(id) {
+    const sb = createAdminClient();
+    const { error } = await sb.from("event_purchases").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    return true;
   },
 
   async updatePurchaseEmailTracking(id, patch) {

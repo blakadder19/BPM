@@ -425,12 +425,6 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
                   isToggling={togglingId === tx.id}
                   onToggleTest={async () => {
                     setToggleError(null);
-                    if (tx.source === "event_purchase") {
-                      setToggleError(
-                        "Event purchases are intentionally excluded from the test-data flow."
-                      );
-                      return;
-                    }
                     setTogglingId(tx.id);
                     try {
                       const result = await toggleFinanceTestMarkerAction({
@@ -612,33 +606,29 @@ function TxRow({
       <Td className="text-xs text-gray-500">{tx.performedBy ?? "—"}</Td>
       {superAdmin && (
         <Td>
-          {tx.source === "event_purchase" ? (
-            <span className="text-[10px] text-gray-400">—</span>
-          ) : (
-            <button
-              type="button"
-              onClick={onToggleTest}
-              disabled={isToggling || !onToggleTest}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                isMarkedAsTest
-                  ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                  : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-              )}
-              title={
-                isMarkedAsTest
-                  ? "Remove the [test] marker so this row no longer appears in the danger zone"
-                  : "Mark this row as test data so it can be deleted from the danger zone"
-              }
-            >
-              {isToggling ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <FlaskConical className="h-3 w-3" />
-              )}
-              {isMarkedAsTest ? "Unmark test" : "Mark as test"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onToggleTest}
+            disabled={isToggling || !onToggleTest}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+              isMarkedAsTest
+                ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+            )}
+            title={
+              isMarkedAsTest
+                ? "Remove the [test] marker so this row no longer appears in the danger zone"
+                : "Mark this row as test data so it can be deleted from the danger zone"
+            }
+          >
+            {isToggling ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <FlaskConical className="h-3 w-3" />
+            )}
+            {isMarkedAsTest ? "Unmark test" : "Mark as test"}
+          </button>
         </Td>
       )}
     </tr>
@@ -813,6 +803,7 @@ function FinanceDangerZone({ refreshKey = 0 }: { refreshKey?: number }) {
         const parts = [
           `${r.deletedSubscriptions ?? 0} subscription(s)`,
           `${r.deletedPenalties ?? 0} penalty/ies`,
+          `${r.deletedEventPurchases ?? 0} event purchase(s)`,
         ];
         let msg = `Deleted: ${parts.join(", ")}.`;
         if (r.skipped && r.skipped > 0) {
@@ -854,15 +845,16 @@ function FinanceDangerZone({ refreshKey = 0 }: { refreshKey?: number }) {
         <div className="border-t border-red-200 px-4 pb-4 pt-3 space-y-3">
           <div className="rounded-lg bg-white/60 border border-red-200 px-3 py-2 text-[11px] text-red-800 space-y-1">
             <p>
-              Lists only subscriptions and penalties whose <span className="font-mono">paymentNotes</span>,{" "}
+              Lists subscriptions, penalties, and event purchases whose{" "}
+              <span className="font-mono">paymentNotes</span>,{" "}
               <span className="font-mono">notes</span>, <span className="font-mono">paymentReference</span>,
               or <span className="font-mono">refundReason</span> contain an explicit test marker:
               <span className="font-mono"> [test]</span>, <span className="font-mono">#test</span>, or{" "}
               <span className="font-mono">TEST:</span>.
             </p>
             <p>
-              Event purchases are <strong>never</strong> deleted. Nothing is deleted without
-              your explicit per-row selection. This action cannot be undone.
+              Records without a test marker are <strong>never</strong> deleted. Nothing is
+              deleted without your explicit per-row selection. This action cannot be undone.
             </p>
           </div>
 
@@ -916,7 +908,7 @@ function FinanceDangerZone({ refreshKey = 0 }: { refreshKey?: number }) {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 uppercase">
-                          {c.kind}
+                          {c.kind === "event_purchase" ? "Event" : c.kind}
                         </span>
                         <span className="text-xs font-medium text-gray-900 truncate">{c.label}</span>
                       </div>

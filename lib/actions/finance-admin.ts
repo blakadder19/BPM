@@ -24,20 +24,26 @@
  *   A record qualifies as test data only when any of the following text fields
  *   contains one of the explicit markers `[test]`, `#test`, or `TEST:`
  *   (case-insensitive):
- *     - subscription: paymentNotes, notes, paymentReference, refundReason
- *     - penalty: notes
+ *     - subscription:    paymentNotes, notes, paymentReference, refundReason
+ *     - penalty:         notes
+ *     - event_purchase:  notes, paymentReference, refundReason
  *
  * Tables affected:
- *   - `subscriptions` (repo delete) — in-memory + Supabase when configured
- *   - `penalties` (in-memory) + `op_penalty` (Supabase) via deletePenaltyFromDB
- *   - `op_finance_audit_log` gets one `manual_edit` entry per deletion
+ *   - `subscriptions`     (repo delete) — in-memory + Supabase when configured
+ *   - `penalties`         (in-memory) + `op_penalty` (Supabase) via deletePenaltyFromDB
+ *   - `event_purchases`   (repo delete) — in-memory + Supabase when configured
+ *   - `op_finance_audit_log` gets one `manual_edit` entry per mark / unmark / delete
  *
- * Event purchases are NEVER touched by this action.
+ * Event purchases were previously excluded from this flow. They are now
+ * supported with the SAME safety model: explicit marker required, explicit
+ * row selection in the UI, server-side marker re-check at delete time,
+ * env flag + super-admin email gates, typed confirmation token.
  */
 
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
 import { getSubscriptionRepo } from "@/lib/repositories";
+import { getSpecialEventRepo } from "@/lib/repositories";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import { invalidateHydration } from "@/lib/supabase/hydrate-operational";
@@ -98,7 +104,7 @@ function withoutMarker(field: string | null | undefined): string | null {
 
 /** Parse "sub-<id>" / "pen-<id>" / "evt-<id>" produced by FinanceTransaction.id. */
 function parseTransactionId(transactionId: string): {
-  source: FinanceMarkableSource | "event_purchase";
+  source: FinanceMarkableSource;
   recordId: string;
 } | null {
   if (transactionId.startsWith("sub-")) {
@@ -135,8 +141,9 @@ export async function getFinanceSuperAdminStatus(): Promise<FinanceSuperAdminSta
 }
 
 /**
- * Return every subscription/penalty record that currently carries an explicit
- * test marker. The super-admin must explicitly select from this list.
+ * Return every subscription / penalty / event-purchase record that currently
+ * carries an explicit test marker. The super-admin must explicitly select
+ * from this list before deletion.
  */
 export async function listFinanceTestCandidatesAction(): Promise<ListFinanceTestCandidatesResult> {
   const status = await getFinanceSuperAdminStatus();
@@ -179,6 +186,33 @@ export async function listFinanceTestCandidatesAction(): Promise<ListFinanceTest
     });
   }
 
+  // Event purchases — only rows whose notes/reference/refundReason carry an
+  // explicit marker. The repo call is inside try/catch because the events
+  // module is optional in some deployments.
+  try {
+    const eventRepo = getSpecialEventRepo();
+    const purchases = await eventRepo.getAllPurchases();
+    for (const p of purchases) {
+      if (!hasTestMarker(p.notes, p.paymentReference, p.refundReason)) continue;
+      const buyer = p.guestName ?? p.guestEmail ?? p.studentId ?? "Unknown buyer";
+      const detailParts = [
+        p.productNameSnapshot ?? null,
+        p.paymentMethod ?? null,
+        p.paymentStatus ?? null,
+        p.notes ?? null,
+      ].filter(Boolean) as string[];
+      candidates.push({
+        kind: "event_purchase",
+        id: p.id,
+        label: `${p.productNameSnapshot ?? "Event purchase"} — ${buyer}`,
+        detail: detailParts.join(" · ") || null,
+        createdAt: p.purchasedAt ?? p.paidAt ?? null,
+      });
+    }
+  } catch {
+    // Event module not active in this environment — skip silently.
+  }
+
   candidates.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return { success: true, candidates };
@@ -211,6 +245,7 @@ export async function deleteFinanceTestRecordsAction(input: {
 
   let deletedSubscriptions = 0;
   let deletedPenalties = 0;
+  let deletedEventPurchases = 0;
   let skipped = 0;
   const skippedReasons: string[] = [];
 
@@ -278,16 +313,55 @@ export async function deleteFinanceTestRecordsAction(input: {
     });
   }
 
+  // ── Event purchases (re-check marker) ────────────────────
+  try {
+    const eventRepo = getSpecialEventRepo();
+    const allPurchases = await eventRepo.getAllPurchases();
+    for (const ep of allPurchases) {
+      if (!idSet.has(ep.id)) continue;
+      if (!hasTestMarker(ep.notes, ep.paymentReference, ep.refundReason)) {
+        skipped++;
+        skippedReasons.push(`${ep.id}: no longer carries a test marker`);
+        continue;
+      }
+      try {
+        const ok = await eventRepo.deletePurchase(ep.id);
+        if (ok) {
+          deletedEventPurchases++;
+          logFinanceEvent({
+            entityType: "event_purchase",
+            entityId: ep.id,
+            action: "manual_edit",
+            performer,
+            detail: "Super-admin test data deletion (explicit selection)",
+            previousValue: ep.paymentStatus,
+            newValue: "deleted",
+          });
+        } else {
+          skipped++;
+          skippedReasons.push(`${ep.id}: repository delete returned false`);
+        }
+      } catch (e) {
+        skipped++;
+        skippedReasons.push(`${ep.id}: ${e instanceof Error ? e.message : "delete error"}`);
+      }
+    }
+  } catch {
+    // Event module not active in this environment — nothing to delete.
+  }
+
   invalidateHydration();
   revalidatePath("/finance");
   revalidatePath("/penalties");
   revalidatePath("/students");
   revalidatePath("/dashboard");
+  revalidatePath("/events");
 
   return {
     success: true,
     deletedSubscriptions,
     deletedPenalties,
+    deletedEventPurchases,
     skipped,
     skippedReasons: skippedReasons.length > 0 ? skippedReasons : undefined,
   };
@@ -296,10 +370,16 @@ export async function deleteFinanceTestRecordsAction(input: {
 /**
  * Toggle the `[test]` marker on a finance row.
  *
- * Subscription marker lives in `paymentNotes` (the cleanest user-visible
- * notes field). Penalty marker lives in `notes`. Event purchases are
- * intentionally NOT supported here — they are excluded from the danger
- * zone deletion as well, so marking them would be misleading.
+ * Marker location per source:
+ *   - subscription:    `paymentNotes` (canonical free-text notes column)
+ *   - penalty:         `notes`
+ *   - event_purchase:  `notes`
+ *
+ * On unmark, every text field that may have historically held a marker is
+ * scrubbed so the row stops appearing in the candidate scan:
+ *   - subscription:    paymentNotes, notes, paymentReference, refundReason
+ *   - penalty:         notes
+ *   - event_purchase:  notes, paymentReference, refundReason
  *
  * Same gates as the rest of the danger zone:
  *   - `BPM_ALLOW_FINANCE_TEST_DELETE === "true"`
@@ -323,13 +403,6 @@ export async function toggleFinanceTestMarkerAction(input: {
   const parsed = parseTransactionId(input.transactionId);
   if (!parsed) {
     return { success: false, error: "Unrecognised finance row id." };
-  }
-  if (parsed.source === "event_purchase") {
-    return {
-      success: false,
-      error:
-        "Event purchases are intentionally excluded from the test-data flow.",
-    };
   }
 
   const user = await getAuthUser();
@@ -490,6 +563,95 @@ export async function toggleFinanceTestMarkerAction(input: {
       isMarked: input.mark,
       source: "penalty",
       recordId: penalty.id,
+    };
+  }
+
+  // ── Event purchase ─────────────────────────────────────────────
+  if (parsed.source === "event_purchase") {
+    let eventRepo: ReturnType<typeof getSpecialEventRepo>;
+    try {
+      eventRepo = getSpecialEventRepo();
+    } catch {
+      return { success: false, error: "Event module is not active in this environment." };
+    }
+    const purchase = await eventRepo.getPurchaseById(parsed.recordId);
+    if (!purchase) return { success: false, error: "Event purchase not found." };
+
+    const currentlyMarked = hasTestMarker(
+      purchase.notes,
+      purchase.paymentReference,
+      purchase.refundReason
+    );
+
+    if (input.mark && currentlyMarked) {
+      return {
+        success: true,
+        alreadyInState: true,
+        isMarked: true,
+        source: "event_purchase",
+        recordId: purchase.id,
+      };
+    }
+    if (!input.mark && !currentlyMarked) {
+      return {
+        success: true,
+        alreadyInState: true,
+        isMarked: false,
+        source: "event_purchase",
+        recordId: purchase.id,
+      };
+    }
+
+    let nextNotes: string | null = purchase.notes ?? null;
+    let nextRef: string | null | undefined; // undefined = leave untouched
+    let nextRefundReason: string | null | undefined;
+
+    if (input.mark) {
+      // Add the canonical marker to `notes` only — never touch a real
+      // payment_reference (could hold Stripe / bank / Revolut ids).
+      nextNotes = withMarker(purchase.notes);
+    } else {
+      // Strip the marker from every field where it may live so the row
+      // stops appearing in the candidate list.
+      nextNotes = withoutMarker(purchase.notes);
+      nextRef = withoutMarker(purchase.paymentReference);
+      nextRefundReason = withoutMarker(purchase.refundReason);
+    }
+
+    try {
+      await eventRepo.updatePurchaseTestFields(purchase.id, {
+        notes: nextNotes,
+        ...(nextRef !== undefined ? { paymentReference: nextRef } : {}),
+        ...(nextRefundReason !== undefined ? { refundReason: nextRefundReason } : {}),
+      });
+    } catch (e) {
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : "Event purchase update failed.",
+      };
+    }
+
+    logFinanceEvent({
+      entityType: "event_purchase",
+      entityId: purchase.id,
+      action: "manual_edit",
+      performer,
+      detail: input.mark
+        ? "Super-admin marked record as test data"
+        : "Super-admin removed test marker",
+      previousValue: currentlyMarked ? "test" : "not_test",
+      newValue: input.mark ? "test" : "not_test",
+    });
+
+    invalidateHydration();
+    revalidatePath("/finance");
+    revalidatePath("/events");
+
+    return {
+      success: true,
+      isMarked: input.mark,
+      source: "event_purchase",
+      recordId: purchase.id,
     };
   }
 

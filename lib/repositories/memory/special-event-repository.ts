@@ -93,6 +93,8 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
   async getPurchasesByEvent(eventId) { return store.getPurchasesForEvent(eventId); },
   async getPurchasesByStudent(studentId) { return store.getPurchasesForStudent(studentId); },
   async getPurchaseByQrToken(token) { return store.getPurchaseByQrToken(token); },
+  async getPurchaseById(id) { return store.getPurchaseById(id); },
+  async getAllPurchases() { return store.getAllPurchases(); },
 
   async createPurchase(data: CreatePurchaseData) {
     const now = new Date().toISOString();
@@ -156,6 +158,18 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       refundReason: patch.refundReason,
     });
     return p ?? null;
+  },
+
+  async updatePurchaseTestFields(id, patch: { notes?: string | null; paymentReference?: string | null; refundReason?: string | null }) {
+    const fields: Partial<{ notes: string | null; paymentReference: string | null; refundReason: string | null }> = {};
+    if (patch.notes !== undefined) fields.notes = patch.notes;
+    if (patch.paymentReference !== undefined) fields.paymentReference = patch.paymentReference;
+    if (patch.refundReason !== undefined) fields.refundReason = patch.refundReason;
+    return store.patchPurchase(id, fields);
+  },
+
+  async deletePurchase(id) {
+    return store.removePurchase(id);
   },
 
   async updatePurchaseEmailTracking(id, patch: { lastEmailType: string; lastEmailSentAt: string; lastEmailSuccess: boolean }) {

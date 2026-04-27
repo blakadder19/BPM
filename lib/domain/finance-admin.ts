@@ -17,7 +17,7 @@ export const FINANCE_TEST_MARKER = "[test]";
  */
 export const FINANCE_TEST_MARKERS_RECOGNISED = ["[test]", "#test", "test:"] as const;
 
-export type FinanceMarkableSource = "subscription" | "penalty";
+export type FinanceMarkableSource = "subscription" | "penalty" | "event_purchase";
 
 export interface MarkFinanceTestResult {
   success: boolean;
@@ -40,7 +40,7 @@ export interface FinanceSuperAdminStatus {
 }
 
 export interface FinanceTestCandidate {
-  kind: "subscription" | "penalty";
+  kind: FinanceMarkableSource;
   id: string;
   label: string;
   detail: string | null;
@@ -58,6 +58,7 @@ export interface DeleteFinanceTestResult {
   error?: string;
   deletedSubscriptions?: number;
   deletedPenalties?: number;
+  deletedEventPurchases?: number;
   skipped?: number;
   skippedReasons?: string[];
 }

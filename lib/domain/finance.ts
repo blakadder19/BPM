@@ -177,7 +177,7 @@ export function buildEventPurchaseTransactions(
       refundedAt: p.refundedAt ?? null,
       refundedBy: p.refundedBy ?? null,
       refundReason: p.refundReason ?? null,
-      isTest: false,
+      isTest: carriesTestMarker(p.notes, p.paymentReference, p.refundReason),
     };
   });
 }
