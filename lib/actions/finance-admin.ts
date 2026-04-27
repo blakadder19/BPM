@@ -41,18 +41,25 @@ import { getSubscriptionRepo } from "@/lib/repositories";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import { invalidateHydration } from "@/lib/supabase/hydrate-operational";
-import { deletePenaltyFromDB } from "@/lib/supabase/operational-persistence";
+import {
+  deletePenaltyFromDB,
+  updatePenaltyInDB,
+} from "@/lib/supabase/operational-persistence";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import {
   FINANCE_TEST_DELETE_CONFIRMATION,
+  FINANCE_TEST_MARKER,
+  FINANCE_TEST_MARKERS_RECOGNISED,
   type FinanceSuperAdminStatus,
   type FinanceTestCandidate,
   type ListFinanceTestCandidatesResult,
   type DeleteFinanceTestResult,
+  type MarkFinanceTestResult,
+  type FinanceMarkableSource,
 } from "@/lib/domain/finance-admin";
 
 /** Explicit markers a record must carry to qualify as test data. */
-const TEST_MARKERS = ["[test]", "#test", "test:"] as const;
+const TEST_MARKERS = FINANCE_TEST_MARKERS_RECOGNISED;
 
 function hasTestMarker(...fields: (string | null | undefined)[]): boolean {
   for (const f of fields) {
@@ -63,6 +70,47 @@ function hasTestMarker(...fields: (string | null | undefined)[]): boolean {
     }
   }
   return false;
+}
+
+/** Append the canonical marker if no recognised marker is already present. */
+function withMarker(field: string | null | undefined): string {
+  const trimmed = (field ?? "").trim();
+  if (hasTestMarker(trimmed)) return trimmed;
+  return trimmed.length === 0 ? FINANCE_TEST_MARKER : `${trimmed} ${FINANCE_TEST_MARKER}`;
+}
+
+/**
+ * Strip every recognised marker from a free-text field. Collapses any
+ * resulting double spaces and trims; returns null when nothing meaningful
+ * remains (so we don't leave behind an empty string).
+ */
+function withoutMarker(field: string | null | undefined): string | null {
+  if (!field) return null;
+  let out = field;
+  // Order matters: longest first so "TEST:" doesn't get partially shadowed.
+  for (const m of ["[test]", "#test", "test:"]) {
+    const re = new RegExp(m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+    out = out.replace(re, "");
+  }
+  out = out.replace(/\s{2,}/g, " ").trim();
+  return out.length === 0 ? null : out;
+}
+
+/** Parse "sub-<id>" / "pen-<id>" / "evt-<id>" produced by FinanceTransaction.id. */
+function parseTransactionId(transactionId: string): {
+  source: FinanceMarkableSource | "event_purchase";
+  recordId: string;
+} | null {
+  if (transactionId.startsWith("sub-")) {
+    return { source: "subscription", recordId: transactionId.slice(4) };
+  }
+  if (transactionId.startsWith("pen-")) {
+    return { source: "penalty", recordId: transactionId.slice(4) };
+  }
+  if (transactionId.startsWith("evt-")) {
+    return { source: "event_purchase", recordId: transactionId.slice(4) };
+  }
+  return null;
 }
 
 /**
@@ -243,4 +291,207 @@ export async function deleteFinanceTestRecordsAction(input: {
     skipped,
     skippedReasons: skippedReasons.length > 0 ? skippedReasons : undefined,
   };
+}
+
+/**
+ * Toggle the `[test]` marker on a finance row.
+ *
+ * Subscription marker lives in `paymentNotes` (the cleanest user-visible
+ * notes field). Penalty marker lives in `notes`. Event purchases are
+ * intentionally NOT supported here — they are excluded from the danger
+ * zone deletion as well, so marking them would be misleading.
+ *
+ * Same gates as the rest of the danger zone:
+ *   - `BPM_ALLOW_FINANCE_TEST_DELETE === "true"`
+ *   - authenticated admin's email matches `BPM_SUPER_ADMIN_EMAIL`
+ */
+export async function toggleFinanceTestMarkerAction(input: {
+  transactionId: string;
+  mark: boolean;
+}): Promise<MarkFinanceTestResult> {
+  const status = await getFinanceSuperAdminStatus();
+  if (!status.envEnabled) {
+    return {
+      success: false,
+      error: "Test data marking is not enabled in this environment.",
+    };
+  }
+  if (!status.isSuperAdmin) {
+    return { success: false, error: "Not authorized." };
+  }
+
+  const parsed = parseTransactionId(input.transactionId);
+  if (!parsed) {
+    return { success: false, error: "Unrecognised finance row id." };
+  }
+  if (parsed.source === "event_purchase") {
+    return {
+      success: false,
+      error:
+        "Event purchases are intentionally excluded from the test-data flow.",
+    };
+  }
+
+  const user = await getAuthUser();
+  const performer = user
+    ? { userId: user.id, email: user.email, name: user.fullName }
+    : null;
+
+  // ── Subscription ────────────────────────────────────────────────
+  if (parsed.source === "subscription") {
+    const subRepo = getSubscriptionRepo();
+    const sub = await subRepo.getById(parsed.recordId);
+    if (!sub) return { success: false, error: "Subscription not found." };
+
+    const currentlyMarked = hasTestMarker(
+      sub.paymentNotes,
+      sub.notes,
+      sub.paymentReference,
+      sub.refundReason
+    );
+
+    if (input.mark && currentlyMarked) {
+      return {
+        success: true,
+        alreadyInState: true,
+        isMarked: true,
+        source: "subscription",
+        recordId: sub.id,
+      };
+    }
+    if (!input.mark && !currentlyMarked) {
+      return {
+        success: true,
+        alreadyInState: true,
+        isMarked: false,
+        source: "subscription",
+        recordId: sub.id,
+      };
+    }
+
+    let nextPaymentNotes: string | null;
+    let nextNotes: string | null = sub.notes ?? null;
+    let nextRef: string | null = sub.paymentReference ?? null;
+    let nextRefundReason: string | null = sub.refundReason ?? null;
+
+    if (input.mark) {
+      // Add marker into paymentNotes — never touch reference / refundReason.
+      nextPaymentNotes = withMarker(sub.paymentNotes);
+    } else {
+      // Strip marker from every field where it might live so the row stops
+      // appearing in the candidate list.
+      nextPaymentNotes = withoutMarker(sub.paymentNotes);
+      nextNotes = withoutMarker(sub.notes);
+      nextRef = withoutMarker(sub.paymentReference);
+      nextRefundReason = withoutMarker(sub.refundReason);
+    }
+
+    try {
+      await subRepo.update(sub.id, {
+        paymentNotes: nextPaymentNotes,
+        notes: nextNotes,
+        paymentReference: nextRef,
+        refundReason: nextRefundReason,
+      });
+    } catch (e) {
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : "Subscription update failed.",
+      };
+    }
+
+    logFinanceEvent({
+      entityType: "subscription",
+      entityId: sub.id,
+      action: "manual_edit",
+      performer,
+      detail: input.mark
+        ? "Super-admin marked record as test data"
+        : "Super-admin removed test marker",
+      previousValue: currentlyMarked ? "test" : "not_test",
+      newValue: input.mark ? "test" : "not_test",
+    });
+
+    invalidateHydration();
+    revalidatePath("/finance");
+    revalidatePath("/students");
+
+    return {
+      success: true,
+      isMarked: input.mark,
+      source: "subscription",
+      recordId: sub.id,
+    };
+  }
+
+  // ── Penalty ─────────────────────────────────────────────────────
+  if (parsed.source === "penalty") {
+    const svc = getPenaltyService();
+    const penalty = svc
+      .getAllPenalties()
+      .find((p) => p.id === parsed.recordId);
+    if (!penalty) return { success: false, error: "Penalty not found." };
+
+    const currentlyMarked = hasTestMarker(penalty.notes);
+
+    if (input.mark && currentlyMarked) {
+      return {
+        success: true,
+        alreadyInState: true,
+        isMarked: true,
+        source: "penalty",
+        recordId: penalty.id,
+      };
+    }
+    if (!input.mark && !currentlyMarked) {
+      return {
+        success: true,
+        alreadyInState: true,
+        isMarked: false,
+        source: "penalty",
+        recordId: penalty.id,
+      };
+    }
+
+    const nextNotes = input.mark
+      ? withMarker(penalty.notes)
+      : withoutMarker(penalty.notes);
+
+    const updated = svc.updateNotes(penalty.id, nextNotes);
+    if (!updated) {
+      return { success: false, error: "Penalty update failed." };
+    }
+    if (isRealUser(penalty.studentId)) {
+      try {
+        await updatePenaltyInDB(penalty.id, { notes: nextNotes });
+      } catch {
+        /* persistence is best-effort; in-memory update already succeeded */
+      }
+    }
+
+    logFinanceEvent({
+      entityType: "penalty",
+      entityId: penalty.id,
+      action: "manual_edit",
+      performer,
+      detail: input.mark
+        ? "Super-admin marked record as test data"
+        : "Super-admin removed test marker",
+      previousValue: currentlyMarked ? "test" : "not_test",
+      newValue: input.mark ? "test" : "not_test",
+    });
+
+    invalidateHydration();
+    revalidatePath("/finance");
+    revalidatePath("/penalties");
+
+    return {
+      success: true,
+      isMarked: input.mark,
+      source: "penalty",
+      recordId: penalty.id,
+    };
+  }
+
+  return { success: false, error: "Unsupported source." };
 }

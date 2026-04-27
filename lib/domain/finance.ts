@@ -33,6 +33,25 @@ export interface FinanceTransaction {
   refundedAt: string | null;
   refundedBy: string | null;
   refundReason: string | null;
+  /**
+   * True when the underlying record carries an explicit super-admin test
+   * marker ([test], #test or TEST:) in any of its free-text fields. Used
+   * by the Finance super-admin tooling — does NOT affect normal display.
+   */
+  isTest: boolean;
+}
+
+const TEST_MARKER_PATTERNS = ["[test]", "#test", "test:"];
+
+function carriesTestMarker(...fields: (string | null | undefined)[]): boolean {
+  for (const f of fields) {
+    if (!f) continue;
+    const lower = f.toLowerCase();
+    for (const m of TEST_MARKER_PATTERNS) {
+      if (lower.includes(m)) return true;
+    }
+  }
+  return false;
 }
 
 export interface FinanceMetrics {
@@ -116,6 +135,7 @@ export function buildSubscriptionTransactions(
       refundedAt: sub.refundedAt ?? null,
       refundedBy: sub.refundedBy ?? null,
       refundReason: sub.refundReason ?? null,
+      isTest: carriesTestMarker(sub.paymentNotes, sub.notes, sub.paymentReference, sub.refundReason),
     };
   });
 }
@@ -157,6 +177,7 @@ export function buildEventPurchaseTransactions(
       refundedAt: p.refundedAt ?? null,
       refundedBy: p.refundedBy ?? null,
       refundReason: p.refundReason ?? null,
+      isTest: false,
     };
   });
 }
@@ -183,6 +204,7 @@ export function buildPenaltyTransactions(
     refundedAt: null,
     refundedBy: null,
     refundReason: null,
+    isTest: carriesTestMarker(p.notes),
   }));
 }
 

@@ -8,6 +8,28 @@
 
 export const FINANCE_TEST_DELETE_CONFIRMATION = "DELETE TEST DATA";
 
+/** Canonical marker we append when a super-admin marks a record as test. */
+export const FINANCE_TEST_MARKER = "[test]";
+
+/**
+ * All markers the candidate scan recognises (case-insensitive). Kept in sync
+ * with the list used by `lib/actions/finance-admin.ts#hasTestMarker`.
+ */
+export const FINANCE_TEST_MARKERS_RECOGNISED = ["[test]", "#test", "test:"] as const;
+
+export type FinanceMarkableSource = "subscription" | "penalty";
+
+export interface MarkFinanceTestResult {
+  success: boolean;
+  error?: string;
+  /** Whether the record now carries a test marker (after the action). */
+  isMarked?: boolean;
+  /** Indicates no change was made (already in the requested state). */
+  alreadyInState?: boolean;
+  source?: FinanceMarkableSource;
+  recordId?: string;
+}
+
 export interface FinanceSuperAdminStatus {
   /** The current authenticated admin matches `BPM_SUPER_ADMIN_EMAIL`. */
   isSuperAdmin: boolean;

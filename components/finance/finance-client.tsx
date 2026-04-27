@@ -15,6 +15,8 @@ import {
   ChevronRight,
   FileText,
   Trash2,
+  FlaskConical,
+  Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
@@ -39,6 +41,7 @@ import {
 import {
   deleteFinanceTestRecordsAction,
   listFinanceTestCandidatesAction,
+  toggleFinanceTestMarkerAction,
 } from "@/lib/actions/finance-admin";
 
 // ── Props ────────────────────────────────────────────────────
@@ -184,6 +187,16 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
   const [methodFilter, setMethodFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+
+  const canMarkTest = !!superAdminStatus?.canDelete;
+  // Optimistic per-row override of `tx.isTest` after a successful toggle, so
+  // the UI updates immediately without waiting for the next router refresh.
+  const [testOverride, setTestOverride] = useState<Record<string, boolean>>({});
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<string | null>(null);
+  // Bumped after a successful toggle so the danger zone re-fetches candidates
+  // when it is currently expanded.
+  const [candidatesRefreshKey, setCandidatesRefreshKey] = useState(0);
 
   const datePresets = useMemo(() => getDatePresets(), []);
 
@@ -378,6 +391,12 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
         </div>
       </div>
 
+      {toggleError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {toggleError}
+        </div>
+      )}
+
       {/* Transaction table */}
       {filtered.length === 0 ? (
         <EmptyState
@@ -388,12 +407,52 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
       ) : (
         <>
           <AdminTable
-            headers={["Date", "Buyer", "Product", "Source / Type", "Status", "Amount", "Method", "Reference", "By"]}
+            headers={
+              canMarkTest
+                ? ["Date", "Buyer", "Product", "Source / Type", "Status", "Amount", "Method", "Reference", "By", "Test"]
+                : ["Date", "Buyer", "Product", "Source / Type", "Status", "Amount", "Method", "Reference", "By"]
+            }
             count={filtered.length}
           >
-            {filtered.slice(0, 200).map((tx) => (
-              <TxRow key={tx.id} tx={tx} />
-            ))}
+            {filtered.slice(0, 200).map((tx) => {
+              const isMarked = testOverride[tx.id] ?? tx.isTest;
+              return (
+                <TxRow
+                  key={tx.id}
+                  tx={tx}
+                  superAdmin={canMarkTest}
+                  isMarkedAsTest={isMarked}
+                  isToggling={togglingId === tx.id}
+                  onToggleTest={async () => {
+                    setToggleError(null);
+                    if (tx.source === "event_purchase") {
+                      setToggleError(
+                        "Event purchases are intentionally excluded from the test-data flow."
+                      );
+                      return;
+                    }
+                    setTogglingId(tx.id);
+                    try {
+                      const result = await toggleFinanceTestMarkerAction({
+                        transactionId: tx.id,
+                        mark: !isMarked,
+                      });
+                      if (!result.success) {
+                        setToggleError(result.error ?? "Toggle failed.");
+                      } else {
+                        setTestOverride((prev) => ({
+                          ...prev,
+                          [tx.id]: result.isMarked ?? !isMarked,
+                        }));
+                        setCandidatesRefreshKey((k) => k + 1);
+                      }
+                    } finally {
+                      setTogglingId(null);
+                    }
+                  }}
+                />
+              );
+            })}
           </AdminTable>
           {filtered.length > 200 && (
             <p className="text-xs text-gray-400 text-center pt-1">
@@ -407,7 +466,7 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
       {auditLog.length > 0 && <AuditTrailSection entries={auditLog} />}
 
       {/* Super-admin danger zone */}
-      {superAdminStatus?.canDelete && <FinanceDangerZone />}
+      {superAdminStatus?.canDelete && <FinanceDangerZone refreshKey={candidatesRefreshKey} />}
     </div>
   );
 }
@@ -478,7 +537,19 @@ function SourceCard({
   );
 }
 
-function TxRow({ tx }: { tx: FinanceTransaction }) {
+function TxRow({
+  tx,
+  superAdmin = false,
+  isMarkedAsTest = false,
+  isToggling = false,
+  onToggleTest,
+}: {
+  tx: FinanceTransaction;
+  superAdmin?: boolean;
+  isMarkedAsTest?: boolean;
+  isToggling?: boolean;
+  onToggleTest?: () => void;
+}) {
   const statusColor = STATUS_COLORS[tx.status] ?? "bg-gray-100 text-gray-600";
   const dateStr = tx.date.includes("T") ? formatDate(tx.date.slice(0, 10)) : formatDate(tx.date);
   const refundInfo = tx.refundedAt || tx.refundReason
@@ -539,6 +610,37 @@ function TxRow({ tx }: { tx: FinanceTransaction }) {
       <Td className="capitalize text-xs">{METHOD_LABELS[tx.paymentMethod ?? ""] ?? tx.paymentMethod ?? "—"}</Td>
       <Td className="max-w-[120px] truncate text-xs text-gray-400">{tx.reference ?? "—"}</Td>
       <Td className="text-xs text-gray-500">{tx.performedBy ?? "—"}</Td>
+      {superAdmin && (
+        <Td>
+          {tx.source === "event_purchase" ? (
+            <span className="text-[10px] text-gray-400">—</span>
+          ) : (
+            <button
+              type="button"
+              onClick={onToggleTest}
+              disabled={isToggling || !onToggleTest}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                isMarkedAsTest
+                  ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                  : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+              )}
+              title={
+                isMarkedAsTest
+                  ? "Remove the [test] marker so this row no longer appears in the danger zone"
+                  : "Mark this row as test data so it can be deleted from the danger zone"
+              }
+            >
+              {isToggling ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <FlaskConical className="h-3 w-3" />
+              )}
+              {isMarkedAsTest ? "Unmark test" : "Mark as test"}
+            </button>
+          )}
+        </Td>
+      )}
     </tr>
   );
 }
@@ -650,7 +752,7 @@ function AuditTrailSection({ entries }: { entries: FinanceAuditEntry[] }) {
 
 // ── Finance Danger Zone (super-admin) ────────────────────────
 
-function FinanceDangerZone() {
+function FinanceDangerZone({ refreshKey = 0 }: { refreshKey?: number }) {
   const [expanded, setExpanded] = useState(false);
   const [candidates, setCandidates] = useState<FinanceTestCandidate[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -677,6 +779,11 @@ function FinanceDangerZone() {
   useEffect(() => {
     if (expanded && candidates === null) loadCandidates();
   }, [expanded, candidates, loadCandidates]);
+
+  // Reload when the parent signals a row was just (un)marked.
+  useEffect(() => {
+    if (expanded && refreshKey > 0) loadCandidates();
+  }, [refreshKey, expanded, loadCandidates]);
 
   function toggle(id: string) {
     setSelectedIds((prev) => {
