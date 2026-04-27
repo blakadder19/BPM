@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth";
 import { getSettings } from "@/lib/services/settings-store";
 import { DANCE_STYLES } from "@/lib/mock-data";
 import { SettingsForm, type SupabaseStatus } from "@/components/settings/settings-form";
+import { AdminsSection } from "@/components/settings/admins-section";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 async function probeSupabaseStatus(): Promise<SupabaseStatus> {
@@ -37,11 +38,14 @@ export default async function SettingsPage() {
   const isDev = process.env.NODE_ENV === "development";
 
   return (
-    <SettingsForm
-      initialSettings={settings}
-      allStyles={allStyles}
-      supabaseStatus={supabaseStatus}
-      isDev={isDev}
-    />
+    <div className="space-y-6">
+      <SettingsForm
+        initialSettings={settings}
+        allStyles={allStyles}
+        supabaseStatus={supabaseStatus}
+        isDev={isDev}
+      />
+      <AdminsSection />
+    </div>
   );
 }
