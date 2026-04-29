@@ -20,6 +20,7 @@
  *     their public.users row.
  */
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getStaffRepo } from "@/lib/repositories";
 import {
@@ -47,6 +48,36 @@ type ActionResult<T = void> = ActionOk<T> | ActionErr;
 
 function normalizeEmail(input: string): string {
   return (input ?? "").trim().toLowerCase();
+}
+
+/**
+ * Resolve the absolute origin to use when constructing copy-link
+ * invite URLs. Falls back through environment hints and the request
+ * host so a missing NEXT_PUBLIC_SITE_URL on a Vercel preview never
+ * leaves the admin with a relative `/login?invite=...` link they
+ * cannot share.
+ */
+async function resolveBaseUrl(): Promise<string> {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  if (explicit) return explicit;
+
+  try {
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    if (host) {
+      const proto =
+        h.get("x-forwarded-proto") ??
+        (host.includes("localhost") ? "http" : "https");
+      return `${proto}://${host}`;
+    }
+  } catch {
+    // headers() can throw outside a request context; fall through.
+  }
+
+  const vercel = process.env.VERCEL_URL?.replace(/\/$/, "");
+  if (vercel) return `https://${vercel}`;
+
+  return "http://localhost:3000";
 }
 
 function isValidEmail(email: string): boolean {
@@ -161,8 +192,16 @@ export async function inviteStaffAction(
   // Build the copy-link. The recipient signs in with this email through
   // the normal Supabase auth flow; the auth callback will see the
   // pending invite and call `acceptStaffInviteOnSignInAction`.
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
+  //
+  // Resolution order for the absolute base URL:
+  //   1. NEXT_PUBLIC_SITE_URL (explicit prod/preview override)
+  //   2. The current request's Host header (covers Vercel previews
+  //      where SITE_URL isn't configured per environment)
+  //   3. VERCEL_URL (auto-injected by Vercel; lacks scheme)
+  //   4. localhost fallback for `next dev`
+  // The point is to never return a relative link here, because the
+  // invite link is meant to be shared cross-device and copied.
+  const base = await resolveBaseUrl();
   const inviteUrl = `${base}/login?invite=${encodeURIComponent(invite.token)}`;
 
   revalidatePath("/staff");

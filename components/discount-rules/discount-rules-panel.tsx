@@ -117,26 +117,79 @@ function isWithinWindow(rule: RuleRow, nowIso: string): boolean {
   return true;
 }
 
-function describeScope(rule: RuleRow, products: ProductRow[]): string {
-  const parts: string[] = [];
-  if (rule.appliesToProductTypes && rule.appliesToProductTypes.length > 0) {
-    parts.push(
-      `Types: ${rule.appliesToProductTypes
-        .map((t) => PRODUCT_TYPE_LABELS[t])
-        .join(", ")}`,
-    );
+/**
+ * Compact chip-based scope renderer for the rules table. Wraps within
+ * its own column so long product names cannot bleed into Stackable /
+ * Priority. Falls back to "All products" when the rule has no
+ * type/id restrictions.
+ */
+function ScopeCell({
+  rule,
+  products,
+}: {
+  rule: RuleRow;
+  products: ProductRow[];
+}) {
+  const types = rule.appliesToProductTypes ?? [];
+  const productIds = rule.appliesToProductIds ?? [];
+  const isAll = types.length === 0 && productIds.length === 0;
+
+  if (isAll) {
+    return <span className="text-xs text-gray-500">All products</span>;
   }
-  if (rule.appliesToProductIds && rule.appliesToProductIds.length > 0) {
-    const names = rule.appliesToProductIds
-      .map((id) => products.find((p) => p.id === id)?.name ?? id)
-      .slice(0, 3);
-    const extra = rule.appliesToProductIds.length - names.length;
-    parts.push(
-      `Products: ${names.join(", ")}${extra > 0 ? ` +${extra} more` : ""}`,
-    );
-  }
-  if (parts.length === 0) return "All products";
-  return parts.join(" · ");
+
+  const productNames = productIds.map(
+    (id) => products.find((p) => p.id === id)?.name ?? id,
+  );
+  const tooltip = [
+    types.length > 0
+      ? `Types: ${types.map((t) => PRODUCT_TYPE_LABELS[t]).join(", ")}`
+      : null,
+    productNames.length > 0 ? `Products: ${productNames.join(", ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const visibleProducts = productNames.slice(0, 2);
+  const extraProducts = productNames.length - visibleProducts.length;
+
+  return (
+    <div
+      className="flex max-w-[260px] flex-col gap-1 whitespace-normal"
+      title={tooltip}
+    >
+      {types.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {types.map((t) => (
+            <span
+              key={t}
+              className="inline-flex items-center rounded-full bg-bpm-50 px-1.5 py-0.5 text-[10px] font-medium text-bpm-700"
+            >
+              {PRODUCT_TYPE_LABELS[t]}
+            </span>
+          ))}
+        </div>
+      )}
+      {productNames.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {visibleProducts.map((name) => (
+            <span
+              key={name}
+              className="inline-flex max-w-[200px] items-center truncate rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-700"
+              title={name}
+            >
+              {name}
+            </span>
+          ))}
+          {extraProducts > 0 && (
+            <span className="inline-flex items-center rounded-full bg-gray-200 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+              +{extraProducts} more
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Page component ──────────────────────────────────────────
@@ -322,8 +375,8 @@ export function DiscountRulesPanel({
                     </div>
                   )}
                 </Td>
-                <Td className="text-xs text-gray-600 max-w-[240px]">
-                  {describeScope(r, products)}
+                <Td className="align-top text-xs text-gray-600">
+                  <ScopeCell rule={r} products={products} />
                 </Td>
                 <Td>
                   <Badge variant={r.stackable ? "success" : "neutral"}>

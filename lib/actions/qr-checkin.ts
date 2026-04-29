@@ -771,7 +771,10 @@ export async function qrSellDropInAndCheckInAction(
     termId: null,
     paymentMethod: "cash" as const,
     paymentStatus: "paid" as const,
-    assignedBy: user.fullName,
+    // assigned_by is a UUID FK to users(id) — must be the auth user
+    // id, not a display name. Finance BY column resolves the id back
+    // to a human label via identityMap.
+    assignedBy: user.id,
     assignedAt: new Date().toISOString(),
     autoRenew: false,
     classesUsed: 0,

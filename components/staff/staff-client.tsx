@@ -79,9 +79,39 @@ function statusVariant(status: StaffStatus): "success" | "neutral" | "warning" {
   return "neutral";
 }
 
+/**
+ * If the server-returned URL is already absolute (`http://` /
+ * `https://`), return it as-is. Otherwise prefix it with the best
+ * origin we have on the client. Used as the last line of defence
+ * against a relative `/login?invite=...` ever surfacing in the UI.
+ */
+function toAbsoluteInviteUrl(maybeUrl: string, baseUrl: string): string {
+  if (/^https?:\/\//i.test(maybeUrl)) return maybeUrl;
+  if (baseUrl) return `${baseUrl}${maybeUrl}`;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${maybeUrl}`;
+  }
+  return maybeUrl;
+}
+
+/**
+ * Compose an absolute invite URL for display/copy.
+ *
+ * Server-side `inviteStaffAction` already returns an absolute URL
+ * (resolved from NEXT_PUBLIC_SITE_URL / request host / VERCEL_URL),
+ * but the pending-invites table renders links from saved tokens too,
+ * and that path uses the `baseUrl` prop. If the prop is missing for
+ * any reason (e.g. SSR before headers were fully resolved), fall back
+ * to `window.location.origin` on the client so admins always see a
+ * shareable absolute link.
+ */
 function inviteUrl(baseUrl: string, token: string): string {
-  if (!baseUrl) return `/login?invite=${encodeURIComponent(token)}`;
-  return `${baseUrl}/login?invite=${encodeURIComponent(token)}`;
+  const path = `/login?invite=${encodeURIComponent(token)}`;
+  if (baseUrl) return `${baseUrl}${path}`;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${path}`;
+  }
+  return path;
 }
 
 export function StaffClient({
@@ -167,32 +197,35 @@ export function StaffClient({
 
       {lastInviteUrl && (
         <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-3 text-sm">
-          <div className="mb-1 font-medium text-bpm-800">Invite link ready to share</div>
-          <div className="flex items-center gap-2">
+          <div className="mb-1 font-medium text-bpm-800">Invite created</div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               readOnly
               value={lastInviteUrl}
               className="w-full rounded border border-bpm-200 bg-white px-2 py-1 font-mono text-xs"
               onClick={(e) => (e.target as HTMLInputElement).select()}
             />
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                navigator.clipboard?.writeText(lastInviteUrl);
-                setActionInfo("Invite link copied to clipboard.");
-              }}
-            >
-              <Copy className="size-3.5" />
-              <span>Copy</span>
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setLastInviteUrl(null)}>
-              <X className="size-3.5" />
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard?.writeText(lastInviteUrl);
+                  setActionInfo("Invite link copied to clipboard.");
+                }}
+              >
+                <Copy className="size-3.5" />
+                <span>Copy link</span>
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setLastInviteUrl(null)}>
+                <X className="size-3.5" />
+              </Button>
+            </div>
           </div>
-          <p className="mt-1 text-xs text-bpm-700">
-            Share this link with the recipient. They sign in with the invited email
-            and the staff role/permissions are activated automatically.
+          <p className="mt-2 text-xs text-bpm-700">
+            Email sending is not configured. Copy and share this invite link manually.
+            The recipient signs in with the invited email and their role/permissions are
+            activated automatically.
           </p>
         </div>
       )}
@@ -375,6 +408,13 @@ export function StaffClient({
             setLastInviteUrl(url);
             setActionInfo(null);
           }}
+          onUpdatedExisting={(email) => {
+            setShowInvite(false);
+            setLastInviteUrl(null);
+            setActionInfo(
+              `${email} is already a staff member — their role and permissions were updated.`,
+            );
+          }}
         />
       )}
 
@@ -401,12 +441,14 @@ function InviteModal({
   onClose,
   onError,
   onCreated,
+  onUpdatedExisting,
 }: {
   baseUrl: string;
   currentIsSuperAdmin: boolean;
   onClose: () => void;
   onError: (msg: string | null) => void;
   onCreated: (inviteUrl: string) => void;
+  onUpdatedExisting: (email: string) => void;
 }) {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -433,10 +475,12 @@ function InviteModal({
       }
       const url = r.data?.inviteUrl;
       if (url) {
-        onCreated(url);
+        // Ensure the displayed link is absolute even if the server
+        // returned a relative one for any reason.
+        onCreated(toAbsoluteInviteUrl(url, baseUrl));
       } else {
-        // Existing staff member — already updated in place.
-        onClose();
+        // Existing staff member — already updated in place by the action.
+        onUpdatedExisting(r.data?.email ?? email);
       }
     } finally {
       setSubmitting(false);
@@ -485,9 +529,12 @@ function InviteModal({
           />
 
           <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-2 text-xs text-bpm-800">
-            We will generate a copyable invite link. Share it manually with the
-            recipient — they sign in with the invited email and access activates
-            automatically. (Email sending is not configured in this MVP.)
+            <p className="font-medium">Email sending is not configured.</p>
+            <p className="mt-0.5">
+              We will generate a copyable invite link. Copy and share it manually with
+              the recipient — they sign in with the invited email and access activates
+              automatically.
+            </p>
           </div>
         </div>
 

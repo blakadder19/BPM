@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
-import { fulfillStripeCheckout } from "@/lib/actions/stripe-checkout";
-import { fulfillExistingSubscriptionPayment } from "@/lib/actions/stripe-checkout";
-import { fulfillEventPurchase, fulfillPendingEventPurchase, fulfillGuestEventPurchase } from "@/lib/actions/event-purchase";
+import { routeStripeSessionFulfillment } from "@/lib/services/stripe-fulfillment-router";
 
 /**
  * Stripe webhook endpoint.
@@ -79,35 +77,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true });
     }
 
-    // Guest event purchase — no student ID, uses guest fields
-    if (metadata.bpm_purchase_type === "event_guest") {
-      console.info(`[stripe-webhook] Routing to guest event fulfillment. event=${metadata.bpm_event_id} product=${metadata.bpm_event_product_id} guest=${metadata.bpm_guest_email}`);
-      const result = await fulfillGuestEventPurchase(session.id, metadata);
-      if (!result.success) {
-        console.error(`[stripe-webhook] Guest fulfillment FAILED for session ${session.id}:`, result.error);
-        return NextResponse.json({ error: "Fulfillment failed" }, { status: 500 });
-      }
-      console.info(`[stripe-webhook] Guest fulfillment SUCCEEDED for session ${session.id}`);
-      return NextResponse.json({ received: true });
-    }
-
-    if (!metadata.bpm_student_id) {
-      console.warn(
-        `[stripe-webhook] Session ${session.id} has no bpm_student_id metadata — ignoring.`,
-      );
-      return NextResponse.json({ received: true });
-    }
-
-    let result: { success: boolean; error?: string };
-    if (metadata.bpm_purchase_type === "event") {
-      result = metadata.bpm_event_purchase_id
-        ? await fulfillPendingEventPurchase(session.id, metadata)
-        : await fulfillEventPurchase(session.id, metadata);
-    } else if (metadata.bpm_mode === "pay_existing") {
-      result = await fulfillExistingSubscriptionPayment(session.id, metadata);
-    } else {
-      result = await fulfillStripeCheckout(session.id, metadata);
-    }
+    const result = await routeStripeSessionFulfillment(session.id, metadata, "webhook");
     if (!result.success) {
       console.error(
         `[stripe-webhook] Fulfillment failed for session ${session.id}:`,

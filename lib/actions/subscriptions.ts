@@ -159,10 +159,12 @@ export async function createSubscriptionAction(
     termId,
     paymentMethod: paymentMethodRaw as PaymentMethod,
     paymentStatus: paymentStatusRaw as SalePaymentStatus,
-    // Store the admin's display name directly so the Finance BY
-    // column doesn't need to look up the user (no admin repo exists).
-    // Fallback to email then id for completeness.
-    assignedBy: adminUser.fullName ?? adminUser.email ?? adminUser.id,
+    // Supabase column `student_subscriptions.assigned_by` is `uuid
+    // REFERENCES users(id)` — must be the auth user id, NEVER the
+    // display name. The Finance BY column resolves this id back to a
+    // human label via `identityMap`. Writing a name here previously
+    // caused: invalid input syntax for type uuid: "BPM Admin".
+    assignedBy: adminUser.id,
     assignedAt: new Date().toISOString(),
     autoRenew,
     classesUsed: 0,
