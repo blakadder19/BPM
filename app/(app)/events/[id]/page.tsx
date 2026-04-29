@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import {
   cachedGetEventById,
   cachedGetEventSessions,
@@ -21,7 +22,10 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requireRole(["admin", "student"]);
+  const user = await requireAuth();
+  if (user.role !== "student") {
+    await requirePermission("events:view");
+  }
   await ensureOperationalDataHydrated();
 
   const event = await cachedGetEventById(id);

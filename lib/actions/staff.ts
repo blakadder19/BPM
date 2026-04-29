@@ -25,7 +25,7 @@ import { revalidatePath } from "next/cache";
 import { getStaffRepo } from "@/lib/repositories";
 import {
   isPermissionKey,
-  ROLE_PRESETS,
+  normalizePermissionsForStorage,
   STAFF_ROLE_KEYS,
   type Permission,
   type StaffRoleKey,
@@ -158,6 +158,13 @@ export async function inviteStaffAction(
   }
 
   const permissions = sanitizePermissions(input.permissions);
+  const storedPermissions = normalizePermissionsForStorage(
+    input.roleKey,
+    permissions,
+  );
+  console.info(
+    `[staff] invite: email=${email} role=${input.roleKey} extras=${storedPermissions.length}`,
+  );
 
   const repo = getStaffRepo();
   // If the email already belongs to a staff member, prefer in-place
@@ -166,14 +173,7 @@ export async function inviteStaffAction(
   if (existing) {
     await repo.updateStaff(existing.id, {
       roleKey: input.roleKey,
-      permissions:
-        input.roleKey === "super_admin"
-          ? []
-          : input.roleKey === "custom"
-            ? permissions
-            : [...ROLE_PRESETS[input.roleKey], ...permissions]
-                // Dedup
-                .filter((v, i, arr) => arr.indexOf(v) === i),
+      permissions: storedPermissions,
       status: "active",
     });
     revalidatePath("/staff");
@@ -187,14 +187,7 @@ export async function inviteStaffAction(
     email,
     displayName: input.displayName ?? null,
     roleKey: input.roleKey,
-    permissions:
-      input.roleKey === "super_admin"
-        ? []
-        : input.roleKey === "custom"
-          ? permissions
-          : [...ROLE_PRESETS[input.roleKey], ...permissions].filter(
-              (v, i, arr) => arr.indexOf(v) === i,
-            ),
+    permissions: storedPermissions,
     invitedBy: guard.access.user.id,
   });
 
@@ -301,16 +294,17 @@ export async function updateStaffPermissionsAction(
   }
 
   const permissions = sanitizePermissions(input.permissions);
+  const storedPermissions = normalizePermissionsForStorage(
+    input.roleKey,
+    permissions,
+  );
+  console.info(
+    `[staff] update: user=${input.userId} role=${input.roleKey} extras=${storedPermissions.length}`,
+  );
+
   await getStaffRepo().updateStaff(input.userId, {
     roleKey: input.roleKey,
-    permissions:
-      input.roleKey === "super_admin"
-        ? []
-        : input.roleKey === "custom"
-          ? permissions
-          : [...ROLE_PRESETS[input.roleKey], ...permissions].filter(
-              (v, i, arr) => arr.indexOf(v) === i,
-            ),
+    permissions: storedPermissions,
   });
 
   revalidatePath("/staff");

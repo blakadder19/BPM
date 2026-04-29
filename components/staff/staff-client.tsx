@@ -28,7 +28,9 @@ import {
   ROLE_PRESETS,
   STAFF_ROLE_KEYS,
   STAFF_ROLE_LABELS,
+  expandPermissions,
   isSensitivePermission,
+  normalizePermissionsForStorage,
   type Permission,
   type StaffRoleKey,
   type StaffStatus,
@@ -567,6 +569,21 @@ function InviteModal({
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  // Same role-change discipline as the edit modal: never carry stale
+  // override perms across role switches.
+  function handleRoleChange(next: StaffRoleKey) {
+    if (next === roleKey) return;
+    if (next === "super_admin") {
+      setOverrides(new Set());
+    } else if (next === "custom") {
+      const effective = expandPermissions(roleKey, [...overrides]);
+      setOverrides(new Set(effective));
+    } else {
+      setOverrides(new Set());
+    }
+    setRoleKey(next);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
@@ -579,7 +596,7 @@ function InviteModal({
           email,
           displayName: displayName.trim() || null,
           roleKey,
-          permissions: [...overrides],
+          permissions: normalizePermissionsForStorage(roleKey, [...overrides]),
         });
       } catch (err) {
         // Surface unexpected server errors instead of silently closing.
@@ -648,7 +665,7 @@ function InviteModal({
 
           <RoleSelect
             value={roleKey}
-            onChange={setRoleKey}
+            onChange={handleRoleChange}
             allowSuperAdmin={currentIsSuperAdmin}
           />
 
@@ -659,11 +676,12 @@ function InviteModal({
           />
 
           <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-2 text-xs text-bpm-800">
-            <p className="font-medium">Email sending is not configured.</p>
+            <p className="font-medium">How invites work</p>
             <p className="mt-0.5">
-              We will generate a copyable invite link. Copy and share it manually with
-              the recipient — they sign in with the invited email and access activates
-              automatically.
+              We send the invite email automatically (when Brevo is configured)
+              and also show you a copyable link as a fallback. The recipient
+              signs in with this email — their staff role and permissions
+              activate on first sign-in.
             </p>
           </div>
         </div>
@@ -701,8 +719,14 @@ function EditPermissionsModal({
   onError: (msg: string | null) => void;
   onSaved: () => void;
 }) {
-  const [roleKey, setRoleKey] = useState<StaffRoleKey>(target.roleKey ?? "teacher");
-  const [overrides, setOverrides] = useState<Set<Permission>>(new Set(target.permissions));
+  const initialRole: StaffRoleKey = target.roleKey ?? "teacher";
+  const [roleKey, setRoleKey] = useState<StaffRoleKey>(initialRole);
+  // Override list is "extras only" for non-Custom; the full effective
+  // set for Custom. Initialize from `target.permissions` which the
+  // server now persists in this exact shape.
+  const [overrides, setOverrides] = useState<Set<Permission>>(
+    new Set(target.permissions),
+  );
   const [fullName, setFullName] = useState<string>(target.fullName ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -712,6 +736,33 @@ function EditPermissionsModal({
     target.status === "active" &&
     activeSuperAdmins <= 1;
   const isSelfSuper = target.id === currentUserId && target.roleKey === "super_admin";
+
+  /**
+   * Role-change handler — prevents stale override leakage.
+   *
+   *   - super_admin: clear overrides (all perms granted by sentinel).
+   *   - custom: pre-fill overrides with the user's CURRENT effective
+   *     permissions so the admin starts from a meaningful state and
+   *     can curate down rather than starting from a blank slate.
+   *   - other preset roles: clear overrides (extras start at zero;
+   *     admin can add specific extras on top of the new preset).
+   *
+   * Without this, switching from Admin → Teacher leaves the override
+   * containing the entire previous Admin preset, and `expandPermissions`
+   * unions it with the Teacher preset, effectively keeping Admin power.
+   */
+  function handleRoleChange(next: StaffRoleKey) {
+    if (next === roleKey) return;
+    if (next === "super_admin") {
+      setOverrides(new Set());
+    } else if (next === "custom") {
+      const effective = expandPermissions(roleKey, [...overrides]);
+      setOverrides(new Set(effective));
+    } else {
+      setOverrides(new Set());
+    }
+    setRoleKey(next);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -749,10 +800,14 @@ function EditPermissionsModal({
         }
       }
 
+      // Defensive client-side normalization: server normalizes again,
+      // but doing it here avoids round-tripping preset perms that
+      // would just be filtered out anyway.
+      const stored = normalizePermissionsForStorage(roleKey, [...overrides]);
       const r = await updateStaffPermissionsAction({
         userId: target.id,
         roleKey,
-        permissions: [...overrides],
+        permissions: stored,
       });
       if (!r.success) {
         setLocalError(r.error);
@@ -810,7 +865,7 @@ function EditPermissionsModal({
 
           <RoleSelect
             value={roleKey}
-            onChange={setRoleKey}
+            onChange={handleRoleChange}
             allowSuperAdmin={currentIsSuperAdmin}
             disabled={isLastSuper || isSelfSuper}
           />
@@ -820,6 +875,15 @@ function EditPermissionsModal({
             overrides={overrides}
             onChange={setOverrides}
           />
+
+          {target.id === currentUserId && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <strong>Heads up:</strong> you are editing your own access. Some
+              changes may not appear in your own sidebar until you sign out and
+              back in. Other staff see the new permissions on their next
+              navigation.
+            </div>
+          )}
         </div>
 
         <div className="flex shrink-0 justify-end gap-2 border-t bg-white px-5 py-3">
@@ -934,6 +998,25 @@ function RoleSelect({
   );
 }
 
+/**
+ * Permissions editor — Model A (preset + custom additions).
+ *
+ * Visual rules:
+ *   - super_admin → editor is hidden, message only.
+ *   - Non-Custom roles:
+ *       • Preset perms render as DISABLED checked + "Included in role".
+ *         You cannot uncheck them here. To remove, switch the role to
+ *         Custom and re-pick exactly what you want.
+ *       • Non-preset perms render as ENABLED checkboxes — toggling
+ *         them adds/removes from the override (extras-only) list.
+ *   - Custom role:
+ *       • Every checkbox is enabled. Checked = effective. Unchecked =
+ *         denied. The override IS the effective permission set.
+ *
+ * The editor never silently grants a permission that is not visibly
+ * checked, and never silently revokes a permission that IS visibly
+ * checked. What you see is what the user gets.
+ */
 function PermissionsEditor({
   roleKey,
   overrides,
@@ -943,34 +1026,66 @@ function PermissionsEditor({
   overrides: Set<Permission>;
   onChange: (next: Set<Permission>) => void;
 }) {
+  const presetSet = useMemo(
+    () => new Set<Permission>(ROLE_PRESETS[roleKey] ?? []),
+    [roleKey],
+  );
+  const effective = useMemo(
+    () => expandPermissions(roleKey, [...overrides]),
+    [roleKey, overrides],
+  );
+
   if (roleKey === "super_admin") {
     return (
       <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-2 text-xs text-bpm-800">
-        Super Admin always has every permission. Per-permission overrides are not used.
+        <p>
+          Super Admin always has every permission. Per-permission overrides
+          are not used.
+        </p>
+        <p className="mt-1 text-[11px] text-bpm-700">
+          Effective permissions: <strong>{effective.size}</strong> (all)
+        </p>
       </div>
     );
   }
 
-  const presetSet = new Set<Permission>(ROLE_PRESETS[roleKey]);
-
-  function toggle(key: Permission) {
+  function toggle(key: Permission, isPresetLocked: boolean) {
+    if (isPresetLocked) return; // Preset perms are locked in non-Custom modes.
     const next = new Set(overrides);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     onChange(next);
   }
 
+  const isCustom = roleKey === "custom";
+
   return (
     <div className="space-y-3">
-      <div className="text-xs text-gray-500">
-        Checked = permission is granted. The role preset auto-grants the highlighted
-        permissions; toggle additional ones below.{" "}
-        {roleKey === "custom" && (
-          <span className="text-amber-700">
-            Custom mode: only the permissions you explicitly enable are granted.
-          </span>
-        )}
+      <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+        <p>
+          {isCustom ? (
+            <>
+              <strong>Custom role:</strong> only permissions you check below
+              are granted. Unchecked = denied.
+            </>
+          ) : (
+            <>
+              <strong>{STAFF_ROLE_LABELS[roleKey]} preset:</strong> the
+              permissions marked <em>Included in role</em> are auto-granted
+              and locked. To remove a preset permission, switch this user
+              to <strong>Custom</strong> and pick exactly what they need.
+              Adding extras is fine.
+            </>
+          )}
+        </p>
+        <p className="mt-1 text-[11px] text-gray-600">
+          Effective permissions:{" "}
+          <strong>
+            {effective.size}/{PERMISSION_GROUPS.reduce((n, g) => n + g.permissions.length, 0)}
+          </strong>
+        </p>
       </div>
+
       <div className="space-y-3">
         {PERMISSION_GROUPS.map((g) => (
           <div key={g.key} className="rounded-md border border-gray-200 px-3 py-2">
@@ -979,28 +1094,41 @@ function PermissionsEditor({
             </div>
             <div className="grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-2">
               {g.permissions.map((p) => {
-                const inPreset = roleKey !== "custom" && presetSet.has(p.key);
+                const inPreset = !isCustom && presetSet.has(p.key);
                 const explicit = overrides.has(p.key);
                 const granted = inPreset || explicit;
                 const sensitive = isSensitivePermission(p.key);
+                const locked = inPreset; // Cannot uncheck preset perms.
                 return (
                   <label
                     key={p.key}
                     className={`flex items-start gap-2 rounded px-1 py-0.5 text-xs ${
                       sensitive && granted ? "bg-amber-50" : ""
-                    }`}
+                    } ${locked ? "opacity-95" : ""}`}
                     title={p.description ?? p.key}
                   >
                     <input
                       type="checkbox"
                       className="mt-0.5"
                       checked={granted}
-                      onChange={() => toggle(p.key)}
+                      disabled={locked}
+                      aria-disabled={locked}
+                      onChange={() => toggle(p.key, locked)}
                     />
                     <span className="flex-1">
                       <span className={inPreset ? "font-medium text-gray-900" : "text-gray-700"}>
                         {p.label}
                       </span>
+                      {locked && (
+                        <span className="ml-1 inline-block rounded-full bg-bpm-100 px-1.5 py-px text-[10px] font-medium uppercase tracking-wider text-bpm-700">
+                          Included in role
+                        </span>
+                      )}
+                      {!locked && explicit && !isCustom && (
+                        <span className="ml-1 inline-block rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-medium uppercase tracking-wider text-emerald-700">
+                          Custom extra
+                        </span>
+                      )}
                       {sensitive && granted && (
                         <span className="ml-1 inline-flex items-center gap-0.5 text-amber-700">
                           <AlertTriangle className="size-3" />

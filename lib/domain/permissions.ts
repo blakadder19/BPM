@@ -284,12 +284,17 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
 /**
  * Produce the effective permission set for a staff member.
  *
- * Resolution order:
+ * Resolution order (Model A — preset + custom additions):
  *   1. super_admin → ALL permissions (sentinel; ignores `override`)
  *   2. custom     → use `override` verbatim (or empty if missing)
  *   3. otherwise  → ROLE_PRESETS[roleKey] union with `override` (override
- *                   ADDS, never silently removes — the caller can store
- *                   role_key='custom' if they need to remove preset perms)
+ *                   ADDS, never silently removes — to remove a preset
+ *                   permission the caller must switch role_key='custom').
+ *
+ * IMPORTANT: For non-Custom roles, the `override` list is stored as
+ * "additions only" (perms NOT already in the preset). `expandPermissions`
+ * still does a defensive UNION with the preset so legacy rows that were
+ * persisted with `[preset + extras]` continue to expand correctly.
  */
 export function expandPermissions(
   roleKey: StaffRoleKey | null,
@@ -305,6 +310,37 @@ export function expandPermissions(
   const out = new Set<Permission>(base);
   for (const p of override ?? []) out.add(p);
   return out;
+}
+
+/**
+ * Normalize the permission list saved into `staff_permissions` for
+ * persistence. This is the source of truth for the storage shape:
+ *
+ *   - super_admin → []  (sentinel — preset is ALL keys, no overrides
+ *                        ever needed)
+ *   - custom      → exact list (deduped, sanitized)
+ *   - otherwise   → ADDITIONS ONLY (perms NOT already in the preset),
+ *                   deduped and sanitized.
+ *
+ * Why "additions only" for non-Custom: if we stored `preset + extras`,
+ * then changing the role would leak old preset perms into the override
+ * because the stored list still contains them. Storing only the delta
+ * makes role changes deterministic and the editor reflect what's
+ * actually granted on top of the preset.
+ *
+ * The function is pure and safe to call from both the client editor
+ * (when computing what to send to the server) and the server actions
+ * (defence-in-depth).
+ */
+export function normalizePermissionsForStorage(
+  roleKey: StaffRoleKey,
+  permissions: readonly Permission[],
+): Permission[] {
+  if (roleKey === "super_admin") return [];
+  const dedup = Array.from(new Set(permissions.filter(isPermissionKey)));
+  if (roleKey === "custom") return dedup;
+  const presetSet = new Set<Permission>(ROLE_PRESETS[roleKey]);
+  return dedup.filter((p) => !presetSet.has(p));
 }
 
 /**

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import { getTemplates } from "@/lib/services/class-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { buildTeacherNameMap } from "@/lib/services/teacher-roster-store";
@@ -26,7 +27,10 @@ import type { ClassCardData } from "@/components/booking/student-class-card";
 
 export default async function ClassesPage() {
   const _t0 = performance.now();
-  const user = await requireRole(["admin", "teacher", "student"]);
+  const user = await requireAuth();
+  if (user.role !== "student") {
+    await requirePermission("classes:view");
+  }
   const _tAuth = performance.now();
 
   if (user.role === "student") {

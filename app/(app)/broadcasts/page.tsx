@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { listBroadcastsAction } from "@/lib/actions/broadcasts";
 import {
   cachedGetAllStudents,
@@ -10,7 +10,7 @@ import { getTemplates } from "@/lib/services/class-store";
 import { BroadcastsClient } from "@/components/broadcasts/broadcasts-client";
 
 export default async function BroadcastsPage() {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   const [broadcasts, students, products, events] = await Promise.all([
     listBroadcastsAction(),

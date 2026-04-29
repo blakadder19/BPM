@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getTemplates } from "@/lib/services/class-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -18,7 +18,7 @@ export default async function BookableClassesPage({
 }: {
   searchParams?: Promise<{ search?: string; date?: string }>;
 }) {
-  await requireRole(["admin", "teacher"]);
+  await requirePermission("classes:view");
   await ensureScheduleBootstrapped();
   await ensureOperationalDataHydrated();
   const params = searchParams ? await searchParams : {};

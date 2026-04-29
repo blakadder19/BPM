@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
+import { getStaffAccess, hasPermission } from "@/lib/staff-permissions";
 import {
   getBookingRepo,
   getAttendanceRepo,
@@ -89,6 +90,15 @@ export default async function BookingsPage({
   const _t0 = performance.now();
   const user = await getAuthUser();
   if (!user) redirect("/login");
+  // Staff need bookings:view to access the admin/teacher branch.
+  // Students don't go through staff permissions — they always see their
+  // own bookings.
+  if (user.role !== "student") {
+    const access = await getStaffAccess();
+    if (!hasPermission(access, "bookings:view")) {
+      redirect("/dashboard");
+    }
+  }
   const _tAuth = performance.now();
 
   // Overlap hydration with searchParams resolution

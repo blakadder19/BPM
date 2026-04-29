@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTemplates } from "@/lib/services/class-store";
 import { getInstances } from "@/lib/services/schedule-store";
@@ -7,7 +7,7 @@ import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 import { AdminTeachers } from "@/components/classes/admin-teachers";
 
 export default async function TeacherPairsPage() {
-  await requireRole(["admin", "teacher"]);
+  await requirePermission("teachers:view");
   await ensureScheduleBootstrapped();
 
   const teacherRoster = getTeachers().map((t) => ({ ...t }));

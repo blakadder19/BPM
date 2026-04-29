@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import {
   cachedGetAllEvents,
   cachedGetStudentEventPurchases,
@@ -12,7 +13,11 @@ import { StudentEvents } from "@/components/events/student-events";
 import { getSpecialEventRepo } from "@/lib/repositories";
 
 export default async function EventsPage() {
-  const user = await requireRole(["admin", "student"]);
+  const user = await requireAuth();
+  // Students always see the public catalog; staff need events:view.
+  if (user.role !== "student") {
+    await requirePermission("events:view");
+  }
   await ensureOperationalDataHydrated();
 
   if (user.role === "student") {

@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import { getAttendanceRepo, getBookingRepo } from "@/lib/repositories";
 import { cachedGetAllStudents, cachedGetAllSubs } from "@/lib/server/cached-queries";
 import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
@@ -15,7 +15,8 @@ export default async function AttendancePage({
   searchParams?: Promise<{ classTitle?: string; date?: string; student?: string; tab?: string }>;
 }) {
   const _t0 = performance.now();
-  const user = await requireRole(["admin", "teacher"]);
+  const access = await requirePermission("attendance:view");
+  const user = access.user;
   const params = searchParams ? await searchParams : {};
 
   await ensureOperationalDataHydrated();

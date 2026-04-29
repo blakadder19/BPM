@@ -198,3 +198,40 @@ export async function requireAnyPermissionForAction(
     error: "You do not have permission to perform this action.",
   };
 }
+
+/**
+ * Server-side guard for admin pages that have NO formal permission key
+ * in the staff catalogue (e.g. /terms, /broadcasts, /studio-hire,
+ * /penalties).
+ *
+ * Why this exists:
+ *   The legacy `requireRole(["admin"])` lets through any user whose
+ *   `users.role='admin'` — but `users.role` is set to `'admin'` for
+ *   ANY non-teacher staff role (admin, front_desk, read_only, custom)
+ *   by `legacyRoleForStaffRole()`. That is the legacy bypass: a Custom
+ *   user with only `events:view` would silently retain access to
+ *   /terms, /broadcasts, etc.
+ *
+ *   Pages that don't have a granular permission must therefore ask
+ *   directly for super-admin access. The Staff & Permissions UI does
+ *   not expose these pages as toggleable items, so super_admin is the
+ *   correct gate.
+ *
+ *   Legacy admin fallback (a pre-staff `users.role='admin'` with NO
+ *   `staff_role_key`) is treated as super_admin in the resolver, so
+ *   existing single-admin installs keep working.
+ */
+export async function requireSuperAdmin(): Promise<StaffAccess> {
+  const access = await getStaffAccess();
+  if (access.isSuperAdmin) return access;
+  redirect("/dashboard");
+}
+
+export async function requireSuperAdminForAction(): Promise<ActionGuardResult> {
+  const access = await getStaffAccess();
+  if (access.isSuperAdmin) return { ok: true, access };
+  return {
+    ok: false,
+    error: "Only a Super Admin can perform this action.",
+  };
+}
