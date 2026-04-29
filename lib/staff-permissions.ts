@@ -79,15 +79,26 @@ export const getStaffAccess = cache(async (): Promise<StaffAccess> => {
         isLegacyAdminFallback: false,
       };
     }
-    const isSuper = row.roleKey === "super_admin";
-    return {
-      user,
-      roleKey: row.roleKey,
-      status: row.status,
-      permissions: expandPermissions(row.roleKey, row.permissions),
-      isSuperAdmin: isSuper,
-      isLegacyAdminFallback: false,
-    };
+
+    // CRITICAL: a row in `public.users` exists for every authenticated
+    // user, but only those with a non-null `staff_role_key` are formal
+    // staff. When the row has roleKey=null we must NOT skip the legacy
+    // fallback below — otherwise a pre-staff `users.role='admin'` user
+    // (whose row exists with roleKey=null because they signed up before
+    // migration 00059) would get permissions=[] and be locked out.
+    if (row.roleKey === null) {
+      // Fall through to the legacy fallback for users.role==='admin'/'teacher'.
+    } else {
+      const isSuper = row.roleKey === "super_admin";
+      return {
+        user,
+        roleKey: row.roleKey,
+        status: row.status,
+        permissions: expandPermissions(row.roleKey, row.permissions),
+        isSuperAdmin: isSuper,
+        isLegacyAdminFallback: false,
+      };
+    }
   }
 
   // Legacy fallback: pre-existing role=admin without a staff_role_key.

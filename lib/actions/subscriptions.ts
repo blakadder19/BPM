@@ -1,8 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
-import { requirePermissionForAction } from "@/lib/staff-permissions";
+import { requirePermission, requirePermissionForAction } from "@/lib/staff-permissions";
 import {
   createSubscription,
   updateSubscription,
@@ -60,7 +59,8 @@ function parseCredits(raw: string | null): number | null {
 export async function createSubscriptionAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
-  const adminUser = await requireRole(["admin"]);
+  const adminAccess = await requirePermission("students:edit");
+  const adminUser = adminAccess.user;
   const studentId = formData.get("studentId") as string;
   const productId = (formData.get("productId") as string)?.trim();
   const termId = (formData.get("termId") as string)?.trim() || null;
@@ -253,7 +253,7 @@ export async function createSubscriptionAction(
 export async function updateSubscriptionAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:edit");
   const id = formData.get("id") as string;
   const statusRaw = formData.get("status") as string;
   const notes = (formData.get("notes") as string)?.trim() || null;
@@ -380,7 +380,7 @@ export interface PaymentChangeImpact {
 export async function checkPaymentChangeImpactAction(
   subscriptionId: string
 ): Promise<{ success: boolean; impact?: PaymentChangeImpact; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:edit");
   await ensureOperationalDataHydrated();
 
   const sub = (await getSubscriptionRepo().getAll()).find((s) => s.id === subscriptionId);

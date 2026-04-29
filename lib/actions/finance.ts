@@ -1,6 +1,6 @@
 "use server";
 
-import { requireRole } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/staff-permissions";
 import { getStudentRepo, getSpecialEventRepo, getSubscriptionRepo, getStaffRepo } from "@/lib/repositories";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -21,7 +21,7 @@ export interface FinanceData {
 }
 
 export async function getFinanceData(): Promise<FinanceData> {
-  await requireRole(["admin"]);
+  await requireAnyPermission(["finance:view", "payments:view", "payments:view_limited"]);
   await ensureOperationalDataHydrated();
 
   const [allStudents, allSubs] = await Promise.all([

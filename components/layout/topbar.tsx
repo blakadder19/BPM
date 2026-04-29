@@ -50,9 +50,15 @@ interface TopbarProps {
   alerts?: AdminAlert[];
   devStudents?: StudentOption[];
   devStudentId?: string | null;
+  /**
+   * Whether the user has the checkin:scan permission. When false the
+   * scan launcher icon is hidden (server actions still enforce the
+   * permission, so this is purely a UX hint).
+   */
+  canScan?: boolean;
 }
 
-export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps) {
+export function Topbar({ user, alerts, devStudents, devStudentId, canScan }: TopbarProps) {
   const { unlocked: showControls } = useDevUnlock();
   const { open: openSidebar } = useSidebar();
 
@@ -96,7 +102,7 @@ export function Topbar({ user, alerts, devStudents, devStudentId }: TopbarProps)
       </div>
 
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
-        {(user.role === "admin" || user.role === "teacher") && <ScanLauncher />}
+        {canScan && <ScanLauncher />}
         <AlertBell alerts={visibleAlerts} isStudent={user.role === "student"} />
         <span className="hidden sm:inline text-sm text-gray-600 truncate max-w-[200px]">
           {user.role === "student" && devStudentId

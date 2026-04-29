@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { getAuthUser } from "@/lib/auth";
+import { requirePermissionForAction } from "@/lib/staff-permissions";
 import { classifyQrToken } from "@/lib/domain/qr-resolver";
 import { HEARTBEAT_STALE_MS, type ScanReceiver } from "@/lib/domain/scan-receiver";
 import { lookupStudentByQr, type QrLookupResult } from "@/lib/actions/qr-checkin";
@@ -39,10 +40,9 @@ export async function registerReceiverAction(receiverId: string): Promise<{
   success: boolean;
   error?: string;
 }> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.access.user;
 
   const { error } = await db()
     .from("scan_receivers")
@@ -113,10 +113,9 @@ export async function getActiveReceiverAction(): Promise<{
   active: boolean;
   receiverId?: string;
 }> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { active: false };
-  }
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return { active: false };
+  const user = guard.access.user;
 
   const { data, error } = await db()
     .from("scan_receivers")
@@ -147,10 +146,9 @@ export async function processGlobalScanAction(qrCode: string): Promise<{
   result?: GlobalScanResult;
   targetReceiverId?: string;
 }> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.access.user;
 
   // Look up the active receiver so mobile can include targetReceiverId in broadcast
   const { data: receiverRow } = await db()

@@ -1146,6 +1146,27 @@ function PermissionsEditor({
           </div>
         ))}
       </div>
+
+      <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+        <summary className="cursor-pointer select-none font-medium text-gray-800">
+          Effective permissions ({effective.size})
+        </summary>
+        <p className="mt-1 text-[11px] text-gray-600">
+          Resolved keys for this user after applying the {STAFF_ROLE_LABELS[roleKey] ?? roleKey} preset and any custom extras. This is what
+          page guards and server actions check at runtime.
+        </p>
+        {effective.size === 0 ? (
+          <p className="mt-2 text-[11px] italic text-gray-500">
+            No permissions granted. This user can only see /dashboard.
+          </p>
+        ) : (
+          <ul className="mt-2 grid grid-cols-1 gap-0.5 font-mono text-[11px] text-gray-700 sm:grid-cols-2">
+            {[...effective].sort().map((k) => (
+              <li key={k}>{k}</li>
+            ))}
+          </ul>
+        )}
+      </details>
     </div>
   );
 }

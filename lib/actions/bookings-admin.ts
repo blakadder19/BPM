@@ -18,7 +18,8 @@ import type { BookingSource, DanceRole } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveWaitlistToDB, deleteWaitlistFromDB, savePenaltyToDB, saveAttendanceToDB, deleteBookingFromDB, deleteAttendanceFromDB, deletePenaltyFromDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { requireRole, requireAuth } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import { requireAnyPermission, requirePermission } from "@/lib/staff-permissions";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { waitlistPromotedEvent } from "@/lib/communications/builders";
@@ -64,7 +65,7 @@ export async function adminCreateBookingAction(
 ): Promise<{ success: boolean; outcome?: string; warning?: string; error?: string }> {
   await ensureOperationalDataHydrated();
   syncClassMap();
-  await requireRole(["admin"]);
+  await requirePermission("bookings:create");
 
   const studentId = (formData.get("studentId") as string)?.trim();
   const studentName = (formData.get("studentName") as string)?.trim();
@@ -294,7 +295,7 @@ export async function adminCancelBookingAction(
 }> {
   await ensureOperationalDataHydrated();
   syncClassMap();
-  await requireRole(["admin"]);
+  await requirePermission("bookings:cancel");
 
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
@@ -421,7 +422,10 @@ export async function adminCheckInBookingAction(
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
   syncClassMap();
-  await requireRole(["admin", "teacher"]);
+  await requireAnyPermission([
+    "checkin:manual_checkin",
+    "attendance:mark_present",
+  ]);
 
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
@@ -474,7 +478,7 @@ export async function adminPromoteWaitlistAction(
   waitlistId: string
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requirePermission("bookings:create");
 
   if (!waitlistId) return { success: false, error: "Missing waitlist ID" };
 
@@ -528,7 +532,7 @@ export async function adminRemoveFromWaitlistAction(
   waitlistId: string
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requirePermission("bookings:cancel");
 
   if (!waitlistId) return { success: false, error: "Missing waitlist ID" };
 
@@ -600,7 +604,7 @@ export async function adminRestoreBookingAction(
 }> {
   await ensureOperationalDataHydrated();
   syncClassMap();
-  await requireRole(["admin"]);
+  await requirePermission("bookings:restore");
 
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 
@@ -710,7 +714,7 @@ export interface BookingConsequences {
 export async function computeBookingConsequencesAction(
   bookingId: string
 ): Promise<{ success: boolean; consequences?: BookingConsequences; error?: string }> {
-  await requireRole(["admin"]);
+  await requireAnyPermission(["bookings:cancel", "bookings:delete"]);
   await ensureOperationalDataHydrated();
   syncClassMap();
 
@@ -824,7 +828,7 @@ export async function adminDeleteBookingAction(
 }> {
   await ensureOperationalDataHydrated();
   syncClassMap();
-  await requireRole(["admin"]);
+  await requirePermission("bookings:delete");
 
   if (!bookingId) return { success: false, error: "Missing booking ID" };
 

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole, type AuthUser } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { createPurchase, updatePurchasePayment, refundPurchase } from "@/lib/services/special-event-service";
 import { sendEventPurchaseEmail, sendEventRefundEmail, type EmailSendResult } from "@/lib/communications/event-emails";
@@ -409,7 +410,8 @@ export async function markEventPurchasePaidAction(input: {
   eventId: string;
   receptionMethod: "cash" | "revolut";
 }): Promise<{ success: boolean; error?: string }> {
-  const admin = await requireRole(["admin"]);
+  const adminAccess = await requirePermission("events:mark_paid");
+  const admin = adminAccess.user;
 
   const repo = getSpecialEventRepo();
   const purchases = await repo.getPurchasesByEvent(input.eventId);
@@ -502,7 +504,8 @@ export async function refundEventPurchaseAction(input: {
   eventId: string;
   refundReason: string | null;
 }): Promise<{ success: boolean; error?: string }> {
-  const user = await requireRole(["admin"]);
+  const access = await requirePermission("events:edit");
+  const user = access.user;
 
   const repo = getSpecialEventRepo();
   const purchases = await repo.getPurchasesByEvent(input.eventId);

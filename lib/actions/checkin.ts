@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
+import { getStaffAccess, hasAnyPermission } from "@/lib/staff-permissions";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getCheckInEligibility, isCheckableStatus } from "@/lib/domain/checkin-rules";
@@ -119,7 +120,11 @@ export async function validateTokenCheckInAction(
   if (!cls) return { success: false, error: "Class not found" };
 
   const user = await getAuthUser();
-  const isStaff = user?.role === "admin" || user?.role === "teacher";
+  // "Staff" classification here is permission-aware: only users with checkin:scan
+  // or checkin:manual_checkin behave as staff (relaxed eligibility window, "Staff"
+  // markedBy label). Legacy users.role='admin' alone no longer qualifies.
+  const access = user ? await getStaffAccess() : null;
+  const isStaff = !!access && hasAnyPermission(access, ["checkin:scan", "checkin:manual_checkin"]);
   const method = isStaff ? "staff" : "qr";
 
   const eligibility = getCheckInEligibility(booking.status, cls.date, cls.startTime, method);

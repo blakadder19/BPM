@@ -8,7 +8,8 @@ import type { PenaltyReason, PenaltyResolution, ClassType } from "@/types/domain
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { requireRole, getAuthUser } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { logFinanceEvent, type AuditPerformer } from "@/lib/services/finance-audit-log";
 
 async function currentPerformer(): Promise<AuditPerformer> {
@@ -28,7 +29,7 @@ export async function updatePenaltyResolution(
   resolution: PenaltyResolution
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   if (!penaltyId) return { success: false, error: "Missing penalty ID" };
 
@@ -65,7 +66,7 @@ export async function updatePenaltyNotesAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   const penaltyId = formData.get("penaltyId") as string;
   const notes = (formData.get("notes") as string)?.trim() || null;
@@ -89,7 +90,7 @@ export async function createPenaltyAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   const studentId = (formData.get("studentId") as string)?.trim();
   const studentName = (formData.get("studentName") as string)?.trim();
@@ -154,7 +155,7 @@ export async function createPenaltyAction(
 export async function deletePenaltyAction(
   penaltyId: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, error: "Not available in production" };
@@ -178,7 +179,7 @@ export async function backfillPenaltiesAction(): Promise<{
   skipped: number;
   error?: string;
 }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, created: 0, skipped: 0, error: "Not available in production" };
@@ -243,7 +244,7 @@ export async function clearAllPenaltiesAction(): Promise<{
   cleared: number;
   error?: string;
 }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   await ensureOperationalDataHydrated();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };

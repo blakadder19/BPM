@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { sendEventPurchaseEmail, type EventPurchaseEmailData, type EmailSendResult } from "@/lib/communications/event-emails";
 import { isEmailEnabled, sendEmail } from "@/lib/communications/email-provider";
@@ -87,7 +87,7 @@ export async function resendEventPurchaseEmailAction(input: {
 }): Promise<ResendEmailResult> {
   const tag = `[resend-email purchase=${input.purchaseId}]`;
   try {
-    await requireRole(["admin"]);
+    await requirePermission("events:edit");
 
     const repo = getSpecialEventRepo();
     console.info(`${tag} Loading event=${input.eventId}…`);
@@ -197,7 +197,7 @@ export interface ReminderResult {
 export async function sendEventReminderAction(input: {
   eventId: string;
 }): Promise<ReminderResult> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
 
   if (!isEmailEnabled()) return { success: false, error: "Email sending is not configured (BREVO_API_KEY missing)" };
 

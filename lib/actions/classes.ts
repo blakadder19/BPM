@@ -55,7 +55,7 @@ import type { ClassCancellationNotice } from "@/lib/services/class-cancellation-
 import { classCancelledEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { findTermForDate } from "@/lib/domain/term-rules";
-import { requireRole } from "@/lib/auth";
+import { requirePermission, requireSuperAdmin } from "@/lib/staff-permissions";
 import type { ClassType, InstanceStatus } from "@/types/domain";
 import { isClassEnded } from "@/lib/domain/datetime";
 import { BLOCKED_SENTINEL } from "@/lib/constants/teacher-assignment";
@@ -213,7 +213,7 @@ async function cascadeCancelBookingsForClass(
 export async function createTemplateAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:create");
   await ensureScheduleBootstrapped();
 
   const title = (formData.get("title") as string)?.trim();
@@ -274,7 +274,7 @@ export async function createTemplateAction(
 export async function updateTemplateAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:edit");
   await ensureScheduleBootstrapped();
 
   const id = (formData.get("id") as string)?.trim();
@@ -362,7 +362,7 @@ export async function updateTemplateAction(
 export async function toggleTemplateActiveAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:edit");
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing template ID" };
 
@@ -386,7 +386,7 @@ export async function toggleTemplateActiveAction(
 export async function createInstanceAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:create");
   await ensureScheduleBootstrapped();
 
   const templateId = (formData.get("templateId") as string)?.trim() || null;
@@ -471,7 +471,7 @@ export async function createInstanceAction(
 export async function updateInstanceAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:edit");
   await ensureScheduleBootstrapped();
 
   const id = (formData.get("id") as string)?.trim();
@@ -539,7 +539,12 @@ export async function updateInstanceStatusAction(
   id: string,
   status: InstanceStatus
 ): Promise<{ success: boolean; error?: string; affectedStudents?: number }> {
-  await requireRole(["admin"]);
+  // "cancelled" → classes:cancel; everything else → classes:edit.
+  if (status === "cancelled") {
+    await requirePermission("classes:cancel");
+  } else {
+    await requirePermission("classes:edit");
+  }
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing instance ID" };
   if (!VALID_STATUSES.has(status)) return { success: false, error: "Invalid status" };
@@ -589,7 +594,7 @@ export async function setInstanceTeacherOverrideAction(
   teacher1Id: string | null,
   teacher2Id: string | null
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   await ensureScheduleBootstrapped();
   if (!instanceId) return { success: false, error: "Missing instance ID" };
 
@@ -620,7 +625,7 @@ export async function previewGenerateScheduleAction(
   endDate: string,
   opts?: { includeInactive?: boolean; overwrite?: boolean }
 ): Promise<{ success: boolean; toCreate: number; toSkip: number; toOverwrite: number; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:view");
   if (!startDate || !endDate) return { success: false, toCreate: 0, toSkip: 0, toOverwrite: 0, error: "Date range required" };
   if (endDate < startDate) return { success: false, toCreate: 0, toSkip: 0, toOverwrite: 0, error: "End date must be after start date" };
 
@@ -633,7 +638,7 @@ export async function generateScheduleAction(
   endDate: string,
   opts?: { includeInactive?: boolean; overwrite?: boolean }
 ): Promise<{ success: boolean; created: number; skipped: number; overwritten?: number; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:create");
   await ensureScheduleBootstrapped();
   if (!startDate || !endDate) return { success: false, created: 0, skipped: 0, error: "Date range required" };
   if (endDate < startDate) return { success: false, created: 0, skipped: 0, error: "End date must be after start date" };
@@ -701,7 +706,7 @@ export interface LinkedInstance {
 export async function getLinkedInstancesAction(
   templateId: string
 ): Promise<{ upcoming: LinkedInstance[]; past: LinkedInstance[] }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:view");
   await ensureScheduleBootstrapped();
   await ensureOperationalDataHydrated();
   const svc = getBookingService();
@@ -730,7 +735,7 @@ export async function getLinkedInstancesAction(
 // ── Delete actions ──────────────────────────────────────────
 
 export async function deleteTemplateAction(id: string): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:delete");
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing template ID" };
 
@@ -781,7 +786,7 @@ export async function deleteTemplateAction(id: string): Promise<{ success: boole
 export async function deleteInstanceAction(
   id: string
 ): Promise<{ success: boolean; error?: string; affectedStudents?: number }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:delete");
   await ensureScheduleBootstrapped();
   if (!id) return { success: false, error: "Missing instance ID" };
 
@@ -827,7 +832,7 @@ async function getTeacherRepo() {
 export async function createTeacherAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:create");
   const fullName = (formData.get("fullName") as string)?.trim();
   if (!fullName) return { success: false, error: "Name is required" };
 
@@ -863,7 +868,7 @@ export async function createTeacherAction(
 export async function updateTeacherAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   const id = (formData.get("id") as string)?.trim();
   if (!id) return { success: false, error: "Missing teacher ID" };
 
@@ -901,7 +906,7 @@ export async function updateTeacherAction(
 export async function toggleTeacherActiveAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   if (!id) return { success: false, error: "Missing teacher ID" };
 
   const existing = require("@/lib/services/teacher-roster-store").getTeacher(id);
@@ -924,7 +929,7 @@ export async function toggleTeacherActiveAction(
 export async function deleteTeacherAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:delete");
   if (!id) return { success: false, error: "Missing teacher ID" };
 
   const existing = require("@/lib/services/teacher-roster-store").getTeacher(id);
@@ -955,7 +960,7 @@ async function getAssignmentRepo() {
 export async function createAssignmentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   const classId = (formData.get("classId") as string)?.trim();
   const classTitle = (formData.get("classTitle") as string)?.trim();
   const teacher1Id = (formData.get("teacher1Id") as string)?.trim();
@@ -993,7 +998,7 @@ export async function createAssignmentAction(
 export async function updateAssignmentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   const id = (formData.get("id") as string)?.trim();
   if (!id) return { success: false, error: "Missing assignment ID" };
 
@@ -1033,7 +1038,7 @@ export async function updateAssignmentAction(
 export async function toggleAssignmentActiveAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   if (!id) return { success: false, error: "Missing assignment ID" };
 
   const existing = require("@/lib/services/teacher-store").getAssignment(id);
@@ -1056,7 +1061,7 @@ export async function toggleAssignmentActiveAction(
 export async function deleteAssignmentAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   if (!id) return { success: false, error: "Missing assignment ID" };
 
   const existing = require("@/lib/services/teacher-store").getAssignment(id);
@@ -1086,7 +1091,7 @@ export async function saveDefaultAssignmentAction(
   teacher1Id: string,
   teacher2Id: string | null
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   if (!classId || !classTitle) return { success: false, error: "Class info required" };
   if (!teacher1Id) return { success: false, error: "Teacher 1 is required" };
 
@@ -1133,7 +1138,7 @@ export async function bulkSetTeacherOverrideAction(
   teacher1Id: string | null,
   teacher2Id: string | null
 ): Promise<{ success: boolean; updated: number; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   await ensureScheduleBootstrapped();
   if (!instanceIds || instanceIds.length === 0) {
     return { success: false, updated: 0, error: "No instances selected" };
@@ -1169,7 +1174,7 @@ export async function bulkSetTeacherOverrideAction(
 export async function bulkBlockInstancesAction(
   instanceIds: string[]
 ): Promise<{ success: boolean; updated: number; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:cancel");
   await ensureScheduleBootstrapped();
   if (!instanceIds || instanceIds.length === 0) {
     return { success: false, updated: 0, error: "No instances selected" };
@@ -1208,7 +1213,7 @@ export async function bulkDefaultAssignmentAction(
   teacher1Id?: string | null,
   teacher2Id?: string | null
 ): Promise<{ success: boolean; updated: number; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   if (!classEntries || classEntries.length === 0) {
     return { success: false, updated: 0, error: "No classes provided" };
   }
@@ -1282,7 +1287,7 @@ export async function bulkCreateInstancesAction(
   endDate: string,
   status: InstanceStatus
 ): Promise<{ success: boolean; created: number; skipped: number; failed: number; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:create");
   await ensureScheduleBootstrapped();
 
   const empty = { success: false, created: 0, skipped: 0, failed: 0 };
@@ -1394,7 +1399,7 @@ export async function copyMonthScheduleAction(
   targetYM: string,
   opts: { copyTeachers: boolean; copyNotes: boolean; status: InstanceStatus }
 ): Promise<{ success: boolean; created: number; skipped: number; failed: number; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("classes:create");
   await ensureScheduleBootstrapped();
 
   const empty = { success: false, created: 0, skipped: 0, failed: 0 };
@@ -1580,7 +1585,7 @@ export async function copyMonthScheduleAction(
 export async function clearScheduleAction(): Promise<{
   success: boolean; cleared: number; error?: string;
 }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }
@@ -1592,7 +1597,7 @@ export async function clearScheduleAction(): Promise<{
 export async function clearTemplatesAction(): Promise<{
   success: boolean; cleared: number; error?: string;
 }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }
@@ -1604,7 +1609,7 @@ export async function clearTemplatesAction(): Promise<{
 export async function clearAssignmentsAction(): Promise<{
   success: boolean; cleared: number; error?: string;
 }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }

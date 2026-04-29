@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import { createPreset, deletePreset } from "@/lib/services/pair-preset-store";
 
 function revalidateTeachers() {
@@ -11,7 +11,7 @@ function revalidateTeachers() {
 export async function createPairPresetAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   const label = (formData.get("label") as string)?.trim();
   const teacher1Id = (formData.get("teacher1Id") as string)?.trim();
   const teacher2Id = (formData.get("teacher2Id") as string)?.trim() || null;
@@ -27,7 +27,7 @@ export async function createPairPresetAction(
 export async function deletePairPresetAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("teachers:edit");
   if (!id) return { success: false, error: "Missing preset ID" };
   const deleted = deletePreset(id);
   if (!deleted) return { success: false, error: "Preset not found" };

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { getAcademyId } from "@/lib/supabase/academy";
 import {
   uploadMediaImage,
@@ -13,7 +13,8 @@ import type { MediaItem } from "@/lib/domain/media-types";
 export async function uploadMediaAction(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string; item?: MediaItem }> {
-  const user = await requireRole(["admin"]);
+  const access = await requireSuperAdmin();
+  const user = access.user;
   const academyId = await getAcademyId();
 
   const file = formData.get("file") as File | null;
@@ -41,7 +42,7 @@ export async function uploadMediaAction(
 export async function listMediaAction(
   kind?: string,
 ): Promise<MediaItem[]> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const academyId = await getAcademyId();
   return listMediaImages(academyId, kind);
 }
@@ -49,7 +50,7 @@ export async function listMediaAction(
 export async function deleteMediaAction(
   mediaId: string,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const result = await deleteMediaImage(mediaId);
   if (result.success) {
     revalidatePath("/broadcasts");
