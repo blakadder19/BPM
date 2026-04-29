@@ -48,6 +48,12 @@ export interface UpdateStaffPatch {
   roleKey?: StaffRoleKey | null;
   permissions?: Permission[];
   status?: StaffStatus;
+  /**
+   * Optional display name change. Persisted to `public.users.full_name`
+   * in Supabase mode and to the in-memory staff row in memory mode.
+   * Email is intentionally NOT editable from the staff module.
+   */
+  fullName?: string;
 }
 
 export interface IStaffRepository {

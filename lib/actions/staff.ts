@@ -286,6 +286,47 @@ export async function updateStaffPermissionsAction(
   return { success: true };
 }
 
+// ── Display name (profile) ─────────────────────────────────────
+
+export interface UpdateStaffProfileInput {
+  userId: string;
+  fullName: string;
+}
+
+/**
+ * Edit a staff member's display name. Email is intentionally NOT
+ * editable here — that flows through Supabase Auth, not the staff
+ * module. Reuses the `staff:edit_permissions` permission so anyone
+ * who can change role/permissions can also fix typos in names; this
+ * keeps the permission catalogue small for the MVP.
+ */
+export async function updateStaffProfileAction(
+  input: UpdateStaffProfileInput,
+): Promise<ActionResult> {
+  const guard = await requirePermissionForAction("staff:edit_permissions");
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const fullName = (input.fullName ?? "").trim();
+  if (!fullName) {
+    return { success: false, error: "Display name cannot be empty." };
+  }
+  if (fullName.length > 120) {
+    return { success: false, error: "Display name is too long." };
+  }
+
+  const target = await getStaffRepo().getStaff(input.userId);
+  if (!target) return { success: false, error: "Staff member not found." };
+
+  await getStaffRepo().updateStaff(input.userId, { fullName });
+
+  // The display name is shown in the sidebar/topbar for the current
+  // user, in the finance BY column for any staff actor, and in the
+  // staff list. Revalidate the staff page; topbar/sidebar refresh on
+  // the next navigation.
+  revalidatePath("/staff");
+  return { success: true };
+}
+
 // ── Status (active / disabled) ─────────────────────────────────
 
 export async function setStaffStatusAction(input: {

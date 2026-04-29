@@ -152,6 +152,11 @@ export const supabaseStaffRepo: IStaffRepository = {
         patch.roleKey === "super_admin" ? null : patch.permissions;
     }
     if (patch.status !== undefined) fields.staff_status = patch.status;
+    if (patch.fullName !== undefined) {
+      // `public.users.full_name` is the canonical display name column —
+      // sidebar, finance BY column, and identityMap all read it.
+      fields.full_name = patch.fullName;
+    }
 
     const { error } = await supabase
       .from("users")
