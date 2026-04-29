@@ -124,6 +124,15 @@ export interface InviteStaffResult {
   inviteId: string;
   inviteUrl: string;
   email: string;
+  /**
+   * Whether the invite email was actually sent.
+   *   - "sent"    — Brevo accepted the message.
+   *   - "skipped" — BREVO_API_KEY not configured; copy-link only.
+   *   - "failed"  — Brevo rejected; copy-link still valid.
+   *   - undefined — existing-staff-update path (no email attempt).
+   */
+  emailStatus?: "sent" | "skipped" | "failed";
+  emailReason?: string;
 }
 
 export async function inviteStaffAction(
@@ -204,10 +213,32 @@ export async function inviteStaffAction(
   const base = await resolveBaseUrl();
   const inviteUrl = `${base}/login?invite=${encodeURIComponent(invite.token)}`;
 
+  // Send the invite email through Brevo. Never fails the action — if
+  // Brevo is not configured or rejects, the copy-link remains valid
+  // and the UI surfaces a clear "could not send" notice.
+  const { sendStaffInviteEmail } = await import(
+    "@/lib/communications/staff-invite-email"
+  );
+  const emailResult = await sendStaffInviteEmail({
+    email,
+    displayName: input.displayName ?? null,
+    roleKey: input.roleKey,
+    inviteUrl,
+    expiresAt: invite.expiresAt,
+    invitedByName:
+      guard.access.user.fullName ?? guard.access.user.email ?? null,
+  });
+
   revalidatePath("/staff");
   return {
     success: true,
-    data: { inviteId: invite.id, inviteUrl, email },
+    data: {
+      inviteId: invite.id,
+      inviteUrl,
+      email,
+      emailStatus: emailResult.status,
+      emailReason: emailResult.reason,
+    },
   };
 }
 

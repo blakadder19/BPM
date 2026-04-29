@@ -72,13 +72,23 @@ export async function sendEmail(payload: EmailPayload): Promise<boolean> {
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      const senderDomain = config.senderEmail.split("@")[1] ?? "?";
       console.error(
-        `[email-provider] Brevo API rejected (${res.status}): ${body.slice(0, 300)}`,
+        `[email-provider] Brevo API rejected ${res.status} for to=${payload.to} from=${config.senderEmail}. Body: ${body.slice(0, 400)}`,
       );
+      // Surface the most common diagnostic up front. Brevo returns a
+      // structured `{ "code": "unauthorized", "message": "..." }` body
+      // for these errors — surface them visibly so admins don't have to
+      // trawl logs.
+      if (res.status === 400 || res.status === 401 || res.status === 403) {
+        console.error(
+          `[email-provider] Hint: verify the sender ${senderDomain ? `domain "${senderDomain}"` : `email "${config.senderEmail}"`} in the Brevo dashboard (Senders & IP). Unverified senders are the most common cause of 400/401/403 from /v3/smtp/email.`,
+        );
+      }
       return false;
     }
 
-    console.info(`[email-provider] Brevo accepted email to ${payload.to} (${res.status}).`);
+    console.info(`[email-provider] Brevo accepted email to=${payload.to} from=${config.senderEmail} (${res.status}).`);
     return true;
   } catch (e) {
     console.error(

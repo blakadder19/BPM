@@ -176,6 +176,7 @@ export function StaffClient({
         url: string;
         email: string;
         roleKey: StaffRoleKey;
+        emailStatus: "sent" | "skipped" | "failed" | undefined;
       }
     | null
   >(null);
@@ -293,11 +294,32 @@ export function StaffClient({
               <span>Copy invite link</span>
             </Button>
           </div>
-          <p className="mt-2 text-xs text-bpm-700">
-            <strong>Email sending is not configured.</strong> Copy and share this
-            invite link manually. The recipient signs in with the invited email and
-            their staff role / permissions are activated automatically.
-          </p>
+          {lastInvite.emailStatus === "sent" && (
+            <p className="mt-2 text-xs text-emerald-700">
+              <strong>Invite email sent.</strong> The link above is also valid for
+              manual sharing if needed.
+            </p>
+          )}
+          {lastInvite.emailStatus === "skipped" && (
+            <p className="mt-2 text-xs text-bpm-700">
+              <strong>Email sending is not configured.</strong> Copy and share
+              this invite link manually. Set <code>BREVO_API_KEY</code> on the
+              server to enable automatic delivery.
+            </p>
+          )}
+          {lastInvite.emailStatus === "failed" && (
+            <p className="mt-2 text-xs text-amber-700">
+              <strong>Invite created, but email could not be sent.</strong>{" "}
+              Copy and share this link manually. (See server logs for the
+              Brevo error — usually a sender domain that needs verifying.)
+            </p>
+          )}
+          {lastInvite.emailStatus === undefined && (
+            <p className="mt-2 text-xs text-bpm-700">
+              The recipient signs in with the invited email and their staff
+              role / permissions are activated automatically.
+            </p>
+          )}
         </div>
       )}
 
@@ -475,9 +497,9 @@ export function StaffClient({
           currentIsSuperAdmin={currentIsSuperAdmin}
           onClose={() => setShowInvite(false)}
           onError={setActionError}
-          onCreated={({ url, email, roleKey }) => {
+          onCreated={({ url, email, roleKey, emailStatus }) => {
             setShowInvite(false);
-            setLastInvite({ url, email, roleKey });
+            setLastInvite({ url, email, roleKey, emailStatus });
             setActionError(null);
             setActionInfo(null);
             // Force the pending-invites list and any nav permissions
@@ -534,6 +556,7 @@ function InviteModal({
     url: string;
     email: string;
     roleKey: StaffRoleKey;
+    emailStatus: "sent" | "skipped" | "failed" | undefined;
   }) => void;
   onUpdatedExisting: (email: string) => void;
 }) {
@@ -583,6 +606,7 @@ function InviteModal({
           url: toAbsoluteInviteUrl(url, baseUrl),
           email: resolvedEmail,
           roleKey,
+          emailStatus: r.data?.emailStatus,
         });
       } else {
         // Existing user — promoted/updated in place by the action.
