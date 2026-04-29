@@ -9,17 +9,30 @@ import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { getSettings } from "@/lib/services/settings-store";
 import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { buildDynamicAccessRulesMap, type ProductAccessRule } from "@/config/product-access";
-import { TERM_PURCHASE_WINDOW_DAYS } from "@/config/business-rules";
 import { isStripeEnabled } from "@/lib/stripe";
-import { StudentCatalog, type CatalogProduct, type StyleOption, type StyleSelectionMode, type TermOption } from "@/components/catalog/student-catalog";
+import { previewPricingForStudent } from "@/lib/services/pricing-service";
+import { StudentCatalog, type AppliedDiscountSummary, type CatalogProduct, type StyleOption, type StyleSelectionMode, type TermOption } from "@/components/catalog/student-catalog";
 import type { MockProduct } from "@/lib/mock-data";
 
+/**
+ * Style summary shown in the student-facing catalog.
+ *
+ * Mode-aware to match admin /products: structured access modes
+ * override the meaning of the legacy `allowedStyleNames` / `styleName`
+ * fields, so e.g. `social_only` must render "Socials only" and not
+ * fall back to "All styles" via the legacy null-list path.
+ */
 function describeStyles(p: MockProduct): string {
+  if (p.styleAccessMode === "social_only") return "Socials only";
+  if (p.styleAccessMode === "all") return "All styles";
   if (p.allowedStyleNames?.length) return p.allowedStyleNames.join(", ");
   return p.styleName ?? "All styles";
 }
 
 function describeLevels(p: MockProduct): string {
+  // Levels are meaningless for socials — match the admin detail panel
+  // and don't display the misleading "All levels" fallback there.
+  if (p.styleAccessMode === "social_only") return "—";
   if (p.allowedLevels?.length) return p.allowedLevels.join(", ");
   return "All levels";
 }
@@ -72,6 +85,9 @@ export default async function CatalogPage() {
       productType: p.productType,
       allowedLevels: p.allowedLevels ?? null,
       allowedStyleIds: p.allowedStyleIds ?? null,
+      styleAccessMode: p.styleAccessMode ?? null,
+      styleAccessPickCount: p.styleAccessPickCount ?? null,
+      allowedClassTypes: p.allowedClassTypes ?? null,
     })),
     danceStyles,
   );
@@ -114,18 +130,32 @@ export default async function CatalogPage() {
     }
   }
 
-  const { studentTermSelectionEnabled } = getSettings();
+  const { studentTermSelectionEnabled, termPurchaseWindowDays } = getSettings();
 
   const rawEligibleTerms: TermOption[] = [];
-  if (currentTerm && isCurrentTermPurchasable(currentTerm.startDate, todayStr, TERM_PURCHASE_WINDOW_DAYS)) {
+  if (currentTerm && isCurrentTermPurchasable(currentTerm.startDate, todayStr, termPurchaseWindowDays)) {
     rawEligibleTerms.push({ id: currentTerm.id, name: currentTerm.name, startDate: currentTerm.startDate, isFuture: false });
   }
   if (nextTerm) rawEligibleTerms.push({ id: nextTerm.id, name: nextTerm.name, startDate: nextTerm.startDate, isFuture: true });
 
   const stripeAvailable = isStripeEnabled();
 
-  const catalog: CatalogProduct[] = products
-    .filter((p) => p.isActive)
+  // Preview discounted pricing for every catalog product at once (single
+  // load of rules + affiliations + first-time gate). The returned numbers
+  // are NOT persisted — the actual frozen snapshot is recomputed at the
+  // moment of purchase via priceProductForStudent({ commit: ... }) so
+  // we never display a price the engine would not honour at commit time.
+  const visibleProducts = products.filter((p) => p.isActive && !p.archivedAt);
+  const pricingPreview = await previewPricingForStudent({
+    studentId: user.id,
+    products: visibleProducts.map((p) => ({
+      id: p.id,
+      productType: p.productType,
+      priceCents: p.priceCents,
+    })),
+  });
+
+  const catalog: CatalogProduct[] = visibleProducts
     .map((p) => {
       let termName: string | null = null;
       if (p.termBound) {
@@ -144,6 +174,17 @@ export default async function CatalogPage() {
         ? studentSubs.filter((s) => s.productId === p.id).length
         : 0;
 
+      const preview = pricingPreview.get(p.id);
+      const appliedDiscounts: AppliedDiscountSummary[] = preview
+        ? preview.appliedDiscounts.map((d) => ({
+            code: d.code,
+            name: d.name,
+            ruleType: d.ruleType,
+            affiliationType: d.affiliationType,
+            amountCents: d.amountCents,
+          }))
+        : [];
+
       return {
         id: p.id,
         name: p.name,
@@ -151,6 +192,10 @@ export default async function CatalogPage() {
         description: p.description,
         longDescription: p.longDescription,
         priceCents: p.priceCents,
+        originalPriceCents: preview?.basePriceCents ?? p.priceCents,
+        discountAmountCents: preview?.totalDiscountCents ?? 0,
+        finalPriceCents: preview?.finalPriceCents ?? p.priceCents,
+        appliedDiscounts,
         styles: describeStyles(p),
         levels: describeLevels(p),
         classesPerTerm: p.classesPerTerm,
@@ -176,7 +221,7 @@ export default async function CatalogPage() {
         autoRenew: p.autoRenew,
       };
     })
-    .sort((a, b) => a.priceCents - b.priceCents);
+    .sort((a, b) => a.finalPriceCents - b.finalPriceCents);
 
   return <StudentCatalog products={catalog} stripeEnabled={stripeAvailable} />;
 }

@@ -1,9 +1,10 @@
-import { requireRole } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/staff-permissions";
 import {
   getBookingRepo,
   getPenaltyRepo,
   getAttendanceRepo,
   getSpecialEventRepo,
+  getAffiliationRepo,
 } from "@/lib/repositories";
 import {
   cachedGetTerms,
@@ -28,7 +29,10 @@ export default async function StudentsPage({
   searchParams?: Promise<{ search?: string }>;
 }) {
   const _t0 = performance.now();
-  await requireRole(["admin"]);
+  // Front-desk and teacher roles can also reach this page through their
+  // `students:view_limited` permission. The detail panel independently
+  // gates finance-sensitive sections via `students:view_finance`.
+  await requireAnyPermission(["students:view", "students:view_limited"]);
   const params = searchParams ? await searchParams : {};
 
   await ensureOperationalDataHydrated();
@@ -36,7 +40,7 @@ export default async function StudentsPage({
   const _tHydrate = performance.now();
 
   const year = new Date().getFullYear();
-  const [students, walletTransactions, products, terms, danceStyles, birthdayMap, subscriptions] = await Promise.all([
+  const [students, walletTransactions, products, terms, danceStyles, birthdayMap, subscriptions, affiliations] = await Promise.all([
     cachedGetAllStudents(),
     getWalletTransactions(),
     cachedGetProducts(),
@@ -44,6 +48,7 @@ export default async function StudentsPage({
     cachedGetAllDanceStyles(),
     getAllRedemptionsForYear(year),
     cachedGetAllSubs(),
+    getAffiliationRepo().getAll(),
   ]);
   const _tDb = performance.now();
 
@@ -150,6 +155,18 @@ export default async function StudentsPage({
       penalties={penalties}
       eventPurchases={eventPurchases}
       attendanceRecords={attendanceRecords}
+      affiliations={affiliations.map((a) => ({
+        id: a.id,
+        studentId: a.studentId,
+        affiliationType: a.affiliationType,
+        verificationStatus: a.verificationStatus,
+        verifiedAt: a.verifiedAt,
+        verifiedBy: a.verifiedBy,
+        validFrom: a.validFrom,
+        validUntil: a.validUntil,
+        notes: a.notes,
+        createdAt: a.createdAt,
+      }))}
       initialSearch={params.search ?? ""}
       birthdayUsedStudentIds={birthdayUsedIds}
       birthdayRedemptions={birthdayRedemptionMap}

@@ -13,6 +13,15 @@ import { Label } from "@/components/ui/label";
 import { saveSettings } from "@/lib/actions/settings";
 import type { AppSettings } from "@/lib/services/settings-store";
 import { ALERT_TYPE_META } from "@/lib/domain/admin-alerts";
+import { CLASS_LEVEL_NAMES } from "@/config/class-levels";
+import type { ProductType } from "@/types/domain";
+
+const DEDUCTION_TYPE_LABELS: Record<ProductType, string> = {
+  pass: "Pass",
+  drop_in: "Drop-in",
+  membership: "Membership",
+};
+const DEDUCTION_TYPE_OPTIONS: ProductType[] = ["pass", "drop_in", "membership"];
 
 export type SupabaseStatus =
   | { state: "connected"; projectUrl: string; tableCount: number }
@@ -42,6 +51,10 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
     roleBalancedStyleNames: initialSettings.roleBalancedStyleNames ?? [],
     disabledAlertIds: initialSettings.disabledAlertIds ?? [],
     provisionalNotes: initialSettings.provisionalNotes ?? "",
+    creditDeductionPriority:
+      initialSettings.creditDeductionPriority ?? ["pass", "drop_in", "membership"],
+    beginnerLevelNames:
+      initialSettings.beginnerLevelNames ?? ["Beginner 1", "Beginner 2"],
   });
 
   function setNum(field: keyof AppSettings, value: string) {
@@ -81,6 +94,30 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
         ? current.filter((id) => id !== alertId)
         : [...current, alertId];
       return { ...prev, disabledAlertIds: next };
+    });
+    setSaved(false);
+    setError(null);
+  }
+
+  function toggleBeginnerLevel(level: string) {
+    setS((prev) => {
+      const current = prev.beginnerLevelNames ?? [];
+      const next = current.includes(level)
+        ? current.filter((l) => l !== level)
+        : [...current, level];
+      return { ...prev, beginnerLevelNames: next };
+    });
+    setSaved(false);
+    setError(null);
+  }
+
+  function moveDeductionPriority(index: number, direction: -1 | 1) {
+    setS((prev) => {
+      const current = [...(prev.creditDeductionPriority ?? [])];
+      const target = index + direction;
+      if (target < 0 || target >= current.length) return prev;
+      [current[index], current[target]] = [current[target], current[index]];
+      return { ...prev, creditDeductionPriority: current };
     });
     setSaved(false);
     setError(null);
@@ -381,6 +418,98 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
                 />
                 <p className="text-xs text-gray-400 mt-1">
                   Students can never self-book once a term-bound course has started. This controls how late admin/reception may still add them.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* ── 6b. Catalog & Booking ───────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Catalog & Booking</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <NumberField
+                id="termPurchaseWindowDays"
+                label="Current-term purchase window (days)"
+                value={s.termPurchaseWindowDays}
+                onChange={(v) => setNum("termPurchaseWindowDays", v)}
+                hint="During the first N days of a term the current term remains purchasable. After that window, only the next term is offered."
+              />
+
+              <div className="space-y-2 border-t border-gray-200 pt-4">
+                <p className="text-sm font-medium text-gray-700">
+                  Credit deduction priority
+                </p>
+                <p className="text-xs text-gray-500">
+                  Order in which a student&apos;s subscriptions are considered when deducting a credit. Use the arrows to reorder.
+                </p>
+                <ol className="space-y-1.5">
+                  {(s.creditDeductionPriority ?? DEDUCTION_TYPE_OPTIONS).map((type, idx, arr) => (
+                    <li
+                      key={type}
+                      className="flex items-center justify-between rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <span className="flex items-center gap-2 text-gray-700">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-bpm-50 text-[11px] font-medium text-bpm-700">
+                          {idx + 1}
+                        </span>
+                        {DEDUCTION_TYPE_LABELS[type]}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => moveDeductionPriority(idx, -1)}
+                          disabled={idx === 0}
+                          className="rounded px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveDeductionPriority(idx, 1)}
+                          disabled={idx === arr.length - 1}
+                          className="rounded px-2 py-0.5 text-xs text-gray-500 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-30"
+                        >
+                          ↓
+                        </button>
+                      </span>
+                      <input type="hidden" name="creditDeductionPriority" value={type} />
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-xs text-gray-400">
+                  Default: passes first, drop-ins second, memberships last (use-it-or-lose-it before unlimited).
+                </p>
+              </div>
+
+              <div className="space-y-2 border-t border-gray-200 pt-4">
+                <p className="text-sm font-medium text-gray-700">
+                  Beginner levels (term-bound late-entry gating)
+                </p>
+                <p className="text-xs text-gray-500">
+                  Levels checked here are treated as &ldquo;beginner&rdquo; courses. For these classes, students cannot self-book once a term has started, and admin late entry is bounded by the term-bound policy above.
+                </p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-md border border-gray-200 bg-gray-50/50 px-3 py-2">
+                  {CLASS_LEVEL_NAMES.map((level) => {
+                    const checked = (s.beginnerLevelNames ?? []).includes(level);
+                    return (
+                      <label key={level} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="beginnerLevelNames"
+                          value={level}
+                          checked={checked}
+                          onChange={() => toggleBeginnerLevel(level)}
+                          className="h-3.5 w-3.5 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
+                        />
+                        {level}
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-400">
+                  Default: Beginner 1 and Beginner 2.
                 </p>
               </div>
             </CardContent>

@@ -10,6 +10,17 @@ export interface ClassLevelInfo {
   description: string;
 }
 
+/**
+ * Level names that count as "beginner" courses for term-bound late-entry
+ * gating. Used as the static default — runtime callers should consult the
+ * `beginnerLevelNames` setting (`AppSettings`) instead, which falls back to
+ * this list when no override is configured.
+ */
+export const DEFAULT_BEGINNER_LEVEL_NAMES: readonly string[] = [
+  "Beginner 1",
+  "Beginner 2",
+];
+
 export const CLASS_LEVELS: ClassLevelInfo[] = [
   {
     name: "Beginner 1",
@@ -50,4 +61,22 @@ export function getClassLevelDescription(
   levelName: string | null
 ): string | null {
   return getClassLevelInfo(levelName)?.description ?? null;
+}
+
+/** Stable, sorted list of level names used by the product editor. */
+export const CLASS_LEVEL_NAMES: readonly string[] = CLASS_LEVELS.map(
+  (l) => l.name,
+);
+
+/**
+ * Test if a level name is considered "beginner" for late-entry gating
+ * purposes. Pass the active list from settings; defaults to
+ * DEFAULT_BEGINNER_LEVEL_NAMES when omitted (preserves legacy behaviour).
+ */
+export function isBeginnerLevelName(
+  level: string | null,
+  beginnerLevels: readonly string[] = DEFAULT_BEGINNER_LEVEL_NAMES,
+): boolean {
+  if (!level) return false;
+  return beginnerLevels.includes(level);
 }

@@ -5,6 +5,8 @@
 import { getSubscriptionRepo } from "@/lib/repositories";
 import { getSubscription as mockGetOne } from "@/lib/services/subscription-store";
 import type { MockSubscription } from "@/lib/mock-data";
+import type { SubscriptionProductSnapshot } from "@/lib/domain/subscription-snapshot";
+import type { AppliedDiscountSnapshot } from "@/lib/domain/pricing-engine";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
 
 export async function getSubscriptions(): Promise<MockSubscription[]> {
@@ -54,6 +56,10 @@ export async function createSubscription(data: {
   collectedBy?: string | null;
   priceCentsAtPurchase?: number | null;
   currencyAtPurchase?: string;
+  productSnapshot?: SubscriptionProductSnapshot | null;
+  originalPriceCents?: number | null;
+  discountAmountCents?: number;
+  appliedDiscount?: AppliedDiscountSnapshot | null;
 }): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
   try {
     const sub = await getSubscriptionRepo().create(data);

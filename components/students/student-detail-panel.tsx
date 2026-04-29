@@ -1,13 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw, ChevronDown, ChevronRight, UserCheck, UserX } from "lucide-react";
+import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw, ChevronDown, ChevronRight, UserCheck, UserX, ShieldCheck, ShieldX, Hourglass, ExternalLink } from "lucide-react";
+import {
+  updateAffiliationStatusAction,
+  deleteAffiliationAction,
+} from "@/lib/actions/affiliations";
+import type { AffiliationSummary } from "./admin-students";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter } from "@/components/ui/dialog";
-import { formatDate } from "@/lib/utils";
+import { formatCents, formatDate } from "@/lib/utils";
 import type { MockProduct, MockEventPurchase } from "@/lib/mock-data";
 import { normalizeFinanceStatusLabel, FINANCE_STATUS_COLORS } from "@/lib/domain/finance";
 import { deriveDisplayStatus } from "@/lib/domain/subscription-display-status";
@@ -41,6 +47,12 @@ interface StudentDetailPanelProps {
   penalties: MockPenalty[];
   eventPurchases?: MockEventPurchase[];
   attendanceRecords?: AttendanceRecord[];
+  /**
+   * Affiliations belonging to THIS student. Pre-filtered by the parent
+   * so the panel can render a small inline section without doing its
+   * own scan over the whole affiliations table.
+   */
+  affiliations?: AffiliationSummary[];
   benefits?: MemberBenefitsSummary | null;
   onAddSub: () => void;
   onEditSub: (sub: MockSubscription) => void;
@@ -48,9 +60,15 @@ interface StudentDetailPanelProps {
 }
 
 function describeProductScope(p: MockProduct): string {
-  const styles = p.allowedStyleNames?.length
-    ? p.allowedStyleNames.join(", ")
-    : p.styleName ?? "All styles";
+  // Mode-aware summary: special structured modes override the meaning of
+  // the generic style/level fields (e.g. social_only ignores both).
+  if (p.styleAccessMode === "social_only") return "Socials only";
+
+  const styles = p.styleAccessMode === "all"
+    ? "All styles"
+    : p.allowedStyleNames?.length
+      ? p.allowedStyleNames.join(", ")
+      : p.styleName ?? "All styles";
   const levels = p.allowedLevels?.length
     ? p.allowedLevels.join(", ")
     : "All levels";
@@ -67,6 +85,7 @@ export function StudentDetailPanel({
   penalties,
   eventPurchases,
   attendanceRecords,
+  affiliations = [],
   benefits,
   onAddSub,
   onEditSub,
@@ -173,6 +192,12 @@ export function StudentDetailPanel({
             )}
             {student.notes && <DL label="Notes" value={student.notes} />}
           </Section>
+
+          {/* ── Affiliations (Phase E — visibility integration) ── */}
+          <AffiliationsSection
+            student={student}
+            affiliations={affiliations}
+          />
 
           {/* ── Member Benefits (admin view) ── */}
           {benefits?.isMember && (
@@ -335,6 +360,216 @@ export function StudentDetailPanel({
         )}
       </td>
     </tr>
+  );
+}
+
+// ── Affiliations section ─────────────────────────────────────
+
+const AFFILIATION_TYPE_LABELS: Record<string, string> = {
+  hse: "HSE",
+  gardai: "Gardaí",
+  language_school: "Language School",
+  corporate: "Corporate",
+  staff: "Staff",
+  other: "Other",
+};
+
+const AFFILIATION_STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
+  verified: "Verified",
+  rejected: "Rejected",
+  expired: "Expired",
+};
+
+function affiliationStatusVariant(s: string): "success" | "danger" | "warning" | "neutral" {
+  switch (s) {
+    case "verified": return "success";
+    case "rejected": return "danger";
+    case "pending": return "warning";
+    default: return "neutral";
+  }
+}
+
+/**
+ * Inline affiliations summary for the student detail panel.
+ *
+ * Read-mostly: shows type, status, validity, verified-by, and notes.
+ *
+ * Lightly actionable: reuses the existing `updateAffiliationStatusAction`
+ * and `deleteAffiliationAction` server actions so the admin can resolve
+ * a pending row without leaving the student profile. For anything more
+ * involved (creating affiliations, editing notes, bulk operations) the
+ * "Manage" link deep-links to /affiliations pre-filtered to this student.
+ *
+ * Snapshot safety: editing or deleting an affiliation NEVER mutates
+ * historical subscription rows — frozen `applied_discount` snapshots on
+ * past purchases are unaffected. Only future engine evaluations change.
+ */
+function AffiliationsSection({
+  student,
+  affiliations,
+}: {
+  student: StudentListItem;
+  affiliations: AffiliationSummary[];
+}) {
+  const router = useRouter();
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  const sorted = [...affiliations].sort((a, b) => {
+    // Verified first, then pending, then everything else; recent on top.
+    const order: Record<string, number> = { verified: 0, pending: 1, expired: 2, rejected: 3 };
+    const av = order[a.verificationStatus] ?? 9;
+    const bv = order[b.verificationStatus] ?? 9;
+    if (av !== bv) return av - bv;
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+
+  const manageHref = `/affiliations?search=${encodeURIComponent(student.email || student.fullName)}`;
+
+  function runStatus(id: string, status: "verified" | "rejected" | "expired") {
+    setError(null);
+    setPendingId(id);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", id);
+      fd.set("verificationStatus", status);
+      const r = await updateAffiliationStatusAction(fd);
+      if (!r.success) setError(r.error ?? "Update failed");
+      router.refresh();
+      setPendingId(null);
+    });
+  }
+
+  function runDelete(id: string) {
+    if (!confirm("Delete this affiliation? Historical purchases keep their frozen discount snapshot — only future pricing is affected.")) {
+      return;
+    }
+    setError(null);
+    setPendingId(id);
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("id", id);
+      const r = await deleteAffiliationAction(fd);
+      if (!r.success) setError(r.error ?? "Delete failed");
+      router.refresh();
+      setPendingId(null);
+    });
+  }
+
+  return (
+    <Section
+      title="Affiliations"
+      action={
+        <Link
+          href={manageHref}
+          className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+        >
+          <ExternalLink className="h-3 w-3" />
+          Manage
+        </Link>
+      }
+    >
+      {error && (
+        <p className="mb-2 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-700">
+          {error}
+        </p>
+      )}
+      {sorted.length === 0 ? (
+        <p className="text-sm text-gray-400">
+          No affiliations on file.{" "}
+          <Link href={manageHref} className="text-bpm-700 hover:underline">
+            Add in Affiliations
+          </Link>
+          .
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {sorted.map((a) => {
+            const isPending = pendingId === a.id;
+            const typeLabel = AFFILIATION_TYPE_LABELS[a.affiliationType] ?? a.affiliationType;
+            const statusLabel = AFFILIATION_STATUS_LABELS[a.verificationStatus] ?? a.verificationStatus;
+            return (
+              <li
+                key={a.id}
+                className="rounded-md border border-gray-200 bg-white px-2.5 py-2 text-sm"
+              >
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-medium text-gray-900">{typeLabel}</span>
+                  <Badge variant={affiliationStatusVariant(a.verificationStatus)}>
+                    {statusLabel}
+                  </Badge>
+                  {(a.validFrom || a.validUntil) && (
+                    <span className="text-xs text-gray-500">
+                      {a.validFrom ? `From ${formatDate(a.validFrom)}` : ""}
+                      {a.validFrom && a.validUntil ? " · " : ""}
+                      {a.validUntil ? `to ${formatDate(a.validUntil)}` : a.validFrom ? "" : ""}
+                    </span>
+                  )}
+                </div>
+
+                {(a.verifiedAt || a.verifiedBy) && (
+                  <p className="mt-0.5 text-[11px] text-gray-500">
+                    {a.verifiedAt && `Verified ${formatDate(a.verifiedAt)}`}
+                    {a.verifiedAt && a.verifiedBy ? " · " : ""}
+                    {a.verifiedBy && `by ${a.verifiedBy}`}
+                  </p>
+                )}
+
+                {a.notes && (
+                  <p className="mt-1 text-xs text-gray-600 italic">{a.notes}</p>
+                )}
+
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {a.verificationStatus !== "verified" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isPending}
+                      onClick={() => runStatus(a.id, "verified")}
+                    >
+                      <ShieldCheck className="size-3.5" />
+                      <span>Verify</span>
+                    </Button>
+                  )}
+                  {a.verificationStatus !== "rejected" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isPending}
+                      onClick={() => runStatus(a.id, "rejected")}
+                    >
+                      <ShieldX className="size-3.5" />
+                      <span>Reject</span>
+                    </Button>
+                  )}
+                  {a.verificationStatus !== "expired" && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isPending}
+                      onClick={() => runStatus(a.id, "expired")}
+                    >
+                      <Hourglass className="size-3.5" />
+                      <span>Expire</span>
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={isPending}
+                    onClick={() => runDelete(a.id)}
+                  >
+                    <Trash2 className="size-3.5 text-red-600" />
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Section>
   );
 }
 
@@ -762,6 +997,26 @@ function SubCard({
               ? "Comp"
               : PAYMENT_STATUS_LABELS[sub.paymentStatus] ?? sub.paymentStatus}
         </Badge>
+      )}
+      {sub.priceCentsAtPurchase != null && sub.priceCentsAtPurchase > 0 && (
+        <span
+          className={`text-xs font-medium ${
+            sub.paymentStatus === "pending" ? "text-amber-700" : "text-gray-600"
+          }`}
+          title={
+            sub.discountAmountCents > 0 && sub.originalPriceCents != null
+              ? `Subtotal ${formatCents(sub.originalPriceCents)} · Discount −${formatCents(sub.discountAmountCents)} · You pay ${formatCents(sub.priceCentsAtPurchase)}`
+              : undefined
+          }
+        >
+          {sub.paymentStatus === "pending" ? "Due " : ""}
+          {formatCents(sub.priceCentsAtPurchase)}
+          {sub.discountAmountCents > 0 && sub.originalPriceCents != null && (
+            <span className="ml-1 text-[10px] text-gray-400 line-through">
+              {formatCents(sub.originalPriceCents)}
+            </span>
+          )}
+        </span>
       )}
       {sub.autoRenew && (
         <span className="text-[10px] text-bpm-600 font-medium">Auto-renew</span>

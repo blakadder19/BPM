@@ -2,7 +2,7 @@
 
 import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Pencil, Plus, Package, Power, Trash2, AlertTriangle } from "lucide-react";
+import { Archive, ArchiveRestore, ChevronDown, ChevronUp, Pencil, Plus, Package, Power, Trash2, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
@@ -19,6 +19,7 @@ import {
   AddProductDialog,
   EditProductDialog,
   DeactivateProductDialog,
+  ArchiveProductDialog,
 } from "./product-dialogs";
 import type { MockProduct, MockSubscription } from "@/lib/mock-data";
 
@@ -31,6 +32,7 @@ const TYPE_OPTIONS = [
 const ACTIVE_OPTIONS = [
   { value: "active", label: "Active" },
   { value: "inactive", label: "Inactive" },
+  { value: "archived", label: "Archived" },
 ];
 
 const PROVISIONAL_OPTIONS = [
@@ -85,6 +87,7 @@ export function AdminProducts({
 
   const [editProduct, setEditProduct] = useState<MockProduct | null>(null);
   const [deactivateProduct, setDeactivateProduct] = useState<MockProduct | null>(null);
+  const [archiveProduct, setArchiveProduct] = useState<MockProduct | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MockProduct | null>(null);
 
@@ -93,8 +96,13 @@ export function AdminProducts({
   const filtered = products.filter((p) => {
     if (q && !p.name.toLowerCase().includes(q)) return false;
     if (typeFilter && p.productType !== typeFilter) return false;
-    if (activeFilter === "active" && !p.isActive) return false;
-    if (activeFilter === "inactive" && p.isActive) return false;
+    // Archive filter: by default (no filter selected) hide archived products so the
+    // active workflow stays clean. Choosing "Archived" explicitly shows only those.
+    const isArchived = !!p.archivedAt;
+    if (activeFilter === "active" && (!p.isActive || isArchived)) return false;
+    if (activeFilter === "inactive" && (p.isActive || isArchived)) return false;
+    if (activeFilter === "archived" && !isArchived) return false;
+    if (!activeFilter && isArchived) return false;
     if (provisionalFilter === "provisional" && !p.isProvisional) return false;
     if (provisionalFilter === "final" && p.isProvisional) return false;
     return true;
@@ -196,11 +204,15 @@ export function AdminProducts({
                     </span>
                   </Td>
                   <Td>
-                    <Badge variant={p.isActive ? "success" : "default"}>
-                      {p.isActive ? "Active" : "Inactive"}
-                    </Badge>
+                    {p.archivedAt ? (
+                      <Badge variant="default">Archived</Badge>
+                    ) : (
+                      <Badge variant={p.isActive ? "success" : "default"}>
+                        {p.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    )}
                   </Td>
-                  <Td className="w-20">
+                  <Td className="w-28">
                     <div className="flex items-center gap-1">
                       <button
                         onClick={(e) => {
@@ -225,6 +237,20 @@ export function AdminProducts({
                         title={p.isActive ? "Deactivate" : "Reactivate"}
                       >
                         <Power className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setArchiveProduct(p);
+                        }}
+                        className="rounded-lg p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                        title={p.archivedAt ? "Unarchive" : "Archive"}
+                      >
+                        {p.archivedAt ? (
+                          <ArchiveRestore className="h-4 w-4" />
+                        ) : (
+                          <Archive className="h-4 w-4" />
+                        )}
                       </button>
                       <button
                         onClick={(e) => {
@@ -264,6 +290,13 @@ export function AdminProducts({
         <DeactivateProductDialog
           product={deactivateProduct}
           onClose={() => setDeactivateProduct(null)}
+        />
+      )}
+
+      {archiveProduct && (
+        <ArchiveProductDialog
+          product={archiveProduct}
+          onClose={() => setArchiveProduct(null)}
         />
       )}
 

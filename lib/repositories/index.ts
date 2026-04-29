@@ -20,6 +20,10 @@ import type { ICreditRepository } from "./interfaces/credit-repository";
 import type { IStudioHireRepository } from "./interfaces/studio-hire-repository";
 import type { IDanceStyleRepository } from "./interfaces/dance-style-repository";
 import type { ISpecialEventRepository } from "./interfaces/special-event-repository";
+import type { IAffiliationRepository } from "./interfaces/affiliation-repository";
+import type { IDiscountRuleRepository } from "./interfaces/discount-rule-repository";
+import type { IDiscountClaimRepository } from "./interfaces/discount-claim-repository";
+import type { IStaffRepository } from "./interfaces/staff-repository";
 
 import { memorySettingsRepo } from "./memory/settings-repository";
 import { memoryBookingRepo } from "./memory/booking-repository";
@@ -135,5 +139,37 @@ export function getSpecialEventRepo(): ISpecialEventRepository {
   return resolveRepo(memorySpecialEventRepo, () => {
     const { supabaseSpecialEventRepo } = require("./supabase/special-event-repository");
     return supabaseSpecialEventRepo;
+  });
+}
+
+export function getAffiliationRepo(): IAffiliationRepository {
+  const { memoryAffiliationRepo } = require("./memory/affiliation-repository");
+  return resolveRepo(memoryAffiliationRepo, () => {
+    const { supabaseAffiliationRepo } = require("./supabase/affiliation-repository");
+    return supabaseAffiliationRepo;
+  });
+}
+
+export function getDiscountRuleRepo(): IDiscountRuleRepository {
+  const { memoryDiscountRuleRepo } = require("./memory/discount-rule-repository");
+  return resolveRepo(memoryDiscountRuleRepo, () => {
+    const { supabaseDiscountRuleRepo } = require("./supabase/discount-rule-repository");
+    return supabaseDiscountRuleRepo;
+  });
+}
+
+export function getDiscountClaimRepo(): IDiscountClaimRepository {
+  const { memoryDiscountClaimRepo } = require("./memory/discount-claim-repository");
+  return resolveRepo(memoryDiscountClaimRepo, () => {
+    const { supabaseDiscountClaimRepo } = require("./supabase/discount-claim-repository");
+    return supabaseDiscountClaimRepo;
+  });
+}
+
+export function getStaffRepo(): IStaffRepository {
+  const { memoryStaffRepo } = require("./memory/staff-repository");
+  return resolveRepo(memoryStaffRepo, () => {
+    const { supabaseStaffRepo } = require("./supabase/staff-repository");
+    return supabaseStaffRepo;
   });
 }

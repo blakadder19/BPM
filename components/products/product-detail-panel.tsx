@@ -77,26 +77,74 @@ export function ProductDetailPanel({
 
           {/* ── Restrictions ── */}
           <Section title="Restrictions">
-            <DL
-              label="Allowed Styles"
-              value={
-                product.allowedStyleNames?.length
-                  ? product.allowedStyleNames.join(", ")
-                  : product.styleName ?? "All styles"
-              }
-            />
-            <DL
-              label="Allowed Levels"
-              value={
-                product.allowedLevels?.length
-                  ? product.allowedLevels.join(", ")
-                  : "All levels"
-              }
-            />
+            {product.styleAccessMode === "social_only" ? (
+              <>
+                {/*
+                  Socials-only short-circuits the generic Allowed Styles /
+                  Allowed Levels presentation: those fields are ignored by
+                  the access engine in this mode, so showing them as
+                  "All styles · All levels" would be misleading.
+                */}
+                <DL label="Access" value="Socials only" />
+                <DL label="Class types" value="Social events" />
+                <p className="mt-1 text-xs text-gray-500">
+                  Excluded from class booking. Style and level restrictions do not apply to socials.
+                </p>
+              </>
+            ) : (
+              <>
+                <DL
+                  label="Allowed Styles"
+                  value={
+                    product.styleAccessMode === "all"
+                      ? "All styles"
+                      : product.allowedStyleNames?.length
+                        ? product.allowedStyleNames.join(", ")
+                        : product.styleName ?? "All styles"
+                  }
+                />
+                <DL
+                  label="Allowed Levels"
+                  value={
+                    product.allowedLevels?.length
+                      ? product.allowedLevels.join(", ")
+                      : "All levels"
+                  }
+                />
+                {product.styleAccessMode && (
+                  <DL
+                    label="Style access mode"
+                    value={
+                      product.styleAccessMode === "course_group" && product.styleAccessPickCount
+                        ? `${product.styleAccessMode} (pick ${product.styleAccessPickCount})`
+                        : product.styleAccessMode
+                    }
+                  />
+                )}
+                {product.allowedClassTypes && product.allowedClassTypes.length > 0 && (
+                  <DL label="Allowed class types" value={product.allowedClassTypes.join(", ")} />
+                )}
+              </>
+            )}
             {product.spanTerms && product.spanTerms > 1 && (
               <DL label="Spans" value={`${product.spanTerms} terms`} />
             )}
           </Section>
+
+          {/* ── Lifecycle / Stripe ── */}
+          {(product.archivedAt || product.stripePriceId) && (
+            <Section title="Lifecycle & integrations">
+              {product.archivedAt && (
+                <DL
+                  label="Archived at"
+                  value={new Date(product.archivedAt).toLocaleString()}
+                />
+              )}
+              {product.stripePriceId && (
+                <DL label="Stripe price ID" value={product.stripePriceId} />
+              )}
+            </Section>
+          )}
 
           {/* ── Usage ── */}
           <Section title="Usage">

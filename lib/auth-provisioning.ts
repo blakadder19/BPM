@@ -12,10 +12,47 @@
  */
 
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
+import { acceptPendingStaffInviteForUser } from "@/lib/staff-invite-acceptance";
+
+/**
+ * Runs the staff-invite acceptance step at the end of provisioning.
+ * Swallows errors so a flaky invite write never blocks login.
+ *
+ * Returns `true` when an invite was actually applied, so the caller
+ * can signal the login UI to bypass its short-lived JWT fast-path
+ * cookie (otherwise the very first page load would still render with
+ * the pre-invite role).
+ */
+async function applyPendingStaffInvite(
+  authUser: SupabaseAuthUser,
+): Promise<boolean> {
+  try {
+    const result = await acceptPendingStaffInviteForUser({
+      userId: authUser.id,
+      email: authUser.email ?? null,
+    });
+    if (result.applied) {
+      console.info(
+        `[ensureProfile] Accepted staff invite (role=${result.roleKey})`,
+      );
+      return true;
+    }
+    if (result.reason === "error") {
+      console.warn(`[ensureProfile] staff-invite accept error: ${result.error}`);
+    }
+    return false;
+  } catch (err) {
+    console.warn(
+      `[ensureProfile] staff-invite accept threw: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return false;
+  }
+}
 
 export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise<{
   success: boolean;
   error?: string;
+  inviteApplied?: boolean;
 }> {
   let step = "init";
   try {
@@ -84,7 +121,12 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       console.info(
         `[ensureProfile] Existing profile found — claim-safe sync complete.`
       );
-      return { success: true };
+      // After the claim-safe sync, see if a pending staff invite for
+      // this email should now be applied (covers the "admin invites
+      // existing user as staff" case where the public.users row
+      // already existed from an earlier signup).
+      const inviteApplied = await applyPendingStaffInvite(authUser);
+      return { success: true, inviteApplied };
     }
 
     // Step 2: Find or create academy (new user only)
@@ -166,7 +208,10 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
     }
 
     console.info(`[ensureProfile] Provisioned new user (role=${role})`);
-    return { success: true };
+    // Apply any pending staff invite for this email — this is the
+    // "invited person signs up for the first time" path.
+    const inviteApplied = await applyPendingStaffInvite(authUser);
+    return { success: true, inviteApplied };
   } catch (err) {
     const msg = `Exception at "${step}": ${err instanceof Error ? err.message : String(err)}`;
     console.error(`[ensureProfile] ${msg}`);

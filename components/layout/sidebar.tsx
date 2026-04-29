@@ -4,11 +4,62 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LogOut, X } from "lucide-react";
+import {
+  LogOut,
+  X,
+  LayoutDashboard,
+  Calendar,
+  CalendarRange,
+  BookOpen,
+  Users,
+  Package,
+  ClipboardCheck,
+  Settings,
+  AlertTriangle,
+  Building2,
+  ShoppingBag,
+  Sparkles,
+  Wallet,
+  Megaphone,
+  ShieldCheck,
+  Tag,
+  KeyRound,
+  Circle,
+  type LucideIcon,
+} from "lucide-react";
 import { signOut } from "@/lib/actions/auth";
-import { getNavigationForRole } from "@/lib/role-config";
+import { getNavigationForRole, type NavItem, type NavIconKey } from "@/lib/role-config";
 import { useSidebar } from "@/components/providers/sidebar-provider";
 import type { AuthUser } from "@/lib/auth";
+
+/**
+ * Client-side icon map.
+ *
+ * Lives here (not in `lib/role-config.ts`) so that the server layout
+ * never has to serialize React component references across the
+ * Server-Component → Client-Component boundary. The server passes a
+ * stable `iconKey` string and this component resolves it to the actual
+ * lucide-react component at render time.
+ */
+const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  classes: Calendar,
+  bookings: BookOpen,
+  events: Sparkles,
+  catalog: ShoppingBag,
+  attendance: ClipboardCheck,
+  students: Users,
+  terms: CalendarRange,
+  products: Package,
+  penalties: AlertTriangle,
+  finance: Wallet,
+  affiliations: ShieldCheck,
+  discountRules: Tag,
+  broadcasts: Megaphone,
+  studioHire: Building2,
+  staff: KeyRound,
+  settings: Settings,
+};
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -24,12 +75,20 @@ const ROLE_COLORS: Record<string, string> = {
 
 interface SidebarProps {
   user: AuthUser;
+  /**
+   * Permission-filtered nav, computed in the server layout so a
+   * disabled or limited staff member never sees admin-only links.
+   * If omitted, falls back to legacy role-based filtering — this keeps
+   * the component usable from any caller that doesn't yet thread
+   * staff access through (and from non-staff routes like /catalog).
+   */
+  navItems?: NavItem[];
 }
 
-export function Sidebar({ user }: SidebarProps) {
+export function Sidebar({ user, navItems: navItemsProp }: SidebarProps) {
   const pathname = usePathname();
   const { mobileOpen, close } = useSidebar();
-  const navItems = getNavigationForRole(user.role);
+  const navItems = navItemsProp ?? getNavigationForRole(user.role);
 
   const initials = user.fullName
     .split(" ")
@@ -63,6 +122,7 @@ export function Sidebar({ user }: SidebarProps) {
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
+          const Icon = NAV_ICONS[item.iconKey] ?? Circle;
           return (
             <Link
               key={item.name}
@@ -76,7 +136,7 @@ export function Sidebar({ user }: SidebarProps) {
                   : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
               )}
             >
-              <item.icon
+              <Icon
                 className={cn(
                   "h-5 w-5 shrink-0",
                   isActive

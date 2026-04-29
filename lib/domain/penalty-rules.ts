@@ -17,7 +17,7 @@ import {
   type ClassContext,
 } from "./credit-rules";
 import { formatCents } from "@/lib/utils";
-import type { PenaltyReason, PenaltyResolution } from "@/types/domain";
+import type { PenaltyReason, PenaltyResolution, ProductType } from "@/types/domain";
 
 export interface PenaltyDecision {
   reason: PenaltyReason;
@@ -32,11 +32,17 @@ export function resolvePenalty(
   reason: PenaltyReason,
   amountCents: number,
   subscriptions: ActiveSubscription[],
-  classCtx: ClassContext
+  classCtx: ClassContext,
+  /**
+   * Phase 2B: optional runtime priority order. Defaults to the static
+   * CREDIT_DEDUCTION_PRIORITY when omitted (preserves test behaviour);
+   * server callers should pass `getSettings().creditDeductionPriority`.
+   */
+  priority?: ProductType[],
 ): PenaltyDecision {
   const label = reason === "late_cancel" ? "Late cancel" : "No-show";
 
-  const sub = resolveSubscription(subscriptions, classCtx);
+  const sub = resolveSubscription(subscriptions, classCtx, undefined, priority);
 
   if (sub) {
     return {

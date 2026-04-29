@@ -7,10 +7,7 @@
  */
 
 import { generateId } from "@/lib/utils";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
+import { isSupabaseMode } from "@/lib/config/data-provider";
 
 export type TeacherCategory =
   | "core_instructor"
@@ -59,7 +56,7 @@ let teachers: Teacher[] | null = null;
 
 function init(): Teacher[] {
   if (!teachers) {
-    teachers = hasSupabaseConfig() ? [] : SEED_TEACHERS.map((t) => ({ ...t }));
+    teachers = isSupabaseMode() ? [] : SEED_TEACHERS.map((t) => ({ ...t }));
   }
   return teachers;
 }

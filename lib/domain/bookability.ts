@@ -6,6 +6,10 @@
  */
 
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
+import {
+  DEFAULT_BEGINNER_LEVEL_NAMES,
+  isBeginnerLevelName,
+} from "@/config/class-levels";
 import type { ClassType, DanceRole, InstanceStatus, ProductType } from "@/types/domain";
 import type { ProductAccessRule } from "@/config/product-access";
 import type { MockSubscription } from "@/lib/mock-data";
@@ -81,6 +85,12 @@ export interface BookabilityContext {
   codeOfConductAccepted: boolean;
   birthdayBenefit?: BirthdayBenefitState;
   studentDateOfBirth?: string | null;
+  /**
+   * Phase 2B: level names treated as beginner courses for term-start gating.
+   * Defaults to DEFAULT_BEGINNER_LEVEL_NAMES when omitted; server callers
+   * should pass `getSettings().beginnerLevelNames`.
+   */
+  beginnerLevelNames?: readonly string[];
 }
 
 // ── Recommendation logic ────────────────────────────────────
@@ -191,15 +201,16 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
       // Term hasn't started yet — student can book normally.
     } else if (effectiveTermStatus === "active") {
       // Birthday benefit can bypass term-start restriction for non-beginner classes.
-      // Beginners 1/2 term-start gating always applies per academy rule.
-      const isBeginner1or2 = /^Beginner [12]$/i.test(cls.level ?? "");
+      // Configured beginner levels always have term-start gating per academy rule.
+      const beginnerLevels = ctx.beginnerLevelNames ?? DEFAULT_BEGINNER_LEVEL_NAMES;
+      const isBeginnerLevel = isBeginnerLevelName(cls.level, beginnerLevels);
       const hasBirthdayOverride =
         ctx.birthdayBenefit?.eligible &&
         !ctx.birthdayBenefit.alreadyUsed &&
         ctx.studentDateOfBirth &&
         isBirthdayWeek(ctx.studentDateOfBirth, cls.date);
 
-      if (!hasBirthdayOverride || isBeginner1or2) {
+      if (!hasBirthdayOverride || isBeginnerLevel) {
         return {
           status: "blocked",
           reason: "This course has already started. Please speak to reception if you'd like to check whether late entry is still possible.",

@@ -4,6 +4,8 @@ import { getDevStudentId } from "@/lib/actions/auth";
 import { cachedGetTerms, cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { getStaffAccess } from "@/lib/staff-permissions";
+import { getNavigationForAccess, getNavigationForRole } from "@/lib/role-config";
 import { UserProvider } from "@/components/providers/user-provider";
 import { SidebarProvider } from "@/components/providers/sidebar-provider";
 import { ScanReceiverStatusProvider } from "@/components/providers/scan-receiver-status-provider";
@@ -79,6 +81,21 @@ export default async function AppLayout({
 
   const [devStudents, alerts] = await Promise.all([devStudentsPromise, alertsPromise]);
 
+  // Resolve nav once per request based on the staff permission set.
+  // Students never carry staff perms, so we keep the legacy role-based
+  // filter for them (covers /catalog and the standard student items).
+  let navItems;
+  if (user.role === "student") {
+    navItems = getNavigationForRole("student");
+  } else {
+    const access = await getStaffAccess();
+    navItems = getNavigationForAccess({
+      legacyRole: user.role,
+      permissions: access.permissions,
+      isSuperAdmin: access.isSuperAdmin,
+    });
+  }
+
   const _ltEnd = performance.now();
   if (isDev) console.info(`[perf layout] auth=${(_ltAuth-_lt0).toFixed(0)}ms alerts=${(_ltEnd-_ltAuth).toFixed(0)}ms total=${(_ltEnd-_lt0).toFixed(0)}ms`);
   const panelStudentId = devStudentId ?? user.id;
@@ -91,7 +108,7 @@ export default async function AppLayout({
     <ScanReceiverStatusProvider>
       <div className="flex h-[100dvh] bg-gray-50">
         <SessionGuard />
-        <Sidebar user={user} />
+        <Sidebar user={user} navItems={navItems} />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Topbar
             user={user}

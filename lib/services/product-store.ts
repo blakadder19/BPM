@@ -1,15 +1,22 @@
 /**
  * Mutable in-memory product store.
- * When Supabase is configured, starts empty — hybrid repo reads from DB.
+ *
+ * Seeding decision is keyed off the active data provider (DATA_PROVIDER),
+ * NOT the mere presence of Supabase env vars. The repo factory routes
+ * directly to memoryProductRepo when DATA_PROVIDER=memory (no hybrid layer
+ * for products), so in memory mode this store MUST be seeded from PRODUCTS
+ * even when Supabase env vars are also present (the documented default
+ * "memory + real auth" setup in docs/SETUP.md).
+ *
+ * In supabase mode the store stays empty — the factory routes to
+ * supabaseProductRepo and the memory store is unused.
  */
 
-import { PRODUCTS, type MockProduct } from "@/lib/mock-data";
+import { PRODUCTS, type MockProduct, type ProductPerks } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
-import type { CreditsModel, ProductType } from "@/types/domain";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
+import { isSupabaseMode } from "@/lib/config/data-provider";
+import type { StyleAccessMode } from "@/lib/domain/subscription-snapshot";
+import type { ClassType, CreditsModel, ProductType } from "@/types/domain";
 
 const g = globalThis as unknown as {
   __bpm_products?: MockProduct[];
@@ -17,7 +24,7 @@ const g = globalThis as unknown as {
 
 function init(): MockProduct[] {
   if (!g.__bpm_products) {
-    g.__bpm_products = hasSupabaseConfig() ? [] : PRODUCTS.map((p) => ({ ...p }));
+    g.__bpm_products = isSupabaseMode() ? [] : PRODUCTS.map((p) => ({ ...p }));
   }
   return g.__bpm_products;
 }
@@ -52,6 +59,12 @@ export function createProduct(data: {
   autoRenew?: boolean;
   benefits?: string[] | null;
   spanTerms?: number | null;
+  perks?: ProductPerks | null;
+  styleAccessMode?: StyleAccessMode | null;
+  styleAccessPickCount?: number | null;
+  allowedClassTypes?: ClassType[] | null;
+  stripePriceId?: string | null;
+  archivedAt?: string | null;
 }): MockProduct {
   const list = init();
   const product: MockProduct = {
@@ -78,6 +91,12 @@ export function createProduct(data: {
     autoRenew: data.autoRenew ?? false,
     benefits: data.benefits ?? null,
     spanTerms: data.spanTerms ?? null,
+    perks: data.perks ?? null,
+    styleAccessMode: data.styleAccessMode ?? null,
+    styleAccessPickCount: data.styleAccessPickCount ?? null,
+    allowedClassTypes: data.allowedClassTypes ?? null,
+    stripePriceId: data.stripePriceId ?? null,
+    archivedAt: data.archivedAt ?? null,
   };
   list.push(product);
   return product;
@@ -108,6 +127,12 @@ type ProductPatch = Partial<
     | "autoRenew"
     | "benefits"
     | "spanTerms"
+    | "perks"
+    | "styleAccessMode"
+    | "styleAccessPickCount"
+    | "allowedClassTypes"
+    | "stripePriceId"
+    | "archivedAt"
   >
 >;
 
@@ -141,6 +166,12 @@ export function updateProduct(
   if (patch.autoRenew !== undefined) product.autoRenew = patch.autoRenew;
   if (patch.benefits !== undefined) product.benefits = patch.benefits;
   if (patch.spanTerms !== undefined) product.spanTerms = patch.spanTerms;
+  if (patch.perks !== undefined) product.perks = patch.perks;
+  if (patch.styleAccessMode !== undefined) product.styleAccessMode = patch.styleAccessMode;
+  if (patch.styleAccessPickCount !== undefined) product.styleAccessPickCount = patch.styleAccessPickCount;
+  if (patch.allowedClassTypes !== undefined) product.allowedClassTypes = patch.allowedClassTypes;
+  if (patch.stripePriceId !== undefined) product.stripePriceId = patch.stripePriceId;
+  if (patch.archivedAt !== undefined) product.archivedAt = patch.archivedAt;
 
   return { ...product };
 }

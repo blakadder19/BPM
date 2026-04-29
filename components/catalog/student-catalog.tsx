@@ -46,13 +46,29 @@ export interface TermOption {
 
 export type StyleSelectionMode = "none" | "pick_one" | "pick_many";
 
+export interface AppliedDiscountSummary {
+  code: string;
+  name: string;
+  ruleType: "affiliation" | "first_time_purchase";
+  affiliationType: string | null;
+  amountCents: number;
+}
+
 export interface CatalogProduct {
   id: string;
   name: string;
   productType: ProductType;
   description: string;
   longDescription: string | null;
+  /** Live product base price. Kept for legacy callers; the catalog
+   *  display uses the *final* price below. */
   priceCents: number;
+  /** Engine preview at request time. NOT a frozen snapshot — the
+   *  authoritative snapshot is created at commit time on the server. */
+  originalPriceCents: number;
+  discountAmountCents: number;
+  finalPriceCents: number;
+  appliedDiscounts: AppliedDiscountSummary[];
   styles: string;
   levels: string;
   classesPerTerm: number | null;
@@ -190,15 +206,30 @@ function ProductCard({
   if (p.classesPerTerm != null) summaryParts.push(`${p.classesPerTerm} classes/term`);
   else if (p.totalCredits != null) summaryParts.push(`${p.totalCredits} class${p.totalCredits !== 1 ? "es" : ""}`);
   summaryParts.push(p.styles);
-  if (p.levels !== "All levels") summaryParts.push(p.levels);
+  // Skip levels when they are the generic "All levels" or the
+  // social_only "—" placeholder — both add no real information.
+  if (p.levels !== "All levels" && p.levels !== "—") summaryParts.push(p.levels);
 
-  const priceLabel = p.recurring ? `${formatCents(p.priceCents)}/term` : formatCents(p.priceCents);
+  const hasDiscount = p.discountAmountCents > 0;
+  const priceSuffix = p.recurring ? "/term" : "";
+  const priceLabel = `${formatCents(p.finalPriceCents)}${priceSuffix}`;
 
   return (
     <ProductListItem
       name={p.name}
       desc={summaryParts.join(" · ")}
-      price={<PricePill accent={!hasOwnership} muted={hasOwnership}>{priceLabel}</PricePill>}
+      price={
+        hasDiscount ? (
+          <span className="flex items-center gap-1.5">
+            <span className="text-[10px] text-gray-400 line-through">
+              {formatCents(p.originalPriceCents)}
+            </span>
+            <PricePill accent={!hasOwnership} muted={hasOwnership}>{priceLabel}</PricePill>
+          </span>
+        ) : (
+          <PricePill accent={!hasOwnership} muted={hasOwnership}>{priceLabel}</PricePill>
+        )
+      }
       badge={
         <>
           {p.currentEntitlement && (
@@ -269,7 +300,7 @@ function ProductCard({
                 <Palette className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                 {p.styles}
               </div>
-              {p.levels !== "All levels" && (
+              {p.levels !== "All levels" && p.levels !== "—" && (
                 <div className="flex items-center gap-2">
                   <GraduationCap className="h-3.5 w-3.5 shrink-0 text-gray-400" />
                   {p.levels}
@@ -291,6 +322,16 @@ function ProductCard({
                 </div>
               )}
             </div>
+
+            {hasDiscount && (
+              <DiscountBreakdown
+                originalPriceCents={p.originalPriceCents}
+                discountAmountCents={p.discountAmountCents}
+                finalPriceCents={p.finalPriceCents}
+                appliedDiscounts={p.appliedDiscounts}
+                compact
+              />
+            )}
 
             {p.benefits && p.benefits.length > 0 && (
               <ul className="space-y-1">
@@ -470,14 +511,27 @@ function PurchaseDialog({
               <StatusBadge status={p.productType} />
             </div>
             <p className="text-sm text-gray-600">{p.description}</p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-baseline gap-2">
+              {p.discountAmountCents > 0 && (
+                <span className="text-sm text-gray-400 line-through">
+                  {formatCents(p.originalPriceCents)}
+                </span>
+              )}
               <span className="text-lg font-bold text-gray-900">
-                {formatCents(p.priceCents)}
+                {formatCents(p.finalPriceCents)}
               </span>
               {p.recurring && (
                 <span className="text-xs text-gray-400">/ term</span>
               )}
             </div>
+            {p.discountAmountCents > 0 && (
+              <DiscountBreakdown
+                originalPriceCents={p.originalPriceCents}
+                discountAmountCents={p.discountAmountCents}
+                finalPriceCents={p.finalPriceCents}
+                appliedDiscounts={p.appliedDiscounts}
+              />
+            )}
           </div>
 
           {/* What's included */}
@@ -498,7 +552,7 @@ function PurchaseDialog({
               <Palette className="h-4 w-4 text-gray-400" />
               {p.styles}
             </div>
-            {p.levels !== "All levels" && (
+            {p.levels !== "All levels" && p.levels !== "—" && (
               <div className="flex items-center gap-2">
                 <GraduationCap className="h-4 w-4 text-gray-400" />
                 {p.levels}
@@ -710,6 +764,9 @@ function PurchaseDialog({
                   <div>
                     <span className="text-sm font-medium text-gray-900">
                       Pay at reception
+                      <span className="ml-1 text-xs text-gray-500">
+                        — {formatCents(p.finalPriceCents)} due
+                      </span>
                     </span>
                     <p className="text-xs text-gray-500">
                       Your plan is reserved immediately. Complete payment at the studio (cash or Revolut).
@@ -811,5 +868,73 @@ function FilterChip({
         {count}
       </span>
     </button>
+  );
+}
+
+// ── Discount breakdown ──────────────────────────────────────
+//
+// Shared layout for the discounted-purchase summary. Used both inside
+// the catalog product card (compact variant) and inside the purchase
+// dialog (full variant). Displays the engine-derived breakdown the
+// server has already computed — the client never recomputes pricing.
+
+function describeDiscountSource(d: AppliedDiscountSummary): string {
+  if (d.ruleType === "first_time_purchase") return "First-time discount";
+  if (d.ruleType === "affiliation") {
+    const aff = d.affiliationType
+      ? d.affiliationType.charAt(0).toUpperCase() + d.affiliationType.slice(1).replace(/_/g, " ")
+      : "Affiliation";
+    return `${aff} affiliation`;
+  }
+  return d.name || d.code;
+}
+
+function DiscountBreakdown({
+  originalPriceCents,
+  discountAmountCents,
+  finalPriceCents,
+  appliedDiscounts,
+  compact,
+}: {
+  originalPriceCents: number;
+  discountAmountCents: number;
+  finalPriceCents: number;
+  appliedDiscounts: AppliedDiscountSummary[];
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-md border border-emerald-200 bg-emerald-50 ${
+        compact ? "px-2.5 py-2 text-[11px]" : "px-3 py-2.5 text-xs"
+      } space-y-1`}
+    >
+      <p className="font-semibold text-emerald-800">Discount applied</p>
+      <div className="flex justify-between text-emerald-900/80">
+        <span>Subtotal</span>
+        <span>{formatCents(originalPriceCents)}</span>
+      </div>
+      {appliedDiscounts.map((d) => (
+        <div key={d.code} className="flex justify-between text-emerald-700">
+          <span className="truncate pr-2" title={d.name}>{describeDiscountSource(d)}</span>
+          <span>−{formatCents(d.amountCents)}</span>
+        </div>
+      ))}
+      {/*
+        Belt-and-braces: if appliedDiscounts is empty but a discount
+        amount is non-zero (legacy snapshot without an itemised list),
+        still surface the totals below so the student/admin sees the
+        amount due. Should not happen for engine-driven previews.
+      */}
+      {appliedDiscounts.length === 0 && discountAmountCents > 0 && (
+        <div className="flex justify-between text-emerald-700">
+          <span>Discount</span>
+          <span>−{formatCents(discountAmountCents)}</span>
+        </div>
+      )}
+      <div className="flex justify-between border-t border-emerald-200 pt-1 font-semibold text-emerald-900">
+        <span>You pay</span>
+        <span>{formatCents(finalPriceCents)}</span>
+      </div>
+    </div>
   );
 }

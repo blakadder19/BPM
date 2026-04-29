@@ -81,13 +81,19 @@ function matchesAccessRule(
  * @param accessRules    Optional map of productId → ProductAccessRule.
  *                       When provided and a subscription has a productId,
  *                       the access rule is used instead of legacy matching.
+ * @param priority       Optional override for the deduction priority order.
+ *                       Defaults to the static `CREDIT_DEDUCTION_PRIORITY`.
+ *                       Server callers should pass the runtime
+ *                       `creditDeductionPriority` setting; tests and pure
+ *                       call sites can omit it to use the static default.
  */
 export function resolveSubscription(
   subscriptions: ActiveSubscription[],
   classCtx: ClassContext,
-  accessRules?: Map<string, ProductAccessRule>
+  accessRules?: Map<string, ProductAccessRule>,
+  priority: ProductType[] = CREDIT_DEDUCTION_PRIORITY,
 ): ActiveSubscription | null {
-  for (const type of CREDIT_DEDUCTION_PRIORITY) {
+  for (const type of priority) {
     const match = subscriptions.find((s) => {
       if (s.productType !== type) return false;
       if (!hasCredits(s)) return false;

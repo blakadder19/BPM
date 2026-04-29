@@ -9,6 +9,7 @@ import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { getProductRepo } from "@/lib/repositories";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { computeBookability, type BookabilityContext, type ClassInstanceInfo } from "@/lib/domain/bookability";
+import { getSettings } from "@/lib/services/settings-store";
 
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getStudentRepo, getSubscriptionRepo, getCocRepo } from "@/lib/repositories";
@@ -175,6 +176,7 @@ export async function createStudentBooking(input: {
     codeOfConductAccepted: cocAccepted,
     birthdayBenefit,
     studentDateOfBirth: student.dateOfBirth,
+    beginnerLevelNames: getSettings().beginnerLevelNames,
   };
 
   if (!ctx.codeOfConductAccepted) {

@@ -34,6 +34,21 @@ export interface FinanceTransaction {
   refundedBy: string | null;
   refundReason: string | null;
   /**
+   * Frozen pricing for subscription rows (Phase 4). Allows /finance to
+   * expose a "discount applied" indicator without recomputing pricing.
+   * Null for rows where a discount snapshot doesn't apply.
+   */
+  originalPriceCents?: number | null;
+  discountAmountCents?: number | null;
+  /** Compact label like "First-time discount + Affiliate (HSE)" or null. */
+  appliedDiscountSummary?: string | null;
+  /**
+   * Underlying domain entity ids, for row-level mark-as-paid actions.
+   * `relatedEventId` is set only for event_purchase rows.
+   */
+  relatedEntityId?: string | null;
+  relatedEventId?: string | null;
+  /**
    * True when the underlying record carries an explicit super-admin test
    * marker ([test], #test or TEST:) in any of its free-text fields. Used
    * by the Finance super-admin tooling — does NOT affect normal display.
@@ -108,13 +123,48 @@ function mapPenaltyStatus(resolution: string): FinanceStatus {
 
 // ── Builders ────────────────────────────────────────────────
 
+/**
+ * Resolve a stored performer field (which may be a user id, email, or
+ * already-formatted name) to a human-readable display string.
+ *
+ * Different write paths historically stored different shapes:
+ * - `qr-checkin.ts` stores `user.fullName`
+ * - `subscriptions.ts` admin-create stored `adminUser.id`
+ * - `catalog-purchase.ts` self-purchase now stores `user.id`
+ * - legacy rows may carry `null`
+ *
+ * Rather than rewrite every historical row, we resolve at read time:
+ * if the value is a known user id we return their name; otherwise we
+ * return the value as-is (it's already human readable).
+ */
+function resolvePerformer(
+  raw: string | null | undefined,
+  identityMap: Map<string, { name: string; email: string }>,
+): string | null {
+  if (!raw) return null;
+  const hit = identityMap.get(raw);
+  if (hit) return hit.name || hit.email || raw;
+  return raw;
+}
+
 export function buildSubscriptionTransactions(
   subscriptions: MockSubscription[],
   studentNameMap: Map<string, { name: string; email: string }>,
+  identityMap?: Map<string, { name: string; email: string }>,
 ): FinanceTransaction[] {
+  const idMap = identityMap ?? studentNameMap;
   return subscriptions.map((sub) => {
     const student = studentNameMap.get(sub.studentId);
     const status = mapSubPaymentStatus(sub.paymentStatus);
+
+    // BY column: prefer the most concrete actor we have, then resolve
+    // it to a human name if the stored value is a user id.
+    const rawPerformer = sub.collectedBy ?? sub.assignedBy ?? null;
+    const performedBy = resolvePerformer(rawPerformer, idMap);
+
+    const discountAmountCents = sub.discountAmountCents ?? 0;
+    const originalPriceCents =
+      sub.originalPriceCents ?? (sub.priceCentsAtPurchase != null ? sub.priceCentsAtPurchase + discountAmountCents : null);
 
     return {
       id: `sub-${sub.id}`,
@@ -131,20 +181,42 @@ export function buildSubscriptionTransactions(
       currency: sub.currencyAtPurchase ?? "EUR",
       paymentMethod: sub.paymentMethod,
       reference: sub.paymentReference,
-      performedBy: sub.collectedBy ?? sub.assignedBy,
+      performedBy,
       refundedAt: sub.refundedAt ?? null,
-      refundedBy: sub.refundedBy ?? null,
+      refundedBy: resolvePerformer(sub.refundedBy ?? null, idMap),
       refundReason: sub.refundReason ?? null,
+      originalPriceCents,
+      discountAmountCents,
+      appliedDiscountSummary: summarizeAppliedDiscount(sub.appliedDiscount),
+      relatedEntityId: sub.id,
+      relatedEventId: null,
       isTest: carriesTestMarker(sub.paymentNotes, sub.notes, sub.paymentReference, sub.refundReason),
     };
   });
+}
+
+/**
+ * Build a compact human-readable label for the applied discount snapshot.
+ * Returns null when no discount was applied.
+ */
+function summarizeAppliedDiscount(snapshot: unknown): string | null {
+  if (!snapshot || typeof snapshot !== "object") return null;
+  const s = snapshot as { appliedDiscounts?: Array<{ name?: string; ruleType?: string; reason?: string }> };
+  const list = Array.isArray(s.appliedDiscounts) ? s.appliedDiscounts : [];
+  if (list.length === 0) return null;
+  return list
+    .map((d) => d.name || d.reason || d.ruleType || "Discount")
+    .filter(Boolean)
+    .join(" + ");
 }
 
 export function buildEventPurchaseTransactions(
   purchases: MockEventPurchase[],
   eventNameMap: Map<string, string>,
   studentNameMap: Map<string, { name: string; email: string }>,
+  identityMap?: Map<string, { name: string; email: string }>,
 ): FinanceTransaction[] {
+  const idMap = identityMap ?? studentNameMap;
   return purchases.map((p) => {
     const eventTitle = eventNameMap.get(p.eventId) ?? "Unknown event";
     const student = p.studentId ? studentNameMap.get(p.studentId) : null;
@@ -173,10 +245,12 @@ export function buildEventPurchaseTransactions(
       currency: p.currency ?? "EUR",
       paymentMethod: p.paymentMethod,
       reference: p.paymentReference,
-      performedBy: p.refundedBy ?? p.checkedInBy,
+      performedBy: resolvePerformer(p.refundedBy ?? p.checkedInBy ?? null, idMap),
       refundedAt: p.refundedAt ?? null,
-      refundedBy: p.refundedBy ?? null,
+      refundedBy: resolvePerformer(p.refundedBy ?? null, idMap),
       refundReason: p.refundReason ?? null,
+      relatedEntityId: p.id,
+      relatedEventId: p.eventId,
       isTest: carriesTestMarker(p.notes, p.paymentReference, p.refundReason),
     };
   });

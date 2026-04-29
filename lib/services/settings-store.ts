@@ -24,8 +24,12 @@ import {
   ALLOWED_ROLE_IMBALANCE,
   STUDENT_PRACTICE_IS_BOOKABLE,
   WAITLIST_OFFER_EXPIRY_HOURS,
+  TERM_PURCHASE_WINDOW_DAYS,
+  CREDIT_DEDUCTION_PRIORITY,
 } from "@/config/business-rules";
+import { DEFAULT_BEGINNER_LEVEL_NAMES } from "@/config/class-levels";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import type { ProductType } from "@/types/domain";
 
 export interface AppSettings {
   // Penalty rules
@@ -62,6 +66,22 @@ export interface AppSettings {
   allowAdminLateEntryIntoTermBound: boolean;
   adminLateEntryMaxClassNumber: number;
   studentTermSelectionEnabled: boolean;
+
+  // Catalog & Booking (Phase 2B)
+  /** Days from term start during which the current term is still purchasable. */
+  termPurchaseWindowDays: number;
+  /**
+   * Order in which a student's subscriptions are considered when deducting
+   * a credit. Must contain exactly the 3 known product types (no duplicates,
+   * no foreign values) — validated server-side before persisting.
+   */
+  creditDeductionPriority: ProductType[];
+  /**
+   * Level names that are treated as "beginner" courses for term-bound late-
+   * entry gating (admin can still add students up to week N, students can
+   * never self-book once a beginner term has started).
+   */
+  beginnerLevelNames: string[];
 
   // Admin alert preferences
   disabledAlertIds: string[];
@@ -101,6 +121,10 @@ function defaults(): AppSettings {
     allowAdminLateEntryIntoTermBound: true,
     adminLateEntryMaxClassNumber: 2,
     studentTermSelectionEnabled: true,
+
+    termPurchaseWindowDays: TERM_PURCHASE_WINDOW_DAYS,
+    creditDeductionPriority: [...CREDIT_DEDUCTION_PRIORITY],
+    beginnerLevelNames: [...DEFAULT_BEGINNER_LEVEL_NAMES],
 
     disabledAlertIds: [],
 

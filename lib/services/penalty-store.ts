@@ -6,15 +6,12 @@
 
 import { PenaltyService, type StoredPenalty } from "./penalty-service";
 import { PENALTIES } from "@/lib/mock-data";
+import { isSupabaseMode } from "@/lib/config/data-provider";
 
 const STORE_VERSION = 3;
 
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
-
 function buildPenalties(): StoredPenalty[] {
-  if (hasSupabaseConfig()) return [];
+  if (isSupabaseMode()) return [];
   return PENALTIES.map((p) => ({
     id: p.id,
     studentId: p.studentId,

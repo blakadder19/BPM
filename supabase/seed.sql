@@ -441,8 +441,8 @@ insert into products (id, academy_id, name, description, long_description, produ
 
   -- ── Social Pass ──
   ('f0f0f0f0-0000-0000-0000-000000000016', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001',
-   'Social Pass', '20 socials per month. Weekday socials + weekend student practice.',
-   'Access to standard weekday socials (Mon, Wed, Fri, and weekend student practice). Includes 20 socials per month. Events are not included.',
+   'Social Pass', '20 socials per month. Standard weekday socials only.',
+   'Access to standard weekday socials. Includes 20 socials per month. Classes, student practice and special events are not included.',
    'pass', 10000, 20, 30, null, null, false, false, null, false,
    null, 'fixed', false, '{}',
    null, null, 'Socials only', null),

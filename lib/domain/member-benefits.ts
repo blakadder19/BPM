@@ -7,7 +7,42 @@
  * - Free weekend Student Practice access
  */
 
-import type { MockSubscription } from "@/lib/mock-data";
+import type { MockSubscription, ProductPerks } from "@/lib/mock-data";
+
+// ── Per-subscription perk resolution ───────────────────────────
+// Phase 2: per-product structured perk flags can override the
+// productType-derived default. Legacy subscriptions (no snapshot,
+// or snapshot with perks === null) keep the pre-existing behaviour:
+// memberships get all three perks, everything else gets none.
+
+const ALL_PERKS_ON: Required<ProductPerks> = {
+  birthdayFreeClass: true,
+  freeWeekendPractice: true,
+  memberGiveaway: true,
+};
+const ALL_PERKS_OFF: Required<ProductPerks> = {
+  birthdayFreeClass: false,
+  freeWeekendPractice: false,
+  memberGiveaway: false,
+};
+
+/**
+ * Effective perks for a subscription. Reads from the snapshot when present
+ * (frozen at purchase), otherwise derives from productType for legacy rows.
+ */
+export function effectiveSubscriptionPerks(
+  sub: Pick<MockSubscription, "productType" | "productSnapshot">,
+): Required<ProductPerks> {
+  const snapPerks = sub.productSnapshot?.perks ?? null;
+  if (snapPerks) {
+    return {
+      birthdayFreeClass: snapPerks.birthdayFreeClass ?? false,
+      freeWeekendPractice: snapPerks.freeWeekendPractice ?? false,
+      memberGiveaway: snapPerks.memberGiveaway ?? false,
+    };
+  }
+  return sub.productType === "membership" ? ALL_PERKS_ON : ALL_PERKS_OFF;
+}
 
 /**
  * Parse a date-of-birth string into 0-indexed month and day.
@@ -84,28 +119,34 @@ function isCurrentlyValid(s: MockSubscription, referenceDate: string): boolean {
 }
 
 /**
- * Returns true if the student has at least one currently-valid membership.
- * All membership tiers qualify for giveaway eligibility.
+ * Returns true if the student has at least one currently-valid subscription
+ * whose effective perks include `memberGiveaway`. Phase 2: per-product flag
+ * with productType-derived fallback for legacy rows.
  */
 export function isMemberGiveawayEligible(
   subscriptions: MockSubscription[],
   referenceDate: string
 ): boolean {
   return subscriptions.some(
-    (s) => s.productType === "membership" && isCurrentlyValid(s, referenceDate)
+    (s) =>
+      isCurrentlyValid(s, referenceDate) &&
+      effectiveSubscriptionPerks(s).memberGiveaway
   );
 }
 
 /**
- * Returns true if the student has at least one currently-valid membership,
- * granting free access to weekend Student Practice sessions.
+ * Returns true if the student has at least one currently-valid subscription
+ * whose effective perks include `freeWeekendPractice`. Phase 2: per-product
+ * flag with productType-derived fallback for legacy rows.
  */
 export function hasFreePracticeAccess(
   subscriptions: MockSubscription[],
   referenceDate: string
 ): boolean {
   return subscriptions.some(
-    (s) => s.productType === "membership" && isCurrentlyValid(s, referenceDate)
+    (s) =>
+      isCurrentlyValid(s, referenceDate) &&
+      effectiveSubscriptionPerks(s).freeWeekendPractice
   );
 }
 
@@ -132,7 +173,12 @@ export interface BirthdayBenefitEligibility {
  * Accepts subscriptions of any status — filters internally.
  */
 export function checkBirthdayBenefitEligibility(opts: {
-  subscriptions: ReadonlyArray<{ id: string; productType: string; status: string }>;
+  subscriptions: ReadonlyArray<{
+    id: string;
+    productType: string;
+    status: string;
+    productSnapshot?: MockSubscription["productSnapshot"];
+  }>;
   dateOfBirth: string | null;
   referenceDate: string;
   alreadyUsedThisYear: boolean;
@@ -147,9 +193,14 @@ export function checkBirthdayBenefitEligibility(opts: {
 
   if (!opts.dateOfBirth) return result;
 
-  const activeMembership = opts.subscriptions.find(
-    (s) => s.productType === "membership" && s.status === "active"
-  );
+  // Phase 2: prefer subscriptions whose effective perks include
+  // birthdayFreeClass. Legacy subs (no snapshot) fall back to productType.
+  const activeMembership = opts.subscriptions.find((s) => {
+    if (s.status !== "active") return false;
+    return effectiveSubscriptionPerks(
+      s as Pick<MockSubscription, "productType" | "productSnapshot">,
+    ).birthdayFreeClass;
+  });
   if (!activeMembership) return result;
 
   result.membershipSubscriptionId = activeMembership.id;
@@ -186,12 +237,21 @@ export function computeMemberBenefits(opts: {
   birthdayClassTitle?: string;
   birthdayClassDate?: string;
 }): MemberBenefitsSummary {
+  // "isMember" preserves the original semantic — any active membership tier
+  // grants member status (used to gate the benefits card itself). Specific
+  // perk flags below decide which individual benefits the student actually
+  // gets.
   const isMember = opts.subscriptions.some(
     (s) => s.productType === "membership" && isCurrentlyValid(s, opts.referenceDate)
   );
 
+  const birthdayPerkActive = opts.subscriptions.some(
+    (s) =>
+      isCurrentlyValid(s, opts.referenceDate) &&
+      effectiveSubscriptionPerks(s).birthdayFreeClass,
+  );
   const birthdayWeekEligible =
-    isMember && isBirthdayWeek(opts.dateOfBirth, opts.referenceDate);
+    birthdayPerkActive && isBirthdayWeek(opts.dateOfBirth, opts.referenceDate);
 
   return {
     isMember,
@@ -199,7 +259,7 @@ export function computeMemberBenefits(opts: {
     birthdayFreeClassUsed: opts.birthdayClassUsed,
     birthdayClassTitle: opts.birthdayClassTitle,
     birthdayClassDate: opts.birthdayClassDate,
-    giveawayEligible: isMember,
-    freePracticeAccess: isMember,
+    giveawayEligible: isMemberGiveawayEligible(opts.subscriptions, opts.referenceDate),
+    freePracticeAccess: hasFreePracticeAccess(opts.subscriptions, opts.referenceDate),
   };
 }

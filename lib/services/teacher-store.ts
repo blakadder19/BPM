@@ -9,16 +9,13 @@
 
 import { TEACHER_PAIRS, type MockTeacherPair } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
+import { isSupabaseMode } from "@/lib/config/data-provider";
 
 let assignments: MockTeacherPair[] | null = null;
 
 function init(): MockTeacherPair[] {
   if (!assignments) {
-    assignments = hasSupabaseConfig() ? [] : TEACHER_PAIRS.map((tp) => ({ ...tp }));
+    assignments = isSupabaseMode() ? [] : TEACHER_PAIRS.map((tp) => ({ ...tp }));
   }
   return assignments;
 }

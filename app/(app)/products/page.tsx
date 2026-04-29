@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import {
   cachedGetProducts,
   cachedGetAllSubs,
@@ -11,11 +11,21 @@ import type { MockProduct } from "@/lib/mock-data";
 
 /**
  * Derive scope description from saved product fields (single source of truth).
+ *
+ * Mode-aware: when the structured access mode overrides the meaning of
+ * styles/levels (e.g. social_only ignores both), the summary reflects
+ * the effective rule rather than the generic style/level lists.
  */
 function describeProductScope(p: MockProduct): { styles: string; levels: string } {
-  const styles = p.allowedStyleNames?.length
-    ? p.allowedStyleNames.join(", ")
-    : p.styleName ?? "All styles";
+  if (p.styleAccessMode === "social_only") {
+    return { styles: "Socials only", levels: "—" };
+  }
+
+  const styles = p.styleAccessMode === "all"
+    ? "All styles"
+    : p.allowedStyleNames?.length
+      ? p.allowedStyleNames.join(", ")
+      : p.styleName ?? "All styles";
   const levels = p.allowedLevels?.length
     ? p.allowedLevels.join(", ")
     : "All levels";
@@ -24,7 +34,7 @@ function describeProductScope(p: MockProduct): { styles: string; levels: string 
 
 export default async function ProductsPage() {
   const _t0 = performance.now();
-  await requireRole(["admin"]);
+  await requirePermission("products:view");
   await ensureOperationalDataHydrated();
   const _tHydrate = performance.now();
 

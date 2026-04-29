@@ -112,9 +112,13 @@ export async function adminCreateBookingAction(
     const { buildDynamicAccessRulesMap } = await import("@/config/product-access");
     const { canAccessClass } = await import("@/lib/domain/product-access");
     const { getProductRepo } = await import("@/lib/repositories");
+    const { resolveAccessRuleForSubscription } = await import("@/lib/domain/subscription-snapshot");
     const allProducts = await getProductRepo().getAll();
     const accessRulesMap = buildDynamicAccessRulesMap(allProducts, getDanceStyles());
-    const accessRule = accessRulesMap.get(sub.productId);
+    // Phase 1: prefer the frozen-at-purchase snapshot when present so admin
+    // edits to the live product cannot retroactively change what an existing
+    // subscription is allowed to book. Falls back to the live rule for legacy subs.
+    const accessRule = resolveAccessRuleForSubscription(sub, accessRulesMap);
     if (rawInstance) {
       const classStyleId = rawInstance.styleId ?? (
         rawInstance.styleName

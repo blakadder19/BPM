@@ -3,8 +3,9 @@
  */
 
 import { getProductRepo } from "@/lib/repositories";
-import type { MockProduct } from "@/lib/mock-data";
-import type { CreditsModel, ProductType } from "@/types/domain";
+import type { MockProduct, ProductPerks } from "@/lib/mock-data";
+import type { StyleAccessMode } from "@/lib/domain/subscription-snapshot";
+import type { ClassType, CreditsModel, ProductType } from "@/types/domain";
 
 export async function getProducts(): Promise<MockProduct[]> {
   return getProductRepo().getAll();
@@ -36,6 +37,12 @@ export async function createProduct(data: {
   autoRenew?: boolean;
   benefits?: string[] | null;
   spanTerms?: number | null;
+  perks?: ProductPerks | null;
+  styleAccessMode?: StyleAccessMode | null;
+  styleAccessPickCount?: number | null;
+  allowedClassTypes?: ClassType[] | null;
+  stripePriceId?: string | null;
+  archivedAt?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     await getProductRepo().create(data);
@@ -70,6 +77,12 @@ export async function updateProduct(
     autoRenew?: boolean;
     benefits?: string[] | null;
     spanTerms?: number | null;
+    perks?: ProductPerks | null;
+    styleAccessMode?: StyleAccessMode | null;
+    styleAccessPickCount?: number | null;
+    allowedClassTypes?: ClassType[] | null;
+    stripePriceId?: string | null;
+    archivedAt?: string | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const result = await getProductRepo().update(id, patch);

@@ -55,14 +55,32 @@ const STANDARD_MEMBERSHIP_STYLE_IDS = ["ds-9", "ds-10"];
 // ── Product access rules ────────────────────────────────────
 
 export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
-  // ── Drop-in ─────────────────────────────────────────────
+  // ── Drop-ins ────────────────────────────────────────────
+  // Active: split per-discipline drop-ins.
+  {
+    productId: "p-dropin-latin",
+    allowedClassTypes: ["class"],
+    styleAccess: { type: "fixed", styleIds: ALL_LATIN_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-dropin-yoga",
+    allowedClassTypes: ["class"],
+    styleAccess: { type: "fixed", styleIds: ["ds-9"] },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  // Legacy universal drop-in — kept so historical p-dropin subscriptions still resolve.
   {
     productId: "p-dropin",
     allowedClassTypes: ["class"],
     styleAccess: { type: "all" },
     allowedLevels: null,
     isProvisional: false,
-    provisionalNote: null,
+    provisionalNote: "Legacy product — superseded by p-dropin-latin and p-dropin-yoga.",
   },
 
   // ── Latin Passes (selected style) ───────────────────────
@@ -251,11 +269,40 @@ export const PRODUCT_ACCESS_RULES: ProductAccessRule[] = [
     provisionalNote: null,
   },
 
-  // ── Rainbow Membership (all-access, 16 classes/term) ────
+  // ── Active mix-and-match memberships ────────────────────
+  // Bronze & Silver: Latin styles only. Gold & Rainbow: Latin + Yoga.
+  {
+    productId: "p-mem-bronze",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: ALL_LATIN_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-mem-silver",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: ALL_LATIN_STYLE_IDS },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+  {
+    productId: "p-mem-gold",
+    allowedClassTypes: ["class", "student_practice"],
+    styleAccess: { type: "fixed", styleIds: [...ALL_LATIN_STYLE_IDS, ...YOGA_STYLE_IDS] },
+    allowedLevels: null,
+    isProvisional: false,
+    provisionalNote: null,
+  },
+
+  // ── Rainbow Membership (Latin + Yoga mix-and-match, 16 classes/term) ────
+  // Note: scope was previously "all" styles; restricted to Latin + Yoga to match the
+  // updated business definition (Gold perks + yoga access + free t-shirt).
   {
     productId: "p-mem-rainbow",
     allowedClassTypes: ["class", "student_practice"],
-    styleAccess: { type: "all" },
+    styleAccess: { type: "fixed", styleIds: [...ALL_LATIN_STYLE_IDS, ...YOGA_STYLE_IDS] },
     allowedLevels: null,
     isProvisional: false,
     provisionalNote: null,
@@ -277,14 +324,32 @@ export function getAccessRulesMap(): Map<string, ProductAccessRule> {
 }
 
 /**
- * Builds an access-rules map from product fields, falling back to hardcoded
- * seed rules only for MODE inference (selected_style, course_group, etc.).
+ * Builds an access-rules map from product fields.
+ *
+ * Phase 3 priority order for each product:
+ *   1. Saved structured fields on the product row
+ *      (styleAccessMode / styleAccessPickCount / allowedClassTypes /
+ *      allowedStyleIds / allowedLevels). Single source of truth when set.
+ *   2. Hardcoded seed rule for that product ID/name (legacy products
+ *      without saved structured fields).
+ *   3. Fallback derivation from productType + allowedStyleIds.
  *
  * Style IDs always come from the product's allowedStyleIds — NOT from hardcoded
- * arrays. This makes the product record the single source of truth.
+ * arrays. The seed rule only contributes the access MODE for legacy rows.
  */
+type DynamicAccessProduct = {
+  id: string;
+  name: string;
+  productType: string;
+  allowedLevels: string[] | null;
+  allowedStyleIds?: string[] | null;
+  styleAccessMode?: StyleAccess["type"] | null;
+  styleAccessPickCount?: number | null;
+  allowedClassTypes?: ClassType[] | null;
+};
+
 export function buildDynamicAccessRulesMap(
-  products: { id: string; name: string; productType: string; allowedLevels: string[] | null; allowedStyleIds?: string[] | null }[],
+  products: DynamicAccessProduct[],
   danceStyles?: { id: string; name: string }[]
 ): Map<string, ProductAccessRule> {
   const seedNameToRule = new Map<string, ProductAccessRule>();
@@ -314,7 +379,16 @@ export function buildDynamicAccessRulesMap(
       : null;
 
     let styleAccess: StyleAccess;
-    if (seedRule) {
+    if (p.styleAccessMode) {
+      const seedPickCount = seedRule?.styleAccess.type === "course_group"
+        ? seedRule.styleAccess.pickCount
+        : null;
+      styleAccess = buildStyleAccessFromMode(
+        p.styleAccessMode,
+        pStyleIds,
+        p.styleAccessPickCount ?? seedPickCount,
+      );
+    } else if (seedRule) {
       styleAccess = overrideStyleIdsFromProduct(seedRule.styleAccess, pStyleIds, mockIdRemapper);
     } else if (pStyleIds) {
       styleAccess = { type: "fixed", styleIds: pStyleIds };
@@ -334,7 +408,9 @@ export function buildDynamicAccessRulesMap(
 
     const rule: ProductAccessRule = {
       productId: p.id,
-      allowedClassTypes: seedRule?.allowedClassTypes
+      allowedClassTypes:
+        p.allowedClassTypes
+        ?? seedRule?.allowedClassTypes
         ?? (p.productType === "membership" ? ["class", "student_practice"] : ["class"]),
       styleAccess,
       allowedLevels: p.allowedLevels ?? seedRule?.allowedLevels ?? null,
@@ -345,6 +421,31 @@ export function buildDynamicAccessRulesMap(
   }
 
   return map;
+}
+
+function buildStyleAccessFromMode(
+  mode: StyleAccess["type"],
+  productStyleIds: string[] | null,
+  pickCount: number | null,
+): StyleAccess {
+  switch (mode) {
+    case "all":
+      return { type: "all" };
+    case "social_only":
+      return { type: "social_only" };
+    case "fixed":
+      return { type: "fixed", styleIds: productStyleIds ?? [] };
+    case "selected_style":
+      return productStyleIds
+        ? { type: "selected_style", allowedStyleIds: productStyleIds }
+        : { type: "selected_style" };
+    case "course_group":
+      return {
+        type: "course_group",
+        poolStyleIds: productStyleIds ?? [],
+        pickCount: pickCount && pickCount > 0 ? pickCount : 1,
+      };
+  }
 }
 
 /**

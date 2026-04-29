@@ -55,7 +55,7 @@ import { useOnboardingAutoOpen, StudentWalkthrough, WelcomeModal } from "@/compo
 import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
 import { toggleAutoRenewAction } from "@/lib/actions/catalog-purchase";
 import { payPendingSubscriptionAction } from "@/lib/actions/stripe-checkout";
-import { formatDate, formatEventDateRange } from "@/lib/utils";
+import { formatCents, formatDate, formatEventDateRange } from "@/lib/utils";
 import { TermBanner } from "@/components/ui/term-banner";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
@@ -111,6 +111,15 @@ export interface StudentEntitlementSummary {
   daysUntilExpiry: number | null;
   isRenewal: boolean;
   isFutureTerm: boolean;
+  /**
+   * Frozen pricing snapshot from the subscription row. Null when the
+   * subscription pre-dates Phase 4 and never carried discount data.
+   * Display surfaces should show priceCentsAtPurchase as the "amount
+   * due / amount paid" — never re-derive via product.priceCents.
+   */
+  priceCentsAtPurchase: number | null;
+  originalPriceCents: number | null;
+  discountAmountCents: number;
 }
 
 export interface TodayForYouItem {
@@ -830,7 +839,17 @@ function EntitlementRow({
       </div>
       {e.paymentStatus === "pending" && (
         <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 space-y-1.5">
-          <p className="text-[11px] font-medium text-amber-800">Payment is due for this plan.</p>
+          <p className="text-[11px] font-medium text-amber-800">
+            {e.priceCentsAtPurchase != null
+              ? `${formatCents(e.priceCentsAtPurchase)} due for this plan.`
+              : "Payment is due for this plan."}
+          </p>
+          {e.discountAmountCents > 0 && e.originalPriceCents != null && (
+            <p className="text-[10px] text-amber-700">
+              Subtotal {formatCents(e.originalPriceCents)} · Discount −
+              {formatCents(e.discountAmountCents)}
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             {stripeEnabled && (
               <PayRenewalButton subscriptionId={e.id} productName={e.productName} />

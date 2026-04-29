@@ -40,7 +40,17 @@ export interface PaymentPendingPayload {
   subscriptionId: string;
   /** e.g. "Term 3 2025" */
   termName: string | null;
+  /** Final amount due, formatted (e.g. "€58.50"). */
   amountLabel: string | null;
+  /**
+   * Optional frozen pricing snapshot (Phase 4). When present, the email
+   * template renders a Subtotal / Discount / Total breakdown instead of
+   * a single "Amount" row.
+   */
+  originalPriceCents?: number | null;
+  discountAmountCents?: number | null;
+  finalPriceCents?: number | null;
+  appliedDiscountSummary?: string | null;
 }
 
 export interface RenewalPreparedPayload {
@@ -91,6 +101,15 @@ export interface PaymentConfirmedPayload {
   subscriptionId: string;
   amountLabel: string | null;
   paymentMethod: string | null;
+  /**
+   * Optional frozen pricing snapshot. Same semantics as
+   * PaymentPendingPayload — used to render a discount breakdown
+   * in the confirmation email when applicable.
+   */
+  originalPriceCents?: number | null;
+  discountAmountCents?: number | null;
+  finalPriceCents?: number | null;
+  appliedDiscountSummary?: string | null;
 }
 
 export interface SubscriptionRefundedPayload {

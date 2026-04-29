@@ -97,15 +97,24 @@ export default function LoginPage() {
     // Provision profile (sets auth_linked_at for admin-created students
     // claiming their account via direct login). Awaited so the DB update
     // completes before the hard navigation renders the dashboard.
-    await provisionCurrentUser().catch((e) =>
-      console.warn("[login] provisionCurrentUser:", e),
-    );
+    const provResult = await provisionCurrentUser().catch((e) => {
+      console.warn("[login] provisionCurrentUser:", e);
+      return { success: false } as { success: boolean; inviteApplied?: boolean };
+    });
 
     // Signal to middleware that the JWT was just issued and doesn't need
     // the expensive getUser() HTTP validation. Short-lived (10s) cookie
     // that saves ~100-300ms on the very first protected page load.
-    const secure = window.location.protocol === "https:" ? "; Secure" : "";
-    document.cookie = `bpm_fresh_jwt=1; path=/; max-age=10; SameSite=Lax${secure}`;
+    //
+    // Skip the fast-path when a staff invite was just applied — the JWT
+    // metadata still reflects the pre-invite role (e.g. "student"),
+    // which would cause the very first page render to use the wrong
+    // navigation/permission set. Forcing the DB lookup picks up the
+    // freshly-written `users.role` + `staff_role_key` immediately.
+    if (!provResult?.inviteApplied) {
+      const secure = window.location.protocol === "https:" ? "; Secure" : "";
+      document.cookie = `bpm_fresh_jwt=1; path=/; max-age=10; SameSite=Lax${secure}`;
+    }
 
     // Use hard navigation instead of router.push(). After login, the
     // browser has no prefetched RSC payload for the protected route, so

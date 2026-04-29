@@ -7,6 +7,7 @@ import type { ClassType, ProductType } from "@/types/domain";
 import type { ProductAccessRule, StyleAccess } from "@/config/product-access";
 import type { MockSubscription } from "@/lib/mock-data";
 import type { TermLike } from "./term-rules";
+import { resolveAccessRuleForSubscription } from "./subscription-snapshot";
 
 export interface ClassContext {
   classType: ClassType;
@@ -114,7 +115,14 @@ export function getValidEntitlements(
 ): ValidEntitlement[] {
   return subscriptions
     .filter((sub) =>
-      isEntitlementValidForClass(sub, cls, terms, accessRulesMap.get(sub.productId))
+      isEntitlementValidForClass(
+        sub,
+        cls,
+        terms,
+        // Phase 1: prefer the frozen-at-purchase snapshot when present;
+        // fall back to the live access rule for legacy subscriptions.
+        resolveAccessRuleForSubscription(sub, accessRulesMap)
+      )
     )
     .map((sub) => toValidEntitlement(sub));
 }
@@ -145,7 +153,8 @@ export function diagnoseNoEntitlement(
   let exhaustedName: string | null = null;
 
   for (const sub of subscriptions) {
-    const rule = accessRulesMap.get(sub.productId);
+    // Phase 1: prefer snapshot, fall back to live rule for legacy subs.
+    const rule = resolveAccessRuleForSubscription(sub, accessRulesMap);
 
     if (!rule) continue;
     if (!classTypeMatches(rule.allowedClassTypes, cls.classType)) {

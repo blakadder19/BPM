@@ -5,18 +5,12 @@
 
 import { DANCE_STYLES, type MockDanceStyle } from "@/lib/mock-data";
 import { getBootstrappedDanceStyles } from "./schedule-bootstrap";
-
-function hasSupabaseConfig(): boolean {
-  return !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-}
+import { isSupabaseMode } from "@/lib/config/data-provider";
 
 export function getDanceStyles(): MockDanceStyle[] {
   const bootstrapped = getBootstrappedDanceStyles();
   if (bootstrapped) return bootstrapped;
-  if (hasSupabaseConfig()) return [];
+  if (isSupabaseMode()) return [];
   return DANCE_STYLES;
 }
 

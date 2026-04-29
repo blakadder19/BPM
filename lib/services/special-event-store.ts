@@ -13,10 +13,7 @@ import {
   type MockEventProduct,
   type MockEventPurchase,
 } from "@/lib/mock-data";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
+import { isSupabaseMode } from "@/lib/config/data-provider";
 
 const g = globalThis as unknown as {
   __bpm_specialEvents?: MockSpecialEvent[];
@@ -27,28 +24,28 @@ const g = globalThis as unknown as {
 
 function initEvents(): MockSpecialEvent[] {
   if (!g.__bpm_specialEvents) {
-    g.__bpm_specialEvents = hasSupabaseConfig() ? [] : SPECIAL_EVENTS.map((e) => ({ ...e }));
+    g.__bpm_specialEvents = isSupabaseMode() ? [] : SPECIAL_EVENTS.map((e) => ({ ...e }));
   }
   return g.__bpm_specialEvents;
 }
 
 function initSessions(): MockEventSession[] {
   if (!g.__bpm_eventSessions) {
-    g.__bpm_eventSessions = hasSupabaseConfig() ? [] : EVENT_SESSIONS.map((s) => ({ ...s }));
+    g.__bpm_eventSessions = isSupabaseMode() ? [] : EVENT_SESSIONS.map((s) => ({ ...s }));
   }
   return g.__bpm_eventSessions;
 }
 
 function initProducts(): MockEventProduct[] {
   if (!g.__bpm_eventProducts) {
-    g.__bpm_eventProducts = hasSupabaseConfig() ? [] : EVENT_PRODUCTS.map((p) => ({ ...p }));
+    g.__bpm_eventProducts = isSupabaseMode() ? [] : EVENT_PRODUCTS.map((p) => ({ ...p }));
   }
   return g.__bpm_eventProducts;
 }
 
 function initPurchases(): MockEventPurchase[] {
   if (!g.__bpm_eventPurchases) {
-    g.__bpm_eventPurchases = hasSupabaseConfig() ? [] : EVENT_PURCHASES.map((p) => ({ ...p }));
+    g.__bpm_eventPurchases = isSupabaseMode() ? [] : EVENT_PURCHASES.map((p) => ({ ...p }));
   }
   return g.__bpm_eventPurchases;
 }

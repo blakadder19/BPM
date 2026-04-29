@@ -9,9 +9,18 @@ import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
+import { buildSnapshotFromProduct } from "@/lib/services/subscription-snapshot-service";
+import {
+  priceProductForStudent,
+  buildAuditDiscountMetadata,
+  detectFirstTimeRaceConflict,
+  releaseDiscountClaim,
+  attachClaimRelations,
+  type FrozenPricing,
+} from "@/lib/services/pricing-service";
+import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import { paymentPendingEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
-import { TERM_PURCHASE_WINDOW_DAYS } from "@/config/business-rules";
 import type { MockProduct } from "@/lib/mock-data";
 import type { PaymentMethod, SalePaymentStatus } from "@/types/domain";
 
@@ -62,6 +71,9 @@ export async function validateAndPreparePurchase(
       productType: p.productType,
       allowedLevels: p.allowedLevels ?? null,
       allowedStyleIds: p.allowedStyleIds ?? null,
+      styleAccessMode: p.styleAccessMode ?? null,
+      styleAccessPickCount: p.styleAccessPickCount ?? null,
+      allowedClassTypes: p.allowedClassTypes ?? null,
     })),
     danceStyles,
   );
@@ -117,6 +129,7 @@ export async function validateAndPreparePurchase(
 
   if (product.termBound) {
     const settings = getSettings();
+    const purchaseWindowDays = settings.termPurchaseWindowDays;
     let assignedTerm: typeof currentTerm = null;
 
     if (settings.studentTermSelectionEnabled && input.selectedTermId) {
@@ -129,13 +142,13 @@ export async function validateAndPreparePurchase(
       }
       if (
         assignedTerm.id === currentTerm?.id &&
-        !isCurrentTermPurchasable(currentTerm.startDate, todayStr, TERM_PURCHASE_WINDOW_DAYS)
+        !isCurrentTermPurchasable(currentTerm.startDate, todayStr, purchaseWindowDays)
       ) {
         return { error: "The purchase window for the current term has closed. Please select the next term." };
       }
     } else {
       const currentOk =
-        currentTerm && isCurrentTermPurchasable(currentTerm.startDate, todayStr, TERM_PURCHASE_WINDOW_DAYS);
+        currentTerm && isCurrentTermPurchasable(currentTerm.startDate, todayStr, purchaseWindowDays);
       assignedTerm = currentOk ? currentTerm : (nextTerm ?? currentTerm);
     }
 
@@ -213,10 +226,47 @@ export async function createPurchaseSubscription(
     paidAt?: string | null;
     notes?: string;
   },
-): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
+  /**
+   * Optional frozen pricing — passed by Stripe webhook fulfillment so the
+   * exact pricing the student saw/paid at session creation is persisted
+   * verbatim, instead of re-deriving via mutable rule state.
+   */
+  frozenPricing?: FrozenPricing,
+): Promise<{ success: boolean; error?: string; subscriptionId?: string; pricing?: FrozenPricing }> {
   const { user, product, termId, validFrom, validUntil } = prepared;
 
-  return createSubscription({
+  // Phase 1: freeze product + access-rule state at purchase so future admin
+  // edits cannot retroactively change this subscription's entitlement.
+  const productSnapshot = await buildSnapshotFromProduct(product);
+
+  // Phase 4 hardening: prefer the caller-supplied frozen pricing (Stripe
+  // webhook path — the claim was already created at session creation).
+  // Otherwise, evaluate the discount engine in COMMIT mode so any
+  // first-time discount is atomically claimed before the row is written.
+  let pricingClaimId: string | null = null;
+  const pricing: FrozenPricing = frozenPricing
+    ? frozenPricing
+    : await (async () => {
+        const live = await priceProductForStudent({
+          studentId: user.id,
+          product: {
+            id: product.id,
+            productType: product.productType,
+            priceCents: product.priceCents,
+          },
+          commit: { source: "catalog_purchase" },
+        });
+        pricingClaimId = live.claim?.id ?? null;
+        return {
+          basePriceCents: live.basePriceCents,
+          totalDiscountCents: live.totalDiscountCents,
+          finalPriceCents: live.finalPriceCents,
+          appliedDiscounts: live.appliedDiscounts,
+          snapshot: live.snapshot,
+        };
+      })();
+
+  const result = await createSubscription({
     studentId: user.id,
     productId: product.id,
     productName: product.name,
@@ -230,7 +280,10 @@ export async function createPurchaseSubscription(
     termId,
     paymentMethod: payment.method,
     paymentStatus: payment.status,
-    assignedBy: null,
+    // Self-purchase: record the student as the actor so the Finance
+    // BY column can resolve a name. Was null pre-fix, which left the
+    // BY column blank for catalog purchases.
+    assignedBy: user.id,
     assignedAt: new Date().toISOString(),
     autoRenew: prepared.autoRenew,
     classesUsed: 0,
@@ -241,9 +294,72 @@ export async function createPurchaseSubscription(
     selectedStyleNames: prepared.selectedStyleNames,
     paidAt: payment.paidAt ?? null,
     paymentReference: payment.reference ?? null,
-    priceCentsAtPurchase: product.priceCents,
+    priceCentsAtPurchase: pricing.finalPriceCents,
     currencyAtPurchase: "EUR",
+    productSnapshot,
+    originalPriceCents: pricing.basePriceCents,
+    discountAmountCents: pricing.totalDiscountCents,
+    appliedDiscount: pricing.snapshot,
   });
+
+  if (result.success && result.subscriptionId) {
+    logFinanceEvent({
+      entityType: "subscription",
+      entityId: result.subscriptionId,
+      action: "created",
+      detail: pricing.snapshot
+        ? `Subscription created with ${pricing.appliedDiscounts.length} discount(s) applied`
+        : "Subscription created",
+      newValue: pricing.snapshot ? `final ${pricing.finalPriceCents}c (saved ${pricing.totalDiscountCents}c)` : null,
+      metadata: buildAuditDiscountMetadata(pricing),
+    });
+
+    // Phase 4 hardening: associate the claim row with the resulting
+    // subscription for audit traceability.
+    if (pricingClaimId) {
+      await attachClaimRelations(pricingClaimId, {
+        relatedSubscriptionId: result.subscriptionId,
+      });
+    }
+
+    // Defense-in-depth anomaly detection: with the atomic claim in place
+    // this should be impossible, but if it ever fires, admin review is
+    // warranted (potential bypass / data corruption).
+    try {
+      const conflict = await detectFirstTimeRaceConflict({
+        studentId: user.id,
+        excludeSubscriptionId: result.subscriptionId,
+        appliedDiscount: pricing.snapshot,
+      });
+      if (conflict.conflicted) {
+        logFinanceEvent({
+          entityType: "subscription",
+          entityId: result.subscriptionId,
+          action: "manual_edit",
+          detail:
+            `First-time discount race detected (claim guard bypassed!): also applied to ${conflict.conflictingSubscriptionIds.join(", ")}.`,
+          metadata: {
+            anomaly: "first_time_race_post_claim",
+            conflictingSubscriptionIds: conflict.conflictingSubscriptionIds,
+          },
+        });
+      }
+    } catch (e) {
+      console.warn("[catalog-purchase] first-time race detection failed:",
+        e instanceof Error ? e.message : e);
+    }
+  } else if (pricingClaimId) {
+    // Subscription creation FAILED after we successfully claimed
+    // first-time eligibility — release the claim so the student can
+    // retry. (Stripe webhook path passes frozenPricing, so this branch
+    // is reached only by catalog-reception/manual paths.)
+    await releaseDiscountClaim(
+      pricingClaimId,
+      "subscription_creation_failed",
+    );
+  }
+
+  return { ...result, pricing };
 }
 
 // ── "Pay at reception" action ────────────────────────────────
@@ -262,6 +378,15 @@ export async function createStudentPurchaseAction(
 
   if (result.success && result.subscriptionId) {
     const { user, product, assignedTermName } = prepared;
+    // Use the FROZEN pricing for the email/notification body, not the
+    // raw product.priceCents — otherwise discounted purchases were
+    // emailed with the base catalog price (Bug 2).
+    const pricing = result.pricing;
+    const finalCents = pricing?.finalPriceCents ?? product.priceCents ?? null;
+    const summary = (pricing?.appliedDiscounts ?? [])
+      .map((d) => d.name || d.reason || d.ruleType)
+      .filter(Boolean)
+      .join(" + ");
     await dispatchCommEvents([
       paymentPendingEvent({
         studentId: user.id,
@@ -269,10 +394,11 @@ export async function createStudentPurchaseAction(
         productName: product.name,
         subscriptionId: result.subscriptionId,
         termName: assignedTermName,
-        amountLabel:
-          product.priceCents != null
-            ? `€${(product.priceCents / 100).toFixed(2)}`
-            : null,
+        amountLabel: finalCents != null ? `€${(finalCents / 100).toFixed(2)}` : null,
+        originalPriceCents: pricing?.basePriceCents ?? null,
+        discountAmountCents: pricing?.totalDiscountCents ?? null,
+        finalPriceCents: pricing?.finalPriceCents ?? null,
+        appliedDiscountSummary: summary || null,
       }),
     ]);
     revalidatePath("/catalog");

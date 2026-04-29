@@ -6,6 +6,10 @@
  */
 
 import type { TermStatus } from "@/types/domain";
+import {
+  DEFAULT_BEGINNER_LEVEL_NAMES,
+  isBeginnerLevelName,
+} from "@/config/class-levels";
 
 export interface TermLike {
   id?: string;
@@ -82,26 +86,32 @@ export function getTermWeekNumber(
 
 /**
  * Returns true when a class level suggests term enforcement by default.
- * Beginner 1 and Beginner 2 courses default to enforced, but any class
- * can be term-linked/enforced via admin controls.  Used as a UI default
- * suggestion — NOT as an enforcement gate.
+ * Beginner courses default to enforced, but any class can be term-linked/
+ * enforced via admin controls. Used as a UI default suggestion — NOT as an
+ * enforcement gate.
+ *
+ * Phase 2B: `beginnerLevels` defaults to the static list, but server
+ * callers should pass `getSettings().beginnerLevelNames` to honour admin
+ * configuration.
  */
-export function isTermBoundLevel(level: string | null): boolean {
-  if (!level) return false;
-  const l = level.trim();
-  return l.startsWith("Beginner 1") || l.startsWith("Beginner 2");
+export function isTermBoundLevel(
+  level: string | null,
+  beginnerLevels: readonly string[] = DEFAULT_BEGINNER_LEVEL_NAMES,
+): boolean {
+  return isBeginnerLevelName(level, beginnerLevels);
 }
 
 /**
- * Whether this level is a beginner course (Beginner 1 or Beginner 2).
- * Returns a positive number for beginner levels, 0 otherwise.
- * Both Beginner 1 and Beginner 2 share the same late-entry policy
- * controlled by the `adminLateEntryMaxClassNumber` setting.
+ * Whether this level is a beginner course. Returns a positive number for
+ * beginner levels, 0 otherwise. All configured beginner levels share the
+ * same late-entry policy controlled by the `adminLateEntryMaxClassNumber`
+ * setting.
  */
-export function beginnerMaxEntryWeek(level: string | null): number {
-  if (!level) return 0;
-  if (level.startsWith("Beginner 1") || level.startsWith("Beginner 2")) return 1;
-  return 0;
+export function beginnerMaxEntryWeek(
+  level: string | null,
+  beginnerLevels: readonly string[] = DEFAULT_BEGINNER_LEVEL_NAMES,
+): number {
+  return isBeginnerLevelName(level, beginnerLevels) ? 1 : 0;
 }
 
 /**
@@ -111,19 +121,23 @@ export function beginnerMaxEntryWeek(level: string | null): number {
 export function isBeginnerEntryWeek(
   level: string | null,
   date: string,
-  term: { startDate: string }
+  term: { startDate: string },
+  beginnerLevels: readonly string[] = DEFAULT_BEGINNER_LEVEL_NAMES,
 ): boolean {
-  const maxWeek = beginnerMaxEntryWeek(level);
+  const maxWeek = beginnerMaxEntryWeek(level, beginnerLevels);
   if (maxWeek === 0) return true;
   const week = getTermWeekNumber(date, term);
   return week <= maxWeek;
 }
 
 /**
- * Whether a level is a beginner-entry class (Beginner 1 or Beginner 2).
+ * Whether a level is a beginner-entry class.
  */
-export function isBeginnerEntryClass(level: string | null): boolean {
-  return beginnerMaxEntryWeek(level) > 0;
+export function isBeginnerEntryClass(
+  level: string | null,
+  beginnerLevels: readonly string[] = DEFAULT_BEGINNER_LEVEL_NAMES,
+): boolean {
+  return beginnerMaxEntryWeek(level, beginnerLevels) > 0;
 }
 
 /**

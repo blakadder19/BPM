@@ -1,8 +1,8 @@
-import { requireRole } from "@/lib/auth";
+import { getStaffAccess, hasPermission, requirePermission } from "@/lib/staff-permissions";
 import { getSettings } from "@/lib/services/settings-store";
 import { DANCE_STYLES } from "@/lib/mock-data";
 import { SettingsForm, type SupabaseStatus } from "@/components/settings/settings-form";
-import { AdminsSection } from "@/components/settings/admins-section";
+import { StaffAccessCard } from "@/components/settings/staff-access-card";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 async function probeSupabaseStatus(): Promise<SupabaseStatus> {
@@ -29,13 +29,19 @@ async function probeSupabaseStatus(): Promise<SupabaseStatus> {
 }
 
 export default async function SettingsPage() {
-  await requireRole(["admin"]);
+  await requirePermission("settings:view");
 
   const settings = getSettings();
   const allStyles = DANCE_STYLES.map((s) => ({ id: s.id, name: s.name }));
   const supabaseStatus = await probeSupabaseStatus();
 
   const isDev = process.env.NODE_ENV === "development";
+
+  // Show the "Staff access" pointer card only to users who can also
+  // see /staff. Computing this server-side keeps the client component
+  // free of any permission logic — it just receives a plain boolean.
+  const access = await getStaffAccess();
+  const canSeeStaffAccessCard = hasPermission(access, "staff:view");
 
   return (
     <div className="space-y-6">
@@ -45,7 +51,7 @@ export default async function SettingsPage() {
         supabaseStatus={supabaseStatus}
         isDev={isDev}
       />
-      <AdminsSection />
+      {canSeeStaffAccessCard && <StaffAccessCard />}
     </div>
   );
 }

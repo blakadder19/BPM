@@ -448,6 +448,7 @@ function rowToAuditEntry(r: Record<string, unknown>): FinanceAuditEntry {
     detail: (r.detail as string) ?? null,
     previousValue: (r.previous_value as string) ?? null,
     newValue: (r.new_value as string) ?? null,
+    metadata: (r.metadata as Record<string, unknown> | null) ?? null,
     createdAt: str(r.created_at, new Date().toISOString()),
   };
 }
@@ -466,6 +467,7 @@ function auditEntryToRow(e: FinanceAuditEntry) {
     detail: e.detail,
     previous_value: e.previousValue,
     new_value: e.newValue,
+    metadata: e.metadata,
     created_at: e.createdAt,
   };
 }

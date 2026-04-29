@@ -11,6 +11,12 @@ import type { ProductAccessRule } from "@/config/product-access";
 import { generateId } from "@/lib/utils";
 import type { ClassType, ProductType, SubscriptionStatus, TxType } from "@/types/domain";
 
+/**
+ * Optional runtime override for the credit-deduction priority order.
+ * Server callers wire this to `getSettings().creditDeductionPriority`.
+ */
+export type CreditPriorityOverride = ProductType[] | undefined;
+
 // ── Store types ─────────────────────────────────────────────
 
 export interface StoredSubscription {
@@ -85,6 +91,8 @@ export class CreditService {
     level: string | null;
     className: string;
     accessRules?: Map<string, ProductAccessRule>;
+    /** Phase 2B: runtime priority override (settings.creditDeductionPriority). */
+    deductionPriority?: CreditPriorityOverride;
   }): CreditDeductionResult {
     const studentSubs = this.subscriptions.filter(
       (s) => s.studentId === params.studentId && s.status === "active"
@@ -112,7 +120,8 @@ export class CreditService {
         danceStyleId: params.danceStyleId,
         level: params.level,
       },
-      params.accessRules
+      params.accessRules,
+      params.deductionPriority,
     );
 
     if (!chosen) {

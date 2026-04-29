@@ -5,13 +5,10 @@
 
 import { CreditService, type StoredSubscription, type StoredWalletTx } from "./credit-service";
 import { SUBSCRIPTIONS, WALLET_TRANSACTIONS } from "@/lib/mock-data";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
+import { isSupabaseMode } from "@/lib/config/data-provider";
 
 function buildSubscriptions(): StoredSubscription[] {
-  if (hasSupabaseConfig()) return [];
+  if (isSupabaseMode()) return [];
   return SUBSCRIPTIONS.map((s) => ({
     id: s.id,
     studentId: s.studentId,
@@ -29,7 +26,7 @@ function buildSubscriptions(): StoredSubscription[] {
 }
 
 function buildWalletTxs(): StoredWalletTx[] {
-  if (hasSupabaseConfig()) return [];
+  if (isSupabaseMode()) return [];
   return WALLET_TRANSACTIONS.map((tx) => ({
     id: tx.id,
     studentId: tx.studentId,

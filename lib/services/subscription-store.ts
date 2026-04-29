@@ -1,15 +1,22 @@
 /**
  * Mutable in-memory subscription store.
- * When Supabase is configured, starts empty — hydration fills real data.
+ *
+ * Seeding decision is keyed off the active data provider (DATA_PROVIDER),
+ * NOT the mere presence of Supabase env vars. The repo factory routes
+ * directly to memorySubscriptionRepo when DATA_PROVIDER=memory (no hybrid
+ * layer for subscriptions), so in memory mode this store MUST be seeded
+ * from SUBSCRIPTIONS even when Supabase env vars are also present.
+ *
+ * In supabase mode the store stays empty — the factory routes to
+ * supabaseSubscriptionRepo and the memory store is unused.
  */
 
 import { SUBSCRIPTIONS, type MockSubscription } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
+import { isSupabaseMode } from "@/lib/config/data-provider";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
+import type { SubscriptionProductSnapshot } from "@/lib/domain/subscription-snapshot";
+import type { AppliedDiscountSnapshot } from "@/lib/domain/pricing-engine";
 
 const g = globalThis as unknown as {
   __bpm_subs?: MockSubscription[];
@@ -17,7 +24,7 @@ const g = globalThis as unknown as {
 
 function init(): MockSubscription[] {
   if (!g.__bpm_subs) {
-    g.__bpm_subs = hasSupabaseConfig() ? [] : SUBSCRIPTIONS.map((s) => ({ ...s }));
+    g.__bpm_subs = isSupabaseMode() ? [] : SUBSCRIPTIONS.map((s) => ({ ...s }));
   }
   return g.__bpm_subs;
 }
@@ -60,6 +67,10 @@ export function createSubscription(data: {
   collectedBy?: string | null;
   priceCentsAtPurchase?: number | null;
   currencyAtPurchase?: string;
+  productSnapshot?: SubscriptionProductSnapshot | null;
+  originalPriceCents?: number | null;
+  discountAmountCents?: number;
+  appliedDiscount?: AppliedDiscountSnapshot | null;
 }): MockSubscription {
   const list = init();
   const sub: MockSubscription = {
@@ -96,6 +107,10 @@ export function createSubscription(data: {
     refundedAt: null,
     refundedBy: null,
     refundReason: null,
+    productSnapshot: data.productSnapshot ?? null,
+    originalPriceCents: data.originalPriceCents ?? null,
+    discountAmountCents: data.discountAmountCents ?? 0,
+    appliedDiscount: data.appliedDiscount ?? null,
   };
   list.push(sub);
   return sub;

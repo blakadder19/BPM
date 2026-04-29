@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
+import { requirePermissionForAction } from "@/lib/staff-permissions";
+import type { Permission } from "@/lib/domain/permissions";
 import { getStudentRepo, getSubscriptionRepo, getTermRepo, getProductRepo, getSpecialEventRepo } from "@/lib/repositories";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
@@ -14,6 +16,14 @@ import { isRealUser } from "@/lib/utils/is-real-user";
 import { isCheckableStatus } from "@/lib/domain/checkin-rules";
 import { isEntitlementValidForClass, diagnoseNoEntitlement } from "@/lib/domain/entitlement-rules";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
+import { resolveAccessRuleForSubscription } from "@/lib/domain/subscription-snapshot";
+import { buildSnapshotFromProduct } from "@/lib/services/subscription-snapshot-service";
+import {
+  priceProductForStudent,
+  buildAuditDiscountMetadata,
+  releaseDiscountClaim,
+  attachClaimRelations,
+} from "@/lib/services/pricing-service";
 import { createSubscription, updateSubscription } from "@/lib/services/subscription-service";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
@@ -22,6 +32,24 @@ import type { CheckInMethod, DanceRole } from "@/types/domain";
 
 function qrPerformer(user: AuthUser) {
   return { userId: user.id, email: user.email, name: user.fullName };
+}
+
+/**
+ * Permission-aware auth guard for QR/check-in actions.
+ *
+ * Replaces the previous inline `user.role !== "admin" && user.role !== "teacher"`
+ * checks with the new permission system so a Front Desk role gets only
+ * the operations the Super Admin enabled (typical: scan + manual_checkin
+ * + mark_paid_reception) without inheriting unrelated admin powers.
+ *
+ * Returns a discriminated union the call sites can forward verbatim.
+ */
+async function requireQrPermission(
+  perm: Permission,
+): Promise<{ ok: true; user: AuthUser } | { ok: false; error: string }> {
+  const guard = await requirePermissionForAction(perm);
+  if (!guard.ok) return { ok: false, error: guard.error };
+  return { ok: true, user: guard.access.user };
 }
 
 /**
@@ -287,6 +315,9 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
       productType: p.productType,
       allowedLevels: p.allowedLevels ?? null,
       allowedStyleIds: p.allowedStyleIds ?? null,
+      styleAccessMode: p.styleAccessMode ?? null,
+      styleAccessPickCount: p.styleAccessPickCount ?? null,
+      allowedClassTypes: p.allowedClassTypes ?? null,
     })),
     danceStyles,
   );
@@ -308,7 +339,10 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
     let matchedSub: typeof studentSubs[number] | null = null;
     for (const sub of studentSubs) {
       if (sub.status !== "active") continue;
-      const rule = accessRulesMap.get(sub.productId);
+      // Phase 1: prefer the frozen-at-purchase snapshot when present so
+      // post-sale admin edits to the live product cannot unlock or revoke
+      // entitlement at check-in. Falls back to the live rule for legacy subs.
+      const rule = resolveAccessRuleForSubscription(sub, accessRulesMap);
       if (isEntitlementValidForClass(sub, classCtx, allTerms, rule)) {
         matchedSub = sub;
         break;
@@ -387,10 +421,8 @@ export async function lookupStudentByQr(token: string): Promise<QrLookupResult> 
 }
 
 export async function lookupStudentByQrAction(token: string): Promise<QrLookupResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
 
   return lookupStudentByQr(token);
 }
@@ -400,10 +432,8 @@ export async function lookupStudentByQrAction(token: string): Promise<QrLookupRe
  * which receives a resolved result but not the original QR token).
  */
 export async function lookupStudentByIdAction(studentId: string): Promise<QrLookupResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
 
   await ensureOperationalDataHydrated();
   const students = await getStudentRepo().getAll();
@@ -421,10 +451,9 @@ export interface QrCheckInResult {
 }
 
 export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheckInResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("checkin:manual_checkin");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.user;
 
   await ensureOperationalDataHydrated();
 
@@ -502,10 +531,9 @@ export async function qrWalkInCheckInAction(
   classId: string,
   subscriptionId: string,
 ): Promise<QrCheckInResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("checkin:manual_checkin");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.user;
 
   await ensureOperationalDataHydrated();
 
@@ -580,10 +608,9 @@ export async function qrMarkPaidAndCheckInAction(
   subscriptionId: string,
   paymentMethod: "cash" | "revolut" = "cash",
 ): Promise<QrCheckInResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("payments:mark_paid_reception");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.user;
 
   await ensureOperationalDataHydrated();
 
@@ -624,10 +651,9 @@ export async function qrMarkPaidAndWalkInAction(
   subscriptionId: string,
   paymentMethod: "cash" | "revolut" = "cash",
 ): Promise<QrCheckInResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("payments:mark_paid_reception");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.user;
 
   await ensureOperationalDataHydrated();
 
@@ -663,10 +689,9 @@ export async function qrMarkSubscriptionPaidAction(
   subscriptionId: string,
   paymentMethod: "cash" | "revolut" = "cash",
 ): Promise<{ success: boolean; error?: string }> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("payments:mark_paid_reception");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.user;
 
   await ensureOperationalDataHydrated();
 
@@ -707,10 +732,9 @@ export async function qrSellDropInAndCheckInAction(
   studentId: string,
   classId: string,
 ): Promise<QrCheckInResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("payments:mark_paid_reception");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.user;
 
   await ensureOperationalDataHydrated();
 
@@ -721,6 +745,18 @@ export async function qrSellDropInAndCheckInAction(
   }
 
   const today = getTodayStr();
+  // Phase 1: snapshot the drop-in product/rule state at the moment of sale
+  // so a later admin edit (e.g. narrowing allowedStyleIds) cannot retroactively
+  // invalidate this drop-in at check-in time.
+  const productSnapshot = await buildSnapshotFromProduct(dropInProduct);
+  // Phase 4 hardening: commit-mode pricing — the QR drop-in sale is
+  // effectively the moment of charge, so any first-time-purchase rule
+  // must be atomically claimed here.
+  const pricing = await priceProductForStudent({
+    studentId,
+    product: { id: dropInProduct.id, productType: "drop_in", priceCents: dropInProduct.priceCents },
+    commit: { source: "qr_dropin" },
+  });
   const subResult = await createSubscription({
     studentId,
     productId: dropInProduct.id,
@@ -740,14 +776,26 @@ export async function qrSellDropInAndCheckInAction(
     autoRenew: false,
     classesUsed: 0,
     classesPerTerm: null,
-    priceCentsAtPurchase: dropInProduct.priceCents,
+    priceCentsAtPurchase: pricing.finalPriceCents,
     currencyAtPurchase: "EUR",
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
     collectedBy: user.fullName,
+    productSnapshot,
+    originalPriceCents: pricing.basePriceCents,
+    discountAmountCents: pricing.totalDiscountCents,
+    appliedDiscount: pricing.snapshot,
   });
 
   if (!subResult.success || !subResult.subscriptionId) {
+    if (pricing.claim) {
+      // Atomic claim was granted but the subscription insert failed —
+      // release so the student can retry without losing first-time.
+      await releaseDiscountClaim(
+        pricing.claim.id,
+        "qr_dropin_subscription_create_failed",
+      );
+    }
     return { success: false, error: subResult.error ?? "Failed to create drop-in subscription" };
   }
 
@@ -756,9 +804,18 @@ export async function qrSellDropInAndCheckInAction(
     entityId: subResult.subscriptionId,
     action: "created",
     performer: qrPerformer(user),
-    detail: `Drop-in sold via QR — ${dropInProduct.name}`,
+    detail: pricing.snapshot
+      ? `Drop-in sold via QR — ${dropInProduct.name} with ${pricing.appliedDiscounts.length} discount(s)`
+      : `Drop-in sold via QR — ${dropInProduct.name}`,
     newValue: "paid",
+    metadata: buildAuditDiscountMetadata(pricing),
   });
+
+  if (pricing.claim) {
+    await attachClaimRelations(pricing.claim.id, {
+      relatedSubscriptionId: subResult.subscriptionId,
+    });
+  }
 
   return qrWalkInCheckInAction(studentId, classId, subResult.subscriptionId);
 }
@@ -786,10 +843,8 @@ export interface GuestPurchaseQrResult {
 }
 
 export async function lookupGuestPurchaseByQrAction(token: string): Promise<GuestPurchaseQrResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Not authorized" };
-  }
+  const guard = await requireQrPermission("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
 
   const { isValidGuestPurchaseQrToken } = await import("@/lib/domain/checkin-token");
   if (!token || !isValidGuestPurchaseQrToken(token)) {

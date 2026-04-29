@@ -8,15 +8,12 @@ import {
   type StoredAttendance,
 } from "./attendance-service";
 import { ATTENDANCE } from "@/lib/mock-data";
+import { isSupabaseMode } from "@/lib/config/data-provider";
 
 const STORE_VERSION = 3;
 
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
-
 function buildRecords(): StoredAttendance[] {
-  if (hasSupabaseConfig()) return [];
+  if (isSupabaseMode()) return [];
   return ATTENDANCE.map((a) => ({
     id: a.id,
     bookableClassId: a.bookableClassId,

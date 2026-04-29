@@ -3,6 +3,8 @@ import type { MockSubscription } from "@/lib/mock-data";
 import type { Database } from "@/types/database";
 import type { PaymentMethod, ProductType, SubscriptionStatus } from "@/types/domain";
 import type { ISubscriptionRepository, CreateSubscriptionData, SubscriptionPatch } from "../interfaces/subscription-repository";
+import type { SubscriptionProductSnapshot } from "@/lib/domain/subscription-snapshot";
+import type { AppliedDiscountSnapshot } from "@/lib/domain/pricing-engine";
 
 type SubRow = Database["public"]["Tables"]["student_subscriptions"]["Row"];
 
@@ -41,6 +43,10 @@ function toMockSubscription(row: SubRow): MockSubscription {
     refundedAt: row.refunded_at,
     refundedBy: row.refunded_by,
     refundReason: row.refund_reason,
+    productSnapshot: (row.product_snapshot as SubscriptionProductSnapshot | null) ?? null,
+    originalPriceCents: row.original_price_cents ?? null,
+    discountAmountCents: row.discount_amount_cents ?? 0,
+    appliedDiscount: (row.applied_discount as AppliedDiscountSnapshot | null) ?? null,
   };
 }
 
@@ -124,6 +130,10 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
         collected_by: input.collectedBy ?? null,
         price_cents_at_purchase: input.priceCentsAtPurchase ?? null,
         currency_at_purchase: input.currencyAtPurchase ?? "EUR",
+        product_snapshot: input.productSnapshot ?? null,
+        original_price_cents: input.originalPriceCents ?? null,
+        discount_amount_cents: input.discountAmountCents ?? 0,
+        applied_discount: input.appliedDiscount ?? null,
       } as never)
       .select("*, products(name, product_type)")
       .single();

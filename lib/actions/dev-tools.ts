@@ -20,6 +20,7 @@ import type { DanceRole } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveWaitlistToDB, deleteWaitlistFromDB, savePenaltyToDB, updatePenaltyInDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { buildSnapshotFromProduct } from "@/lib/services/subscription-snapshot-service";
 
 function guardDev() {
   if (process.env.NODE_ENV !== "development") {
@@ -112,7 +113,7 @@ export async function devGetProducts(): Promise<
 > {
   guardDev();
   const products = await getProductRepo().getAll();
-  return products.filter((p) => p.isActive).map((p) => ({
+  return products.filter((p) => p.isActive && !p.archivedAt).map((p) => ({
     id: p.id,
     name: p.name,
     productType: p.productType,
@@ -168,6 +169,10 @@ export async function devAssignProduct(
   const todayStr = new Date().toISOString().slice(0, 10);
   const activeTerm = terms.find((t) => deriveTermStatus(t, todayStr) === "active");
 
+  // Phase 1: snapshot live product state so dev-assigned subs behave the
+  // same as real-purchase subs under product edits.
+  const productSnapshot = await buildSnapshotFromProduct(product);
+
   const result = await createSubscription({
     studentId,
     productId: product.id,
@@ -189,6 +194,7 @@ export async function devAssignProduct(
     classesPerTerm: product.classesPerTerm,
     priceCentsAtPurchase: product.priceCents,
     currencyAtPurchase: "EUR",
+    productSnapshot,
   });
 
   revalidateAll();

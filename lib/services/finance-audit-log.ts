@@ -45,6 +45,11 @@ export interface FinanceAuditEntry {
   detail: string | null;
   previousValue: string | null;
   newValue: string | null;
+  /**
+   * Phase 4: structured event metadata (e.g. applied discount snapshot).
+   * NULL when an event has no structured payload.
+   */
+  metadata: Record<string, unknown> | null;
   createdAt: string;
 }
 
@@ -87,6 +92,7 @@ export function logFinanceEvent(params: {
   detail?: string | null;
   previousValue?: string | null;
   newValue?: string | null;
+  metadata?: Record<string, unknown> | null;
 }): FinanceAuditEntry {
   const now = new Date().toISOString();
   const performer = params.performer ?? null;
@@ -105,6 +111,7 @@ export function logFinanceEvent(params: {
     detail: params.detail ?? null,
     previousValue: params.previousValue ?? null,
     newValue: params.newValue ?? null,
+    metadata: params.metadata ?? null,
     createdAt: now,
   };
   store().push(entry);

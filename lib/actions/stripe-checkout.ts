@@ -1,5 +1,26 @@
 "use server";
 
+/**
+ * Stripe checkout server actions.
+ *
+ * SOURCE-OF-TRUTH INVARIANT:
+ *   BPM calculates, Stripe charges, webhook persists the frozen result.
+ *
+ * Concretely:
+ *   - `createStripeCheckoutAction` calls priceProductForStudent in COMMIT
+ *     mode so any first-time claim is atomically recorded. The session
+ *     is then created with `unit_amount = pricing.finalPriceCents` and
+ *     the compact frozen snapshot is sent through session metadata.
+ *   - `payPendingSubscriptionAction` charges `sub.priceCentsAtPurchase`
+ *     verbatim — it never re-prices, never reads `product.priceCents`.
+ *   - `fulfillStripeCheckout` rehydrates the frozen snapshot from
+ *     metadata and hands it to `createPurchaseSubscription` so the
+ *     persisted row matches what Stripe actually charged.
+ *
+ * Do NOT introduce a parallel pricing path here. All pricing decisions
+ * must come from `priceProductForStudent` / `previewPricingForStudent`.
+ */
+
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
@@ -10,6 +31,13 @@ import {
   type PreparedPurchase,
 } from "./catalog-purchase";
 import { getProductRepo, getSubscriptionRepo } from "@/lib/repositories";
+import {
+  priceProductForStudent,
+  serializePricingForStripe,
+  deserializePricingFromStripe,
+  releaseDiscountClaim,
+  attachClaimRelations,
+} from "@/lib/services/pricing-service";
 
 /**
  * Resolve the app's base URL from the incoming request headers.
@@ -49,6 +77,25 @@ export async function createStripeCheckoutAction(
 
   const appUrl = await resolveAppUrl();
 
+  // Phase 4 hardening: pre-compute the discount engine in COMMIT mode.
+  // If a first-time-purchase rule applies, the atomic claim is recorded
+  // BEFORE the Stripe session URL is returned to the student. The same
+  // metadata then drives webhook fulfillment, so charged amount and
+  // recorded amount remain in lockstep across the whole flow.
+  const pricing = await priceProductForStudent({
+    studentId: user.id,
+    product: { id: product.id, productType: product.productType, priceCents: product.priceCents },
+    commit: { source: "stripe_checkout" },
+  });
+  const pricingTransit = serializePricingForStripe(pricing);
+  const lineDescriptionBase =
+    assignedTermName
+      ? `${product.description ?? product.name} — ${assignedTermName}`
+      : (product.description ?? product.name);
+  const lineDescription = pricing.snapshot
+    ? `${lineDescriptionBase} (discounts applied: ${pricing.appliedDiscounts.map((a) => a.code).join(", ")})`
+    : lineDescriptionBase;
+
   try {
     const stripe = getStripe();
 
@@ -62,12 +109,9 @@ export async function createStripeCheckoutAction(
             currency: "eur",
             product_data: {
               name: product.name,
-              description:
-                assignedTermName
-                  ? `${product.description ?? product.name} — ${assignedTermName}`
-                  : (product.description ?? product.name),
+              description: lineDescription,
             },
-            unit_amount: product.priceCents,
+            unit_amount: pricing.finalPriceCents,
           },
           quantity: 1,
         },
@@ -88,10 +132,26 @@ export async function createStripeCheckoutAction(
         bpm_selected_style_names: prepared.selectedStyleNames
           ? JSON.stringify(prepared.selectedStyleNames)
           : "",
+        bpm_original_price_cents: String(pricing.basePriceCents),
+        bpm_discount_amount_cents: String(pricing.totalDiscountCents),
+        bpm_final_price_cents: String(pricing.finalPriceCents),
+        bpm_applied_discount_codes: pricing.appliedDiscounts.map((a) => a.code).join(",") || "",
+        // Compact frozen-pricing transit (≤500 chars). Read at fulfillment
+        // to avoid re-evaluating mutable rule state.
+        bpm_pricing_snapshot: pricingTransit ?? "",
+        // Atomic first-time claim id (if any), so fulfillment can attach
+        // the resulting subscription id for audit traceability.
+        bpm_first_time_claim_id: pricing.claim?.id ?? "",
       },
       success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/checkout/cancel`,
     });
+
+    if (pricing.claim && session.id) {
+      await attachClaimRelations(pricing.claim.id, {
+        relatedSessionId: session.id,
+      });
+    }
 
     return { success: true, url: session.url ?? undefined };
   } catch (e) {
@@ -99,6 +159,17 @@ export async function createStripeCheckoutAction(
       "[stripe-checkout] Session creation failed:",
       e instanceof Error ? e.message : e,
     );
+    // Stripe session creation crashed AFTER the atomic claim was
+    // recorded — release so the student can retry. (Only applies when
+    // Stripe.checkout.sessions.create itself threw; a successful return
+    // followed by the user abandoning the URL leaves the claim in
+    // place, which is intentional — see migration 00057 docstring.)
+    if (pricing.claim) {
+      await releaseDiscountClaim(
+        pricing.claim.id,
+        "stripe_session_create_threw",
+      );
+    }
     return {
       success: false,
       error: "Could not start online payment. Please try again or pay at reception.",
@@ -133,6 +204,13 @@ export async function payPendingSubscriptionAction(
 
   const appUrl = await resolveAppUrl();
 
+  // Phase 4 hardening: the subscription row already has the correct
+  // price-at-purchase frozen at creation time (incl. any discount that was
+  // applied via priceProductForStudent). We MUST charge exactly that
+  // amount, NOT the live product.priceCents — otherwise discounted pending
+  // subs get billed at full price.
+  const chargeCents = sub.priceCentsAtPurchase ?? product.priceCents;
+
   try {
     const stripe = getStripe();
 
@@ -150,7 +228,7 @@ export async function payPendingSubscriptionAction(
                 ? `Payment for existing plan — ${sub.productName}`
                 : sub.productName,
             },
-            unit_amount: product.priceCents,
+            unit_amount: chargeCents,
           },
           quantity: 1,
         },
@@ -260,15 +338,65 @@ export async function fulfillStripeCheckout(
     autoRenew: autoRenewMeta === "true" ? true : autoRenewMeta === "false" ? false : product.autoRenew,
   };
 
-  const result = await createPurchaseSubscription(prepared, {
-    method: "stripe",
-    status: "paid",
-    paidAt: new Date().toISOString(),
-    reference: `stripe:${sessionId}`,
-    notes: "Paid online via Stripe",
-  });
+  // Phase 4 hardening: rehydrate the frozen pricing computed at session
+  // creation. If we have it, we pass it through to the subscription
+  // creation path so the row is written with exactly the discount state
+  // the student saw — preventing drift from rule edits or first-time
+  // races between session creation and webhook callback.
+  let frozenPricing = undefined;
+  const transit = metadata.bpm_pricing_snapshot;
+  if (transit) {
+    const restored = await deserializePricingFromStripe(transit);
+    if (restored) {
+      frozenPricing = restored;
+    } else {
+      console.warn(
+        `[stripe-fulfill] session=${sessionId} bpm_pricing_snapshot present but unparsable — falling back to live engine.`,
+      );
+    }
+  } else if (metadata.bpm_discount_amount_cents && metadata.bpm_discount_amount_cents !== "0") {
+    // Legacy session that pre-dates the snapshot transit field but recorded a
+    // discount via the older flat metadata fields. Synthesize a no-snapshot
+    // frozen pricing so the charged amount is preserved verbatim, and warn.
+    console.warn(
+      `[stripe-fulfill] session=${sessionId} legacy discount metadata without snapshot — preserving charged amount but skipping rule snapshot.`,
+    );
+    const finalCents = Number(metadata.bpm_final_price_cents ?? 0);
+    const baseCents = Number(metadata.bpm_original_price_cents ?? 0);
+    const discountCents = Number(metadata.bpm_discount_amount_cents ?? 0);
+    if (finalCents > 0 && baseCents > 0) {
+      frozenPricing = {
+        basePriceCents: baseCents,
+        totalDiscountCents: discountCents,
+        finalPriceCents: finalCents,
+        appliedDiscounts: [],
+        snapshot: null,
+      };
+    }
+  }
+
+  const result = await createPurchaseSubscription(
+    prepared,
+    {
+      method: "stripe",
+      status: "paid",
+      paidAt: new Date().toISOString(),
+      reference: `stripe:${sessionId}`,
+      notes: "Paid online via Stripe",
+    },
+    frozenPricing,
+  );
 
   if (result.success) {
+    // Phase 4 hardening: attach the atomic first-time claim (recorded
+    // at session creation) to the now-known subscription id so audit
+    // can follow the chain claim → session → subscription.
+    const claimId = metadata.bpm_first_time_claim_id;
+    if (claimId && result.subscriptionId) {
+      await attachClaimRelations(claimId, {
+        relatedSubscriptionId: result.subscriptionId,
+      });
+    }
     revalidatePath("/catalog");
     revalidatePath("/dashboard");
     revalidatePath("/classes");

@@ -33,8 +33,16 @@ export async function getFinanceData(): Promise<FinanceData> {
     allStudents.map((s) => [s.id, { name: s.fullName, email: s.email }]),
   );
 
+  // Identity map used to resolve performer ids (student or admin) to a
+  // human-readable name for the Finance "BY" column. Self-purchase rows
+  // store the student id; admin manual / qr-checkin paths now store the
+  // admin's full name directly so they don't need a separate lookup.
+  // For backward compatibility, leave the resolver as a passthrough on
+  // unknown values.
+  const identityMap = new Map(studentNameMap);
+
   // Subscriptions → transactions (uses snapshot amounts, not current product prices)
-  const subTx = buildSubscriptionTransactions(allSubs, studentNameMap);
+  const subTx = buildSubscriptionTransactions(allSubs, studentNameMap, identityMap);
 
   // Event purchases → transactions
   let eventTx: FinanceTransaction[] = [];

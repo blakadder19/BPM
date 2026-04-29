@@ -77,6 +77,26 @@ interface AttendanceSlice {
   status: "present" | "absent" | "late" | "excused";
 }
 
+/**
+ * Lightweight affiliation slice used by the student detail panel.
+ *
+ * Only the fields the panel renders are included — keep this list tight
+ * so the /students payload stays small for academies with many
+ * affiliations.
+ */
+export interface AffiliationSummary {
+  id: string;
+  studentId: string;
+  affiliationType: string;
+  verificationStatus: string;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
 interface AdminStudentsProps {
   students: StudentListItem[];
   subscriptions: MockSubscription[];
@@ -88,6 +108,7 @@ interface AdminStudentsProps {
   penalties: MockPenalty[];
   eventPurchases?: MockEventPurchase[];
   attendanceRecords?: AttendanceSlice[];
+  affiliations?: AffiliationSummary[];
   initialSearch?: string;
   birthdayUsedStudentIds?: string[];
   birthdayRedemptions?: Record<string, { classTitle?: string; classDate?: string }>;
@@ -104,6 +125,7 @@ export function AdminStudents({
   penalties,
   eventPurchases,
   attendanceRecords,
+  affiliations = [],
   initialSearch,
   birthdayUsedStudentIds = [],
   birthdayRedemptions = {},
@@ -373,6 +395,7 @@ export function AdminStudents({
                     penalties={penalties}
                     eventPurchases={eventPurchases}
                     attendanceRecords={attendanceRecords}
+                    affiliations={affiliations.filter((a) => a.studentId === s.id)}
                     benefits={computeMemberBenefits({
                       dateOfBirth: s.dateOfBirth,
                       referenceDate: new Date().toISOString().slice(0, 10),

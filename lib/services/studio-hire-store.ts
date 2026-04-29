@@ -8,18 +8,12 @@ import {
   StudioHireService,
   type StoredStudioHire,
 } from "./studio-hire-service";
+import { isSupabaseMode } from "@/lib/config/data-provider";
 
 const STORE_VERSION = 1;
 
-function hasSupabaseConfig(): boolean {
-  return !!(
-    process.env.NEXT_PUBLIC_SUPABASE_URL &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-}
-
 function buildEntries(): StoredStudioHire[] {
-  if (hasSupabaseConfig()) return [];
+  if (isSupabaseMode()) return [];
 
   const now = new Date().toISOString();
   return [

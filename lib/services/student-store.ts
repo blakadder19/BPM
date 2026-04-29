@@ -7,11 +7,8 @@
 import { STUDENTS, type MockStudent } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 import { generateStudentQrToken } from "@/lib/domain/checkin-token";
+import { isSupabaseMode } from "@/lib/config/data-provider";
 import type { DanceRole } from "@/types/domain";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
 
 const g = globalThis as unknown as {
   __bpm_students?: MockStudent[];
@@ -19,7 +16,7 @@ const g = globalThis as unknown as {
 
 function init(): MockStudent[] {
   if (!g.__bpm_students) {
-    g.__bpm_students = hasSupabaseConfig() ? [] : STUDENTS.map((s) => ({ ...s }));
+    g.__bpm_students = isSupabaseMode() ? [] : STUDENTS.map((s) => ({ ...s }));
   }
   return g.__bpm_students;
 }

@@ -1,8 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAcademyId } from "@/lib/supabase/academy";
-import type { MockProduct } from "@/lib/mock-data";
+import type { MockProduct, ProductPerks } from "@/lib/mock-data";
 import type { Database } from "@/types/database";
-import type { CreditsModel, ProductType } from "@/types/domain";
+import type { StyleAccessMode } from "@/lib/domain/subscription-snapshot";
+import type { ClassType, CreditsModel, ProductType } from "@/types/domain";
 import type { IProductRepository, CreateProductData, ProductPatch } from "../interfaces/product-repository";
 
 type ProductRow = Database["public"]["Tables"]["products"]["Row"];
@@ -32,6 +33,12 @@ function toMockProduct(row: ProductRow): MockProduct {
     autoRenew: row.auto_renew,
     benefits: row.benefits,
     spanTerms: row.span_terms ?? null,
+    perks: (row.perks as ProductPerks | null) ?? null,
+    styleAccessMode: (row.style_access_mode as StyleAccessMode | null) ?? null,
+    styleAccessPickCount: row.style_access_pick_count ?? null,
+    allowedClassTypes: (row.allowed_class_types as ClassType[] | null) ?? null,
+    stripePriceId: row.stripe_price_id ?? null,
+    archivedAt: row.archived_at ?? null,
   };
 }
 
@@ -84,6 +91,12 @@ export const supabaseProductRepo: IProductRepository = {
         auto_renew: input.autoRenew ?? false,
         benefits: input.benefits ?? null,
         span_terms: input.spanTerms ?? null,
+        perks: input.perks ?? null,
+        style_access_mode: input.styleAccessMode ?? null,
+        style_access_pick_count: input.styleAccessPickCount ?? null,
+        allowed_class_types: input.allowedClassTypes ?? null,
+        stripe_price_id: input.stripePriceId ?? null,
+        archived_at: input.archivedAt ?? null,
       } as never)
       .select()
       .single();
@@ -115,6 +128,12 @@ export const supabaseProductRepo: IProductRepository = {
     if (patch.isActive !== undefined) fields.is_active = patch.isActive;
     if (patch.spanTerms !== undefined) fields.span_terms = patch.spanTerms;
     if (patch.styleName !== undefined) fields.style_name = patch.styleName;
+    if (patch.perks !== undefined) fields.perks = patch.perks;
+    if (patch.styleAccessMode !== undefined) fields.style_access_mode = patch.styleAccessMode;
+    if (patch.styleAccessPickCount !== undefined) fields.style_access_pick_count = patch.styleAccessPickCount;
+    if (patch.allowedClassTypes !== undefined) fields.allowed_class_types = patch.allowedClassTypes;
+    if (patch.stripePriceId !== undefined) fields.stripe_price_id = patch.stripePriceId;
+    if (patch.archivedAt !== undefined) fields.archived_at = patch.archivedAt;
 
     if (Object.keys(fields).length === 0) return this.getById(id);
 

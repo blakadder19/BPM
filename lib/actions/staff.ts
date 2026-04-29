@@ -1,0 +1,342 @@
+"use server";
+
+/**
+ * Staff & Permissions server actions.
+ *
+ * SECURITY POSTURE
+ *   - Every action verifies the actor's permission server-side via
+ *     `requirePermissionForAction`. Hiding UI buttons is NOT enough.
+ *   - Last-super-admin protection: cannot disable, downgrade, or
+ *     remove permissions from the only remaining active super admin.
+ *   - Self-protection: cannot remove your own super-admin role.
+ *
+ * INVITE FLOW (MVP, copy-link only)
+ *   - Super admin creates an invite for an email + role + permissions.
+ *     The action returns the invite URL so the inviter can share it
+ *     manually (no email sending in this PR).
+ *   - When a Supabase user signs in matching that email, the invite is
+ *     accepted by `acceptStaffInviteOnSignInAction` (called from the
+ *     auth callback), which writes the role_key + permissions onto
+ *     their public.users row.
+ */
+
+import { revalidatePath } from "next/cache";
+import { getStaffRepo } from "@/lib/repositories";
+import {
+  isPermissionKey,
+  ROLE_PRESETS,
+  STAFF_ROLE_KEYS,
+  type Permission,
+  type StaffRoleKey,
+  type StaffStatus,
+} from "@/lib/domain/permissions";
+import {
+  requirePermissionForAction,
+  getStaffAccess,
+} from "@/lib/staff-permissions";
+
+interface ActionOk<T = void> {
+  success: true;
+  data?: T;
+}
+interface ActionErr {
+  success: false;
+  error: string;
+}
+type ActionResult<T = void> = ActionOk<T> | ActionErr;
+
+function normalizeEmail(input: string): string {
+  return (input ?? "").trim().toLowerCase();
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function sanitizePermissions(input: unknown): Permission[] {
+  if (!Array.isArray(input)) return [];
+  const out: Permission[] = [];
+  for (const v of input) {
+    if (typeof v === "string" && isPermissionKey(v)) out.push(v);
+  }
+  return out;
+}
+
+function isValidRoleKey(value: unknown): value is StaffRoleKey {
+  return (
+    typeof value === "string" &&
+    (STAFF_ROLE_KEYS as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Count remaining active super admins. Used by every code path that
+ * could possibly demote or disable the last one.
+ */
+async function countActiveSuperAdmins(): Promise<number> {
+  const all = await getStaffRepo().listStaff();
+  return all.filter(
+    (s) => s.roleKey === "super_admin" && s.status === "active",
+  ).length;
+}
+
+// ── Invite ─────────────────────────────────────────────────────
+
+export interface InviteStaffInput {
+  email: string;
+  displayName?: string | null;
+  roleKey: StaffRoleKey;
+  permissions: Permission[];
+}
+
+export interface InviteStaffResult {
+  inviteId: string;
+  inviteUrl: string;
+  email: string;
+}
+
+export async function inviteStaffAction(
+  input: InviteStaffInput,
+): Promise<ActionResult<InviteStaffResult>> {
+  const guard = await requirePermissionForAction("staff:invite");
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const email = normalizeEmail(input.email);
+  if (!isValidEmail(email)) {
+    return { success: false, error: "Enter a valid email address." };
+  }
+  if (!isValidRoleKey(input.roleKey)) {
+    return { success: false, error: "Invalid role." };
+  }
+
+  // Only super admins can mint other super admins.
+  if (input.roleKey === "super_admin" && !guard.access.isSuperAdmin) {
+    return {
+      success: false,
+      error: "Only a Super Admin can invite another Super Admin.",
+    };
+  }
+
+  const permissions = sanitizePermissions(input.permissions);
+
+  const repo = getStaffRepo();
+  // If the email already belongs to a staff member, prefer in-place
+  // update over creating a redundant invite.
+  const existing = await repo.getStaffByEmail(email);
+  if (existing) {
+    await repo.updateStaff(existing.id, {
+      roleKey: input.roleKey,
+      permissions:
+        input.roleKey === "super_admin"
+          ? []
+          : input.roleKey === "custom"
+            ? permissions
+            : [...ROLE_PRESETS[input.roleKey], ...permissions]
+                // Dedup
+                .filter((v, i, arr) => arr.indexOf(v) === i),
+      status: "active",
+    });
+    revalidatePath("/staff");
+    return {
+      success: true,
+      data: { inviteId: "", inviteUrl: "", email },
+    };
+  }
+
+  const invite = await repo.createInvite({
+    email,
+    displayName: input.displayName ?? null,
+    roleKey: input.roleKey,
+    permissions:
+      input.roleKey === "super_admin"
+        ? []
+        : input.roleKey === "custom"
+          ? permissions
+          : [...ROLE_PRESETS[input.roleKey], ...permissions].filter(
+              (v, i, arr) => arr.indexOf(v) === i,
+            ),
+    invitedBy: guard.access.user.id,
+  });
+
+  // Build the copy-link. The recipient signs in with this email through
+  // the normal Supabase auth flow; the auth callback will see the
+  // pending invite and call `acceptStaffInviteOnSignInAction`.
+  const base =
+    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
+  const inviteUrl = `${base}/login?invite=${encodeURIComponent(invite.token)}`;
+
+  revalidatePath("/staff");
+  return {
+    success: true,
+    data: { inviteId: invite.id, inviteUrl, email },
+  };
+}
+
+// ── Update permissions / role ──────────────────────────────────
+
+export interface UpdateStaffPermissionsInput {
+  userId: string;
+  roleKey: StaffRoleKey;
+  permissions: Permission[];
+}
+
+export async function updateStaffPermissionsAction(
+  input: UpdateStaffPermissionsInput,
+): Promise<ActionResult> {
+  const guard = await requirePermissionForAction("staff:edit_permissions");
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const target = await getStaffRepo().getStaff(input.userId);
+  if (!target) return { success: false, error: "Staff member not found." };
+
+  if (!isValidRoleKey(input.roleKey)) {
+    return { success: false, error: "Invalid role." };
+  }
+
+  // Only super admins can promote to super_admin or demote a super admin.
+  const targetIsSuper = target.roleKey === "super_admin";
+  if (
+    (input.roleKey === "super_admin" || targetIsSuper) &&
+    !guard.access.isSuperAdmin
+  ) {
+    return {
+      success: false,
+      error: "Only a Super Admin can manage Super Admin access.",
+    };
+  }
+
+  // Self-protection: cannot remove your own super_admin role.
+  if (
+    target.id === guard.access.user.id &&
+    targetIsSuper &&
+    input.roleKey !== "super_admin"
+  ) {
+    return {
+      success: false,
+      error:
+        "You cannot remove your own Super Admin role. Ask another Super Admin to do it.",
+    };
+  }
+
+  // Last-super-admin protection.
+  if (targetIsSuper && input.roleKey !== "super_admin") {
+    const remaining = await countActiveSuperAdmins();
+    if (remaining <= 1) {
+      return {
+        success: false,
+        error:
+          "This is the last active Super Admin — promote someone else first.",
+      };
+    }
+  }
+
+  const permissions = sanitizePermissions(input.permissions);
+  await getStaffRepo().updateStaff(input.userId, {
+    roleKey: input.roleKey,
+    permissions:
+      input.roleKey === "super_admin"
+        ? []
+        : input.roleKey === "custom"
+          ? permissions
+          : [...ROLE_PRESETS[input.roleKey], ...permissions].filter(
+              (v, i, arr) => arr.indexOf(v) === i,
+            ),
+  });
+
+  revalidatePath("/staff");
+  return { success: true };
+}
+
+// ── Status (active / disabled) ─────────────────────────────────
+
+export async function setStaffStatusAction(input: {
+  userId: string;
+  status: StaffStatus;
+}): Promise<ActionResult> {
+  const guard = await requirePermissionForAction("staff:disable");
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const target = await getStaffRepo().getStaff(input.userId);
+  if (!target) return { success: false, error: "Staff member not found." };
+
+  if (input.status !== "active" && input.status !== "disabled") {
+    return { success: false, error: "Invalid status." };
+  }
+
+  if (target.id === guard.access.user.id && input.status === "disabled") {
+    return { success: false, error: "You cannot disable your own access." };
+  }
+
+  if (target.roleKey === "super_admin" && input.status === "disabled") {
+    if (!guard.access.isSuperAdmin) {
+      return {
+        success: false,
+        error: "Only a Super Admin can disable a Super Admin.",
+      };
+    }
+    const remaining = await countActiveSuperAdmins();
+    if (remaining <= 1) {
+      return {
+        success: false,
+        error: "This is the last active Super Admin — cannot disable.",
+      };
+    }
+  }
+
+  await getStaffRepo().updateStaff(input.userId, { status: input.status });
+  revalidatePath("/staff");
+  return { success: true };
+}
+
+// ── Invite revoke ──────────────────────────────────────────────
+
+export async function revokeStaffInviteAction(input: {
+  inviteId: string;
+}): Promise<ActionResult> {
+  const guard = await requirePermissionForAction("staff:revoke_invite");
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const ok = await getStaffRepo().revokeInvite(input.inviteId);
+  if (!ok) return { success: false, error: "Invite not found or not pending." };
+  revalidatePath("/staff");
+  return { success: true };
+}
+
+// ── Accept on sign-in ──────────────────────────────────────────
+
+/**
+ * Server-action wrapper around the shared staff-invite acceptance
+ * helper. The actual acceptance now happens inside
+ * `ensureSupabaseProfile` (provisioning), so this action is mostly a
+ * thin compatibility shim — kept exported in case any client surface
+ * still calls it directly.
+ *
+ * Idempotent — safe to call on every sign-in.
+ */
+export async function acceptStaffInviteOnSignInAction(input: {
+  userId: string;
+  email: string;
+}): Promise<ActionResult> {
+  const { acceptPendingStaffInviteForUser } = await import(
+    "@/lib/staff-invite-acceptance"
+  );
+  const result = await acceptPendingStaffInviteForUser({
+    userId: input.userId,
+    email: input.email,
+  });
+  if (result.reason === "error") {
+    return { success: false, error: result.error ?? "Failed to apply invite." };
+  }
+  return { success: true };
+}
+
+// Re-exported helper so admin pages can render an "are you a legacy
+// admin?" banner without instantiating staff-permissions in client code.
+export async function loadCurrentStaffAccessForBannerAction() {
+  const access = await getStaffAccess();
+  return {
+    isSuperAdmin: access.isSuperAdmin,
+    isLegacyAdminFallback: access.isLegacyAdminFallback,
+    roleKey: access.roleKey,
+  };
+}

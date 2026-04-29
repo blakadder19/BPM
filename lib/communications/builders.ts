@@ -52,6 +52,10 @@ export function paymentPendingEvent(input: {
   subscriptionId: string;
   termName?: string | null;
   amountLabel?: string | null;
+  originalPriceCents?: number | null;
+  discountAmountCents?: number | null;
+  finalPriceCents?: number | null;
+  appliedDiscountSummary?: string | null;
 }): CommEvent<"payment_pending"> {
   return {
     id: generateId("ppn"),
@@ -63,6 +67,10 @@ export function paymentPendingEvent(input: {
       subscriptionId: input.subscriptionId,
       termName: input.termName ?? null,
       amountLabel: input.amountLabel ?? null,
+      originalPriceCents: input.originalPriceCents ?? null,
+      discountAmountCents: input.discountAmountCents ?? null,
+      finalPriceCents: input.finalPriceCents ?? null,
+      appliedDiscountSummary: input.appliedDiscountSummary ?? null,
     },
     createdAt: new Date().toISOString(),
     idempotencyKey: `payment_pending:${input.studentId}:${input.subscriptionId}`,
@@ -78,6 +86,10 @@ export function paymentConfirmedEvent(input: {
   subscriptionId: string;
   amountLabel?: string | null;
   paymentMethod?: string | null;
+  originalPriceCents?: number | null;
+  discountAmountCents?: number | null;
+  finalPriceCents?: number | null;
+  appliedDiscountSummary?: string | null;
 }): CommEvent<"payment_confirmed"> {
   return {
     id: generateId("pcn"),
@@ -89,6 +101,10 @@ export function paymentConfirmedEvent(input: {
       subscriptionId: input.subscriptionId,
       amountLabel: input.amountLabel ?? null,
       paymentMethod: input.paymentMethod ?? null,
+      originalPriceCents: input.originalPriceCents ?? null,
+      discountAmountCents: input.discountAmountCents ?? null,
+      finalPriceCents: input.finalPriceCents ?? null,
+      appliedDiscountSummary: input.appliedDiscountSummary ?? null,
     },
     createdAt: new Date().toISOString(),
     idempotencyKey: `payment_confirmed:${input.studentId}:${input.subscriptionId}`,

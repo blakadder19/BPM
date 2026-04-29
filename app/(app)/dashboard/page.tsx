@@ -23,6 +23,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { isStripeEnabled } from "@/lib/stripe";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { getSettings } from "@/lib/services/settings-store";
 import { AdminDashboard, type AdminDashboardData, type DashboardClassSummary, type DashboardDemandItem, type DashboardEventSummary } from "@/components/dashboard/admin-dashboard";
 import { getInstances } from "@/lib/services/schedule-store";
 import {
@@ -161,6 +162,9 @@ export default async function DashboardPage() {
         daysUntilExpiry: daysUntilExpiry(sub, todayStr),
         isRenewal: !!sub.renewedFromId,
         isFutureTerm: sub.validFrom > todayStr,
+        priceCentsAtPurchase: sub.priceCentsAtPurchase,
+        originalPriceCents: sub.originalPriceCents,
+        discountAmountCents: sub.discountAmountCents,
       };
     }
 
@@ -243,7 +247,8 @@ export default async function DashboardPage() {
       }
     }
 
-    const BEGINNER_LEVELS = new Set(["Beginner 1", "Beginner 2"]);
+    const { beginnerLevelNames } = getSettings();
+    const BEGINNER_LEVELS = new Set(beginnerLevelNames);
 
     const dashboardBirthdayBenefit = bdayEligibility.potentiallyEligible
       ? {
@@ -299,6 +304,7 @@ export default async function DashboardPage() {
           codeOfConductAccepted: cocAccepted,
           birthdayBenefit: dashboardBirthdayBenefit,
           studentDateOfBirth: student?.dateOfBirth ?? null,
+          beginnerLevelNames,
         };
 
         const result = computeBookability(ctx);

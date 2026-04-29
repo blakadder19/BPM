@@ -41,6 +41,47 @@ function paragraph(text: string): string {
   return `<p style="margin:0 0 16px;color:${B.ZINC_700};font-size:14px;line-height:1.6;">${text}</p>`;
 }
 
+function formatCents(cents: number): string {
+  return `€${(cents / 100).toFixed(2)}`;
+}
+
+/**
+ * Build the rows for an "Amount" section in payment emails.
+ *
+ * If frozen pricing fields indicate a discount was applied, render a
+ * Subtotal / Discount / Total breakdown. Otherwise fall back to the
+ * single Amount row (using `amountLabel` so legacy callers that only
+ * supply that field keep working unchanged).
+ */
+function pricingRows(p: {
+  amountLabel: string | null;
+  originalPriceCents?: number | null;
+  discountAmountCents?: number | null;
+  finalPriceCents?: number | null;
+  appliedDiscountSummary?: string | null;
+}): Array<{ label: string; valueHtml: string }> {
+  const discount = p.discountAmountCents ?? 0;
+  const original = p.originalPriceCents ?? null;
+  const final = p.finalPriceCents ?? null;
+  if (discount > 0 && original != null && final != null) {
+    const reasonHtml = p.appliedDiscountSummary
+      ? `<span style="color:${B.ZINC_500};font-size:11px;"> · ${p.appliedDiscountSummary}</span>`
+      : "";
+    return [
+      { label: "Subtotal", valueHtml: formatCents(original) },
+      {
+        label: "Discount",
+        valueHtml: `<span style="color:${B.BPM_500};font-weight:600;">−${formatCents(discount)}</span>${reasonHtml}`,
+      },
+      { label: "Total", valueHtml: `<strong>${formatCents(final)}</strong>` },
+    ];
+  }
+  if (p.amountLabel) {
+    return [{ label: "Amount", valueHtml: `<strong>${p.amountLabel}</strong>` }];
+  }
+  return [];
+}
+
 // ── Per-event templates ──────────────────────────────────────
 
 function classCancelled(
@@ -77,7 +118,7 @@ function paymentPending(
   const rows = [
     { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
     ...(p.termName ? [{ label: "Term", valueHtml: p.termName }] : []),
-    ...(p.amountLabel ? [{ label: "Amount", valueHtml: `<strong>${p.amountLabel}</strong>` }] : []),
+    ...pricingRows(p),
     { label: "Status", valueHtml: bpmStatusBadge("pending") },
   ];
 
@@ -100,7 +141,7 @@ function paymentConfirmed(
   const appUrl = getAppUrl();
   const rows = [
     { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
-    ...(p.amountLabel ? [{ label: "Amount", valueHtml: `<strong>${p.amountLabel}</strong>` }] : []),
+    ...pricingRows(p),
     ...(p.paymentMethod ? [{ label: "Method", valueHtml: p.paymentMethod }] : []),
     { label: "Status", valueHtml: bpmStatusBadge("paid") },
   ];

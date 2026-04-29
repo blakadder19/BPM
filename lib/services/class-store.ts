@@ -6,11 +6,8 @@
 
 import { CLASSES, type MockClass } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
+import { isSupabaseMode } from "@/lib/config/data-provider";
 import type { ClassType } from "@/types/domain";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
 
 const g = globalThis as unknown as {
   __bpm_classTemplates?: MockClass[];
@@ -18,7 +15,7 @@ const g = globalThis as unknown as {
 
 function init(): MockClass[] {
   if (!g.__bpm_classTemplates) {
-    g.__bpm_classTemplates = hasSupabaseConfig() ? [] : CLASSES.map((c) => ({ ...c }));
+    g.__bpm_classTemplates = isSupabaseMode() ? [] : CLASSES.map((c) => ({ ...c }));
   }
   return g.__bpm_classTemplates;
 }

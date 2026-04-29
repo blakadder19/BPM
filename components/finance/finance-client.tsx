@@ -17,7 +17,11 @@ import {
   Trash2,
   FlaskConical,
   Loader2,
+  Tag,
+  CheckCircle2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { markFinanceTransactionPaidAction } from "@/lib/actions/finance-row-actions";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
@@ -188,12 +192,18 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  const router = useRouter();
   const canMarkTest = !!superAdminStatus?.canDelete;
   // Optimistic per-row override of `tx.isTest` after a successful toggle, so
   // the UI updates immediately without waiting for the next router refresh.
   const [testOverride, setTestOverride] = useState<Record<string, boolean>>({});
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [toggleError, setToggleError] = useState<string | null>(null);
+  // Per-row "Mark as paid" state. Once a row succeeds we hide its action
+  // optimistically until the next route revalidate refreshes the list.
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [markedPaidIds, setMarkedPaidIds] = useState<Set<string>>(new Set());
+  const [markPaidError, setMarkPaidError] = useState<string | null>(null);
   // Bumped after a successful toggle so the danger zone re-fetches candidates
   // when it is currently expanded.
   const [candidatesRefreshKey, setCandidatesRefreshKey] = useState(0);
@@ -397,6 +407,12 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
         </div>
       )}
 
+      {markPaidError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          {markPaidError}
+        </div>
+      )}
+
       {/* Transaction table */}
       {filtered.length === 0 ? (
         <EmptyState
@@ -416,6 +432,7 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
           >
             {filtered.slice(0, 200).map((tx) => {
               const isMarked = testOverride[tx.id] ?? tx.isTest;
+              const wasMarkedPaidLocally = markedPaidIds.has(tx.id);
               return (
                 <TxRow
                   key={tx.id}
@@ -423,6 +440,31 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
                   superAdmin={canMarkTest}
                   isMarkedAsTest={isMarked}
                   isToggling={togglingId === tx.id}
+                  isMarkingPaid={markingPaidId === tx.id}
+                  wasJustMarkedPaid={wasMarkedPaidLocally}
+                  onMarkPaid={async () => {
+                    setMarkPaidError(null);
+                    setMarkingPaidId(tx.id);
+                    try {
+                      const r = await markFinanceTransactionPaidAction({
+                        transactionId: tx.id,
+                      });
+                      if (!r.success) {
+                        setMarkPaidError(r.error ?? "Failed to mark as paid.");
+                      } else {
+                        setMarkedPaidIds((prev) => {
+                          const next = new Set(prev);
+                          next.add(tx.id);
+                          return next;
+                        });
+                        // Trigger a server refresh so the row's BY,
+                        // status, and audit log reflect the change.
+                        router.refresh();
+                      }
+                    } finally {
+                      setMarkingPaidId(null);
+                    }
+                  }}
                   onToggleTest={async () => {
                     setToggleError(null);
                     setTogglingId(tx.id);
@@ -536,12 +578,18 @@ function TxRow({
   superAdmin = false,
   isMarkedAsTest = false,
   isToggling = false,
+  isMarkingPaid = false,
+  wasJustMarkedPaid = false,
+  onMarkPaid,
   onToggleTest,
 }: {
   tx: FinanceTransaction;
   superAdmin?: boolean;
   isMarkedAsTest?: boolean;
   isToggling?: boolean;
+  isMarkingPaid?: boolean;
+  wasJustMarkedPaid?: boolean;
+  onMarkPaid?: () => void;
   onToggleTest?: () => void;
 }) {
   const statusColor = STATUS_COLORS[tx.status] ?? "bg-gray-100 text-gray-600";
@@ -554,9 +602,27 @@ function TxRow({
       ].filter(Boolean).join(" — ")
     : null;
 
-  const isPending = tx.status === "pending";
+  const isPending = tx.status === "pending" && !wasJustMarkedPaid;
   const isRefunded = tx.status === "refunded";
-  const isPendingManual = isPending && (tx.paymentMethod === "manual" || tx.paymentMethod === "cash" || tx.paymentMethod === "bank_transfer");
+  const isPendingManual = isPending && (tx.paymentMethod === "manual" || tx.paymentMethod === "cash" || tx.paymentMethod === "bank_transfer" || tx.paymentMethod === "revolut" || tx.paymentMethod === null);
+  // "Mark as paid" is only safe for subscription + event_purchase pending
+  // rows. Penalties have their own resolution flow; refunded/paid rows
+  // stay read-only.
+  const canMarkPaid = isPending
+    && (tx.source === "subscription" || tx.source === "event_purchase")
+    && !!onMarkPaid;
+
+  // Discount indicator (Bug 3): show only when the frozen subscription
+  // snapshot recorded a non-zero discount.
+  const hasDiscount = (tx.discountAmountCents ?? 0) > 0;
+  const discountTooltip = hasDiscount
+    ? [
+        tx.originalPriceCents != null ? `Subtotal: ${formatCents(tx.originalPriceCents)}` : null,
+        tx.discountAmountCents ? `Discount: −${formatCents(tx.discountAmountCents)}` : null,
+        `Total: ${formatCents(tx.amountCents)}`,
+        tx.appliedDiscountSummary,
+      ].filter(Boolean).join("\n")
+    : null;
 
   const rowClass = cn(
     isRefunded && "bg-red-50/40",
@@ -593,14 +659,45 @@ function TxRow({
         </div>
       </Td>
       <Td>
-        <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", statusColor)}>
-          {normalizeFinanceStatusLabel(tx.status)}
-        </span>
-        {isPendingManual && (
-          <span className="ml-1 text-[10px] text-amber-600 font-medium">Action needed</span>
-        )}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", statusColor)}>
+            {wasJustMarkedPaid ? "Paid" : normalizeFinanceStatusLabel(tx.status)}
+          </span>
+          {isPendingManual && !wasJustMarkedPaid && (
+            <span className="text-[10px] text-amber-600 font-medium">Action needed</span>
+          )}
+          {canMarkPaid && (
+            <button
+              type="button"
+              onClick={onMarkPaid}
+              disabled={isMarkingPaid}
+              className="inline-flex items-center gap-1 rounded-md border border-green-300 bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-700 hover:bg-green-100 disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Mark this pending purchase as paid at reception"
+            >
+              {isMarkingPaid ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-3 w-3" />
+              )}
+              Mark paid
+            </button>
+          )}
+        </div>
       </Td>
-      <Td className="font-medium tabular-nums">{formatCents(tx.amountCents)}</Td>
+      <Td className="font-medium tabular-nums">
+        <div className="flex items-center gap-1.5">
+          <span>{formatCents(tx.amountCents)}</span>
+          {hasDiscount && (
+            <span
+              className="inline-flex items-center gap-0.5 rounded bg-bpm-50 px-1 py-0.5 text-[10px] font-medium text-bpm-700 cursor-help"
+              title={discountTooltip ?? undefined}
+            >
+              <Tag className="h-2.5 w-2.5" />
+              −{formatCents(tx.discountAmountCents ?? 0)}
+            </span>
+          )}
+        </div>
+      </Td>
       <Td className="capitalize text-xs">{METHOD_LABELS[tx.paymentMethod ?? ""] ?? tx.paymentMethod ?? "—"}</Td>
       <Td className="max-w-[120px] truncate text-xs text-gray-400">{tx.reference ?? "—"}</Td>
       <Td className="text-xs text-gray-500">{tx.performedBy ?? "—"}</Td>

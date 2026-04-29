@@ -1,5 +1,6 @@
-import type { MockProduct } from "@/lib/mock-data";
-import type { CreditsModel, ProductType } from "@/types/domain";
+import type { MockProduct, ProductPerks } from "@/lib/mock-data";
+import type { StyleAccessMode } from "@/lib/domain/subscription-snapshot";
+import type { ClassType, CreditsModel, ProductType } from "@/types/domain";
 
 export interface CreateProductData {
   name: string;
@@ -23,6 +24,12 @@ export interface CreateProductData {
   autoRenew?: boolean;
   benefits?: string[] | null;
   spanTerms?: number | null;
+  perks?: ProductPerks | null;
+  styleAccessMode?: StyleAccessMode | null;
+  styleAccessPickCount?: number | null;
+  allowedClassTypes?: ClassType[] | null;
+  stripePriceId?: string | null;
+  archivedAt?: string | null;
 }
 
 export type ProductPatch = Partial<
@@ -49,6 +56,12 @@ export type ProductPatch = Partial<
     | "autoRenew"
     | "benefits"
     | "spanTerms"
+    | "perks"
+    | "styleAccessMode"
+    | "styleAccessPickCount"
+    | "allowedClassTypes"
+    | "stripePriceId"
+    | "archivedAt"
   >
 >;
 

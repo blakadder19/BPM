@@ -42,3 +42,8 @@ supabase/.temp/
 
 # local dev data
 .data/
+
+# Local env backups
+.env.local.backup*
+.env.local.bak
+.env*.backup

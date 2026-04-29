@@ -260,7 +260,7 @@ export async function renewSubscriptionAction(
       termId: nextTerm.id,
       paymentMethod: source.paymentMethod,
       paymentStatus: "pending",
-      assignedBy: adminUser.id,
+      assignedBy: adminUser.fullName ?? adminUser.email ?? adminUser.id,
       assignedAt: new Date().toISOString(),
       autoRenew: source.autoRenew,
       classesUsed: 0,
@@ -272,6 +272,18 @@ export async function renewSubscriptionAction(
       renewedFromId: source.id,
       priceCentsAtPurchase: source.priceCentsAtPurchase,
       currencyAtPurchase: source.currencyAtPurchase,
+      // Phase 1: a renewal inherits the parent subscription's frozen rule
+      // state so the renewed term keeps the access the customer originally
+      // bought, even if the live product was edited in between.
+      productSnapshot: source.productSnapshot ?? null,
+      // Phase 4: renewals deliberately do NOT re-evaluate the discount engine.
+      // They inherit the parent's frozen pricing snapshot so a one-off
+      // first-time/affiliation discount cannot be silently re-applied each
+      // term, and so an admin disabling/changing a rule does not retroactively
+      // change a renewing customer's price.
+      originalPriceCents: source.originalPriceCents ?? source.priceCentsAtPurchase,
+      discountAmountCents: source.discountAmountCents,
+      appliedDiscount: source.appliedDiscount ?? null,
     });
 
     if (result.success && result.subscriptionId) {
@@ -353,6 +365,12 @@ async function prepareRenewal(inst: RenewalInstruction): Promise<boolean> {
       renewedFromId: source.id,
       priceCentsAtPurchase: source.priceCentsAtPurchase,
       currencyAtPurchase: source.currencyAtPurchase,
+      // Phase 1: auto-renewal inherits the parent's frozen rule state.
+      productSnapshot: source.productSnapshot ?? null,
+      // Phase 4: auto-renewal also inherits the parent's pricing snapshot.
+      originalPriceCents: source.originalPriceCents ?? source.priceCentsAtPurchase,
+      discountAmountCents: source.discountAmountCents,
+      appliedDiscount: source.appliedDiscount ?? null,
     });
     return result.success;
   } catch {

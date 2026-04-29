@@ -6,12 +6,9 @@
 
 import { BOOKABLE_CLASSES, type MockBookableClass } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
+import { isSupabaseMode } from "@/lib/config/data-provider";
 import type { ClassType, InstanceStatus } from "@/types/domain";
 import { getTemplates } from "./class-store";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
 
 const g = globalThis as unknown as {
   __bpm_scheduleInstances?: MockBookableClass[];
@@ -19,7 +16,7 @@ const g = globalThis as unknown as {
 
 function init(): MockBookableClass[] {
   if (!g.__bpm_scheduleInstances) {
-    g.__bpm_scheduleInstances = hasSupabaseConfig() ? [] : BOOKABLE_CLASSES.map((bc) => ({ ...bc }));
+    g.__bpm_scheduleInstances = isSupabaseMode() ? [] : BOOKABLE_CLASSES.map((bc) => ({ ...bc }));
   }
   return g.__bpm_scheduleInstances;
 }

@@ -299,6 +299,11 @@ export interface Database {
           notes: string | null;
           stripe_price_id: string | null;
           metadata: Record<string, unknown>;
+          perks: Record<string, unknown> | null;
+          style_access_mode: string | null;
+          style_access_pick_count: number | null;
+          allowed_class_types: string[] | null;
+          archived_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -346,6 +351,10 @@ export interface Database {
           refunded_at: string | null;
           refunded_by: string | null;
           refund_reason: string | null;
+          product_snapshot: Record<string, unknown> | null;
+          original_price_cents: number | null;
+          discount_amount_cents: number;
+          applied_discount: Record<string, unknown> | null;
           created_at: string;
           updated_at: string;
         };
@@ -522,6 +531,84 @@ export interface Database {
           expires_at?: string;
         };
         Relationships: [];
+      };
+
+      student_affiliations: {
+        Row: {
+          id: string;
+          student_id: string;
+          affiliation_type: string;
+          verification_status: string;
+          verified_at: string | null;
+          verified_by: string | null;
+          metadata: Record<string, unknown>;
+          valid_from: string | null;
+          valid_until: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["student_affiliations"]["Row"]> & {
+          student_id: string;
+          affiliation_type: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["student_affiliations"]["Row"]>;
+      };
+
+      discount_rules: {
+        Row: {
+          id: string;
+          code: string;
+          name: string;
+          description: string | null;
+          rule_type: string;
+          affiliation_type: string | null;
+          discount_kind: string;
+          discount_value: number;
+          applies_to_product_types: string[] | null;
+          applies_to_product_ids: string[] | null;
+          min_price_cents: number | null;
+          max_discount_cents: number | null;
+          is_active: boolean;
+          priority: number;
+          stackable: boolean;
+          valid_from: string | null;
+          valid_until: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["discount_rules"]["Row"]> & {
+          code: string;
+          name: string;
+          rule_type: string;
+          discount_kind: string;
+          discount_value: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["discount_rules"]["Row"]>;
+      };
+
+      discount_claims: {
+        Row: {
+          id: string;
+          student_id: string;
+          claim_type: string;
+          rule_id: string | null;
+          source: string;
+          related_subscription_id: string | null;
+          related_session_id: string | null;
+          released_at: string | null;
+          released_reason: string | null;
+          claimed_at: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["discount_claims"]["Row"]> & {
+          id: string;
+          student_id: string;
+          claim_type: string;
+          source: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["discount_claims"]["Row"]>;
       };
     };
 

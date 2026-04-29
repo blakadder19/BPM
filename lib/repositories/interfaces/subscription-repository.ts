@@ -1,4 +1,6 @@
 import type { MockSubscription } from "@/lib/mock-data";
+import type { SubscriptionProductSnapshot } from "@/lib/domain/subscription-snapshot";
+import type { AppliedDiscountSnapshot } from "@/lib/domain/pricing-engine";
 import type {
   PaymentMethod,
   ProductType,
@@ -36,6 +38,14 @@ export interface CreateSubscriptionData {
   collectedBy?: string | null;
   priceCentsAtPurchase?: number | null;
   currencyAtPurchase?: string;
+  /** Phase 1 — frozen product/access snapshot at purchase time. */
+  productSnapshot?: SubscriptionProductSnapshot | null;
+  /** Phase 4 — list price (BEFORE discount). */
+  originalPriceCents?: number | null;
+  /** Phase 4 — total discount applied at purchase time. */
+  discountAmountCents?: number;
+  /** Phase 4 — frozen applied-discount snapshot (null when no discount). */
+  appliedDiscount?: AppliedDiscountSnapshot | null;
 }
 
 export interface SubscriptionPatch {

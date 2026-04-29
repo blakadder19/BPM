@@ -589,10 +589,10 @@ export function AddSubscriptionDialog({
   const accessRulesMapFull = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
 
   const filteredProducts = useMemo(() => {
-    if (!recommendedStyleName) return products.filter((p) => p.isActive);
+    if (!recommendedStyleName) return products.filter((p) => p.isActive && !p.archivedAt);
     const matchingStyleId = danceStyles.find((s) => s.name === recommendedStyleName)?.id;
     return products.filter((p) => {
-      if (!p.isActive) return false;
+      if (!p.isActive || p.archivedAt) return false;
       if (p.productType === "drop_in") return true;
       const rule = accessRulesMapFull.get(p.id);
       if (!rule) return true;

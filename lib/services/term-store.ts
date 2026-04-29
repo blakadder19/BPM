@@ -5,11 +5,8 @@
 
 import { TERMS, type MockTerm } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
+import { isSupabaseMode } from "@/lib/config/data-provider";
 import type { TermStatus } from "@/types/domain";
-
-function hasSupabaseConfig(): boolean {
-  return !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-}
 
 const g = globalThis as unknown as {
   __bpm_terms?: MockTerm[];
@@ -17,7 +14,7 @@ const g = globalThis as unknown as {
 
 function init(): MockTerm[] {
   if (!g.__bpm_terms) {
-    g.__bpm_terms = hasSupabaseConfig() ? [] : TERMS.map((t) => ({ ...t }));
+    g.__bpm_terms = isSupabaseMode() ? [] : TERMS.map((t) => ({ ...t }));
   }
   return g.__bpm_terms;
 }

@@ -46,11 +46,23 @@ const buildClassCancelled: MessageBuilder<"class_cancelled"> = (
   href: "/bookings",
 });
 
+function pricingSentence(p: {
+  amountLabel: string | null;
+  discountAmountCents?: number | null;
+}): string {
+  if (!p.amountLabel) return "";
+  const discount = p.discountAmountCents ?? 0;
+  if (discount > 0) {
+    return ` Amount: ${p.amountLabel} (discount applied).`;
+  }
+  return ` Amount: ${p.amountLabel}.`;
+}
+
 const buildPaymentPending: MessageBuilder<"payment_pending"> = (
   p: PaymentPendingPayload
 ) => ({
   title: "Payment pending",
-  body: `Your "${p.productName}"${p.termName ? ` (${p.termName})` : ""} is awaiting payment.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Pay online or at reception.`,
+  body: `Your "${p.productName}"${p.termName ? ` (${p.termName})` : ""} is awaiting payment.${pricingSentence(p)} Pay online or at reception.`,
   href: `/dashboard#entitlement-${p.subscriptionId}`,
 });
 
@@ -58,7 +70,7 @@ const buildPaymentConfirmed: MessageBuilder<"payment_confirmed"> = (
   p: PaymentConfirmedPayload
 ) => ({
   title: "Payment received",
-  body: `Your payment for "${p.productName}" has been confirmed.${p.amountLabel ? ` Amount: ${p.amountLabel}.` : ""} Thank you!`,
+  body: `Your payment for "${p.productName}" has been confirmed.${pricingSentence(p)} Thank you!`,
   href: "/dashboard",
 });
 
