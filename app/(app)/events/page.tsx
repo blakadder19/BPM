@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
-import { requirePermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import {
   cachedGetAllEvents,
   cachedGetStudentEventPurchases,
@@ -32,6 +36,13 @@ export default async function EventsPage() {
   }
 
   const events = await cachedGetAllEvents();
+  const access = await getStaffAccess();
+  const permissions = {
+    canCreate: hasPermission(access, "events:create"),
+    canEdit: hasPermission(access, "events:edit"),
+    canDelete: hasPermission(access, "events:delete"),
+    canMarkPaid: hasPermission(access, "events:mark_paid"),
+  };
 
   const repo = getSpecialEventRepo();
   const sessionCountMap: Record<string, number> = {};
@@ -50,6 +61,7 @@ export default async function EventsPage() {
       events={events}
       sessionCountMap={sessionCountMap}
       productCountMap={productCountMap}
+      permissions={permissions}
     />
   );
 }

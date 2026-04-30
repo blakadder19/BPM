@@ -113,6 +113,17 @@ export interface StudentOption {
   fullName: string;
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface AttendanceClientPermissions {
+  canMarkPresent: boolean;
+  canMarkAbsent: boolean;
+  canEditHistory: boolean;
+}
+
 interface AttendanceClientProps {
   mockToday: string;
   todaysClasses: BookableClassProp[];
@@ -126,6 +137,7 @@ interface AttendanceClientProps {
   initialDateFilter?: string;
   initialStudentSearch?: string;
   currentUserName?: string;
+  permissions: AttendanceClientPermissions;
 }
 
 export function AttendanceClient({
@@ -141,6 +153,7 @@ export function AttendanceClient({
   initialDateFilter,
   initialStudentSearch,
   currentUserName,
+  permissions,
 }: AttendanceClientProps) {
   const router = useRouter();
   const hasContextFilter = !!(initialClassFilter || initialStudentSearch);
@@ -148,6 +161,10 @@ export function AttendanceClient({
     hasContextFilter ? "history" : "today"
   );
   const [showAddAttendance, setShowAddAttendance] = useState(false);
+  const isReadOnly =
+    !permissions.canMarkPresent &&
+    !permissions.canMarkAbsent &&
+    !permissions.canEditHistory;
 
   return (
     <div className="space-y-6">
@@ -158,12 +175,21 @@ export function AttendanceClient({
         />
         <div className="flex items-center gap-2">
           <AdminHelpButton pageKey="attendance" />
-          <Button onClick={() => setShowAddAttendance(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Record
-          </Button>
+          {permissions.canEditHistory && (
+            <Button onClick={() => setShowAddAttendance(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Record
+            </Button>
+          )}
         </div>
       </div>
+
+      {isReadOnly && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You have view-only access to Attendance. Mark, edit, and delete
+          actions are hidden.
+        </div>
+      )}
 
       <div className="border-b border-gray-200">
         <nav className="-mb-px flex gap-4 sm:gap-6 overflow-x-auto">
@@ -182,13 +208,16 @@ export function AttendanceClient({
 
       {activeTab === "today" ? (
         <>
-          <TokenCheckInPanel />
+          {(permissions.canMarkPresent || permissions.canEditHistory) && (
+            <TokenCheckInPanel />
+          )}
           <TodayView
             mockToday={mockToday}
             todaysClasses={todaysClasses}
             bookings={bookings}
             attendanceRecords={attendanceRecords}
             currentUserName={currentUserName}
+            permissions={permissions}
           />
         </>
       ) : (
@@ -199,10 +228,11 @@ export function AttendanceClient({
           initialClassFilter={initialStudentSearch ? initialClassFilter : ""}
           initialDateFilter={initialStudentSearch ? initialDateFilter : ""}
           currentUserName={currentUserName}
+          permissions={permissions}
         />
       )}
 
-      {showAddAttendance && (
+      {showAddAttendance && permissions.canEditHistory && (
         <AddAttendanceDialog
           students={studentOptions ?? []}
           classes={allClasses}
@@ -308,12 +338,14 @@ function TodayView({
   bookings,
   attendanceRecords,
   currentUserName,
+  permissions,
 }: {
   mockToday: string;
   todaysClasses: BookableClassProp[];
   bookings: BookingProp[];
   attendanceRecords: StoredAttendance[];
   currentUserName?: string;
+  permissions: AttendanceClientPermissions;
 }) {
   if (todaysClasses.length === 0) {
     return (
@@ -339,6 +371,7 @@ function TodayView({
             (a) => a.bookableClassId === bc.id
           )}
           currentUserName={currentUserName}
+          permissions={permissions}
         />
       ))}
     </div>
@@ -360,11 +393,13 @@ function ClassAttendanceCard({
   bookings: classBookings,
   attendanceRecords,
   currentUserName,
+  permissions,
 }: {
   bookableClass: BookableClassProp;
   bookings: BookingProp[];
   attendanceRecords: StoredAttendance[];
   currentUserName?: string;
+  permissions: AttendanceClientPermissions;
 }) {
   const router = useRouter();
 
@@ -613,6 +648,24 @@ function ClassAttendanceCard({
                     {MARK_OPTIONS.map((opt) => {
                       const Icon = opt.icon;
                       const isActive = currentMark === opt.value;
+                      const allowedForOption =
+                        opt.value === "absent"
+                          ? permissions.canMarkAbsent
+                          : permissions.canMarkPresent;
+                      if (!allowedForOption) {
+                        return isActive ? (
+                          <span
+                            key={opt.value}
+                            className={cn(
+                              "flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-inset",
+                              opt.activeColor,
+                            )}
+                          >
+                            <Icon className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">{opt.label}</span>
+                          </span>
+                        ) : null;
+                      }
                       return (
                         <button
                           key={opt.value}
@@ -633,7 +686,7 @@ function ClassAttendanceCard({
                         </button>
                       );
                     })}
-                    {!row.bookingId && currentMark && (
+                    {!row.bookingId && currentMark && permissions.canEditHistory && (
                       <button
                         onClick={() => setDeleteConfirm(row.studentId)}
                         disabled={pending}
@@ -751,6 +804,7 @@ function HistoryView({
   initialClassFilter,
   initialDateFilter,
   currentUserName,
+  permissions,
 }: {
   attendanceRecords: StoredAttendance[];
   allClasses: BookableClassProp[];
@@ -758,6 +812,7 @@ function HistoryView({
   initialClassFilter?: string;
   currentUserName?: string;
   initialDateFilter?: string;
+  permissions: AttendanceClientPermissions;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState(initialSearch ?? "");
@@ -877,6 +932,7 @@ function HistoryView({
               bookableClass={classMap.get(a.bookableClassId)}
               onRefresh={() => router.refresh()}
               currentUserName={currentUserName}
+              permissions={permissions}
             />
           ))}
         </AdminTable>
@@ -890,11 +946,13 @@ function HistoryRow({
   bookableClass: bc,
   onRefresh,
   currentUserName,
+  permissions,
 }: {
   record: StoredAttendance;
   bookableClass: BookableClassProp | undefined;
   onRefresh: () => void;
   currentUserName?: string;
+  permissions: AttendanceClientPermissions;
 }) {
   const [currentStatus, setCurrentStatus] = useState(a.status);
   const [isPending, startTransition] = useTransition();
@@ -971,30 +1029,34 @@ function HistoryRow({
       <Td>{a.classTitle}</Td>
       <Td>{formatDate(a.date)}</Td>
       <Td>
-        <select
-          value={currentStatus}
-          onChange={(e) => handleStatusChange(e.target.value as AttendanceMark)}
-          disabled={isPending}
-          className={cn(
-            "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-bpm-100",
-            currentStatus === "present" && "border-emerald-200 bg-emerald-50 text-emerald-700",
-            currentStatus === "late" && "border-amber-200 bg-amber-50 text-amber-700",
-            currentStatus === "absent" && "border-red-200 bg-red-50 text-red-700",
-            currentStatus === "excused" && "border-blue-200 bg-blue-50 text-bpm-700"
-          )}
-        >
-          <option value="present">Present</option>
-          <option value="late">Late</option>
-          <option value="absent">Absent</option>
-          <option value="excused">Excused</option>
-        </select>
+        {permissions.canEditHistory ? (
+          <select
+            value={currentStatus}
+            onChange={(e) => handleStatusChange(e.target.value as AttendanceMark)}
+            disabled={isPending}
+            className={cn(
+              "rounded-lg border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-bpm-100",
+              currentStatus === "present" && "border-emerald-200 bg-emerald-50 text-emerald-700",
+              currentStatus === "late" && "border-amber-200 bg-amber-50 text-amber-700",
+              currentStatus === "absent" && "border-red-200 bg-red-50 text-red-700",
+              currentStatus === "excused" && "border-blue-200 bg-blue-50 text-bpm-700"
+            )}
+          >
+            <option value="present">Present</option>
+            <option value="late">Late</option>
+            <option value="absent">Absent</option>
+            <option value="excused">Excused</option>
+          </select>
+        ) : (
+          <StatusBadge status={currentStatus} />
+        )}
       </Td>
         <Td><SourceBadge source={a.source ?? "walk_in"} /></Td>
       <Td className="capitalize">{a.checkInMethod}</Td>
       <Td>{a.markedBy}</Td>
       <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
         <Td>
-          {isDeletable && (
+          {isDeletable && permissions.canEditHistory && (
             <button
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isPending}

@@ -1,4 +1,8 @@
-import { requirePermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import {
   getAffiliationRepo,
   getDiscountRuleRepo,
@@ -23,12 +27,20 @@ export default async function DiscountRulesPage() {
   await requirePermission("discounts:view");
   await ensureOperationalDataHydrated();
 
-  const [rules, products, students, affiliations] = await Promise.all([
+  const [rules, products, students, affiliations, access] = await Promise.all([
     getDiscountRuleRepo().getAll(),
     getProductRepo().getAll(),
     cachedGetAllStudents(),
     getAffiliationRepo().getAll(),
+    getStaffAccess(),
   ]);
+
+  const permissions = {
+    canCreate: hasPermission(access, "discounts:create"),
+    canEdit: hasPermission(access, "discounts:edit"),
+    canDelete: hasPermission(access, "discounts:delete"),
+    canPreview: hasPermission(access, "discounts:preview"),
+  };
 
   // Count how many *verified* affiliations exist per type. Surfaced in
   // the rule list so admins can see at a glance whether an affiliation
@@ -75,6 +87,7 @@ export default async function DiscountRulesPage() {
         email: s.email,
       }))}
       verifiedAffiliationCounts={verifiedCountByType}
+      permissions={permissions}
     />
   );
 }

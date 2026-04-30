@@ -57,17 +57,34 @@ interface PurchaseRow {
   productType: string;
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface EventOperationsPermissions {
+  canCheckIn: boolean;
+  canCollectPayment: boolean;
+}
+
 interface Props {
   event: MockSpecialEvent;
   products: MockEventProduct[];
   purchases: MockEventPurchase[];
   studentInfoMap: Record<string, { fullName: string; email: string }>;
   currentUserId: string;
+  permissions: EventOperationsPermissions;
 }
 
 // ── Component ────────────────────────────────────────────────
 
-export function EventOperations({ event, products, purchases, studentInfoMap }: Props) {
+export function EventOperations({
+  event,
+  products,
+  purchases,
+  studentInfoMap,
+  permissions,
+}: Props) {
   const productMap = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
   // Event window check (calendar-day span: check-in enabled for all days covered by the event)
@@ -297,6 +314,8 @@ export function EventOperations({ event, products, purchases, studentInfoMap }: 
               onUndoCheckIn={handleUndoCheckIn}
               onCollectPaymentAndCheckIn={handleCollectPaymentAndCheckIn}
               actionPending={actionPending}
+              canCheckIn={permissions.canCheckIn}
+              canCollectPayment={permissions.canCollectPayment}
             />
           ))
         )}
@@ -339,13 +358,15 @@ function FilterSelect({ label, value, onChange, options }: {
   );
 }
 
-function PurchaseCard({ row, isLive, onCheckIn, onUndoCheckIn, onCollectPaymentAndCheckIn, actionPending }: {
+function PurchaseCard({ row, isLive, onCheckIn, onUndoCheckIn, onCollectPaymentAndCheckIn, actionPending, canCheckIn, canCollectPayment }: {
   row: PurchaseRow;
   isLive: boolean;
   onCheckIn: (id: string) => void;
   onUndoCheckIn: (id: string) => void;
   onCollectPaymentAndCheckIn: (id: string, method: "cash" | "revolut") => void;
   actionPending: boolean;
+  canCheckIn: boolean;
+  canCollectPayment: boolean;
 }) {
   const p = row.purchase;
   const isCheckedIn = !!p.checkedInAt;
@@ -396,50 +417,62 @@ function PurchaseCard({ row, isLive, onCheckIn, onUndoCheckIn, onCollectPaymentA
             <Lock className="h-3 w-3" /> Read-only
           </div>
         ) : isCheckedIn ? (
-          <button
-            onClick={() => onUndoCheckIn(p.id)}
-            disabled={actionPending}
-            className="flex items-center justify-center gap-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-          >
-            <RotateCcw className="h-3 w-3" /> Undo
-          </button>
+          canCheckIn ? (
+            <button
+              onClick={() => onUndoCheckIn(p.id)}
+              disabled={actionPending}
+              className="flex items-center justify-center gap-1 rounded-lg border border-gray-300 px-2 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <RotateCcw className="h-3 w-3" /> Undo
+            </button>
+          ) : (
+            <span className="text-xs text-gray-400">Checked in</span>
+          )
         ) : isPaid ? (
-          <button
-            onClick={() => onCheckIn(p.id)}
-            disabled={actionPending}
-            className="flex items-center justify-center gap-1 rounded-lg bg-green-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
-          >
-            <CheckCircle2 className="h-3 w-3" /> Check in
-          </button>
+          canCheckIn ? (
+            <button
+              onClick={() => onCheckIn(p.id)}
+              disabled={actionPending}
+              className="flex items-center justify-center gap-1 rounded-lg bg-green-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              <CheckCircle2 className="h-3 w-3" /> Check in
+            </button>
+          ) : (
+            <span className="text-xs text-gray-400">Paid — view only</span>
+          )
         ) : isPending ? (
-          <div className="space-y-1">
-            {!showPayOpts ? (
-              <button
-                onClick={() => setShowPayOpts(true)}
-                disabled={actionPending}
-                className="flex items-center justify-center gap-1 rounded-lg bg-amber-500 px-2 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
-              >
-                <Banknote className="h-3 w-3" /> Collect & check in
-              </button>
-            ) : (
-              <div className="flex gap-1">
+          canCollectPayment ? (
+            <div className="space-y-1">
+              {!showPayOpts ? (
                 <button
-                  onClick={() => { onCollectPaymentAndCheckIn(p.id, "cash"); setShowPayOpts(false); }}
+                  onClick={() => setShowPayOpts(true)}
                   disabled={actionPending}
-                  className="rounded-lg bg-green-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                  className="flex items-center justify-center gap-1 rounded-lg bg-amber-500 px-2 py-1.5 text-xs font-medium text-white hover:bg-amber-600 disabled:opacity-50"
                 >
-                  Cash
+                  <Banknote className="h-3 w-3" /> Collect & check in
                 </button>
-                <button
-                  onClick={() => { onCollectPaymentAndCheckIn(p.id, "revolut"); setShowPayOpts(false); }}
-                  disabled={actionPending}
-                  className="rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                >
-                  Revolut
-                </button>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => { onCollectPaymentAndCheckIn(p.id, "cash"); setShowPayOpts(false); }}
+                    disabled={actionPending}
+                    className="rounded-lg bg-green-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                  >
+                    Cash
+                  </button>
+                  <button
+                    onClick={() => { onCollectPaymentAndCheckIn(p.id, "revolut"); setShowPayOpts(false); }}
+                    disabled={actionPending}
+                    className="rounded-lg bg-blue-600 px-2 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Revolut
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">Pending — view only</span>
+          )
         ) : (
           <div className="flex items-center gap-1 text-xs text-gray-400">
             <XCircle className="h-3 w-3" /> N/A

@@ -51,6 +51,11 @@ type NoEntitlementTarget = {
   styleName: string | null;
 };
 
+export interface StudentScanPanelPermissions {
+  canCheckIn: boolean;
+  canCollectPayment: boolean;
+}
+
 interface StudentScanPanelProps {
   /** The resolved scan result for this student. */
   result: QrLookupResult;
@@ -61,6 +66,11 @@ interface StudentScanPanelProps {
    * global scan overlay where the dialog already provides its own header).
    */
   compactHeader?: boolean;
+  /**
+   * Plain-boolean permissions for the reception flow. Server actions
+   * still enforce these checks independently.
+   */
+  permissions: StudentScanPanelPermissions;
 }
 
 /**
@@ -77,7 +87,7 @@ interface StudentScanPanelProps {
  * It does NOT own modal lifecycle — the parent decides when to close,
  * which enables "do not auto-close; wait for admin" in the overlay.
  */
-export function StudentScanPanel({ result: initialResult, onRefresh, compactHeader }: StudentScanPanelProps) {
+export function StudentScanPanel({ result: initialResult, onRefresh, compactHeader, permissions }: StudentScanPanelProps) {
   const [result, setResult] = useState<QrLookupResult>(initialResult);
   const [checkInResults, setCheckInResults] = useState<Map<string, { success: boolean; message: string }>>(new Map());
   const [isCheckingIn, startCheckIn] = useTransition();
@@ -323,7 +333,7 @@ export function StudentScanPanel({ result: initialResult, onRefresh, compactHead
         {result.allEntitlements && result.allEntitlements.length > 0 ? (
           <AllEntitlementsSection
             entitlements={result.allEntitlements}
-            onMarkPaid={handleEntitlementMarkPaid}
+            onMarkPaid={permissions.canCollectPayment ? handleEntitlementMarkPaid : undefined}
           />
         ) : (
           <div className="border-t border-gray-100 pt-3">
@@ -365,14 +375,17 @@ export function StudentScanPanel({ result: initialResult, onRefresh, compactHead
               key={b.bookingId}
               booking={b}
               result={checkInResults.get(b.bookingId)}
-              onCheckIn={() =>
-                handleCheckIn(
-                  b.bookingId,
-                  b.entitlement?.paymentStatus,
-                  b.entitlement?.subscriptionId,
-                  b.entitlement?.productName,
-                  b.classTitle,
-                )
+              onCheckIn={
+                permissions.canCheckIn
+                  ? () =>
+                      handleCheckIn(
+                        b.bookingId,
+                        b.entitlement?.paymentStatus,
+                        b.entitlement?.subscriptionId,
+                        b.entitlement?.productName,
+                        b.classTitle,
+                      )
+                  : undefined
               }
               isPending={isCheckingIn}
             />
@@ -396,7 +409,7 @@ export function StudentScanPanel({ result: initialResult, onRefresh, compactHead
               key={cls.classId}
               cls={cls}
               result={checkInResults.get(`walkin-${cls.classId}`)}
-              onAction={() => handleWalkIn(cls)}
+              onAction={permissions.canCheckIn ? () => handleWalkIn(cls) : undefined}
               isPending={isCheckingIn}
               studentHasAnyProduct={!!result.hasActiveEntitlement}
             />

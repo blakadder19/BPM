@@ -1,4 +1,8 @@
-import { requireAnyPermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasPermission,
+  requireAnyPermission,
+} from "@/lib/staff-permissions";
 import {
   getBookingRepo,
   getPenaltyRepo,
@@ -40,7 +44,7 @@ export default async function StudentsPage({
   const _tHydrate = performance.now();
 
   const year = new Date().getFullYear();
-  const [students, walletTransactions, products, terms, danceStyles, birthdayMap, subscriptions, affiliations] = await Promise.all([
+  const [students, walletTransactions, products, terms, danceStyles, birthdayMap, subscriptions, affiliations, access] = await Promise.all([
     cachedGetAllStudents(),
     getWalletTransactions(),
     cachedGetProducts(),
@@ -49,7 +53,17 @@ export default async function StudentsPage({
     getAllRedemptionsForYear(year),
     cachedGetAllSubs(),
     getAffiliationRepo().getAll(),
+    getStaffAccess(),
   ]);
+
+  const permissions = {
+    canCreate: hasPermission(access, "students:create"),
+    canEdit: hasPermission(access, "students:edit"),
+    canDelete: hasPermission(access, "students:delete"),
+    canViewFinance: hasPermission(access, "students:view_finance"),
+    canManageAffiliations: hasPermission(access, "students:manage_affiliations"),
+    canRunLifecycle: hasPermission(access, "students:edit"),
+  };
   const _tDb = performance.now();
 
   const bookingSvc = getBookingRepo().getService();
@@ -170,6 +184,7 @@ export default async function StudentsPage({
       initialSearch={params.search ?? ""}
       birthdayUsedStudentIds={birthdayUsedIds}
       birthdayRedemptions={birthdayRedemptionMap}
+      permissions={permissions}
     />
   );
 }

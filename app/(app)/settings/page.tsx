@@ -42,6 +42,9 @@ export default async function SettingsPage() {
   // free of any permission logic — it just receives a plain boolean.
   const access = await getStaffAccess();
   const canSeeStaffAccessCard = hasPermission(access, "staff:view");
+  const permissions = {
+    canEdit: hasPermission(access, "settings:edit"),
+  };
 
   return (
     <div className="space-y-6">
@@ -50,6 +53,7 @@ export default async function SettingsPage() {
         allStyles={allStyles}
         supabaseStatus={supabaseStatus}
         isDev={isDev}
+        permissions={permissions}
       />
       {canSeeStaffAccessCard && <StaffAccessCard />}
     </div>

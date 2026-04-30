@@ -33,14 +33,19 @@ interface StyleOption {
   name: string;
 }
 
+export interface SettingsFormPermissions {
+  canEdit: boolean;
+}
+
 interface SettingsFormProps {
   initialSettings: AppSettings;
   allStyles: StyleOption[];
   supabaseStatus?: SupabaseStatus;
   isDev?: boolean;
+  permissions: SettingsFormPermissions;
 }
 
-export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev }: SettingsFormProps) {
+export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev, permissions }: SettingsFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -612,21 +617,27 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
         </div>
 
         {/* ── Save bar ───────────────────────────────────────── */}
-        <div className="sticky bottom-0 z-10 -mx-4 mt-6 border-t border-gray-200 bg-white/95 backdrop-blur px-4 py-3 md:-mx-6 md:px-6">
-          <div className="flex items-center gap-3">
-            <Button type="submit" disabled={isPending}>
-              <Save className="mr-2 h-4 w-4" />
-              {isPending ? "Saving…" : "Save settings"}
-            </Button>
-            {saved && (
-              <span className="flex items-center gap-1 text-sm text-emerald-600">
-                <CheckCircle className="h-4 w-4" />
-                Settings saved
-              </span>
-            )}
-            {error && <span className="text-sm text-red-600">{error}</span>}
+        {permissions.canEdit ? (
+          <div className="sticky bottom-0 z-10 -mx-4 mt-6 border-t border-gray-200 bg-white/95 backdrop-blur px-4 py-3 md:-mx-6 md:px-6">
+            <div className="flex items-center gap-3">
+              <Button type="submit" disabled={isPending}>
+                <Save className="mr-2 h-4 w-4" />
+                {isPending ? "Saving…" : "Save settings"}
+              </Button>
+              {saved && (
+                <span className="flex items-center gap-1 text-sm text-emerald-600">
+                  <CheckCircle className="h-4 w-4" />
+                  Settings saved
+                </span>
+              )}
+              {error && <span className="text-sm text-red-600">{error}</span>}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="sticky bottom-0 z-10 -mx-4 mt-6 border-t border-amber-200 bg-amber-50/95 backdrop-blur px-4 py-3 text-sm text-amber-800 md:-mx-6 md:px-6">
+            You have view-only access to settings.
+          </div>
+        )}
       </form>
     </div>
   );

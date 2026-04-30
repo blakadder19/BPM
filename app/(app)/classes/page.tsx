@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { requireAuth } from "@/lib/auth";
-import { requirePermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import { getTemplates } from "@/lib/services/class-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { buildTeacherNameMap } from "@/lib/services/teacher-roster-store";
@@ -246,6 +250,13 @@ export default async function ClassesPage() {
   const teacherNameMap = Object.fromEntries(nameMap);
   const isDev = process.env.NODE_ENV === "development";
 
+  const access = await getStaffAccess();
+  const permissions = {
+    canCreate: hasPermission(access, "classes:create"),
+    canEdit: hasPermission(access, "classes:edit"),
+    canDelete: hasPermission(access, "classes:delete"),
+  };
+
   return (
     <AdminTemplates
       templates={templates}
@@ -260,6 +271,7 @@ export default async function ClassesPage() {
       teacherAssignments={teacherAssignments}
       teacherNameMap={teacherNameMap}
       isDev={isDev}
+      permissions={permissions}
     />
   );
 }

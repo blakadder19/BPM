@@ -105,6 +105,12 @@ export default async function AppLayout({
 
   const canScanReceive =
     !!staffAccess && hasPermission(staffAccess, "checkin:scan");
+  const scanReceivePermissions = {
+    canCheckIn:
+      !!staffAccess && hasPermission(staffAccess, "checkin:manual_checkin"),
+    canCollectPayment:
+      !!staffAccess && hasPermission(staffAccess, "payments:mark_paid_reception"),
+  };
 
   const _ltEnd = performance.now();
   if (isDev) console.info(`[perf layout] auth=${(_ltAuth-_lt0).toFixed(0)}ms alerts=${(_ltEnd-_ltAuth).toFixed(0)}ms total=${(_ltEnd-_lt0).toFixed(0)}ms`);
@@ -132,7 +138,12 @@ export default async function AppLayout({
               user={{ role: user.role, fullName: user.fullName, email: user.email }}
             >
               {children}
-              {canScanReceive && <GlobalScanReceiver userId={user.id} />}
+              {canScanReceive && (
+                <GlobalScanReceiver
+                  userId={user.id}
+                  permissions={scanReceivePermissions}
+                />
+              )}
             </UserProvider>
           </main>
         </div>

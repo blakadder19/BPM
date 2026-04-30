@@ -97,6 +97,20 @@ export interface AffiliationSummary {
   createdAt: string;
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface AdminStudentsPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canViewFinance: boolean;
+  canManageAffiliations: boolean;
+  canRunLifecycle: boolean;
+}
+
 interface AdminStudentsProps {
   students: StudentListItem[];
   subscriptions: MockSubscription[];
@@ -112,6 +126,7 @@ interface AdminStudentsProps {
   initialSearch?: string;
   birthdayUsedStudentIds?: string[];
   birthdayRedemptions?: Record<string, { classTitle?: string; classDate?: string }>;
+  permissions: AdminStudentsPermissions;
 }
 
 export function AdminStudents({
@@ -129,7 +144,10 @@ export function AdminStudents({
   initialSearch,
   birthdayUsedStudentIds = [],
   birthdayRedemptions = {},
+  permissions,
 }: AdminStudentsProps) {
+  const isReadOnly =
+    !permissions.canCreate && !permissions.canEdit && !permissions.canDelete;
   const searchParams = useSearchParams();
   const birthdayUsedSet = new Set(birthdayUsedStudentIds);
   const [search, setSearch] = useState(initialSearch ?? "");
@@ -225,6 +243,7 @@ export function AdminStudents({
         />
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <AdminHelpButton pageKey="students" />
+          {permissions.canRunLifecycle && (
           <Button
             variant="outline"
             size="sm"
@@ -254,12 +273,22 @@ export function AdminStudents({
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${lifecyclePending ? "animate-spin" : ""}`} />
             {lifecyclePending ? "Checking…" : "Term Lifecycle"}
           </Button>
-          <Button onClick={() => setShowAdd(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Student
-          </Button>
+          )}
+          {permissions.canCreate && (
+            <Button onClick={() => setShowAdd(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Student
+            </Button>
+          )}
         </div>
       </div>
+
+      {isReadOnly && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You have view-only access to Students. Create, edit, and delete
+          actions are hidden.
+        </div>
+      )}
 
       {lifecycleMsg && (
         <div className="rounded-lg border border-bpm-200 bg-bpm-50 px-4 py-2 text-sm text-bpm-800">
@@ -347,40 +376,46 @@ export function AdminStudents({
                   <Td>{formatDate(s.joinedAt)}</Td>
                   <Td className="w-20">
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditStudent(s);
-                        }}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        title="Edit student"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeactivateStudent(s);
-                        }}
-                        className={`rounded-lg p-1.5 ${
-                          s.isActive
-                            ? "text-gray-400 hover:bg-red-50 hover:text-red-600"
-                            : "text-gray-400 hover:bg-green-50 hover:text-green-600"
-                        }`}
-                        title={s.isActive ? "Deactivate" : "Reactivate"}
-                      >
-                        <Power className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteStudentTarget(s);
-                        }}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                        title="Delete student"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {permissions.canEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditStudent(s);
+                          }}
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          title="Edit student"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
+                      {permissions.canEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeactivateStudent(s);
+                          }}
+                          className={`rounded-lg p-1.5 ${
+                            s.isActive
+                              ? "text-gray-400 hover:bg-red-50 hover:text-red-600"
+                              : "text-gray-400 hover:bg-green-50 hover:text-green-600"
+                          }`}
+                          title={s.isActive ? "Deactivate" : "Reactivate"}
+                        >
+                          <Power className="h-4 w-4" />
+                        </button>
+                      )}
+                      {permissions.canDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteStudentTarget(s);
+                          }}
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                          title="Delete student"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </Td>
                 </tr>
@@ -404,8 +439,9 @@ export function AdminStudents({
                       birthdayClassTitle: birthdayRedemptions[s.id]?.classTitle,
                       birthdayClassDate: birthdayRedemptions[s.id]?.classDate,
                     })}
-                    onAddSub={() => setAddSubStudentId(s.id)}
-                    onEditSub={setEditSub}
+                    onAddSub={permissions.canEdit ? () => setAddSubStudentId(s.id) : null}
+                    onEditSub={permissions.canEdit ? setEditSub : null}
+                    canViewFinance={permissions.canViewFinance}
                     colSpan={TABLE_HEADERS.length}
                   />
                 )}
@@ -415,13 +451,13 @@ export function AdminStudents({
         </AdminTable>
       )}
 
-      {showAdd && <AddStudentDialog onClose={() => setShowAdd(false)} />}
+      {showAdd && permissions.canCreate && <AddStudentDialog onClose={() => setShowAdd(false)} />}
 
-      {editStudent && (
+      {editStudent && permissions.canEdit && (
         <EditStudentDialog student={editStudent} onClose={() => setEditStudent(null)} />
       )}
 
-      {deactivateStudent && (
+      {deactivateStudent && permissions.canEdit && (
         <DeactivateConfirmDialog
           student={deactivateStudent}
           impact={computeStudentImpact(deactivateStudent.id)}
@@ -429,7 +465,7 @@ export function AdminStudents({
         />
       )}
 
-      {deleteStudentTarget && (
+      {deleteStudentTarget && permissions.canDelete && (
         <DeleteStudentDialog
           student={deleteStudentTarget}
           impact={computeStudentImpact(deleteStudentTarget.id)}
@@ -437,7 +473,7 @@ export function AdminStudents({
         />
       )}
 
-      {addSubStudentId && (
+      {addSubStudentId && permissions.canEdit && (
         <AddSubscriptionDialog
           studentId={addSubStudentId}
           products={products}
@@ -455,7 +491,7 @@ export function AdminStudents({
         />
       )}
 
-      {editSub && (
+      {editSub && permissions.canEdit && (
         <EditSubscriptionDialog subscription={editSub} products={products} danceStyles={danceStyles} onClose={() => setEditSub(null)} />
       )}
     </div>

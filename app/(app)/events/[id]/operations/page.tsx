@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireAnyPermission } from "@/lib/staff-permissions";
+import { hasPermission, requireAnyPermission } from "@/lib/staff-permissions";
 import {
   cachedGetEventById,
   cachedGetEventProducts,
@@ -34,6 +34,11 @@ export default async function EventOperationsPage({
     studentInfoMap[s.id] = { fullName: s.fullName, email: s.email };
   }
 
+  const permissions = {
+    canCheckIn: hasPermission(access, "checkin:manual_checkin"),
+    canCollectPayment: hasPermission(access, "payments:mark_paid_reception"),
+  };
+
   return (
     <EventOperations
       event={event}
@@ -41,6 +46,7 @@ export default async function EventOperationsPage({
       purchases={purchases}
       studentInfoMap={studentInfoMap}
       currentUserId={user.id}
+      permissions={permissions}
     />
   );
 }

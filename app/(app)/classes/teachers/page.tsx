@@ -1,4 +1,8 @@
-import { requirePermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTemplates } from "@/lib/services/class-store";
 import { getInstances } from "@/lib/services/schedule-store";
@@ -18,6 +22,13 @@ export default async function TeacherPairsPage() {
   const teacherNameMap = Object.fromEntries(nameMap);
   const isDev = process.env.NODE_ENV === "development";
 
+  const access = await getStaffAccess();
+  const permissions = {
+    canCreate: hasPermission(access, "teachers:create"),
+    canEdit: hasPermission(access, "teachers:edit"),
+    canDelete: hasPermission(access, "teachers:delete"),
+  };
+
   return (
     <AdminTeachers
       teacherRoster={teacherRoster}
@@ -26,6 +37,7 @@ export default async function TeacherPairsPage() {
       teacherNameMap={teacherNameMap}
       scheduleInstances={scheduleInstances}
       isDev={isDev}
+      permissions={permissions}
     />
   );
 }

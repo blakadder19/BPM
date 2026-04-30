@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
-import { getStaffAccess, hasPermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasAnyPermission,
+  hasPermission,
+} from "@/lib/staff-permissions";
 import {
   getBookingRepo,
   getAttendanceRepo,
@@ -409,6 +413,18 @@ export default async function BookingsPage({
   const _tEnd = performance.now();
   if (process.env.NODE_ENV === "development") console.info(`[perf /bookings admin] auth=${(_tAuth-_t0).toFixed(0)}ms hydrate=${(_tHydrate-_tAuth).toFixed(0)}ms enrich+filter=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
+  const access = await getStaffAccess();
+  const permissions = {
+    canCreate: hasPermission(access, "bookings:create"),
+    canCancel: hasPermission(access, "bookings:cancel"),
+    canRestore: hasPermission(access, "bookings:restore"),
+    canDelete: hasPermission(access, "bookings:delete"),
+    canCheckIn: hasAnyPermission(access, [
+      "checkin:manual_checkin",
+      "attendance:mark_present",
+    ]),
+  };
+
   return (
     <AdminBookings
       bookings={pageBookings}
@@ -437,6 +453,7 @@ export default async function BookingsPage({
       }}
       typeOptions={typeOptions}
       locationOptions={locationOptions}
+      permissions={permissions}
     />
   );
 }

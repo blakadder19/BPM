@@ -1,4 +1,4 @@
-import { requirePermission } from "@/lib/staff-permissions";
+import { hasPermission, requirePermission } from "@/lib/staff-permissions";
 import { getAttendanceRepo, getBookingRepo } from "@/lib/repositories";
 import { cachedGetAllStudents, cachedGetAllSubs } from "@/lib/server/cached-queries";
 import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
@@ -79,6 +79,12 @@ export default async function AttendancePage({
   const _tEnd = performance.now();
   if (process.env.NODE_ENV === "development") console.info(`[perf /attendance] hydrate=${(_tHydrate-_t0).toFixed(0)}ms rest=${(_tEnd-_tHydrate).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
+  const permissions = {
+    canMarkPresent: hasPermission(access, "attendance:mark_present"),
+    canMarkAbsent: hasPermission(access, "attendance:mark_absent"),
+    canEditHistory: hasPermission(access, "attendance:edit_history"),
+  };
+
   return (
     <AttendanceClient
       mockToday={today}
@@ -93,6 +99,7 @@ export default async function AttendancePage({
       initialDateFilter={params.date ?? ""}
       initialStudentSearch={params.student ?? ""}
       currentUserName={user.fullName}
+      permissions={permissions}
     />
   );
 }

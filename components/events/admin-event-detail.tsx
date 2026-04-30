@@ -75,12 +75,26 @@ export interface StudentInfo {
   email: string;
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface AdminEventDetailPermissions {
+  canEdit: boolean;
+  canDelete: boolean;
+  canMarkPaid: boolean;
+  canRefund: boolean;
+  canScan: boolean;
+}
+
 interface Props {
   event: MockSpecialEvent;
   sessions: MockEventSession[];
   products: MockEventProduct[];
   purchases: MockEventPurchase[];
   studentInfoMap: Record<string, StudentInfo>;
+  permissions: AdminEventDetailPermissions;
 }
 
 import { formatEventDateRange, formatEventDT, formatSessionTimeRange } from "@/lib/utils";
@@ -130,8 +144,16 @@ const CAPACITY_CONFIG: Record<CapacityState, { label: string; icon: typeof Check
   oversold: { label: "Oversold", icon: AlertTriangle, className: "text-red-700", bg: "bg-red-100", border: "border-red-300", text: "text-red-800" },
 };
 
-export function AdminEventDetail({ event, sessions, products, purchases, studentInfoMap }: Props) {
+export function AdminEventDetail({
+  event,
+  sessions,
+  products,
+  purchases,
+  studentInfoMap,
+  permissions,
+}: Props) {
   const router = useRouter();
+  const isReadOnly = !permissions.canEdit && !permissions.canDelete && !permissions.canMarkPaid;
 
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [showAnnouncement, setShowAnnouncement] = useState(false);
@@ -289,29 +311,42 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                     </button>
                   </>
                 )}
-                <Link
-                  href={`/events/${event.id}/operations`}
-                  className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
-                >
-                  <ScanLine className="h-3.5 w-3.5" /> Reception mode
-                </Link>
-                <button
-                  onClick={() => setShowAnnouncement(true)}
-                  className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-2 text-sm font-medium text-white hover:bg-bpm-700"
-                >
-                  <Megaphone className="h-3.5 w-3.5" /> Promote
-                </button>
-                <button
-                  onClick={() => setShowEditEvent(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                >
-                  <Pencil className="h-3.5 w-3.5" /> Edit
-                </button>
+                {permissions.canScan && (
+                  <Link
+                    href={`/events/${event.id}/operations`}
+                    className="flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+                  >
+                    <ScanLine className="h-3.5 w-3.5" /> Reception mode
+                  </Link>
+                )}
+                {permissions.canEdit && (
+                  <button
+                    onClick={() => setShowAnnouncement(true)}
+                    className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-2 text-sm font-medium text-white hover:bg-bpm-700"
+                  >
+                    <Megaphone className="h-3.5 w-3.5" /> Promote
+                  </button>
+                )}
+                {permissions.canEdit && (
+                  <button
+                    onClick={() => setShowEditEvent(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                )}
               </div>
             }
           />
         </div>
       </div>
+
+      {isReadOnly && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You have view-only access to this event. Edit, delete, and payment
+          actions are hidden.
+        </div>
+      )}
 
       {/* ── Event Overview Card ─────────────────────────────── */}
       <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
@@ -500,12 +535,14 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Sessions ({sessions.length})</h2>
-          <button
-            onClick={() => setShowAddSession(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-bpm-700"
-          >
-            <Plus className="h-3.5 w-3.5" /> Add Session
-          </button>
+          {permissions.canEdit && (
+            <button
+              onClick={() => setShowAddSession(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-bpm-700"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Session
+            </button>
+          )}
         </div>
 
         {sessions.length === 0 ? (
@@ -522,8 +559,12 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                 <Td>{s.capacity ?? "—"}</Td>
                 <Td>
                   <div className="flex gap-2">
-                    <button onClick={() => setEditSession(s)} className="text-xs text-bpm-600 hover:underline">Edit</button>
-                    <button onClick={() => setDeleteSession(s)} className="text-xs text-red-600 hover:underline">Delete</button>
+                    {permissions.canEdit && (
+                      <button onClick={() => setEditSession(s)} className="text-xs text-bpm-600 hover:underline">Edit</button>
+                    )}
+                    {permissions.canEdit && (
+                      <button onClick={() => setDeleteSession(s)} className="text-xs text-red-600 hover:underline">Delete</button>
+                    )}
                   </div>
                 </Td>
               </tr>
@@ -536,12 +577,14 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Products ({products.length})</h2>
-          <button
-            onClick={() => setShowAddProduct(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-bpm-700"
-          >
-            <Plus className="h-3.5 w-3.5" /> Add Product
-          </button>
+          {permissions.canEdit && (
+            <button
+              onClick={() => setShowAddProduct(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-bpm-700"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Product
+            </button>
+          )}
         </div>
 
         {products.length === 0 ? (
@@ -563,8 +606,12 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                 <Td>{p.salesOpen ? <Badge variant="success">Open</Badge> : <Badge variant="default">Closed</Badge>}</Td>
                 <Td>
                   <div className="flex gap-2">
-                    <button onClick={() => setEditProduct(p)} className="text-xs text-bpm-600 hover:underline">Edit</button>
-                    <button onClick={() => setDeleteProduct(p)} className="text-xs text-red-600 hover:underline">Delete</button>
+                    {permissions.canEdit && (
+                      <button onClick={() => setEditProduct(p)} className="text-xs text-bpm-600 hover:underline">Edit</button>
+                    )}
+                    {permissions.canEdit && (
+                      <button onClick={() => setDeleteProduct(p)} className="text-xs text-red-600 hover:underline">Delete</button>
+                    )}
                   </div>
                 </Td>
               </tr>
@@ -590,7 +637,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
               </span>
             )}
           </div>
-          {activePurchases.length > 0 && (
+          {activePurchases.length > 0 && permissions.canEdit && (
             <div className="flex items-center gap-2">
               <button
                 onClick={handleSendReminder}
@@ -678,7 +725,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                   </Td>
                   <Td>
                     <div className="flex items-center gap-2">
-                      {pur.paymentStatus === "pending" && (
+                      {pur.paymentStatus === "pending" && permissions.canMarkPaid && (
                         <button
                           onClick={() => { setPayPurchase(pur); setPayMethod("cash"); setPayError(null); }}
                           className="text-xs font-medium text-bpm-600 hover:underline"
@@ -686,7 +733,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                           Mark as paid
                         </button>
                       )}
-                      {pur.paymentStatus === "paid" && (
+                      {pur.paymentStatus === "paid" && permissions.canRefund && (
                         <button
                           onClick={() => { setRefundPurchase(pur); setRefundReason(""); setRefundError(null); }}
                           className="text-xs font-medium text-red-600 hover:underline inline-flex items-center gap-0.5"
@@ -694,7 +741,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
                           <Undo2 className="h-3 w-3" /> Refund
                         </button>
                       )}
-                      {canResend && (
+                      {canResend && permissions.canEdit && (
                         <button
                           onClick={() => handleResendEmail(pur.id, buyerEmail)}
                           disabled={emailPending}
@@ -714,22 +761,26 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
       </section>
 
       {/* ── Dialogs ─────────────────────────────────────────── */}
-      <EventFormDialog
-        open={showEditEvent}
-        onClose={() => setShowEditEvent(false)}
-        defaults={event}
-        action={updateEventAction}
-      />
+      {permissions.canEdit && (
+        <EventFormDialog
+          open={showEditEvent}
+          onClose={() => setShowEditEvent(false)}
+          defaults={event}
+          action={updateEventAction}
+        />
+      )}
 
-      <SessionFormDialog
-        open={showAddSession}
-        onClose={() => setShowAddSession(false)}
-        eventId={event.id}
-        eventStartDate={event.startDate}
-        eventEndDate={event.endDate}
-        action={createSessionAction}
-      />
-      {editSession && (
+      {permissions.canEdit && (
+        <SessionFormDialog
+          open={showAddSession}
+          onClose={() => setShowAddSession(false)}
+          eventId={event.id}
+          eventStartDate={event.startDate}
+          eventEndDate={event.endDate}
+          action={createSessionAction}
+        />
+      )}
+      {editSession && permissions.canEdit && (
         <SessionFormDialog
           open={!!editSession}
           onClose={() => setEditSession(null)}
@@ -740,7 +791,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
           action={updateSessionAction}
         />
       )}
-      {deleteSession && (
+      {deleteSession && permissions.canEdit && (
         <ConfirmDeleteDialog
           open={!!deleteSession}
           onClose={() => setDeleteSession(null)}
@@ -754,14 +805,16 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
         />
       )}
 
-      <EventProductFormDialog
-        open={showAddProduct}
-        onClose={() => setShowAddProduct(false)}
-        eventId={event.id}
-        sessions={sessions}
-        action={createEventProductAction}
-      />
-      {editProduct && (
+      {permissions.canEdit && (
+        <EventProductFormDialog
+          open={showAddProduct}
+          onClose={() => setShowAddProduct(false)}
+          eventId={event.id}
+          sessions={sessions}
+          action={createEventProductAction}
+        />
+      )}
+      {editProduct && permissions.canEdit && (
         <EventProductFormDialog
           open={!!editProduct}
           onClose={() => setEditProduct(null)}
@@ -771,7 +824,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
           action={updateEventProductAction}
         />
       )}
-      {deleteProduct && (
+      {deleteProduct && permissions.canEdit && (
         <ConfirmDeleteDialog
           open={!!deleteProduct}
           onClose={() => setDeleteProduct(null)}
@@ -785,15 +838,17 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
         />
       )}
 
-      <EventAnnouncementDialog
-        open={showAnnouncement}
-        onClose={() => setShowAnnouncement(false)}
-        event={event}
-        students={studentList}
-      />
+      {permissions.canEdit && (
+        <EventAnnouncementDialog
+          open={showAnnouncement}
+          onClose={() => setShowAnnouncement(false)}
+          event={event}
+          students={studentList}
+        />
+      )}
 
       {/* ── Mark as paid dialog ─────────────────────────────── */}
-      {payPurchase && (
+      {payPurchase && permissions.canMarkPaid && (
         <Dialog open={!!payPurchase} onClose={() => setPayPurchase(null)}>
           <DialogContent>
             <DialogHeader>
@@ -850,7 +905,7 @@ export function AdminEventDetail({ event, sessions, products, purchases, student
       )}
 
       {/* ── Refund dialog ──────────────────────────────────────── */}
-      {refundPurchase && (
+      {refundPurchase && permissions.canRefund && (
         <Dialog open={!!refundPurchase} onClose={() => setRefundPurchase(null)}>
           <DialogContent>
             <DialogHeader>

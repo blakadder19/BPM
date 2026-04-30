@@ -16,10 +16,11 @@ import {
   unregisterReceiverAction,
 } from "@/lib/actions/scan-receiver";
 import { useScanReceiverStatus } from "@/components/providers/scan-receiver-status-provider";
-import { GlobalScanOverlay } from "./global-scan-overlay";
+import { GlobalScanOverlay, type GlobalScanOverlayPermissions } from "./global-scan-overlay";
 
 interface GlobalScanReceiverProps {
   userId: string;
+  permissions: GlobalScanOverlayPermissions;
 }
 
 function generateReceiverId(): string {
@@ -49,7 +50,7 @@ function getResultKey(result: GlobalScanResult): string {
  * the receiver only off /scan, navigating to /scan unmounts the inner
  * component and its effect cleanup unregisters this tab.
  */
-export function GlobalScanReceiver({ userId }: GlobalScanReceiverProps) {
+export function GlobalScanReceiver({ userId, permissions }: GlobalScanReceiverProps) {
   const pathname = usePathname();
   const { setStatus } = useScanReceiverStatus();
   const gated = pathname?.startsWith("/scan");
@@ -61,7 +62,7 @@ export function GlobalScanReceiver({ userId }: GlobalScanReceiverProps) {
   }, [gated, setStatus]);
 
   if (gated) return null;
-  return <GlobalScanReceiverInner userId={userId} />;
+  return <GlobalScanReceiverInner userId={userId} permissions={permissions} />;
 }
 
 /**
@@ -69,7 +70,7 @@ export function GlobalScanReceiver({ userId }: GlobalScanReceiverProps) {
  * tab as the active scan receiver, subscribes to the Supabase Realtime
  * broadcast channel, and shows a global overlay when scan results arrive.
  */
-function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
+function GlobalScanReceiverInner({ userId, permissions }: GlobalScanReceiverProps) {
   const receiverIdRef = useRef<string>("");
   const channelRef = useRef<ReturnType<ReturnType<typeof createClient>["channel"]> | null>(null);
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -233,6 +234,7 @@ function GlobalScanReceiverInner({ userId }: GlobalScanReceiverProps) {
       onClose={handleClose}
       onNextScan={handleNextScan}
       suppressedCount={suppressedCount}
+      permissions={permissions}
     />
   );
 }

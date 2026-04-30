@@ -73,11 +73,24 @@ interface StudentRow {
   email: string | null;
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface DiscountRulesPanelPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canPreview: boolean;
+}
+
 interface PanelProps {
   rules: RuleRow[];
   products: ProductRow[];
   students: StudentRow[];
   verifiedAffiliationCounts: Record<string, number>;
+  permissions: DiscountRulesPanelPermissions;
 }
 
 const RULE_TYPE_LABELS: Record<DiscountRuleType, string> = {
@@ -199,7 +212,10 @@ export function DiscountRulesPanel({
   products,
   students,
   verifiedAffiliationCounts,
+  permissions,
 }: PanelProps) {
+  const isReadOnly =
+    !permissions.canCreate && !permissions.canEdit && !permissions.canDelete;
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -262,12 +278,21 @@ export function DiscountRulesPanel({
         title="Discount Rules"
         description="Manage the academy's discount catalogue. BPM is the only source of truth — Stripe charges the exact final amount BPM calculates, and editing rules here never affects historical purchases (each subscription carries a frozen snapshot)."
         actions={
-          <Button onClick={openCreate}>
-            <Plus className="size-4" />
-            <span>New rule</span>
-          </Button>
+          permissions.canCreate ? (
+            <Button onClick={openCreate}>
+              <Plus className="size-4" />
+              <span>New rule</span>
+            </Button>
+          ) : null
         }
       />
+
+      {isReadOnly && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You have view-only access to Discount Rules. Create, edit, and delete
+          actions are hidden.
+        </div>
+      )}
 
       {actionError && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -404,49 +429,55 @@ export function DiscountRulesPanel({
                 </Td>
                 <Td>
                   <div className="flex flex-wrap gap-1">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => openEdit(r)}
-                      disabled={pendingId === r.id}
-                    >
-                      <Pencil className="size-3.5" />
-                      <span>Edit</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        runRowAction(r.id, () =>
-                          toggleDiscountRuleActiveAction(r.id, !r.isActive),
-                        )
-                      }
-                      disabled={pendingId === r.id}
-                    >
-                      {r.isActive ? (
-                        <PowerOff className="size-3.5" />
-                      ) : (
-                        <Power className="size-3.5" />
-                      )}
-                      <span>{r.isActive ? "Deactivate" : "Activate"}</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        if (
-                          !confirm(
-                            `Delete discount rule "${r.code}"? Historical purchases keep their frozen snapshot — only future evaluations are affected. (Tip: deactivate is usually safer.)`,
+                    {permissions.canEdit && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEdit(r)}
+                        disabled={pendingId === r.id}
+                      >
+                        <Pencil className="size-3.5" />
+                        <span>Edit</span>
+                      </Button>
+                    )}
+                    {permissions.canEdit && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          runRowAction(r.id, () =>
+                            toggleDiscountRuleActiveAction(r.id, !r.isActive),
                           )
-                        ) {
-                          return;
                         }
-                        runRowAction(r.id, () => deleteDiscountRuleAction(r.id));
-                      }}
-                      disabled={pendingId === r.id}
-                    >
-                      <Trash2 className="size-3.5 text-red-600" />
-                    </Button>
+                        disabled={pendingId === r.id}
+                      >
+                        {r.isActive ? (
+                          <PowerOff className="size-3.5" />
+                        ) : (
+                          <Power className="size-3.5" />
+                        )}
+                        <span>{r.isActive ? "Deactivate" : "Activate"}</span>
+                      </Button>
+                    )}
+                    {permissions.canDelete && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (
+                            !confirm(
+                              `Delete discount rule "${r.code}"? Historical purchases keep their frozen snapshot — only future evaluations are affected. (Tip: deactivate is usually safer.)`,
+                            )
+                          ) {
+                            return;
+                          }
+                          runRowAction(r.id, () => deleteDiscountRuleAction(r.id));
+                        }}
+                        disabled={pendingId === r.id}
+                      >
+                        <Trash2 className="size-3.5 text-red-600" />
+                      </Button>
+                    )}
                   </div>
                 </Td>
               </tr>
@@ -455,7 +486,7 @@ export function DiscountRulesPanel({
         </AdminTable>
       )}
 
-      {editorOpen && (
+      {editorOpen && (permissions.canCreate || permissions.canEdit) && (
         <RuleEditor
           rule={editorRule}
           products={products}

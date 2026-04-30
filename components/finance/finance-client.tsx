@@ -50,11 +50,23 @@ import {
 
 // ── Props ────────────────────────────────────────────────────
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface FinanceClientPermissions {
+  canMarkPaid: boolean;
+  canRefund: boolean;
+  canDangerZone: boolean;
+}
+
 interface FinanceClientProps {
   transactions: FinanceTransaction[];
   metrics: FinanceMetrics;
   auditLog?: FinanceAuditEntry[];
   superAdminStatus?: FinanceSuperAdminStatus | null;
+  permissions: FinanceClientPermissions;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -183,7 +195,7 @@ function exportToCsv(rows: FinanceTransaction[]) {
 
 // ── Component ───────────────────────────────────────────────
 
-export function FinanceClient({ transactions, metrics, auditLog = [], superAdminStatus }: FinanceClientProps) {
+export function FinanceClient({ transactions, metrics, auditLog = [], superAdminStatus, permissions }: FinanceClientProps) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -442,7 +454,7 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
                   isToggling={togglingId === tx.id}
                   isMarkingPaid={markingPaidId === tx.id}
                   wasJustMarkedPaid={wasMarkedPaidLocally}
-                  onMarkPaid={async () => {
+                  onMarkPaid={permissions.canMarkPaid ? async () => {
                     setMarkPaidError(null);
                     setMarkingPaidId(tx.id);
                     try {
@@ -464,7 +476,7 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
                     } finally {
                       setMarkingPaidId(null);
                     }
-                  }}
+                  } : undefined}
                   onToggleTest={async () => {
                     setToggleError(null);
                     setTogglingId(tx.id);
@@ -502,7 +514,7 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
       {auditLog.length > 0 && <AuditTrailSection entries={auditLog} />}
 
       {/* Super-admin danger zone */}
-      {superAdminStatus?.canDelete && <FinanceDangerZone refreshKey={candidatesRefreshKey} />}
+      {superAdminStatus?.canDelete && permissions.canDangerZone && <FinanceDangerZone refreshKey={candidatesRefreshKey} />}
     </div>
   );
 }

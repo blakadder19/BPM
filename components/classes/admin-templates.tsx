@@ -63,6 +63,17 @@ interface TermOption {
   endDate?: string;
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface AdminTemplatesPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
 interface AdminTemplatesProps {
   templates: MockClass[];
   allStyles: StyleOption[];
@@ -71,6 +82,7 @@ interface AdminTemplatesProps {
   teacherAssignments: MockTeacherPair[];
   teacherNameMap: Record<string, string>;
   isDev?: boolean;
+  permissions: AdminTemplatesPermissions;
 }
 
 export function AdminTemplates({
@@ -81,6 +93,7 @@ export function AdminTemplates({
   teacherAssignments,
   teacherNameMap,
   isDev,
+  permissions,
 }: AdminTemplatesProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -155,12 +168,21 @@ export function AdminTemplates({
         />
         <div className="flex items-center gap-2">
           <AdminHelpButton pageKey="templates" />
-          <Button onClick={() => setShowAdd(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Template
-          </Button>
+          {permissions.canCreate && (
+            <Button onClick={() => setShowAdd(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Template
+            </Button>
+          )}
         </div>
       </div>
+
+      {!permissions.canCreate && !permissions.canEdit && !permissions.canDelete && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You have view-only access to Class Templates. Create, edit, and
+          delete actions are hidden.
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="w-64">
@@ -182,10 +204,12 @@ export function AdminTemplates({
           title="No templates found"
           description="Try adjusting your search or filters, or add a new template."
           action={
-            <Button onClick={() => setShowAdd(true)}>
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add Template
-            </Button>
+            permissions.canCreate ? (
+              <Button onClick={() => setShowAdd(true)}>
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add Template
+              </Button>
+            ) : undefined
           }
         />
       ) : (
@@ -252,30 +276,36 @@ export function AdminTemplates({
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => setEditTarget(c)}
-                        className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        title="Edit"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleToggleActive(c.id)}
-                        disabled={togglePending}
-                        className={`rounded p-1.5 hover:bg-gray-100 ${
-                          c.isActive ? "text-amber-500 hover:text-amber-600" : "text-green-500 hover:text-green-600"
-                        }`}
-                        title={c.isActive ? "Deactivate" : "Reactivate"}
-                      >
-                        <Power className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(c)}
-                        className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
-                        title="Delete template"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {permissions.canEdit && (
+                        <button
+                          onClick={() => setEditTarget(c)}
+                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          title="Edit"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {permissions.canEdit && (
+                        <button
+                          onClick={() => handleToggleActive(c.id)}
+                          disabled={togglePending}
+                          className={`rounded p-1.5 hover:bg-gray-100 ${
+                            c.isActive ? "text-amber-500 hover:text-amber-600" : "text-green-500 hover:text-green-600"
+                          }`}
+                          title={c.isActive ? "Deactivate" : "Reactivate"}
+                        >
+                          <Power className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {permissions.canDelete && (
+                        <button
+                          onClick={() => setDeleteTarget(c)}
+                          className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                          title="Delete template"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {isExpanded ? (
                         <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
                       ) : (
@@ -304,14 +334,14 @@ export function AdminTemplates({
         </AdminTable>
       )}
 
-      {showAdd && (
+      {showAdd && permissions.canCreate && (
         <AddTemplateDialog allStyles={allStyles} allTerms={allTerms} onClose={() => setShowAdd(false)} />
       )}
-      {editTarget && (
+      {editTarget && permissions.canEdit && (
         <EditTemplateDialog template={editTarget} allStyles={allStyles} allTerms={allTerms} onClose={() => setEditTarget(null)} />
       )}
 
-      {deleteTarget && (
+      {deleteTarget && permissions.canDelete && (
         <DeleteTemplateModal
           template={deleteTarget}
           onClose={() => setDeleteTarget(null)}

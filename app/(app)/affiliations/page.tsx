@@ -1,4 +1,8 @@
-import { requirePermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import { getAffiliationRepo, getDiscountRuleRepo } from "@/lib/repositories";
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -13,11 +17,19 @@ export default async function AffiliationsPage({
   await ensureOperationalDataHydrated();
   const params = searchParams ? await searchParams : {};
 
-  const [affiliations, students, rules] = await Promise.all([
+  const [affiliations, students, rules, access] = await Promise.all([
     getAffiliationRepo().getAll(),
     cachedGetAllStudents(),
     getDiscountRuleRepo().getActive(),
+    getStaffAccess(),
   ]);
+
+  const permissions = {
+    canCreate: hasPermission(access, "affiliations:create"),
+    canEdit: hasPermission(access, "affiliations:edit"),
+    canVerify: hasPermission(access, "affiliations:verify"),
+    canDelete: hasPermission(access, "affiliations:delete"),
+  };
 
   const studentRows = students.map((s) => ({
     id: s.id,
@@ -53,6 +65,7 @@ export default async function AffiliationsPage({
       students={studentRows}
       activeRulesByAffiliation={activeRulesByAffiliation}
       initialSearch={params.search ?? ""}
+      permissions={permissions}
     />
   );
 }

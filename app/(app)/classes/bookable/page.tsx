@@ -1,4 +1,8 @@
-import { requirePermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getTemplates } from "@/lib/services/class-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -43,6 +47,15 @@ export default async function BookableClassesPage({
   const terms = await getTermRepo().getAll();
   const allTerms = terms.map((t) => ({ id: t.id, name: t.name, startDate: t.startDate, endDate: t.endDate }));
 
+  const access = await getStaffAccess();
+  const permissions = {
+    canCreate: hasPermission(access, "classes:create"),
+    canEdit: hasPermission(access, "classes:edit"),
+    canCancel: hasPermission(access, "classes:cancel"),
+    canDelete: hasPermission(access, "classes:delete"),
+    canAssignTeachers: hasPermission(access, "teachers:edit"),
+  };
+
   return (
     <AdminSchedule
       instances={instances}
@@ -64,6 +77,7 @@ export default async function BookableClassesPage({
       initialSearch={params.search ?? ""}
       initialDate={params.date ?? ""}
       today={getTodayStr()}
+      permissions={permissions}
     />
   );
 }

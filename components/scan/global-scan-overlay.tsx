@@ -24,7 +24,9 @@ import {
   lookupStudentByIdAction,
   type QrLookupResult,
 } from "@/lib/actions/qr-checkin";
-import { StudentScanPanel } from "./student-scan-panel";
+import { StudentScanPanel, type StudentScanPanelPermissions } from "./student-scan-panel";
+
+export interface GlobalScanOverlayPermissions extends StudentScanPanelPermissions {}
 
 interface GlobalScanOverlayProps {
   /** The current scanned result to display. Null hides the dialog. */
@@ -42,6 +44,7 @@ interface GlobalScanOverlayProps {
    * Next-scan button so the admin knows the mobile user tried again.
    */
   suppressedCount?: number;
+  permissions: GlobalScanOverlayPermissions;
 }
 
 export function GlobalScanOverlay({
@@ -49,6 +52,7 @@ export function GlobalScanOverlay({
   onClose,
   onNextScan,
   suppressedCount = 0,
+  permissions,
 }: GlobalScanOverlayProps) {
   const open = !!result;
 
@@ -79,7 +83,9 @@ export function GlobalScanOverlay({
         </DialogHeader>
 
         <DialogBody>
-          {result?.type === "student" && <StudentResultBody result={result.data} />}
+          {result?.type === "student" && (
+            <StudentResultBody result={result.data} permissions={permissions} />
+          )}
           {result?.type === "event_guest" && (
             <EventGuestResultBody result={result.data} />
           )}
@@ -110,7 +116,13 @@ export function GlobalScanOverlay({
 
 // ── Student result body ────────────────────────────────────────
 
-function StudentResultBody({ result }: { result: QrLookupResult }) {
+function StudentResultBody({
+  result,
+  permissions,
+}: {
+  result: QrLookupResult;
+  permissions: GlobalScanOverlayPermissions;
+}) {
   const studentId = result.student?.id;
   const [currentResult, setCurrentResult] = useState(result);
 
@@ -123,7 +135,14 @@ function StudentResultBody({ result }: { result: QrLookupResult }) {
     return next;
   }, [studentId]);
 
-  return <StudentScanPanel result={currentResult} onRefresh={refresh} compactHeader />;
+  return (
+    <StudentScanPanel
+      result={currentResult}
+      onRefresh={refresh}
+      compactHeader
+      permissions={permissions}
+    />
+  );
 }
 
 // ── Event guest body (rich, reuses the event-guest details from qr-checkin) ──
