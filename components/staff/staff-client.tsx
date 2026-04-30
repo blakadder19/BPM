@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   Plus,
   X,
@@ -27,7 +28,9 @@ import {
   ROLE_PRESETS,
   STAFF_ROLE_KEYS,
   STAFF_ROLE_LABELS,
+  expandPermissions,
   isSensitivePermission,
+  normalizePermissionsForStorage,
   type Permission,
   type StaffRoleKey,
   type StaffStatus,
@@ -37,6 +40,7 @@ import {
   revokeStaffInviteAction,
   setStaffStatusAction,
   updateStaffPermissionsAction,
+  updateStaffProfileAction,
 } from "@/lib/actions/staff";
 
 export interface StaffClientStaffRow {
@@ -79,9 +83,74 @@ function statusVariant(status: StaffStatus): "success" | "neutral" | "warning" {
   return "neutral";
 }
 
+/**
+ * Copy text to the clipboard with a synchronous fallback for older
+ * browsers / non-HTTPS contexts where `navigator.clipboard` is
+ * unavailable. Calls `onSuccess` only when the copy actually
+ * succeeds — important so the "copied" toast doesn't lie.
+ */
+function copyToClipboard(text: string, onSuccess: () => void): void {
+  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => onSuccess(),
+      () => fallbackCopy(text, onSuccess),
+    );
+    return;
+  }
+  fallbackCopy(text, onSuccess);
+}
+
+function fallbackCopy(text: string, onSuccess: () => void): void {
+  try {
+    if (typeof document === "undefined") return;
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "absolute";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    onSuccess();
+  } catch {
+    // Last resort — let the user copy manually from the visible input.
+  }
+}
+
+/**
+ * If the server-returned URL is already absolute (`http://` /
+ * `https://`), return it as-is. Otherwise prefix it with the best
+ * origin we have on the client. Used as the last line of defence
+ * against a relative `/login?invite=...` ever surfacing in the UI.
+ */
+function toAbsoluteInviteUrl(maybeUrl: string, baseUrl: string): string {
+  if (/^https?:\/\//i.test(maybeUrl)) return maybeUrl;
+  if (baseUrl) return `${baseUrl}${maybeUrl}`;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${maybeUrl}`;
+  }
+  return maybeUrl;
+}
+
+/**
+ * Compose an absolute invite URL for display/copy.
+ *
+ * Server-side `inviteStaffAction` already returns an absolute URL
+ * (resolved from NEXT_PUBLIC_SITE_URL / request host / VERCEL_URL),
+ * but the pending-invites table renders links from saved tokens too,
+ * and that path uses the `baseUrl` prop. If the prop is missing for
+ * any reason (e.g. SSR before headers were fully resolved), fall back
+ * to `window.location.origin` on the client so admins always see a
+ * shareable absolute link.
+ */
 function inviteUrl(baseUrl: string, token: string): string {
-  if (!baseUrl) return `/login?invite=${encodeURIComponent(token)}`;
-  return `${baseUrl}/login?invite=${encodeURIComponent(token)}`;
+  const path = `/login?invite=${encodeURIComponent(token)}`;
+  if (baseUrl) return `${baseUrl}${path}`;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return `${window.location.origin}${path}`;
+  }
+  return path;
 }
 
 export function StaffClient({
@@ -92,6 +161,7 @@ export function StaffClient({
   isLegacyAdminFallback,
   baseUrl,
 }: Props) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [actionError, setActionError] = useState<string | null>(null);
@@ -101,7 +171,27 @@ export function StaffClient({
 
   const [showInvite, setShowInvite] = useState(false);
   const [editTarget, setEditTarget] = useState<StaffClientStaffRow | null>(null);
-  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
+  // After a successful invite we keep the URL + email + role so the
+  // sticky banner can show all three. Cleared with the X button.
+  const [lastInvite, setLastInvite] = useState<
+    | {
+        url: string;
+        email: string;
+        roleKey: StaffRoleKey;
+        emailStatus: "sent" | "skipped" | "failed" | undefined;
+      }
+    | null
+  >(null);
+
+  const inviteBannerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (lastInvite && inviteBannerRef.current) {
+      inviteBannerRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [lastInvite]);
 
   const activeSuperAdmins = useMemo(
     () => staff.filter((s) => s.roleKey === "super_admin" && s.status === "active").length,
@@ -165,35 +255,73 @@ export function StaffClient({
         </div>
       )}
 
-      {lastInviteUrl && (
-        <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-3 text-sm">
-          <div className="mb-1 font-medium text-bpm-800">Invite link ready to share</div>
-          <div className="flex items-center gap-2">
+      {lastInvite && (
+        <div
+          ref={inviteBannerRef}
+          className="rounded-md border-2 border-bpm-300 bg-bpm-50 px-4 py-3 text-sm shadow-sm"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <div>
+              <div className="font-semibold text-bpm-900">Invite created</div>
+              <div className="text-xs text-bpm-700">
+                <span className="font-medium">{lastInvite.email}</span> ·{" "}
+                {STAFF_ROLE_LABELS[lastInvite.roleKey]}
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setLastInvite(null)}
+              aria-label="Dismiss invite banner"
+            >
+              <X className="size-3.5" />
+            </Button>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <input
               readOnly
-              value={lastInviteUrl}
+              value={lastInvite.url}
               className="w-full rounded border border-bpm-200 bg-white px-2 py-1 font-mono text-xs"
               onClick={(e) => (e.target as HTMLInputElement).select()}
             />
             <Button
               size="sm"
-              variant="outline"
               onClick={() => {
-                navigator.clipboard?.writeText(lastInviteUrl);
-                setActionInfo("Invite link copied to clipboard.");
+                copyToClipboard(lastInvite.url, () =>
+                  setActionInfo("Invite link copied to clipboard."),
+                );
               }}
             >
               <Copy className="size-3.5" />
-              <span>Copy</span>
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setLastInviteUrl(null)}>
-              <X className="size-3.5" />
+              <span>Copy invite link</span>
             </Button>
           </div>
-          <p className="mt-1 text-xs text-bpm-700">
-            Share this link with the recipient. They sign in with the invited email
-            and the staff role/permissions are activated automatically.
-          </p>
+          {lastInvite.emailStatus === "sent" && (
+            <p className="mt-2 text-xs text-emerald-700">
+              <strong>Invite email sent.</strong> The link above is also valid for
+              manual sharing if needed.
+            </p>
+          )}
+          {lastInvite.emailStatus === "skipped" && (
+            <p className="mt-2 text-xs text-bpm-700">
+              <strong>Email sending is not configured.</strong> Copy and share
+              this invite link manually. Set <code>BREVO_API_KEY</code> on the
+              server to enable automatic delivery.
+            </p>
+          )}
+          {lastInvite.emailStatus === "failed" && (
+            <p className="mt-2 text-xs text-amber-700">
+              <strong>Invite created, but email could not be sent.</strong>{" "}
+              Copy and share this link manually. (See server logs for the
+              Brevo error — usually a sender domain that needs verifying.)
+            </p>
+          )}
+          {lastInvite.emailStatus === undefined && (
+            <p className="mt-2 text-xs text-bpm-700">
+              The recipient signs in with the invited email and their staff
+              role / permissions are activated automatically.
+            </p>
+          )}
         </div>
       )}
 
@@ -223,8 +351,9 @@ export function StaffClient({
                       size="sm"
                       variant="outline"
                       onClick={() => {
-                        navigator.clipboard?.writeText(url);
-                        setActionInfo(`Invite link for ${inv.email} copied.`);
+                        copyToClipboard(url, () =>
+                          setActionInfo(`Invite link for ${inv.email} copied.`),
+                        );
                       }}
                     >
                       <Copy className="size-3.5" />
@@ -370,10 +499,24 @@ export function StaffClient({
           currentIsSuperAdmin={currentIsSuperAdmin}
           onClose={() => setShowInvite(false)}
           onError={setActionError}
-          onCreated={(url) => {
+          onCreated={({ url, email, roleKey, emailStatus }) => {
             setShowInvite(false);
-            setLastInviteUrl(url);
+            setLastInvite({ url, email, roleKey, emailStatus });
+            setActionError(null);
             setActionInfo(null);
+            // Force the pending-invites list and any nav permissions
+            // to refetch from the server so the new row appears
+            // immediately without a manual reload.
+            router.refresh();
+          }}
+          onUpdatedExisting={(email) => {
+            setShowInvite(false);
+            setLastInvite(null);
+            setActionError(null);
+            setActionInfo(
+              `${email} already has a BPM account — their staff role and permissions have been updated. They will see the new access on their next sign-in.`,
+            );
+            router.refresh();
           }}
         />
       )}
@@ -386,7 +529,11 @@ export function StaffClient({
           currentUserId={currentUserId}
           onClose={() => setEditTarget(null)}
           onError={setActionError}
-          onSaved={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null);
+            setActionInfo("Staff details updated.");
+            router.refresh();
+          }}
         />
       )}
     </div>
@@ -401,12 +548,19 @@ function InviteModal({
   onClose,
   onError,
   onCreated,
+  onUpdatedExisting,
 }: {
   baseUrl: string;
   currentIsSuperAdmin: boolean;
   onClose: () => void;
   onError: (msg: string | null) => void;
-  onCreated: (inviteUrl: string) => void;
+  onCreated: (payload: {
+    url: string;
+    email: string;
+    roleKey: StaffRoleKey;
+    emailStatus: "sent" | "skipped" | "failed" | undefined;
+  }) => void;
+  onUpdatedExisting: (email: string) => void;
 }) {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -415,28 +569,65 @@ function InviteModal({
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
+  // Same role-change discipline as the edit modal: never carry stale
+  // override perms across role switches.
+  function handleRoleChange(next: StaffRoleKey) {
+    if (next === roleKey) return;
+    if (next === "super_admin") {
+      setOverrides(new Set());
+    } else if (next === "custom") {
+      const effective = expandPermissions(roleKey, [...overrides]);
+      setOverrides(new Set(effective));
+    } else {
+      setOverrides(new Set());
+    }
+    setRoleKey(next);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLocalError(null);
     onError(null);
     setSubmitting(true);
     try {
-      const r = await inviteStaffAction({
-        email,
-        displayName: displayName.trim() || null,
-        roleKey,
-        permissions: [...overrides],
-      });
+      let r: Awaited<ReturnType<typeof inviteStaffAction>>;
+      try {
+        r = await inviteStaffAction({
+          email,
+          displayName: displayName.trim() || null,
+          roleKey,
+          permissions: normalizePermissionsForStorage(roleKey, [...overrides]),
+        });
+      } catch (err) {
+        // Surface unexpected server errors instead of silently closing.
+        // Common causes: Supabase unreachable, RLS misconfiguration,
+        // missing migration. Without this catch the modal would close
+        // with no feedback at all (Round-2 QA bug).
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("[invite-staff] action threw:", msg);
+        setLocalError(`Could not create invite: ${msg}`);
+        return;
+      }
+
       if (!r.success) {
         setLocalError(r.error);
         return;
       }
+
       const url = r.data?.inviteUrl;
+      const resolvedEmail = r.data?.email ?? email;
       if (url) {
-        onCreated(url);
+        // Ensure the displayed link is absolute even if the server
+        // returned a relative one for any reason.
+        onCreated({
+          url: toAbsoluteInviteUrl(url, baseUrl),
+          email: resolvedEmail,
+          roleKey,
+          emailStatus: r.data?.emailStatus,
+        });
       } else {
-        // Existing staff member — already updated in place.
-        onClose();
+        // Existing user — promoted/updated in place by the action.
+        onUpdatedExisting(resolvedEmail);
       }
     } finally {
       setSubmitting(false);
@@ -474,7 +665,7 @@ function InviteModal({
 
           <RoleSelect
             value={roleKey}
-            onChange={setRoleKey}
+            onChange={handleRoleChange}
             allowSuperAdmin={currentIsSuperAdmin}
           />
 
@@ -485,9 +676,13 @@ function InviteModal({
           />
 
           <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-2 text-xs text-bpm-800">
-            We will generate a copyable invite link. Share it manually with the
-            recipient — they sign in with the invited email and access activates
-            automatically. (Email sending is not configured in this MVP.)
+            <p className="font-medium">How invites work</p>
+            <p className="mt-0.5">
+              We send the invite email automatically (when Brevo is configured)
+              and also show you a copyable link as a fallback. The recipient
+              signs in with this email — their staff role and permissions
+              activate on first sign-in.
+            </p>
           </div>
         </div>
 
@@ -524,8 +719,15 @@ function EditPermissionsModal({
   onError: (msg: string | null) => void;
   onSaved: () => void;
 }) {
-  const [roleKey, setRoleKey] = useState<StaffRoleKey>(target.roleKey ?? "teacher");
-  const [overrides, setOverrides] = useState<Set<Permission>>(new Set(target.permissions));
+  const initialRole: StaffRoleKey = target.roleKey ?? "teacher";
+  const [roleKey, setRoleKey] = useState<StaffRoleKey>(initialRole);
+  // Override list is "extras only" for non-Custom; the full effective
+  // set for Custom. Initialize from `target.permissions` which the
+  // server now persists in this exact shape.
+  const [overrides, setOverrides] = useState<Set<Permission>>(
+    new Set(target.permissions),
+  );
+  const [fullName, setFullName] = useState<string>(target.fullName ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -534,6 +736,33 @@ function EditPermissionsModal({
     target.status === "active" &&
     activeSuperAdmins <= 1;
   const isSelfSuper = target.id === currentUserId && target.roleKey === "super_admin";
+
+  /**
+   * Role-change handler — prevents stale override leakage.
+   *
+   *   - super_admin: clear overrides (all perms granted by sentinel).
+   *   - custom: pre-fill overrides with the user's CURRENT effective
+   *     permissions so the admin starts from a meaningful state and
+   *     can curate down rather than starting from a blank slate.
+   *   - other preset roles: clear overrides (extras start at zero;
+   *     admin can add specific extras on top of the new preset).
+   *
+   * Without this, switching from Admin → Teacher leaves the override
+   * containing the entire previous Admin preset, and `expandPermissions`
+   * unions it with the Teacher preset, effectively keeping Admin power.
+   */
+  function handleRoleChange(next: StaffRoleKey) {
+    if (next === roleKey) return;
+    if (next === "super_admin") {
+      setOverrides(new Set());
+    } else if (next === "custom") {
+      const effective = expandPermissions(roleKey, [...overrides]);
+      setOverrides(new Set(effective));
+    } else {
+      setOverrides(new Set());
+    }
+    setRoleKey(next);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -549,18 +778,46 @@ function EditPermissionsModal({
       return;
     }
 
+    const trimmedName = fullName.trim();
+    if (!trimmedName) {
+      setLocalError("Display name cannot be empty.");
+      return;
+    }
+
     setSubmitting(true);
     try {
+      // Persist name change first if it actually changed. We treat
+      // the two saves as independent so a permissions edit still
+      // succeeds even if the name save fails (and vice versa).
+      if (trimmedName !== (target.fullName ?? "")) {
+        const profileResult = await updateStaffProfileAction({
+          userId: target.id,
+          fullName: trimmedName,
+        });
+        if (!profileResult.success) {
+          setLocalError(profileResult.error);
+          return;
+        }
+      }
+
+      // Defensive client-side normalization: server normalizes again,
+      // but doing it here avoids round-tripping preset perms that
+      // would just be filtered out anyway.
+      const stored = normalizePermissionsForStorage(roleKey, [...overrides]);
       const r = await updateStaffPermissionsAction({
         userId: target.id,
         roleKey,
-        permissions: [...overrides],
+        permissions: stored,
       });
       if (!r.success) {
         setLocalError(r.error);
         return;
       }
       onSaved();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[edit-staff] action threw:", msg);
+      setLocalError(`Could not save changes: ${msg}`);
     } finally {
       setSubmitting(false);
     }
@@ -588,13 +845,27 @@ function EditPermissionsModal({
             </div>
           )}
 
+          <FieldLabel
+            label="Display name"
+            required
+            hint="Shown in the sidebar, finance audit, and the staff list. Email cannot be changed here."
+          >
+            <input
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              required
+              maxLength={120}
+              className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            />
+          </FieldLabel>
+
           <div className="text-xs text-gray-500">
             Email: <span className="font-mono">{target.email}</span>
           </div>
 
           <RoleSelect
             value={roleKey}
-            onChange={setRoleKey}
+            onChange={handleRoleChange}
             allowSuperAdmin={currentIsSuperAdmin}
             disabled={isLastSuper || isSelfSuper}
           />
@@ -604,6 +875,15 @@ function EditPermissionsModal({
             overrides={overrides}
             onChange={setOverrides}
           />
+
+          {target.id === currentUserId && (
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <strong>Heads up:</strong> you are editing your own access. Some
+              changes may not appear in your own sidebar until you sign out and
+              back in. Other staff see the new permissions on their next
+              navigation.
+            </div>
+          )}
         </div>
 
         <div className="flex shrink-0 justify-end gap-2 border-t bg-white px-5 py-3">
@@ -718,6 +998,25 @@ function RoleSelect({
   );
 }
 
+/**
+ * Permissions editor — Model A (preset + custom additions).
+ *
+ * Visual rules:
+ *   - super_admin → editor is hidden, message only.
+ *   - Non-Custom roles:
+ *       • Preset perms render as DISABLED checked + "Included in role".
+ *         You cannot uncheck them here. To remove, switch the role to
+ *         Custom and re-pick exactly what you want.
+ *       • Non-preset perms render as ENABLED checkboxes — toggling
+ *         them adds/removes from the override (extras-only) list.
+ *   - Custom role:
+ *       • Every checkbox is enabled. Checked = effective. Unchecked =
+ *         denied. The override IS the effective permission set.
+ *
+ * The editor never silently grants a permission that is not visibly
+ * checked, and never silently revokes a permission that IS visibly
+ * checked. What you see is what the user gets.
+ */
 function PermissionsEditor({
   roleKey,
   overrides,
@@ -727,34 +1026,66 @@ function PermissionsEditor({
   overrides: Set<Permission>;
   onChange: (next: Set<Permission>) => void;
 }) {
+  const presetSet = useMemo(
+    () => new Set<Permission>(ROLE_PRESETS[roleKey] ?? []),
+    [roleKey],
+  );
+  const effective = useMemo(
+    () => expandPermissions(roleKey, [...overrides]),
+    [roleKey, overrides],
+  );
+
   if (roleKey === "super_admin") {
     return (
       <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-2 text-xs text-bpm-800">
-        Super Admin always has every permission. Per-permission overrides are not used.
+        <p>
+          Super Admin always has every permission. Per-permission overrides
+          are not used.
+        </p>
+        <p className="mt-1 text-[11px] text-bpm-700">
+          Effective permissions: <strong>{effective.size}</strong> (all)
+        </p>
       </div>
     );
   }
 
-  const presetSet = new Set<Permission>(ROLE_PRESETS[roleKey]);
-
-  function toggle(key: Permission) {
+  function toggle(key: Permission, isPresetLocked: boolean) {
+    if (isPresetLocked) return; // Preset perms are locked in non-Custom modes.
     const next = new Set(overrides);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     onChange(next);
   }
 
+  const isCustom = roleKey === "custom";
+
   return (
     <div className="space-y-3">
-      <div className="text-xs text-gray-500">
-        Checked = permission is granted. The role preset auto-grants the highlighted
-        permissions; toggle additional ones below.{" "}
-        {roleKey === "custom" && (
-          <span className="text-amber-700">
-            Custom mode: only the permissions you explicitly enable are granted.
-          </span>
-        )}
+      <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+        <p>
+          {isCustom ? (
+            <>
+              <strong>Custom role:</strong> only permissions you check below
+              are granted. Unchecked = denied.
+            </>
+          ) : (
+            <>
+              <strong>{STAFF_ROLE_LABELS[roleKey]} preset:</strong> the
+              permissions marked <em>Included in role</em> are auto-granted
+              and locked. To remove a preset permission, switch this user
+              to <strong>Custom</strong> and pick exactly what they need.
+              Adding extras is fine.
+            </>
+          )}
+        </p>
+        <p className="mt-1 text-[11px] text-gray-600">
+          Effective permissions:{" "}
+          <strong>
+            {effective.size}/{PERMISSION_GROUPS.reduce((n, g) => n + g.permissions.length, 0)}
+          </strong>
+        </p>
       </div>
+
       <div className="space-y-3">
         {PERMISSION_GROUPS.map((g) => (
           <div key={g.key} className="rounded-md border border-gray-200 px-3 py-2">
@@ -763,28 +1094,41 @@ function PermissionsEditor({
             </div>
             <div className="grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-2">
               {g.permissions.map((p) => {
-                const inPreset = roleKey !== "custom" && presetSet.has(p.key);
+                const inPreset = !isCustom && presetSet.has(p.key);
                 const explicit = overrides.has(p.key);
                 const granted = inPreset || explicit;
                 const sensitive = isSensitivePermission(p.key);
+                const locked = inPreset; // Cannot uncheck preset perms.
                 return (
                   <label
                     key={p.key}
                     className={`flex items-start gap-2 rounded px-1 py-0.5 text-xs ${
                       sensitive && granted ? "bg-amber-50" : ""
-                    }`}
+                    } ${locked ? "opacity-95" : ""}`}
                     title={p.description ?? p.key}
                   >
                     <input
                       type="checkbox"
                       className="mt-0.5"
                       checked={granted}
-                      onChange={() => toggle(p.key)}
+                      disabled={locked}
+                      aria-disabled={locked}
+                      onChange={() => toggle(p.key, locked)}
                     />
                     <span className="flex-1">
                       <span className={inPreset ? "font-medium text-gray-900" : "text-gray-700"}>
                         {p.label}
                       </span>
+                      {locked && (
+                        <span className="ml-1 inline-block rounded-full bg-bpm-100 px-1.5 py-px text-[10px] font-medium uppercase tracking-wider text-bpm-700">
+                          Included in role
+                        </span>
+                      )}
+                      {!locked && explicit && !isCustom && (
+                        <span className="ml-1 inline-block rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-medium uppercase tracking-wider text-emerald-700">
+                          Custom extra
+                        </span>
+                      )}
                       {sensitive && granted && (
                         <span className="ml-1 inline-flex items-center gap-0.5 text-amber-700">
                           <AlertTriangle className="size-3" />
@@ -802,6 +1146,27 @@ function PermissionsEditor({
           </div>
         ))}
       </div>
+
+      <details className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+        <summary className="cursor-pointer select-none font-medium text-gray-800">
+          Effective permissions ({effective.size})
+        </summary>
+        <p className="mt-1 text-[11px] text-gray-600">
+          Resolved keys for this user after applying the {STAFF_ROLE_LABELS[roleKey] ?? roleKey} preset and any custom extras. This is what
+          page guards and server actions check at runtime.
+        </p>
+        {effective.size === 0 ? (
+          <p className="mt-2 text-[11px] italic text-gray-500">
+            No permissions granted. This user can only see /dashboard.
+          </p>
+        ) : (
+          <ul className="mt-2 grid grid-cols-1 gap-0.5 font-mono text-[11px] text-gray-700 sm:grid-cols-2">
+            {[...effective].sort().map((k) => (
+              <li key={k}>{k}</li>
+            ))}
+          </ul>
+        )}
+      </details>
     </div>
   );
 }

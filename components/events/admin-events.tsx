@@ -17,10 +17,23 @@ import { createEventAction, deleteEventAction } from "@/lib/actions/special-even
 import { formatEventDateRange } from "@/lib/utils";
 import type { MockSpecialEvent } from "@/lib/mock-data";
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key checked
+ * by the matching server action.
+ */
+export interface AdminEventsPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canMarkPaid: boolean;
+}
+
 interface AdminEventsProps {
   events: MockSpecialEvent[];
   sessionCountMap: Record<string, number>;
   productCountMap: Record<string, number>;
+  permissions: AdminEventsPermissions;
 }
 
 const STATUS_OPTIONS = [
@@ -29,12 +42,18 @@ const STATUS_OPTIONS = [
   { value: "published", label: "Published" },
 ];
 
-export function AdminEvents({ events, sessionCountMap, productCountMap }: AdminEventsProps) {
+export function AdminEvents({
+  events,
+  sessionCountMap,
+  productCountMap,
+  permissions,
+}: AdminEventsProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MockSpecialEvent | null>(null);
+  const isReadOnly = !permissions.canCreate && !permissions.canEdit && !permissions.canDelete;
 
   const filtered = events.filter((e) => {
     if (statusFilter && e.status !== statusFilter) return false;
@@ -53,15 +72,24 @@ export function AdminEvents({ events, sessionCountMap, productCountMap }: AdminE
         actions={
           <>
             <AdminHelpButton pageKey="events" />
-            <button
-              onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-2 text-sm font-medium text-white hover:bg-bpm-700"
-            >
-              <Plus className="h-4 w-4" /> New Event
-            </button>
+            {permissions.canCreate && (
+              <button
+                onClick={() => setShowAdd(true)}
+                className="flex items-center gap-1.5 rounded-lg bg-bpm-600 px-3 py-2 text-sm font-medium text-white hover:bg-bpm-700"
+              >
+                <Plus className="h-4 w-4" /> New Event
+              </button>
+            )}
           </>
         }
       />
+
+      {isReadOnly && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You have view-only access to Events. Create, edit, and delete actions
+          are hidden.
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search events…" />
@@ -106,14 +134,16 @@ export function AdminEvents({ events, sessionCountMap, productCountMap }: AdminE
               <Td>
                 <div className="flex gap-2">
                   <Link href={`/events/${evt.id}`} className="text-xs text-bpm-600 hover:underline">
-                    Manage
+                    {permissions.canEdit ? "Manage" : "View"}
                   </Link>
-                  <button
-                    onClick={() => setDeleteTarget(evt)}
-                    className="text-xs text-red-600 hover:underline"
-                  >
-                    Delete
-                  </button>
+                  {permissions.canDelete && (
+                    <button
+                      onClick={() => setDeleteTarget(evt)}
+                      className="text-xs text-red-600 hover:underline"
+                    >
+                      Delete
+                    </button>
+                  )}
                 </div>
               </Td>
             </tr>
@@ -121,13 +151,15 @@ export function AdminEvents({ events, sessionCountMap, productCountMap }: AdminE
         </AdminTable>
       )}
 
-      <EventFormDialog
-        open={showAdd}
-        onClose={() => setShowAdd(false)}
-        action={createEventAction}
-      />
+      {permissions.canCreate && (
+        <EventFormDialog
+          open={showAdd}
+          onClose={() => setShowAdd(false)}
+          action={createEventAction}
+        />
+      )}
 
-      {deleteTarget && (
+      {deleteTarget && permissions.canDelete && (
         <ConfirmDeleteDialog
           open={!!deleteTarget}
           onClose={() => setDeleteTarget(null)}

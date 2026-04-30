@@ -729,7 +729,7 @@ export function BookingCheckInCard({
 }: {
   booking: QrStudentBooking;
   result?: { success: boolean; message: string };
-  onCheckIn: () => void;
+  onCheckIn?: () => void;
   isPending: boolean;
 }) {
   const checkedIn = b.isCheckedIn || result?.success;
@@ -789,7 +789,7 @@ export function BookingCheckInCard({
             {result?.success ? result.message : "Checked in"}
           </span>
         </div>
-      ) : (
+      ) : onCheckIn ? (
         <Button
           onClick={onCheckIn}
           disabled={isPending || !b.canCheckIn}
@@ -797,7 +797,7 @@ export function BookingCheckInCard({
         >
           {isPending ? "Checking in…" : "Check In"}
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -811,7 +811,7 @@ export function TodayClassCard({
 }: {
   cls: QrTodayClass;
   result?: { success: boolean; message: string };
-  onAction: () => void;
+  onAction?: () => void;
   isPending: boolean;
   studentHasAnyProduct: boolean;
 }) {
@@ -904,7 +904,7 @@ export function TodayClassCard({
             {result?.message ?? "Checked in"}
           </span>
         </div>
-      ) : cls.hasEntitlement && cls.paymentStatus === "pending" ? (
+      ) : !onAction ? null : cls.hasEntitlement && cls.paymentStatus === "pending" ? (
         <Button
           onClick={onAction}
           disabled={isPending}

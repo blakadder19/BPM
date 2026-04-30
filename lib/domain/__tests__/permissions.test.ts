@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   expandPermissions,
+  normalizePermissionsForStorage,
   PERMISSION_KEYS,
   ROLE_PRESETS,
   isPermissionKey,
@@ -101,6 +102,86 @@ describe("isPermissionKey", () => {
     expect(isPermissionKey("checkin:scan")).toBe(true);
     expect(isPermissionKey("not:real")).toBe(false);
     expect(isPermissionKey("")).toBe(false);
+  });
+});
+
+describe("normalizePermissionsForStorage", () => {
+  it("super_admin always normalizes to empty (sentinel)", () => {
+    const out = normalizePermissionsForStorage("super_admin", [
+      "events:view",
+      "settings:edit",
+    ] as Permission[]);
+    expect(out).toEqual([]);
+  });
+
+  it("custom keeps the exact list (deduped + sanitized)", () => {
+    const out = normalizePermissionsForStorage("custom", [
+      "events:view",
+      "events:view",
+      "checkin:scan",
+    ] as Permission[]);
+    expect(out.sort()).toEqual(["checkin:scan", "events:view"]);
+  });
+
+  it("custom drops unknown keys defensively", () => {
+    const out = normalizePermissionsForStorage("custom", [
+      "events:view",
+      "made:up",
+    ] as Permission[]);
+    expect(out).toEqual(["events:view"]);
+  });
+
+  it("non-custom drops permissions already in the preset (additions only)", () => {
+    // Teacher preset includes checkin:scan and bookings:view.
+    const out = normalizePermissionsForStorage("teacher", [
+      "checkin:scan",
+      "bookings:view",
+      "events:view",
+    ] as Permission[]);
+    expect(out.includes("checkin:scan")).toBe(false);
+    expect(out.includes("bookings:view")).toBe(false);
+    expect(out).toEqual(["events:view"]);
+  });
+
+  it("expandPermissions(role, normalized) reproduces effective set", () => {
+    const inputAll = [
+      "checkin:scan", // in teacher preset
+      "events:view", // not in teacher preset
+    ] as Permission[];
+    const stored = normalizePermissionsForStorage("teacher", inputAll);
+    const effective = expandPermissions("teacher", stored);
+    for (const k of inputAll) expect(effective.has(k)).toBe(true);
+  });
+
+  it("custom-only-events:view yields effective={events:view}", () => {
+    const stored = normalizePermissionsForStorage("custom", [
+      "events:view",
+    ] as Permission[]);
+    const effective = expandPermissions("custom", stored);
+    expect(effective.has("events:view")).toBe(true);
+    expect(effective.has("dashboard:view")).toBe(false);
+    expect(effective.has("students:view")).toBe(false);
+    expect(effective.size).toBe(1);
+  });
+
+  it("switching admin → teacher does not retain stale admin perms", () => {
+    // Simulate the legacy-buggy storage shape where the override
+    // contained `[adminPreset + extras]`. Once normalized for the
+    // *new* teacher role, only the extras should remain.
+    const adminPreset = ROLE_PRESETS.admin;
+    const oldStored = [...adminPreset, "finance:refund" as Permission];
+    const renormalized = normalizePermissionsForStorage(
+      "teacher",
+      oldStored as Permission[],
+    );
+    // Anything that's now in the teacher preset should be dropped.
+    for (const p of ROLE_PRESETS.teacher) {
+      expect(renormalized.includes(p)).toBe(false);
+    }
+    // The non-teacher-preset admin perms remain as overrides — that's
+    // expected for a one-off switch. The editor's role-change UX
+    // resets overrides, so in practice the user clears these.
+    expect(renormalized.includes("finance:refund")).toBe(true);
   });
 });
 

@@ -107,10 +107,15 @@ const STAFF_SELECT =
 export const supabaseStaffRepo: IStaffRepository = {
   async listStaff() {
     const supabase = createAdminClient();
+    // Filter out demo-cleanup rows produced by migration 00061: those
+    // have `staff_role_key = NULL` AND `staff_status = 'disabled'` and
+    // should disappear from /staff. Real disabled staff keep their
+    // `staff_role_key` set, so they still appear with a Disabled badge.
     const { data, error } = await supabase
       .from("users")
       .select(STAFF_SELECT)
       .in("role", ["admin", "teacher"] as never)
+      .or("staff_role_key.not.is.null,staff_status.neq.disabled")
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
     return ((data ?? []) as unknown as UsersRow[]).map(rowToStaff);
@@ -147,6 +152,11 @@ export const supabaseStaffRepo: IStaffRepository = {
         patch.roleKey === "super_admin" ? null : patch.permissions;
     }
     if (patch.status !== undefined) fields.staff_status = patch.status;
+    if (patch.fullName !== undefined) {
+      // `public.users.full_name` is the canonical display name column —
+      // sidebar, finance BY column, and identityMap all read it.
+      fields.full_name = patch.fullName;
+    }
 
     const { error } = await supabase
       .from("users")

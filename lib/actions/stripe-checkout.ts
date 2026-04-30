@@ -30,7 +30,7 @@ import {
   type PurchaseInput,
   type PreparedPurchase,
 } from "./catalog-purchase";
-import { getProductRepo, getSubscriptionRepo } from "@/lib/repositories";
+import { getProductRepo, getSubscriptionRepo, getStudentRepo } from "@/lib/repositories";
 import {
   priceProductForStudent,
   serializePricingForStripe,
@@ -38,6 +38,61 @@ import {
   releaseDiscountClaim,
   attachClaimRelations,
 } from "@/lib/services/pricing-service";
+import { paymentConfirmedEvent } from "@/lib/communications/builders";
+import { dispatchCommEvents } from "@/lib/communications/dispatch";
+import { isEmailEnabled } from "@/lib/communications/email-provider";
+
+/**
+ * Fire a `payment_confirmed` notification + email for a successful
+ * Stripe-paid subscription. Never throws — email failure must never
+ * roll back fulfillment, since Stripe has already charged the
+ * student. Idempotent across the webhook / success-page reconciliation
+ * race because the comm event carries
+ * `payment_confirmed:<studentId>:<subscriptionId>` as its idempotency
+ * key (see lib/communications/builders.ts).
+ */
+async function dispatchStripePaymentConfirmed(args: {
+  studentId: string;
+  subscriptionId: string;
+  productName: string;
+  amountCents: number | null;
+  originalPriceCents: number | null;
+  discountAmountCents: number | null;
+  appliedDiscountSummary: string | null;
+}): Promise<void> {
+  try {
+    const student = await getStudentRepo().getById(args.studentId);
+    const studentName = student?.fullName ?? "BPM student";
+    const amountLabel =
+      args.amountCents != null ? `€${(args.amountCents / 100).toFixed(2)}` : null;
+
+    if (!isEmailEnabled()) {
+      console.info(
+        `[stripe-fulfill] BREVO_API_KEY not set — purchase confirmation email skipped for subscription=${args.subscriptionId}. In-app notification still dispatched.`,
+      );
+    }
+
+    await dispatchCommEvents([
+      paymentConfirmedEvent({
+        studentId: args.studentId,
+        studentName,
+        productName: args.productName,
+        subscriptionId: args.subscriptionId,
+        amountLabel,
+        paymentMethod: "stripe",
+        originalPriceCents: args.originalPriceCents,
+        discountAmountCents: args.discountAmountCents,
+        finalPriceCents: args.amountCents,
+        appliedDiscountSummary: args.appliedDiscountSummary,
+      }),
+    ]);
+  } catch (e) {
+    console.warn(
+      "[stripe-fulfill] payment_confirmed dispatch failed (purchase already fulfilled):",
+      e instanceof Error ? e.message : e,
+    );
+  }
+}
 
 /**
  * Resolve the app's base URL from the incoming request headers.
@@ -397,6 +452,27 @@ export async function fulfillStripeCheckout(
         relatedSubscriptionId: result.subscriptionId,
       });
     }
+
+    // Purchase confirmation: in-app notification + email (Brevo).
+    // Idempotent — webhook + success-page reconciliation cannot
+    // double-send because dispatchCommEvents short-circuits on the
+    // notification's idempotency key.
+    if (result.subscriptionId) {
+      const summary = (result.pricing?.appliedDiscounts ?? [])
+        .map((d) => d.name || d.reason || d.ruleType)
+        .filter(Boolean)
+        .join(" + ");
+      await dispatchStripePaymentConfirmed({
+        studentId: studentId,
+        subscriptionId: result.subscriptionId,
+        productName: product.name,
+        amountCents: result.pricing?.finalPriceCents ?? product.priceCents ?? null,
+        originalPriceCents: result.pricing?.basePriceCents ?? null,
+        discountAmountCents: result.pricing?.totalDiscountCents ?? null,
+        appliedDiscountSummary: summary || null,
+      });
+    }
+
     revalidatePath("/catalog");
     revalidatePath("/dashboard");
     revalidatePath("/classes");
@@ -588,6 +664,28 @@ export async function fulfillExistingSubscriptionPayment(
   });
 
   if (result.success) {
+    // Purchase confirmation: identical flow to fulfillStripeCheckout.
+    // The frozen subscription row already carries the correct
+    // priceCentsAtPurchase / discount fields, so we read them rather
+    // than recomputing.
+    const summary = (() => {
+      const ad = sub.appliedDiscount;
+      if (!ad || !Array.isArray(ad)) return null;
+      const labels = ad
+        .map((d) => d?.name || d?.reason || d?.ruleType)
+        .filter(Boolean) as string[];
+      return labels.length > 0 ? labels.join(" + ") : null;
+    })();
+    await dispatchStripePaymentConfirmed({
+      studentId: sub.studentId,
+      subscriptionId,
+      productName: sub.productName,
+      amountCents: sub.priceCentsAtPurchase ?? null,
+      originalPriceCents: sub.originalPriceCents ?? null,
+      discountAmountCents: sub.discountAmountCents ?? null,
+      appliedDiscountSummary: summary,
+    });
+
     revalidatePath("/catalog");
     revalidatePath("/dashboard");
     revalidatePath("/classes");

@@ -62,12 +62,25 @@ interface DanceStyleOption {
   name: string;
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface AdminProductsPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canArchive: boolean;
+  canDelete: boolean;
+}
+
 interface AdminProductsProps {
   products: MockProduct[];
   subscriptions: MockSubscription[];
   studentNameMap: Record<string, string>;
   danceStyles?: DanceStyleOption[];
   scopeMap?: Record<string, ProductScope>;
+  permissions: AdminProductsPermissions;
 }
 
 export function AdminProducts({
@@ -76,6 +89,7 @@ export function AdminProducts({
   studentNameMap,
   danceStyles = [],
   scopeMap = {},
+  permissions,
 }: AdminProductsProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -90,6 +104,11 @@ export function AdminProducts({
   const [archiveProduct, setArchiveProduct] = useState<MockProduct | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MockProduct | null>(null);
+  const isReadOnly =
+    !permissions.canCreate &&
+    !permissions.canEdit &&
+    !permissions.canArchive &&
+    !permissions.canDelete;
 
   const q = search.toLowerCase();
 
@@ -117,12 +136,21 @@ export function AdminProducts({
         />
         <div className="flex items-center gap-2">
           <AdminHelpButton pageKey="products" />
-          <Button onClick={() => setShowAdd(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Product
-          </Button>
+          {permissions.canCreate && (
+            <Button onClick={() => setShowAdd(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Product
+            </Button>
+          )}
         </div>
       </div>
+
+      {isReadOnly && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You have view-only access to Products. Create, edit, archive, and
+          delete actions are hidden.
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:flex-wrap">
         <div className="w-full sm:max-w-xs">
@@ -214,54 +242,62 @@ export function AdminProducts({
                   </Td>
                   <Td className="w-28">
                     <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditProduct(p);
-                        }}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                        title="Edit product"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeactivateProduct(p);
-                        }}
-                        className={`rounded-lg p-1.5 ${
-                          p.isActive
-                            ? "text-gray-400 hover:bg-red-50 hover:text-red-600"
-                            : "text-gray-400 hover:bg-green-50 hover:text-green-600"
-                        }`}
-                        title={p.isActive ? "Deactivate" : "Reactivate"}
-                      >
-                        <Power className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setArchiveProduct(p);
-                        }}
-                        className="rounded-lg p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
-                        title={p.archivedAt ? "Unarchive" : "Archive"}
-                      >
-                        {p.archivedAt ? (
-                          <ArchiveRestore className="h-4 w-4" />
-                        ) : (
-                          <Archive className="h-4 w-4" />
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setDeleteTarget(p);
-                        }}
-                        className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
-                        title="Delete product"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {permissions.canEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditProduct(p);
+                          }}
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          title="Edit product"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                      )}
+                      {permissions.canEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeactivateProduct(p);
+                          }}
+                          className={`rounded-lg p-1.5 ${
+                            p.isActive
+                              ? "text-gray-400 hover:bg-red-50 hover:text-red-600"
+                              : "text-gray-400 hover:bg-green-50 hover:text-green-600"
+                          }`}
+                          title={p.isActive ? "Deactivate" : "Reactivate"}
+                        >
+                          <Power className="h-4 w-4" />
+                        </button>
+                      )}
+                      {permissions.canArchive && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setArchiveProduct(p);
+                          }}
+                          className="rounded-lg p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-600"
+                          title={p.archivedAt ? "Unarchive" : "Archive"}
+                        >
+                          {p.archivedAt ? (
+                            <ArchiveRestore className="h-4 w-4" />
+                          ) : (
+                            <Archive className="h-4 w-4" />
+                          )}
+                        </button>
+                      )}
+                      {permissions.canDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(p);
+                          }}
+                          className="rounded-lg p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                          title="Delete product"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   </Td>
                 </tr>
@@ -280,27 +316,29 @@ export function AdminProducts({
         </AdminTable>
       )}
 
-      {showAdd && <AddProductDialog onClose={() => setShowAdd(false)} danceStyles={danceStyles} />}
+      {showAdd && permissions.canCreate && (
+        <AddProductDialog onClose={() => setShowAdd(false)} danceStyles={danceStyles} />
+      )}
 
-      {editProduct && (
+      {editProduct && permissions.canEdit && (
         <EditProductDialog product={editProduct} onClose={() => setEditProduct(null)} danceStyles={danceStyles} />
       )}
 
-      {deactivateProduct && (
+      {deactivateProduct && permissions.canEdit && (
         <DeactivateProductDialog
           product={deactivateProduct}
           onClose={() => setDeactivateProduct(null)}
         />
       )}
 
-      {archiveProduct && (
+      {archiveProduct && permissions.canArchive && (
         <ArchiveProductDialog
           product={archiveProduct}
           onClose={() => setArchiveProduct(null)}
         />
       )}
 
-      {deleteTarget && (
+      {deleteTarget && permissions.canDelete && (
         <DeleteProductDialog
           product={deleteTarget}
           subscriptions={subscriptions}

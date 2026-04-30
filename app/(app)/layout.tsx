@@ -4,7 +4,7 @@ import { getDevStudentId } from "@/lib/actions/auth";
 import { cachedGetTerms, cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
-import { getStaffAccess } from "@/lib/staff-permissions";
+import { getStaffAccess, hasPermission } from "@/lib/staff-permissions";
 import { getNavigationForAccess, getNavigationForRole } from "@/lib/role-config";
 import { UserProvider } from "@/components/providers/user-provider";
 import { SidebarProvider } from "@/components/providers/sidebar-provider";
@@ -56,45 +56,61 @@ export default async function AppLayout({
     ? cachedGetAllStudents().then((ss) => ss.map((s) => ({ id: s.id, fullName: s.fullName })))
     : Promise.resolve(undefined);
 
+  // Resolve staff access once per request — used for both navigation
+  // filtering and the alert/scan-receiver gates below. Students never
+  // carry staff perms; we still resolve to keep the call sites uniform.
+  const staffAccess = user.role === "student" ? null : await getStaffAccess();
+
   // Student alerts are fetched client-side in the Topbar to avoid blocking
   // the layout render (~200ms of Supabase queries per navigation).
-  // Admin alerts are fast (local computation), so they stay server-side.
+  // Admin alerts are permission-aware: shown to super-admins or staff with
+  // classes/teachers-related view permissions (the alerts surface schedule /
+  // teacher-coverage issues). Non-permissioned users see no alerts.
+  const canSeeAdminAlerts =
+    !!staffAccess &&
+    (staffAccess.isSuperAdmin ||
+      hasPermission(staffAccess, "classes:view") ||
+      hasPermission(staffAccess, "teachers:view"));
+
   const alertsPromise = (async (): Promise<AdminAlert[]> => {
-    if (user.role === "admin") {
-      try {
-        await ensureScheduleBootstrapped();
-        const terms = await cachedGetTerms();
-        const settings = getSettings();
-        return computeAdminAlerts({
-          terms,
-          instances: getInstances(),
-          teacherAssignments: getAssignments(),
-          today: getTodayStr(),
-          disabledAlertIds: settings.disabledAlertIds,
-        });
-      } catch {
-        return [];
-      }
+    if (!canSeeAdminAlerts) return [];
+    try {
+      await ensureScheduleBootstrapped();
+      const terms = await cachedGetTerms();
+      const settings = getSettings();
+      return computeAdminAlerts({
+        terms,
+        instances: getInstances(),
+        teacherAssignments: getAssignments(),
+        today: getTodayStr(),
+        disabledAlertIds: settings.disabledAlertIds,
+      });
+    } catch {
+      return [];
     }
-    return [];
   })();
 
   const [devStudents, alerts] = await Promise.all([devStudentsPromise, alertsPromise]);
 
-  // Resolve nav once per request based on the staff permission set.
-  // Students never carry staff perms, so we keep the legacy role-based
-  // filter for them (covers /catalog and the standard student items).
   let navItems;
-  if (user.role === "student") {
+  if (user.role === "student" || !staffAccess) {
     navItems = getNavigationForRole("student");
   } else {
-    const access = await getStaffAccess();
     navItems = getNavigationForAccess({
       legacyRole: user.role,
-      permissions: access.permissions,
-      isSuperAdmin: access.isSuperAdmin,
+      permissions: staffAccess.permissions,
+      isSuperAdmin: staffAccess.isSuperAdmin,
     });
   }
+
+  const canScanReceive =
+    !!staffAccess && hasPermission(staffAccess, "checkin:scan");
+  const scanReceivePermissions = {
+    canCheckIn:
+      !!staffAccess && hasPermission(staffAccess, "checkin:manual_checkin"),
+    canCollectPayment:
+      !!staffAccess && hasPermission(staffAccess, "payments:mark_paid_reception"),
+  };
 
   const _ltEnd = performance.now();
   if (isDev) console.info(`[perf layout] auth=${(_ltAuth-_lt0).toFixed(0)}ms alerts=${(_ltEnd-_ltAuth).toFixed(0)}ms total=${(_ltEnd-_lt0).toFixed(0)}ms`);
@@ -115,14 +131,18 @@ export default async function AppLayout({
             alerts={alerts}
             devStudents={devStudents}
             devStudentId={devStudentId}
+            canScan={canScanReceive}
           />
           <main data-main-scroll className="flex-1 overflow-y-auto overscroll-y-contain [&]:[-webkit-overflow-scrolling:touch] px-4 py-4 md:p-6">
             <UserProvider
               user={{ role: user.role, fullName: user.fullName, email: user.email }}
             >
               {children}
-              {(user.role === "admin" || user.role === "teacher") && (
-                <GlobalScanReceiver userId={user.id} />
+              {canScanReceive && (
+                <GlobalScanReceiver
+                  userId={user.id}
+                  permissions={scanReceivePermissions}
+                />
               )}
             </UserProvider>
           </main>

@@ -1,6 +1,6 @@
 "use server";
 
-import { requireRole } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import { getSpecialEventRepo, getStudentRepo } from "@/lib/repositories";
 import { eventAnnouncementEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
@@ -34,7 +34,7 @@ export async function sendEventAnnouncementAction(input: {
   sendInApp: boolean;
   sendEmail: boolean;
 }): Promise<AnnouncementResult> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
 
   const repo = getSpecialEventRepo();
   const event = await repo.getEventById(input.eventId);

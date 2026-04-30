@@ -119,14 +119,26 @@ async function sendToInAppChannel(event: CommEvent): Promise<void> {
 /**
  * Email channel: resolves student email, builds HTML content, sends via Brevo.
  * No-ops gracefully if email is not configured or the address cannot be resolved.
+ *
+ * Logging policy (improved for QA round 3):
+ *   - Always log the gating decision so admins can see WHY an email
+ *     didn't arrive (BREVO_API_KEY missing / email unresolved / Brevo
+ *     rejected) without having to read the email-provider source.
+ *   - Includes event type and event id in every line so logs from
+ *     `purchase_confirmed` events can be correlated end-to-end.
  */
 async function sendToEmailChannel(event: CommEvent): Promise<void> {
-  if (!isEmailEnabled()) return;
+  if (!isEmailEnabled()) {
+    console.info(
+      `[email] BREVO_API_KEY not configured — skipping ${event.type} for student ${event.studentId} (event ${event.id}). Set BREVO_API_KEY in the server environment to enable transactional sends.`,
+    );
+    return;
+  }
 
   const email = await resolveStudentEmail(event.studentId);
   if (!email) {
     console.info(
-      `[email] No email address for student ${event.studentId} — skipping.`
+      `[email] No email address for student ${event.studentId} — skipping ${event.type} (event ${event.id}).`,
     );
     return;
   }
@@ -140,7 +152,14 @@ async function sendToEmailChannel(event: CommEvent): Promise<void> {
   const ok = await sendEmail({ to: email, subject, html });
   if (ok) {
     console.info(
-      `[email] Sent ${event.type} to ${email} (event ${event.id})`
+      `[email] Sent ${event.type} to ${email} (event ${event.id})`,
+    );
+  } else {
+    // sendEmail() already logged the Brevo response body; surface a
+    // clear correlation line at the dispatch layer so /finance and
+    // QA reports can find why a specific event didn't deliver.
+    console.warn(
+      `[email] Brevo rejected ${event.type} for student ${event.studentId} (event ${event.id}). Common causes: sender domain not verified in Brevo, recipient on Brevo blocklist, plan limit reached.`,
     );
   }
 }

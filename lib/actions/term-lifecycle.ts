@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { getSubscriptionRepo, getTermRepo, getStudentRepo } from "@/lib/repositories";
 import {
   createSubscription,
@@ -71,7 +71,7 @@ export async function runTermLifecycleAction(
   result?: LifecycleResult;
 }> {
   if (trigger === "manual") {
-    await requireRole(["admin"]);
+    await requireSuperAdmin();
   }
 
   if (!acquireLock()) {
@@ -226,7 +226,8 @@ export async function lazyExpireSubscriptions(): Promise<number> {
 export async function renewSubscriptionAction(
   subscriptionId: string
 ): Promise<{ success: boolean; error?: string }> {
-  const adminUser = await requireRole(["admin"]);
+  const adminAccess = await requireSuperAdmin();
+  const adminUser = adminAccess.user;
   await ensureOperationalDataHydrated();
 
   const [allSubs, allTerms] = await Promise.all([
@@ -317,7 +318,7 @@ export async function renewSubscriptionAction(
 export async function cancelRenewalAction(
   subscriptionId: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   await ensureOperationalDataHydrated();
 
   const allSubs = await getSubscriptionRepo().getAll();

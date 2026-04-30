@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAcademyId } from "@/lib/supabase/academy";
 import { resolveAudience, type AudienceType, type AudienceParams } from "@/lib/services/broadcast-audience";
@@ -99,7 +99,7 @@ export async function previewAudienceAction(
   audienceType: AudienceType,
   audienceParams: AudienceParams = {}
 ): Promise<{ count: number; sampleNames: string[] }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const result = await resolveAudience(audienceType, audienceParams);
   return {
     count: result.students.length,
@@ -122,7 +122,8 @@ export async function createBroadcastAction(input: {
   ctaDestinationId?: string;
   category?: string;
 }): Promise<{ success: boolean; error?: string; id?: string }> {
-  const user = await requireRole(["admin"]);
+  const access = await requireSuperAdmin();
+  const user = access.user;
   const supabase = createAdminClient();
   const academyId = await getAcademyId();
 
@@ -182,7 +183,7 @@ export async function createBroadcastAction(input: {
 export async function sendBroadcastAction(
   broadcastId: string
 ): Promise<{ success: boolean; error?: string; recipientCount?: number; emailSentCount?: number }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const supabase = createAdminClient();
 
   const { data: row, error: fetchErr } = await supabase
@@ -324,7 +325,7 @@ export async function sendBroadcastAction(
 // ── List broadcasts ──────────────────────────────────────────
 
 export async function listBroadcastsAction(): Promise<BroadcastRow[]> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const supabase = createAdminClient();
   const academyId = await getAcademyId();
 
@@ -348,7 +349,7 @@ export async function listBroadcastsAction(): Promise<BroadcastRow[]> {
 export async function deleteBroadcastAction(
   broadcastId: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const supabase = createAdminClient();
 
   const { data: row } = await supabase

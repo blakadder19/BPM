@@ -1,8 +1,35 @@
+import { headers } from "next/headers";
 import { requirePermission } from "@/lib/staff-permissions";
 import { getStaffRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { StaffClient, type StaffClientStaffRow, type StaffClientInviteRow } from "@/components/staff/staff-client";
 import type { Permission } from "@/lib/domain/permissions";
+
+/**
+ * Resolve an absolute origin for invite copy-links. Mirrors the same
+ * fallback chain used inside `inviteStaffAction` so the link the
+ * admin sees in the pending-invites table matches the one the action
+ * generates server-side.
+ */
+async function resolveBaseUrl(): Promise<string> {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  if (explicit) return explicit;
+  try {
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    if (host) {
+      const proto =
+        h.get("x-forwarded-proto") ??
+        (host.includes("localhost") ? "http" : "https");
+      return `${proto}://${host}`;
+    }
+  } catch {
+    /* ignore */
+  }
+  const vercel = process.env.VERCEL_URL?.replace(/\/$/, "");
+  if (vercel) return `https://${vercel}`;
+  return "";
+}
 
 export default async function StaffPage() {
   const access = await requirePermission("staff:view");
@@ -38,7 +65,7 @@ export default async function StaffPage() {
       token: i.token,
     }));
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
+  const baseUrl = await resolveBaseUrl();
 
   return (
     <StaffClient

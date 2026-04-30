@@ -1,4 +1,4 @@
-import { requireRole } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { getPenaltyRepo, getSettingsRepo } from "@/lib/repositories";
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -11,7 +11,7 @@ export default async function PenaltiesPage({
 }: {
   searchParams?: Promise<{ classTitle?: string; date?: string; student?: string }>;
 }) {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const params = searchParams ? await searchParams : {};
 
   await ensureOperationalDataHydrated();

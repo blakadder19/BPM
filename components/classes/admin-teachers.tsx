@@ -30,6 +30,17 @@ const ACTIVE_OPTIONS = [
   { value: "inactive", label: "Inactive" },
 ];
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface AdminTeachersPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
 interface AdminTeachersProps {
   teacherRoster: Teacher[];
   assignments: MockTeacherPair[];
@@ -37,6 +48,7 @@ interface AdminTeachersProps {
   teacherNameMap: Record<string, string>;
   scheduleInstances?: MockBookableClass[];
   isDev?: boolean;
+  permissions: AdminTeachersPermissions;
 }
 
 export function AdminTeachers({
@@ -46,6 +58,7 @@ export function AdminTeachers({
   teacherNameMap,
   scheduleInstances,
   isDev,
+  permissions,
 }: AdminTeachersProps) {
   const [activeSection, setActiveSection] = useState<"roster" | "assignments">("roster");
 
@@ -77,7 +90,7 @@ export function AdminTeachers({
         ))}
       </nav>
 
-      {activeSection === "roster" && <RosterSection roster={teacherRoster} assignments={assignments} scheduleInstances={scheduleInstances} />}
+      {activeSection === "roster" && <RosterSection roster={teacherRoster} assignments={assignments} scheduleInstances={scheduleInstances} permissions={permissions} />}
       {activeSection === "assignments" && (
         <AssignmentsSection
           assignments={assignments}
@@ -86,6 +99,7 @@ export function AdminTeachers({
           teacherNameMap={teacherNameMap}
           scheduleInstances={scheduleInstances}
           isDev={isDev}
+          permissions={permissions}
         />
       )}
     </div>
@@ -94,7 +108,7 @@ export function AdminTeachers({
 
 // ── Roster Section ──────────────────────────────────────────
 
-function RosterSection({ roster, assignments, scheduleInstances }: { roster: Teacher[]; assignments?: MockTeacherPair[]; scheduleInstances?: MockBookableClass[] }) {
+function RosterSection({ roster, assignments, scheduleInstances, permissions }: { roster: Teacher[]; assignments?: MockTeacherPair[]; scheduleInstances?: MockBookableClass[]; permissions: AdminTeachersPermissions }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("");
@@ -142,10 +156,12 @@ function RosterSection({ roster, assignments, scheduleInstances }: { roster: Tea
           </div>
           <SelectFilter value={activeFilter} onChange={setActiveFilter} options={ACTIVE_OPTIONS} placeholder="All Status" />
         </div>
-        <Button onClick={() => setShowAdd(true)}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Add Teacher
-        </Button>
+        {permissions.canCreate && (
+          <Button onClick={() => setShowAdd(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Teacher
+          </Button>
+        )}
       </div>
 
       {filtered.length === 0 ? (
@@ -153,7 +169,7 @@ function RosterSection({ roster, assignments, scheduleInstances }: { roster: Tea
           icon={Inbox}
           title="No teachers found"
           description="Add a teacher to get started."
-          action={<Button onClick={() => setShowAdd(true)}><Plus className="mr-1.5 h-4 w-4" />Add Teacher</Button>}
+          action={permissions.canCreate ? <Button onClick={() => setShowAdd(true)}><Plus className="mr-1.5 h-4 w-4" />Add Teacher</Button> : undefined}
         />
       ) : (
         <AdminTable headers={["Name", "Role", "Email", "Phone", "Active", ""]} count={filtered.length}>
@@ -179,15 +195,21 @@ function RosterSection({ roster, assignments, scheduleInstances }: { roster: Tea
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => setEditTarget(t)} className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Edit">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => setDeactivateTarget(t)} className={`rounded p-1.5 hover:bg-gray-100 ${t.isActive ? "text-amber-500 hover:text-amber-600" : "text-green-500 hover:text-green-600"}`} title={t.isActive ? "Deactivate" : "Reactivate"}>
-                        <Power className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => setDeleteTarget(t)} className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600" title="Delete teacher">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {permissions.canEdit && (
+                        <button onClick={() => setEditTarget(t)} className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Edit">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {permissions.canEdit && (
+                        <button onClick={() => setDeactivateTarget(t)} className={`rounded p-1.5 hover:bg-gray-100 ${t.isActive ? "text-amber-500 hover:text-amber-600" : "text-green-500 hover:text-green-600"}`} title={t.isActive ? "Deactivate" : "Reactivate"}>
+                          <Power className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {permissions.canDelete && (
+                        <button onClick={() => setDeleteTarget(t)} className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600" title="Delete teacher">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" /> : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />}
                     </div>
                   </Td>
@@ -212,10 +234,10 @@ function RosterSection({ roster, assignments, scheduleInstances }: { roster: Tea
         </AdminTable>
       )}
 
-      {showAdd && <AddTeacherDialog onClose={() => setShowAdd(false)} />}
-      {editTarget && <EditTeacherDialog teacher={editTarget} onClose={() => setEditTarget(null)} />}
+      {showAdd && permissions.canCreate && <AddTeacherDialog onClose={() => setShowAdd(false)} />}
+      {editTarget && permissions.canEdit && <EditTeacherDialog teacher={editTarget} onClose={() => setEditTarget(null)} />}
 
-      {deactivateTarget && (
+      {deactivateTarget && permissions.canEdit && (
         <DeactivateTeacherDialog
           teacher={deactivateTarget}
           impact={computeTeacherImpact(deactivateTarget.id)}
@@ -223,7 +245,7 @@ function RosterSection({ roster, assignments, scheduleInstances }: { roster: Tea
         />
       )}
 
-      {deleteTarget && (
+      {deleteTarget && permissions.canDelete && (
         <DeleteTeacherDialog
           teacher={deleteTarget}
           impact={computeTeacherImpact(deleteTarget.id)}
@@ -365,6 +387,7 @@ function AssignmentsSection({
   teacherNameMap,
   scheduleInstances,
   isDev,
+  permissions,
 }: {
   assignments: MockTeacherPair[];
   templates: MockClass[];
@@ -372,6 +395,7 @@ function AssignmentsSection({
   teacherNameMap: Record<string, string>;
   scheduleInstances?: MockBookableClass[];
   isDev?: boolean;
+  permissions: AdminTeachersPermissions;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -439,16 +463,18 @@ function AssignmentsSection({
           <SelectFilter value={activeFilter} onChange={setActiveFilter} options={ACTIVE_OPTIONS} placeholder="All Status" />
         </div>
         <div className="flex items-center gap-2">
-          {isDev && (
+          {isDev && permissions.canDelete && (
             <Button variant="outline" size="sm" onClick={handleClearAll} disabled={clearPending}>
               <Trash2 className="mr-1 h-3.5 w-3.5" />
               {clearPending ? "Clearing…" : "Clear All"}
             </Button>
           )}
-          <Button onClick={() => setShowAdd(true)}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Assignment
-          </Button>
+          {permissions.canCreate && (
+            <Button onClick={() => setShowAdd(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Assignment
+            </Button>
+          )}
         </div>
       </div>
 
@@ -466,7 +492,7 @@ function AssignmentsSection({
           icon={Inbox}
           title="No assignments found"
           description="Add a default teacher assignment for a class template."
-          action={<Button onClick={() => setShowAdd(true)}><Plus className="mr-1.5 h-4 w-4" />Add Assignment</Button>}
+          action={permissions.canCreate ? <Button onClick={() => setShowAdd(true)}><Plus className="mr-1.5 h-4 w-4" />Add Assignment</Button> : undefined}
         />
       ) : (
         <AdminTable
@@ -490,15 +516,21 @@ function AssignmentsSection({
                   </Td>
                   <Td>
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                      <button onClick={() => setEditTarget(tp)} className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Edit">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => setDeactivateAssignment(tp)} className={`rounded p-1.5 hover:bg-gray-100 ${tp.isActive ? "text-amber-500 hover:text-amber-600" : "text-green-500 hover:text-green-600"}`} title={tp.isActive ? "Deactivate" : "Reactivate"}>
-                        <Power className="h-3.5 w-3.5" />
-                      </button>
-                      <button onClick={() => setDeleteAssignment(tp)} className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600" title="Delete">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      {permissions.canEdit && (
+                        <button onClick={() => setEditTarget(tp)} className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600" title="Edit">
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {permissions.canEdit && (
+                        <button onClick={() => setDeactivateAssignment(tp)} className={`rounded p-1.5 hover:bg-gray-100 ${tp.isActive ? "text-amber-500 hover:text-amber-600" : "text-green-500 hover:text-green-600"}`} title={tp.isActive ? "Deactivate" : "Reactivate"}>
+                          <Power className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                      {permissions.canDelete && (
+                        <button onClick={() => setDeleteAssignment(tp)} className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600" title="Delete">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       {classHistory.length > 1 && (
                         isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-gray-400" /> : <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
                       )}
@@ -536,10 +568,10 @@ function AssignmentsSection({
         </AdminTable>
       )}
 
-      {showAdd && <AddAssignmentDialog templates={templates} teacherRoster={teacherRoster} onClose={() => setShowAdd(false)} />}
-      {editTarget && <EditAssignmentDialog assignment={editTarget} templates={templates} teacherRoster={teacherRoster} onClose={() => setEditTarget(null)} />}
+      {showAdd && permissions.canCreate && <AddAssignmentDialog templates={templates} teacherRoster={teacherRoster} onClose={() => setShowAdd(false)} />}
+      {editTarget && permissions.canEdit && <EditAssignmentDialog assignment={editTarget} templates={templates} teacherRoster={teacherRoster} onClose={() => setEditTarget(null)} />}
 
-      {deactivateAssignment && (
+      {deactivateAssignment && permissions.canEdit && (
         <DeactivateAssignmentDialog
           assignment={deactivateAssignment}
           impact={computeAssignmentImpact(deactivateAssignment)}
@@ -548,7 +580,7 @@ function AssignmentsSection({
         />
       )}
 
-      {deleteAssignment && (
+      {deleteAssignment && permissions.canDelete && (
         <DeleteAssignmentDialog
           assignment={deleteAssignment}
           impact={computeAssignmentImpact(deleteAssignment)}

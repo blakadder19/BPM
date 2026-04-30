@@ -85,9 +85,16 @@ export function getNavigationForRole(role: UserRole): NavItem[] {
  * Precedence:
  *   - If the item declares a `permission`, it appears iff the access
  *     bag contains that permission (super_admin always passes).
- *   - Otherwise the item falls back to the legacy `roles` array against
- *     the supplied legacy role (so non-staff routes like /catalog still
- *     work without needing a permission key).
+ *   - If the item has NO `permission`:
+ *       • Student routes (e.g. /catalog) still use the legacy `roles`
+ *         match — student nav is permission-free by design.
+ *       • All OTHER permission-free items are super-admin-only. This
+ *         closes the legacy bypass where a Custom/Front-Desk user with
+ *         `users.role='admin'` (set by `legacyRoleForStaffRole`) would
+ *         otherwise see /terms, /broadcasts, /studio-hire, /penalties
+ *         in their sidebar despite having no granted permission for
+ *         them. The matching server-side guards now use
+ *         `requireSuperAdmin()`.
  */
 export function getNavigationForAccess(input: {
   legacyRole: UserRole;
@@ -102,7 +109,13 @@ export function getNavigationForAccess(input: {
         : [item.permission];
       return required.some((p) => input.permissions.has(p));
     }
-    return item.roles.includes(input.legacyRole);
+    // No permission key: super-admin always sees it; otherwise only
+    // student-only items are visible (via legacy role match).
+    if (input.isSuperAdmin) return true;
+    if (item.roles.length === 1 && item.roles[0] === "student") {
+      return input.legacyRole === "student";
+    }
+    return false;
   });
 }
 

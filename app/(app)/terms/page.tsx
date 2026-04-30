@@ -1,11 +1,11 @@
-import { requireRole } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { cachedGetTerms } from "@/lib/server/cached-queries";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { AdminTerms } from "@/components/terms/admin-terms";
 
 export default async function TermsPage() {
   const _t0 = performance.now();
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   const terms = await cachedGetTerms();
 

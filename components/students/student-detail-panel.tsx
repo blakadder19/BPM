@@ -54,8 +54,15 @@ interface StudentDetailPanelProps {
    */
   affiliations?: AffiliationSummary[];
   benefits?: MemberBenefitsSummary | null;
-  onAddSub: () => void;
-  onEditSub: (sub: MockSubscription) => void;
+  /** Click handler for "Add subscription" — pass null when the user
+   * lacks the required permission so the button is hidden. */
+  onAddSub: (() => void) | null;
+  /** Click handler for "Edit subscription" — pass null when the user
+   * lacks the required permission so edit affordances are hidden. */
+  onEditSub: ((sub: MockSubscription) => void) | null;
+  /** True when the current user can see finance-sensitive blocks
+   * (wallet, penalties, payment status). */
+  canViewFinance?: boolean;
   colSpan: number;
 }
 
@@ -89,6 +96,7 @@ export function StudentDetailPanel({
   benefits,
   onAddSub,
   onEditSub,
+  canViewFinance = false,
   colSpan,
 }: StudentDetailPanelProps) {
   const router = useRouter();
@@ -232,13 +240,15 @@ export function StudentDetailPanel({
           <Section
             title="Subscriptions"
             action={
-              <button
-                onClick={onAddSub}
-                className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-              >
-                <Plus className="h-3 w-3" />
-                Add
-              </button>
+              onAddSub ? (
+                <button
+                  onClick={onAddSub}
+                  className="flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add
+                </button>
+              ) : null
             }
           >
             {subs.length === 0 ? (
@@ -627,7 +637,7 @@ function InactiveSubsHistory({
   allStudentSubs: MockSubscription[];
   termsById: Map<string, MockTerm>;
   products: MockProduct[];
-  onEdit: (sub: MockSubscription) => void;
+  onEdit: ((sub: MockSubscription) => void) | null;
   onRemove: (sub: MockSubscription) => void;
   onDelete: (sub: MockSubscription) => void;
   renewEligibleIds: Set<string>;
@@ -928,7 +938,7 @@ function SubCard({
   allStudentSubs: MockSubscription[];
   termsById: Map<string, MockTerm>;
   products: MockProduct[];
-  onEdit: (sub: MockSubscription) => void;
+  onEdit: ((sub: MockSubscription) => void) | null;
   onRemove: (sub: MockSubscription) => void;
   onDelete: (sub: MockSubscription) => void;
   renewEligible?: boolean;
@@ -1080,14 +1090,16 @@ function SubCard({
             <RotateCw className={`h-3.5 w-3.5 ${renewPending ? "animate-spin" : ""}`} />
           </button>
         )}
-        <button
-          onClick={() => onEdit(sub)}
-          className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-          title="Edit subscription"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-        {isActive ? (
+        {onEdit && (
+          <button
+            onClick={() => onEdit(sub)}
+            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            title="Edit subscription"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onEdit && (isActive ? (
           <button
             onClick={() => onRemove(sub)}
             className="rounded-lg p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
@@ -1103,7 +1115,7 @@ function SubCard({
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
-        )}
+        ))}
       </div>
     </div>
   );

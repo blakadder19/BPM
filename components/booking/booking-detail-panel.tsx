@@ -10,9 +10,13 @@ import type { BookingView } from "@/app/(app)/bookings/page";
 interface BookingDetailPanelProps {
   booking: BookingView;
   colSpan: number;
-  onCancel: () => void;
+  /** Callback to cancel this booking; pass undefined to hide the
+   * Cancel button when the user lacks permission. */
+  onCancel?: () => void;
   onDelete?: () => void;
-  onCheckIn: () => void;
+  /** Callback to check this booking in; pass undefined to hide the
+   * Check In button when the user lacks permission. */
+  onCheckIn?: () => void;
   onViewWaitlist: () => void;
   onRestore?: () => void;
   hasLinkedPenalty?: boolean;
@@ -146,13 +150,13 @@ export function BookingDetailPanel({
 
           <Section title="Actions" className="md:col-span-2">
             <div className="flex flex-wrap items-center gap-2">
-              {b.status === "confirmed" && !actionsDisabled && (
+              {b.status === "confirmed" && !actionsDisabled && onCheckIn && (
                 <Button variant="outline" size="sm" onClick={onCheckIn}>
                   <Check className="h-3.5 w-3.5 mr-1" />
                   Check In
                 </Button>
               )}
-              {isActive && !actionsDisabled && (
+              {isActive && !actionsDisabled && onCancel && (
                 <Button variant="danger" size="sm" onClick={onCancel}>
                   <XIcon className="h-3.5 w-3.5 mr-1" />
                   Cancel Booking

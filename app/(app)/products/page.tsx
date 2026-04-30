@@ -1,4 +1,8 @@
-import { requirePermission } from "@/lib/staff-permissions";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import {
   cachedGetProducts,
   cachedGetAllSubs,
@@ -38,11 +42,19 @@ export default async function ProductsPage() {
   await ensureOperationalDataHydrated();
   const _tHydrate = performance.now();
 
-  const [products, subscriptions, students] = await Promise.all([
+  const [products, subscriptions, students, access] = await Promise.all([
     cachedGetProducts(),
     cachedGetAllSubs(),
     cachedGetAllStudents(),
+    getStaffAccess(),
   ]);
+
+  const permissions = {
+    canCreate: hasPermission(access, "products:create"),
+    canEdit: hasPermission(access, "products:edit"),
+    canArchive: hasPermission(access, "products:archive"),
+    canDelete: hasPermission(access, "products:delete"),
+  };
   const _tDb = performance.now();
 
   const danceStyles = getDanceStyles().map((s) => ({ id: s.id, name: s.name }));
@@ -67,6 +79,7 @@ export default async function ProductsPage() {
       studentNameMap={studentNameMap}
       danceStyles={danceStyles}
       scopeMap={scopeMap}
+      permissions={permissions}
     />
   );
 }

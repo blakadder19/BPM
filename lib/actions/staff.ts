@@ -20,11 +20,12 @@
  *     their public.users row.
  */
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getStaffRepo } from "@/lib/repositories";
 import {
   isPermissionKey,
-  ROLE_PRESETS,
+  normalizePermissionsForStorage,
   STAFF_ROLE_KEYS,
   type Permission,
   type StaffRoleKey,
@@ -47,6 +48,36 @@ type ActionResult<T = void> = ActionOk<T> | ActionErr;
 
 function normalizeEmail(input: string): string {
   return (input ?? "").trim().toLowerCase();
+}
+
+/**
+ * Resolve the absolute origin to use when constructing copy-link
+ * invite URLs. Falls back through environment hints and the request
+ * host so a missing NEXT_PUBLIC_SITE_URL on a Vercel preview never
+ * leaves the admin with a relative `/login?invite=...` link they
+ * cannot share.
+ */
+async function resolveBaseUrl(): Promise<string> {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  if (explicit) return explicit;
+
+  try {
+    const h = await headers();
+    const host = h.get("x-forwarded-host") ?? h.get("host");
+    if (host) {
+      const proto =
+        h.get("x-forwarded-proto") ??
+        (host.includes("localhost") ? "http" : "https");
+      return `${proto}://${host}`;
+    }
+  } catch {
+    // headers() can throw outside a request context; fall through.
+  }
+
+  const vercel = process.env.VERCEL_URL?.replace(/\/$/, "");
+  if (vercel) return `https://${vercel}`;
+
+  return "http://localhost:3000";
 }
 
 function isValidEmail(email: string): boolean {
@@ -93,6 +124,15 @@ export interface InviteStaffResult {
   inviteId: string;
   inviteUrl: string;
   email: string;
+  /**
+   * Whether the invite email was actually sent.
+   *   - "sent"    — Brevo accepted the message.
+   *   - "skipped" — BREVO_API_KEY not configured; copy-link only.
+   *   - "failed"  — Brevo rejected; copy-link still valid.
+   *   - undefined — existing-staff-update path (no email attempt).
+   */
+  emailStatus?: "sent" | "skipped" | "failed";
+  emailReason?: string;
 }
 
 export async function inviteStaffAction(
@@ -118,6 +158,13 @@ export async function inviteStaffAction(
   }
 
   const permissions = sanitizePermissions(input.permissions);
+  const storedPermissions = normalizePermissionsForStorage(
+    input.roleKey,
+    permissions,
+  );
+  console.info(
+    `[staff] invite: email=${email} role=${input.roleKey} extras=${storedPermissions.length}`,
+  );
 
   const repo = getStaffRepo();
   // If the email already belongs to a staff member, prefer in-place
@@ -126,14 +173,7 @@ export async function inviteStaffAction(
   if (existing) {
     await repo.updateStaff(existing.id, {
       roleKey: input.roleKey,
-      permissions:
-        input.roleKey === "super_admin"
-          ? []
-          : input.roleKey === "custom"
-            ? permissions
-            : [...ROLE_PRESETS[input.roleKey], ...permissions]
-                // Dedup
-                .filter((v, i, arr) => arr.indexOf(v) === i),
+      permissions: storedPermissions,
       status: "active",
     });
     revalidatePath("/staff");
@@ -147,28 +187,51 @@ export async function inviteStaffAction(
     email,
     displayName: input.displayName ?? null,
     roleKey: input.roleKey,
-    permissions:
-      input.roleKey === "super_admin"
-        ? []
-        : input.roleKey === "custom"
-          ? permissions
-          : [...ROLE_PRESETS[input.roleKey], ...permissions].filter(
-              (v, i, arr) => arr.indexOf(v) === i,
-            ),
+    permissions: storedPermissions,
     invitedBy: guard.access.user.id,
   });
 
   // Build the copy-link. The recipient signs in with this email through
   // the normal Supabase auth flow; the auth callback will see the
   // pending invite and call `acceptStaffInviteOnSignInAction`.
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "";
+  //
+  // Resolution order for the absolute base URL:
+  //   1. NEXT_PUBLIC_SITE_URL (explicit prod/preview override)
+  //   2. The current request's Host header (covers Vercel previews
+  //      where SITE_URL isn't configured per environment)
+  //   3. VERCEL_URL (auto-injected by Vercel; lacks scheme)
+  //   4. localhost fallback for `next dev`
+  // The point is to never return a relative link here, because the
+  // invite link is meant to be shared cross-device and copied.
+  const base = await resolveBaseUrl();
   const inviteUrl = `${base}/login?invite=${encodeURIComponent(invite.token)}`;
+
+  // Send the invite email through Brevo. Never fails the action — if
+  // Brevo is not configured or rejects, the copy-link remains valid
+  // and the UI surfaces a clear "could not send" notice.
+  const { sendStaffInviteEmail } = await import(
+    "@/lib/communications/staff-invite-email"
+  );
+  const emailResult = await sendStaffInviteEmail({
+    email,
+    displayName: input.displayName ?? null,
+    roleKey: input.roleKey,
+    inviteUrl,
+    expiresAt: invite.expiresAt,
+    invitedByName:
+      guard.access.user.fullName ?? guard.access.user.email ?? null,
+  });
 
   revalidatePath("/staff");
   return {
     success: true,
-    data: { inviteId: invite.id, inviteUrl, email },
+    data: {
+      inviteId: invite.id,
+      inviteUrl,
+      email,
+      emailStatus: emailResult.status,
+      emailReason: emailResult.reason,
+    },
   };
 }
 
@@ -231,18 +294,60 @@ export async function updateStaffPermissionsAction(
   }
 
   const permissions = sanitizePermissions(input.permissions);
+  const storedPermissions = normalizePermissionsForStorage(
+    input.roleKey,
+    permissions,
+  );
+  console.info(
+    `[staff] update: user=${input.userId} role=${input.roleKey} extras=${storedPermissions.length}`,
+  );
+
   await getStaffRepo().updateStaff(input.userId, {
     roleKey: input.roleKey,
-    permissions:
-      input.roleKey === "super_admin"
-        ? []
-        : input.roleKey === "custom"
-          ? permissions
-          : [...ROLE_PRESETS[input.roleKey], ...permissions].filter(
-              (v, i, arr) => arr.indexOf(v) === i,
-            ),
+    permissions: storedPermissions,
   });
 
+  revalidatePath("/staff");
+  return { success: true };
+}
+
+// ── Display name (profile) ─────────────────────────────────────
+
+export interface UpdateStaffProfileInput {
+  userId: string;
+  fullName: string;
+}
+
+/**
+ * Edit a staff member's display name. Email is intentionally NOT
+ * editable here — that flows through Supabase Auth, not the staff
+ * module. Reuses the `staff:edit_permissions` permission so anyone
+ * who can change role/permissions can also fix typos in names; this
+ * keeps the permission catalogue small for the MVP.
+ */
+export async function updateStaffProfileAction(
+  input: UpdateStaffProfileInput,
+): Promise<ActionResult> {
+  const guard = await requirePermissionForAction("staff:edit_permissions");
+  if (!guard.ok) return { success: false, error: guard.error };
+
+  const fullName = (input.fullName ?? "").trim();
+  if (!fullName) {
+    return { success: false, error: "Display name cannot be empty." };
+  }
+  if (fullName.length > 120) {
+    return { success: false, error: "Display name is too long." };
+  }
+
+  const target = await getStaffRepo().getStaff(input.userId);
+  if (!target) return { success: false, error: "Staff member not found." };
+
+  await getStaffRepo().updateStaff(input.userId, { fullName });
+
+  // The display name is shown in the sidebar/topbar for the current
+  // user, in the finance BY column for any staff actor, and in the
+  // staff list. Revalidate the staff page; topbar/sidebar refresh on
+  // the next navigation.
   revalidatePath("/staff");
   return { success: true };
 }

@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import { getTemplates } from "@/lib/services/class-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { buildTeacherNameMap } from "@/lib/services/teacher-roster-store";
@@ -26,7 +31,10 @@ import type { ClassCardData } from "@/components/booking/student-class-card";
 
 export default async function ClassesPage() {
   const _t0 = performance.now();
-  const user = await requireRole(["admin", "teacher", "student"]);
+  const user = await requireAuth();
+  if (user.role !== "student") {
+    await requirePermission("classes:view");
+  }
   const _tAuth = performance.now();
 
   if (user.role === "student") {
@@ -242,6 +250,13 @@ export default async function ClassesPage() {
   const teacherNameMap = Object.fromEntries(nameMap);
   const isDev = process.env.NODE_ENV === "development";
 
+  const access = await getStaffAccess();
+  const permissions = {
+    canCreate: hasPermission(access, "classes:create"),
+    canEdit: hasPermission(access, "classes:edit"),
+    canDelete: hasPermission(access, "classes:delete"),
+  };
+
   return (
     <AdminTemplates
       templates={templates}
@@ -256,6 +271,7 @@ export default async function ClassesPage() {
       teacherAssignments={teacherAssignments}
       teacherNameMap={teacherNameMap}
       isDev={isDev}
+      permissions={permissions}
     />
   );
 }

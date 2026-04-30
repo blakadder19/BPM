@@ -76,6 +76,9 @@ export default function SignupPage() {
     });
 
     if (authError) {
+      console.warn(
+        `[signup] supabase.auth.signUp error code=${authError.code ?? "?"} status=${authError.status ?? "?"} message=${authError.message}`,
+      );
       setError(authError.message);
       setIsPending(false);
       return;
@@ -94,6 +97,9 @@ export default function SignupPage() {
 
     // If Supabase returned a session, the user is auto-confirmed
     if (data.session) {
+      console.info(
+        "[signup] auto-confirmed (session returned). Email confirmation is OFF in Supabase Auth → Settings.",
+      );
       await provisionCurrentUser().catch((e) =>
         console.error("[signup] provisionCurrentUser threw:", e)
       );
@@ -102,8 +108,17 @@ export default function SignupPage() {
       return;
     }
 
-    // No session means email confirmation is required.
-    // Push state into the URL so the confirmation screen survives refresh.
+    // No session means email confirmation is required. Diagnostic log
+    // is intentionally verbose: when QA reports "I never got the
+    // confirmation email", the very next thing to check is whether
+    // Supabase Auth is configured with custom SMTP (Brevo) AND whether
+    // the redirect URL is in the allow-list.
+    console.info(
+      `[signup] confirmation email expected: user=${data.user?.id ?? "?"} email=${email} redirect=${callbackUrl}. ` +
+        "Confirmation emails are sent by Supabase Auth (NOT by BPM/BREVO_API_KEY). " +
+        "If no email arrives: configure Custom SMTP under Supabase Dashboard → Authentication → SMTP Settings, " +
+        "and add this origin to Authentication → URL Configuration → Redirect URLs.",
+    );
     setConfirmationSent(true);
     setIsPending(false);
     router.replace("/signup?awaiting=1");

@@ -23,10 +23,17 @@ values (
 
 
 -- ── Auth users ──────────────────────────────────────────────
--- Only seed the admin + 2 teachers here. The 3 demo login accounts
+-- Only seed the admin user here. The 3 demo login accounts
 -- (admin@bpm.dance, teacher@bpm.dance, student@bpm.dance) are created
 -- manually in the Supabase dashboard for the hosted project.
 -- This seed is for local dev (supabase db reset) only.
+--
+-- NOTE: demo teachers (María García / Carlos Rivera) were previously
+-- seeded here but leaked into hosted preview environments and
+-- appeared in /staff as mock rows. They have been removed from this
+-- file (and cleaned up by migration 00061_remove_demo_staff.sql).
+-- Local dev does not need them — staff & teacher flows can be
+-- exercised against admin@bpm.dance with the staff invite UI.
 
 insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, recovery_token)
 values
@@ -37,38 +44,12 @@ values
    format('{"full_name":"BPM Admin","role":"admin","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
    now(), now(), '', ''),
 
-  -- Teachers
-  ('00000000-0000-0000-0000-000000000000', 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00002', 'authenticated', 'authenticated',
-   'maria@bpm.dance', crypt('password123', gen_salt('bf')), now(),
-   '{"provider":"email","providers":["email"]}',
-   format('{"full_name":"María García","role":"teacher","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
-   now(), now(), '', ''),
-
-  ('00000000-0000-0000-0000-000000000000', 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00003', 'authenticated', 'authenticated',
-   'carlos@bpm.dance', crypt('password123', gen_salt('bf')), now(),
-   '{"provider":"email","providers":["email"]}',
-   format('{"full_name":"Carlos Rivera","role":"teacher","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
-   now(), now(), '', ''),
-
   -- Generic student (local dev only)
   ('00000000-0000-0000-0000-000000000000', 'c0c0c0c0-c0c0-c0c0-c0c0-c0c0c0c00001', 'authenticated', 'authenticated',
    'student@bpm.dance', crypt('password123', gen_salt('bf')), now(),
    '{"provider":"email","providers":["email"]}',
    format('{"full_name":"BPM Student","role":"student","academy_id":"%s"}', 'a0a0a0a0-a0a0-a0a0-a0a0-a0a0a0a00001')::jsonb,
    now(), now(), '', '');
-
-
--- ── Enrich teacher profiles ─────────────────────────────────
-
-update teacher_profiles
-set bio = 'Professional Bachata and Salsa instructor with 10+ years of experience.',
-    specialties = '{Bachata,Salsa Line,Bachata Tradicional}'
-where id = 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00002';
-
-update teacher_profiles
-set bio = 'Cuban Salsa specialist. Founder of BPM Dublin.',
-    specialties = '{Cuban}'
-where id = 'b0b0b0b0-b0b0-b0b0-b0b0-b0b0b0b00003';
 
 
 -- ── Enrich student profiles ─────────────────────────────────

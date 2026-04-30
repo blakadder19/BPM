@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { getTermRepo } from "@/lib/repositories";
 import type { TermStatus } from "@/types/domain";
 
@@ -10,7 +10,7 @@ const VALID_STATUSES = new Set<string>(["draft", "active", "upcoming", "past"]);
 export async function createTermAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const name = (formData.get("name") as string)?.trim();
   const startDate = (formData.get("startDate") as string)?.trim();
   const endDate = (formData.get("endDate") as string)?.trim();
@@ -38,7 +38,7 @@ export async function createTermAction(
 export async function updateTermAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   const id = (formData.get("id") as string)?.trim();
   const name = (formData.get("name") as string)?.trim();
   const startDate = (formData.get("startDate") as string)?.trim();
@@ -70,7 +70,7 @@ export async function updateTermAction(
 export async function deleteTermAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   if (!id) return { success: false, error: "Missing term ID" };
 
   const existing = await getTermRepo().getById(id);

@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAuth, requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import {
   createStudent,
   updateStudent,
@@ -17,7 +18,7 @@ function parseRole(raw: string | null): DanceRole | null {
 export async function createStudentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:create");
   const fullName = (formData.get("fullName") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
   const phone = (formData.get("phone") as string)?.trim() || null;
@@ -54,7 +55,7 @@ export async function createStudentAction(
 export async function updateStudentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:edit");
   const id = formData.get("id") as string;
   const fullName = (formData.get("fullName") as string)?.trim();
   const email = (formData.get("email") as string)?.trim();
@@ -96,7 +97,7 @@ export async function updateStudentAction(
 export async function toggleStudentActiveAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:edit");
   const id = formData.get("id") as string;
   if (!id) return { success: false, error: "Missing student ID" };
 
@@ -108,7 +109,7 @@ export async function toggleStudentActiveAction(
 export async function deleteStudentAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:delete");
   const id = formData.get("id") as string;
   if (!id) return { success: false, error: "Missing student ID" };
 
@@ -139,7 +140,7 @@ export interface RelatedBookingSummary {
 export async function getRelatedBookingsForSubscriptionAction(
   subscriptionId: string,
 ): Promise<{ bookings: RelatedBookingSummary[] }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:edit");
   const { getBookingService } = await import("@/lib/services/booking-store");
   const { ensureOperationalDataHydrated } = await import("@/lib/supabase/hydrate-operational");
   const { getTodayStr } = await import("@/lib/domain/datetime");
@@ -174,7 +175,7 @@ export async function removeStudentSubscriptionAction(
   subscriptionId: string,
   cancelBookingIds?: string[],
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:edit");
   if (!subscriptionId) return { success: false, error: "Missing subscription ID" };
 
   const { updateSubscription } = await import("@/lib/services/subscription-service");
@@ -217,7 +218,7 @@ export async function removeStudentSubscriptionAction(
 export async function deleteStudentSubscriptionAction(
   subscriptionId: string
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("students:delete");
   if (!subscriptionId) return { success: false, error: "Missing subscription ID" };
 
   const { getSubscriptionRepo } = await import("@/lib/repositories");

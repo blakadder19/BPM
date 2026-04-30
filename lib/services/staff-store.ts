@@ -102,6 +102,10 @@ export function updateStaff(userId: string, patch: UpdateStaffPatch): StaffMembe
     permissions:
       patch.permissions !== undefined ? [...patch.permissions] : [...cur.permissions],
     status: patch.status !== undefined ? patch.status : cur.status,
+    fullName:
+      patch.fullName !== undefined && patch.fullName.trim().length > 0
+        ? patch.fullName.trim()
+        : cur.fullName,
     updatedAt: nowIso(),
   };
   staff[idx] = next;

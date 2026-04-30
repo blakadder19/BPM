@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requirePermission } from "@/lib/staff-permissions";
 import {
   createEvent,
   updateEvent,
@@ -100,7 +100,7 @@ async function resolveCoverImage(
 export async function createEventAction(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:create");
   const title = (formData.get("title") as string)?.trim();
   const subtitle = (formData.get("subtitle") as string)?.trim() || null;
   const description = (formData.get("description") as string)?.trim() || "";
@@ -150,7 +150,7 @@ export async function createEventAction(
 export async function updateEventAction(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
   const id = formData.get("id") as string;
   if (!id) return { success: false, error: "Missing event ID" };
 
@@ -192,7 +192,7 @@ export async function updateEventAction(
 export async function deleteEventAction(
   id: string,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:delete");
   if (!id) return { success: false, error: "Missing event ID" };
   const result = await deleteEvent(id);
   if (result.success) revalidateEvents();
@@ -202,7 +202,7 @@ export async function deleteEventAction(
 export async function removeEventCoverAction(
   eventId: string,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
   if (!eventId) return { success: false, error: "Missing event ID" };
   await removeEventCover(eventId).catch(() => {});
   const result = await updateEvent(eventId, { coverImageUrl: null });
@@ -215,7 +215,7 @@ export async function removeEventCoverAction(
 export async function createSessionAction(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
   const eventId = formData.get("eventId") as string;
   const title = (formData.get("title") as string)?.trim();
   const sessionType = formData.get("sessionType") as string;
@@ -249,7 +249,7 @@ export async function createSessionAction(
 export async function updateSessionAction(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
   const id = formData.get("id") as string;
   const eventId = formData.get("eventId") as string;
   if (!id) return { success: false, error: "Missing session ID" };
@@ -287,7 +287,7 @@ export async function deleteSessionAction(
   id: string,
   eventId: string,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
   if (!id) return { success: false, error: "Missing session ID" };
   const result = await deleteSession(id);
   if (result.success) revalidateEvents(eventId);
@@ -299,7 +299,7 @@ export async function deleteSessionAction(
 export async function createEventProductAction(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
   const eventId = formData.get("eventId") as string;
   const name = (formData.get("name") as string)?.trim();
   const description = (formData.get("description") as string)?.trim() || null;
@@ -332,7 +332,7 @@ export async function createEventProductAction(
 export async function updateEventProductAction(
   formData: FormData,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
   const id = formData.get("id") as string;
   const eventId = formData.get("eventId") as string;
   if (!id) return { success: false, error: "Missing product ID" };
@@ -368,7 +368,7 @@ export async function deleteEventProductAction(
   id: string,
   eventId: string,
 ): Promise<{ success: boolean; error?: string }> {
-  await requireRole(["admin"]);
+  await requirePermission("events:edit");
   if (!id) return { success: false, error: "Missing product ID" };
   const result = await deleteEventProduct(id);
   if (result.success) revalidateEvents(eventId);

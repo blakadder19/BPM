@@ -40,7 +40,9 @@ function ClassesTabs() {
 
 export default function ClassesLayout({ children }: { children: ReactNode }) {
   const { role } = useUser();
-  const showTabs = role === "admin" || role === "teacher";
+  // Hint-only: hide the staff tab strip from students. Each page enforces
+  // its own permission server-side.
+  const showTabs = role !== "student";
 
   return (
     <div className="space-y-6">

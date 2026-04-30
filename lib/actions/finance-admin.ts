@@ -42,6 +42,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAuthUser } from "@/lib/auth";
+import { getStaffAccess } from "@/lib/staff-permissions";
 import { getSubscriptionRepo } from "@/lib/repositories";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { getPenaltyService } from "@/lib/services/penalty-store";
@@ -125,11 +126,16 @@ function parseTransactionId(transactionId: string): {
  */
 export async function getFinanceSuperAdminStatus(): Promise<FinanceSuperAdminStatus> {
   const user = await getAuthUser();
+  const access = user ? await getStaffAccess() : null;
   const superEmail = (process.env.BPM_SUPER_ADMIN_EMAIL ?? "").toLowerCase().trim();
   const envEnabled = process.env.BPM_ALLOW_FINANCE_TEST_DELETE === "true";
+  // Permission-aware: must be a real Super Admin in the RBAC sense AND match the
+  // configured BPM_SUPER_ADMIN_EMAIL. Legacy users.role='admin' alone is no
+  // longer enough — staff with custom/teacher roles cannot reach this even if
+  // their email happens to match.
   const isSuperAdmin = !!(
     user &&
-    user.role === "admin" &&
+    access?.isSuperAdmin &&
     superEmail.length > 0 &&
     user.email.toLowerCase().trim() === superEmail
   );

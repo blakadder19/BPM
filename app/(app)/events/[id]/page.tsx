@@ -1,5 +1,10 @@
 import { notFound, redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import {
   cachedGetEventById,
   cachedGetEventSessions,
@@ -21,7 +26,10 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requireRole(["admin", "student"]);
+  const user = await requireAuth();
+  if (user.role !== "student") {
+    await requirePermission("events:view");
+  }
   await ensureOperationalDataHydrated();
 
   const event = await cachedGetEventById(id);
@@ -49,15 +57,24 @@ export default async function EventDetailPage({
     );
   }
 
-  const [purchases, students] = await Promise.all([
+  const [purchases, students, access] = await Promise.all([
     cachedGetEventPurchases(id),
     cachedGetAllStudents(),
+    getStaffAccess(),
   ]);
 
   const studentInfoMap: Record<string, { fullName: string; email: string }> = {};
   for (const s of students) {
     studentInfoMap[s.id] = { fullName: s.fullName, email: s.email };
   }
+
+  const permissions = {
+    canEdit: hasPermission(access, "events:edit"),
+    canDelete: hasPermission(access, "events:delete"),
+    canMarkPaid: hasPermission(access, "events:mark_paid"),
+    canRefund: hasPermission(access, "events:edit"),
+    canScan: hasPermission(access, "checkin:scan"),
+  };
 
   return (
     <AdminEventDetail
@@ -66,6 +83,7 @@ export default async function EventDetailPage({
       products={products}
       purchases={purchases}
       studentInfoMap={studentInfoMap}
+      permissions={permissions}
     />
   );
 }

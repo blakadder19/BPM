@@ -1,4 +1,8 @@
-import { requireRole } from "@/lib/auth";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTemplates } from "@/lib/services/class-store";
 import { getInstances } from "@/lib/services/schedule-store";
@@ -7,7 +11,7 @@ import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 import { AdminTeachers } from "@/components/classes/admin-teachers";
 
 export default async function TeacherPairsPage() {
-  await requireRole(["admin", "teacher"]);
+  await requirePermission("teachers:view");
   await ensureScheduleBootstrapped();
 
   const teacherRoster = getTeachers().map((t) => ({ ...t }));
@@ -18,6 +22,13 @@ export default async function TeacherPairsPage() {
   const teacherNameMap = Object.fromEntries(nameMap);
   const isDev = process.env.NODE_ENV === "development";
 
+  const access = await getStaffAccess();
+  const permissions = {
+    canCreate: hasPermission(access, "teachers:create"),
+    canEdit: hasPermission(access, "teachers:edit"),
+    canDelete: hasPermission(access, "teachers:delete"),
+  };
+
   return (
     <AdminTeachers
       teacherRoster={teacherRoster}
@@ -26,6 +37,7 @@ export default async function TeacherPairsPage() {
       teacherNameMap={teacherNameMap}
       scheduleInstances={scheduleInstances}
       isDev={isDev}
+      permissions={permissions}
     />
   );
 }

@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { requireAuth } from "@/lib/auth";
+import {
+  getStaffAccess,
+  hasPermission,
+  requirePermission,
+} from "@/lib/staff-permissions";
 import {
   cachedGetAllEvents,
   cachedGetStudentEventPurchases,
@@ -12,7 +17,11 @@ import { StudentEvents } from "@/components/events/student-events";
 import { getSpecialEventRepo } from "@/lib/repositories";
 
 export default async function EventsPage() {
-  const user = await requireRole(["admin", "student"]);
+  const user = await requireAuth();
+  // Students always see the public catalog; staff need events:view.
+  if (user.role !== "student") {
+    await requirePermission("events:view");
+  }
   await ensureOperationalDataHydrated();
 
   if (user.role === "student") {
@@ -27,6 +36,13 @@ export default async function EventsPage() {
   }
 
   const events = await cachedGetAllEvents();
+  const access = await getStaffAccess();
+  const permissions = {
+    canCreate: hasPermission(access, "events:create"),
+    canEdit: hasPermission(access, "events:edit"),
+    canDelete: hasPermission(access, "events:delete"),
+    canMarkPaid: hasPermission(access, "events:mark_paid"),
+  };
 
   const repo = getSpecialEventRepo();
   const sessionCountMap: Record<string, number> = {};
@@ -45,6 +61,7 @@ export default async function EventsPage() {
       events={events}
       sessionCountMap={sessionCountMap}
       productCountMap={productCountMap}
+      permissions={permissions}
     />
   );
 }

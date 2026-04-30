@@ -56,6 +56,19 @@ interface SettingsFlags {
   studentPracticeBookable: boolean;
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface AdminSchedulePermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canCancel: boolean;
+  canDelete: boolean;
+  canAssignTeachers: boolean;
+}
+
 interface AdminScheduleProps {
   instances: MockBookableClass[];
   templates: MockClass[];
@@ -71,6 +84,7 @@ interface AdminScheduleProps {
   initialSearch?: string;
   initialDate?: string;
   today?: string;
+  permissions: AdminSchedulePermissions;
 }
 
 export function AdminSchedule({
@@ -88,6 +102,7 @@ export function AdminSchedule({
   initialSearch,
   initialDate,
   today: todayProp,
+  permissions,
 }: AdminScheduleProps) {
   const inactiveSet = useMemo(() => new Set(inactiveTeacherIds ?? []), [inactiveTeacherIds]);
   const router = useRouter();
@@ -264,32 +279,44 @@ export function AdminSchedule({
         />
         <div className="flex items-center gap-2">
           <AdminHelpButton pageKey="schedule" />
-          {isDev && (
-            <>
-              <Button variant="outline" size="sm" onClick={handleClearSchedule} disabled={clearPending}>
-                <Trash2 className="mr-1 h-3.5 w-3.5" />
-                {clearPending ? "Clearing…" : "Clear Schedule"}
-              </Button>
-              <Button variant="outline" onClick={() => setShowGenerate(true)}>
-                <CalendarPlus className="mr-1.5 h-4 w-4" />
-                Generate Schedule
-              </Button>
-            </>
+          {isDev && permissions.canDelete && (
+            <Button variant="outline" size="sm" onClick={handleClearSchedule} disabled={clearPending}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" />
+              {clearPending ? "Clearing…" : "Clear Schedule"}
+            </Button>
           )}
-          <Button variant="outline" onClick={() => setShowCopyMonth(true)}>
-            <Copy className="mr-1.5 h-4 w-4" />
-            Copy Previous Month
-          </Button>
-          <Button variant="outline" onClick={() => setShowBulkCreate(true)}>
-            <ListChecks className="mr-1.5 h-4 w-4" />
-            Bulk Create
-          </Button>
-          <Button onClick={() => { setAddDefaultDate(null); setShowAdd(true); }}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add Instance
-          </Button>
+          {isDev && permissions.canCreate && (
+            <Button variant="outline" onClick={() => setShowGenerate(true)}>
+              <CalendarPlus className="mr-1.5 h-4 w-4" />
+              Generate Schedule
+            </Button>
+          )}
+          {permissions.canCreate && (
+            <Button variant="outline" onClick={() => setShowCopyMonth(true)}>
+              <Copy className="mr-1.5 h-4 w-4" />
+              Copy Previous Month
+            </Button>
+          )}
+          {permissions.canCreate && (
+            <Button variant="outline" onClick={() => setShowBulkCreate(true)}>
+              <ListChecks className="mr-1.5 h-4 w-4" />
+              Bulk Create
+            </Button>
+          )}
+          {permissions.canCreate && (
+            <Button onClick={() => { setAddDefaultDate(null); setShowAdd(true); }}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Instance
+            </Button>
+          )}
         </div>
       </div>
+
+      {!permissions.canCreate && !permissions.canEdit && !permissions.canCancel && !permissions.canDelete && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          You have view-only access to this page.
+        </div>
+      )}
 
       {clearResult && (
         <div className="flex items-center justify-between rounded-lg bg-blue-50 px-4 py-2 text-sm text-blue-700">
@@ -375,8 +402,8 @@ export function AdminSchedule({
           pairPresets={pairPresets}
           allTerms={allTerms}
           inactiveTeacherIds={inactiveTeacherIds}
-          onCreateInstance={handleCreateFromDay}
-          onReschedule={handleReschedule}
+          onCreateInstance={permissions.canCreate ? handleCreateFromDay : undefined}
+          onReschedule={permissions.canEdit ? handleReschedule : undefined}
           forcedViewMode={viewMode}
         />
       )}
@@ -390,22 +417,24 @@ export function AdminSchedule({
               title="No schedule instances found"
               description="Generate from templates or create manually."
               action={
-                <div className="flex gap-2">
-                  {isDev && (
-                    <Button variant="outline" onClick={() => setShowGenerate(true)}>
-                      <CalendarPlus className="mr-1.5 h-4 w-4" /> Generate
+                permissions.canCreate ? (
+                  <div className="flex gap-2">
+                    {isDev && (
+                      <Button variant="outline" onClick={() => setShowGenerate(true)}>
+                        <CalendarPlus className="mr-1.5 h-4 w-4" /> Generate
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={() => setShowCopyMonth(true)}>
+                      <Copy className="mr-1.5 h-4 w-4" /> Copy Month
                     </Button>
-                  )}
-                  <Button variant="outline" onClick={() => setShowCopyMonth(true)}>
-                    <Copy className="mr-1.5 h-4 w-4" /> Copy Month
-                  </Button>
-                  <Button variant="outline" onClick={() => setShowBulkCreate(true)}>
-                    <ListChecks className="mr-1.5 h-4 w-4" /> Bulk Create
-                  </Button>
-                  <Button onClick={() => { setAddDefaultDate(null); setShowAdd(true); }}>
-                    <Plus className="mr-1.5 h-4 w-4" /> Add Instance
-                  </Button>
-                </div>
+                    <Button variant="outline" onClick={() => setShowBulkCreate(true)}>
+                      <ListChecks className="mr-1.5 h-4 w-4" /> Bulk Create
+                    </Button>
+                    <Button onClick={() => { setAddDefaultDate(null); setShowAdd(true); }}>
+                      <Plus className="mr-1.5 h-4 w-4" /> Add Instance
+                    </Button>
+                  </div>
+                ) : undefined
               }
             />
           ) : (
@@ -480,21 +509,25 @@ export function AdminSchedule({
                       <Td>{bc.location}</Td>
                       <Td>
                         <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          <button
-                            onClick={() => setOverrideTarget(bc)}
-                            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                            title="Date-specific teachers"
-                          >
-                            <Users className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setEditTarget(bc)}
-                            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                            title="Edit"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          {effStatus !== "cancelled" && effStatus !== "ended" && (
+                          {permissions.canAssignTeachers && (
+                            <button
+                              onClick={() => setOverrideTarget(bc)}
+                              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                              title="Date-specific teachers"
+                            >
+                              <Users className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {permissions.canEdit && (
+                            <button
+                              onClick={() => setEditTarget(bc)}
+                              className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                              title="Edit"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                          {permissions.canCancel && effStatus !== "cancelled" && effStatus !== "ended" && (
                             <button
                               onClick={() => handleStatusChange(bc.id, "cancelled")}
                               disabled={statusPending}
@@ -504,7 +537,7 @@ export function AdminSchedule({
                               <XCircle className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {effStatus === "scheduled" && (
+                          {permissions.canEdit && effStatus === "scheduled" && (
                             <button
                               onClick={() => handleStatusChange(bc.id, "open")}
                               disabled={statusPending}
@@ -514,7 +547,7 @@ export function AdminSchedule({
                               <Unlock className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {effStatus === "open" && (
+                          {permissions.canEdit && effStatus === "open" && (
                             <button
                               onClick={() => handleStatusChange(bc.id, "closed")}
                               disabled={statusPending}
@@ -524,7 +557,7 @@ export function AdminSchedule({
                               <Lock className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          {(effStatus === "closed" || effStatus === "cancelled") && (
+                          {permissions.canEdit && (effStatus === "closed" || effStatus === "cancelled") && (
                             <button
                               onClick={() => handleStatusChange(bc.id, "open")}
                               disabled={statusPending}
@@ -534,16 +567,18 @@ export function AdminSchedule({
                               <Unlock className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button
-                            onClick={() => {
-                              setCancelConfirmTarget(bc);
-                              setCancelConfirmAction("delete");
-                            }}
-                            className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
-                            title="Delete instance"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          {permissions.canDelete && (
+                            <button
+                              onClick={() => {
+                                setCancelConfirmTarget(bc);
+                                setCancelConfirmAction("delete");
+                              }}
+                              className="rounded p-1.5 text-red-400 hover:bg-red-50 hover:text-red-600"
+                              title="Delete instance"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           {isExpanded ? (
                             <ChevronUp className="h-3.5 w-3.5 text-gray-400" />
                           ) : (
@@ -571,7 +606,7 @@ export function AdminSchedule({
         </>
       )}
 
-      {showAdd && (
+      {showAdd && permissions.canCreate && (
         <AddInstanceDialog
           templates={templates}
           allStyles={allStyles}
@@ -580,15 +615,15 @@ export function AdminSchedule({
           defaultDate={addDefaultDate ?? undefined}
         />
       )}
-      {editTarget && <EditInstanceDialog instance={editTarget} allTerms={allTerms} onClose={() => setEditTarget(null)} />}
-      {showGenerate && (
+      {editTarget && permissions.canEdit && <EditInstanceDialog instance={editTarget} allTerms={allTerms} onClose={() => setEditTarget(null)} />}
+      {showGenerate && permissions.canCreate && (
         <GenerateScheduleDialog
           activeTemplateCount={activeTemplateCount}
           totalTemplateCount={totalTemplateCount}
           onClose={() => setShowGenerate(false)}
         />
       )}
-      {showBulkCreate && (
+      {showBulkCreate && permissions.canCreate && (
         <BulkCreateDialog
           templates={templates}
           allTerms={allTerms}
@@ -596,14 +631,14 @@ export function AdminSchedule({
           onClose={() => setShowBulkCreate(false)}
         />
       )}
-      {showCopyMonth && (
+      {showCopyMonth && permissions.canCreate && (
         <CopyMonthDialog
           instances={instances}
           existingKeys={existingInstanceKeys}
           onClose={() => setShowCopyMonth(false)}
         />
       )}
-      {overrideTarget && (
+      {overrideTarget && permissions.canAssignTeachers && (
         <TeacherOverrideDialog
           instance={overrideTarget}
           teacherRoster={teacherRoster}
@@ -611,7 +646,7 @@ export function AdminSchedule({
           onClose={() => setOverrideTarget(null)}
         />
       )}
-      {rescheduleTarget && (
+      {rescheduleTarget && permissions.canEdit && (
         <RescheduleConfirmDialog
           instance={rescheduleTarget.instance}
           newDate={rescheduleTarget.newDate}
@@ -631,7 +666,7 @@ export function AdminSchedule({
         />
       )}
 
-      {cancelConfirmTarget && (
+      {cancelConfirmTarget && (cancelConfirmAction === "delete" ? permissions.canDelete : permissions.canCancel) && (
         <StudentImpactModal
           target={cancelConfirmTarget}
           isPending={cancelConfirmPending}

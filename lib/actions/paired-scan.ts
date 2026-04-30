@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
-import { getAuthUser } from "@/lib/auth";
+import { requirePermissionForAction } from "@/lib/staff-permissions";
 import {
   generatePairingCode,
   isValidPairingCode,
@@ -53,10 +53,9 @@ export async function createPairedScanSession(input: {
   contextType: ScanContextType;
   contextId?: string;
 }): Promise<CreateSessionResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Your login session has expired. Please refresh the page and sign in again." };
-  }
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.access.user;
 
   // Deactivate any existing active sessions for this user + context
   await db()
@@ -95,10 +94,9 @@ export interface JoinSessionResult {
 }
 
 export async function joinScanSession(pairingCode: string): Promise<JoinSessionResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Your login session has expired. Please sign in again on this device." };
-  }
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.access.user;
 
   const code = pairingCode.toUpperCase().trim();
   if (!isValidPairingCode(code)) {
@@ -137,10 +135,9 @@ export async function processPairedScan(input: {
   sessionId: string;
   qrCode: string;
 }): Promise<ProcessScanResult> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Your login session has expired. Please sign in again on this device." };
-  }
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.access.user;
 
   const { data, error } = await db()
     .from("scan_sessions")
@@ -208,10 +205,9 @@ export async function processPairedScan(input: {
 // ── Close session ────────────────────────────────────────────
 
 export async function closeScanSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return { success: false, error: "Your login session has expired. Please refresh the page and sign in again." };
-  }
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.access.user;
 
   const { error } = await db()
     .from("scan_sessions")

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth";
+import { hasPermission, requireAnyPermission } from "@/lib/staff-permissions";
 import {
   cachedGetEventById,
   cachedGetEventProducts,
@@ -14,7 +14,11 @@ export default async function EventOperationsPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const user = await requireRole(["admin"]);
+  // Operations page mixes view + write actions (mark paid, etc.).
+  // Allow anyone with at least events:view; individual mutating
+  // server actions enforce events:edit / events:mark_paid separately.
+  const access = await requireAnyPermission(["events:view"]);
+  const user = access.user;
 
   const event = await cachedGetEventById(id);
   if (!event) notFound();
@@ -30,6 +34,11 @@ export default async function EventOperationsPage({
     studentInfoMap[s.id] = { fullName: s.fullName, email: s.email };
   }
 
+  const permissions = {
+    canCheckIn: hasPermission(access, "checkin:manual_checkin"),
+    canCollectPayment: hasPermission(access, "payments:mark_paid_reception"),
+  };
+
   return (
     <EventOperations
       event={event}
@@ -37,6 +46,7 @@ export default async function EventOperationsPage({
       purchases={purchases}
       studentInfoMap={studentInfoMap}
       currentUserId={user.id}
+      permissions={permissions}
     />
   );
 }

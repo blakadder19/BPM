@@ -11,7 +11,7 @@ import type { AttendanceMark, CheckInMethod, ClassType } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveAttendanceToDB, saveBookingToDB, savePenaltyToDB, updatePenaltyInDB, deleteAttendanceFromDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { requireRole } from "@/lib/auth";
+import { requireAnyPermission, requirePermission, requireSuperAdmin } from "@/lib/staff-permissions";
 
 export interface MarkAttendanceResult {
   success: boolean;
@@ -96,7 +96,11 @@ export async function markStudentAttendance(params: {
   directSubscriptionId?: string | null;
 }): Promise<MarkAttendanceResult> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin", "teacher"]);
+  await requireAnyPermission([
+    "attendance:mark_present",
+    "attendance:mark_absent",
+    "attendance:edit_history",
+  ]);
 
   if (!params.bookableClassId || !params.studentId || !params.markedBy) {
     return {
@@ -366,7 +370,7 @@ export async function closeAttendanceForPastClasses(): Promise<{
   classesProcessed: number;
   bookingsMarkedMissed: number;
 }> {
-  await requireRole(["admin", "teacher"]);
+  await requirePermission("attendance:edit_history");
   await ensureOperationalDataHydrated();
   const result = runAttendanceClosure();
 
@@ -386,7 +390,7 @@ export async function closeAttendanceForPastClasses(): Promise<{
 export async function deleteAttendanceRecordAction(
   attendanceId: string
 ): Promise<{ success: boolean; error?: string; creditRestored?: boolean }> {
-  await requireRole(["admin"]);
+  await requirePermission("attendance:edit_history");
   await ensureOperationalDataHydrated();
 
   if (!attendanceId) return { success: false, error: "Missing attendance ID" };
@@ -437,7 +441,7 @@ export async function clearManualAttendanceAction(): Promise<{
   cleared: number;
   error?: string;
 }> {
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
   if (process.env.NODE_ENV !== "development") {
     return { success: false, cleared: 0, error: "Not available in production" };
   }

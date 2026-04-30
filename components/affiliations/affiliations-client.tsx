@@ -67,9 +67,22 @@ function statusVariant(s: AffiliationVerificationStatus) {
   }
 }
 
+/**
+ * Plain-boolean permissions resolved server-side from the current
+ * staff access. Each flag corresponds 1:1 to a permission key
+ * checked by the matching server action.
+ */
+export interface AffiliationsClientPermissions {
+  canCreate: boolean;
+  canEdit: boolean;
+  canVerify: boolean;
+  canDelete: boolean;
+}
+
 interface Props {
   affiliations: AffiliationRow[];
   students: StudentRow[];
+  permissions: AffiliationsClientPermissions;
   /**
    * Map of affiliation type → count of currently ACTIVE discount rules
    * that require that affiliation. Surfaced as small chips above the
@@ -90,7 +103,13 @@ export function AffiliationsClient({
   students,
   activeRulesByAffiliation = {},
   initialSearch = "",
+  permissions,
 }: Props) {
+  const isReadOnly =
+    !permissions.canCreate &&
+    !permissions.canEdit &&
+    !permissions.canVerify &&
+    !permissions.canDelete;
   const [search, setSearch] = useState(initialSearch);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -135,12 +154,21 @@ export function AffiliationsClient({
         title="Student Affiliations"
         description="HSE, Gardaí, language school and other affiliations that may unlock discount rules. Affiliations must be verified before they can apply discounts at purchase time."
         actions={
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="size-4" />
-            <span>Add affiliation</span>
-          </Button>
+          permissions.canCreate ? (
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="size-4" />
+              <span>Add affiliation</span>
+            </Button>
+          ) : null
         }
       />
+
+      {isReadOnly && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          You have view-only access to Affiliations. Create, verify, and delete
+          actions are hidden.
+        </div>
+      )}
 
       {actionError && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -242,7 +270,7 @@ export function AffiliationsClient({
                 </Td>
                 <Td>
                   <div className="flex flex-wrap gap-1">
-                    {a.verificationStatus !== "verified" && (
+                    {a.verificationStatus !== "verified" && permissions.canVerify && (
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
@@ -258,7 +286,7 @@ export function AffiliationsClient({
                         </Button>
                       </form>
                     )}
-                    {a.verificationStatus !== "rejected" && (
+                    {a.verificationStatus !== "rejected" && permissions.canVerify && (
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
@@ -274,7 +302,7 @@ export function AffiliationsClient({
                         </Button>
                       </form>
                     )}
-                    {a.verificationStatus !== "expired" && (
+                    {a.verificationStatus !== "expired" && permissions.canEdit && (
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
@@ -290,19 +318,21 @@ export function AffiliationsClient({
                         </Button>
                       </form>
                     )}
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        if (!confirm("Delete this affiliation?")) return;
-                        const fd = new FormData();
-                        fd.set("id", a.id);
-                        runAction(fd, deleteAffiliationAction);
-                      }}
-                    >
-                      <Button size="sm" variant="ghost">
-                        <Trash2 className="size-3.5 text-red-600" />
-                      </Button>
-                    </form>
+                    {permissions.canDelete && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          if (!confirm("Delete this affiliation?")) return;
+                          const fd = new FormData();
+                          fd.set("id", a.id);
+                          runAction(fd, deleteAffiliationAction);
+                        }}
+                      >
+                        <Button size="sm" variant="ghost">
+                          <Trash2 className="size-3.5 text-red-600" />
+                        </Button>
+                      </form>
+                    )}
                   </div>
                 </Td>
               </tr>
@@ -311,7 +341,7 @@ export function AffiliationsClient({
         </AdminTable>
       )}
 
-      {showCreate && (
+      {showCreate && permissions.canCreate && (
         <CreateAffiliationModal
           students={students}
           onClose={() => setShowCreate(false)}

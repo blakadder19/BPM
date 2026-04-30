@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { getStudioHireService } from "@/lib/services/studio-hire-store";
 import {
   saveStudioHireToDB,
@@ -45,7 +45,7 @@ export async function createStudioHireAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   const requesterName = (formData.get("requesterName") as string)?.trim();
   const contactEmail =
@@ -129,7 +129,7 @@ export async function updateStudioHireAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   const id = (formData.get("id") as string)?.trim();
   if (!id) return { success: false, error: "Missing entry ID" };
@@ -236,7 +236,7 @@ export async function updateStudioHireStatusAction(
   }
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   if (!id) return { success: false, error: "Missing entry ID" };
   if (!VALID_STATUSES.includes(newStatus)) {
@@ -291,7 +291,7 @@ export async function deleteStudioHireAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
   await ensureOperationalDataHydrated();
-  await requireRole(["admin"]);
+  await requireSuperAdmin();
 
   if (!id) return { success: false, error: "Missing entry ID" };
 

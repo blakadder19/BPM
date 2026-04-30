@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getAuthUser } from "@/lib/auth";
+import { requirePermissionForAction } from "@/lib/staff-permissions";
 import { getSpecialEventRepo, getStudentRepo } from "@/lib/repositories";
 import { updatePurchaseCheckIn, updatePurchasePayment } from "@/lib/services/special-event-service";
 import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
@@ -85,11 +85,10 @@ function buildPurchaseInfo(
 }
 
 async function requireStaff() {
-  const user = await getAuthUser();
-  if (!user || (user.role !== "admin" && user.role !== "teacher")) {
-    return null;
-  }
-  return user;
+  // Permission-aware: requires checkin:scan (event lookup/check-in is a scanning workflow).
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return null;
+  return guard.access.user;
 }
 
 function revalidateEvent(eventId: string) {
