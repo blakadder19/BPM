@@ -7,11 +7,10 @@ import {
   updateSettings,
   type AppSettings,
 } from "@/lib/services/settings-store";
-import { DANCE_STYLES } from "@/lib/mock-data";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { CLASS_LEVEL_NAMES } from "@/config/class-levels";
 import type { ProductType } from "@/types/domain";
 
-const VALID_STYLE_NAMES = new Set(DANCE_STYLES.map((s) => s.name));
 const VALID_CLASS_LEVELS = new Set(CLASS_LEVEL_NAMES);
 const VALID_DEDUCTION_TYPES: readonly ProductType[] = ["pass", "drop_in", "membership"];
 
@@ -117,8 +116,12 @@ export async function saveSettings(
   };
 
   // --- Role balanced style names (multi-checkbox) ---
+  // Validate against the live store (DB + bootstrapped cache) instead of
+  // the seed constant — otherwise newly-created styles cannot be opted
+  // into role balance from Settings.
+  const validStyleNames = new Set(getDanceStyles().map((s) => s.name));
   const rawStyles = formData.getAll("roleBalancedStyleNames") as string[];
-  const roleBalancedStyleNames = rawStyles.filter((s) => VALID_STYLE_NAMES.has(s));
+  const roleBalancedStyleNames = rawStyles.filter((s) => validStyleNames.has(s));
 
   // --- Disabled alert IDs (multi-checkbox) ---
   const disabledAlertIds = formData.getAll("disabledAlertIds") as string[];

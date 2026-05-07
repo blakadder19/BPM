@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { dayName, formatTime, formatDate } from "@/lib/utils";
 import { isTermBoundLevel } from "@/lib/domain/term-rules";
+import { StyleCombobox } from "./style-combobox";
 
 const CLASS_TYPES = [
   { value: "class", label: "Class" },
@@ -60,6 +61,7 @@ function TemplateForm({
   onSubmit,
   isPending,
   error,
+  canCreateStyle,
 }: {
   initial: Partial<MockClass>;
   allStyles: StyleOption[];
@@ -67,9 +69,16 @@ function TemplateForm({
   onSubmit: (fd: FormData) => void;
   isPending: boolean;
   error: string | null;
+  canCreateStyle: boolean;
 }) {
   const [classType, setClassType] = useState(initial.classType ?? "class");
+  // The selector is now a combobox; we keep both the id and the name in
+  // local state so the hidden form fields always carry consistent data
+  // (existing server actions read both styleId and styleName).
   const [styleId, setStyleId] = useState(initial.styleId ?? "");
+  const [styleName, setStyleName] = useState(initial.styleName ?? "");
+  const [styles, setStyles] = useState<StyleOption[]>(allStyles);
+  const [styleSuccess, setStyleSuccess] = useState<string | null>(null);
   const [selectedTermId, setSelectedTermId] = useState(initial.termId ?? "");
   const [isTermBound, setIsTermBound] = useState(initial.termBound ?? false);
 
@@ -77,8 +86,8 @@ function TemplateForm({
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     if (initial.id) fd.set("id", initial.id);
-    const style = allStyles.find((s) => s.id === fd.get("styleId"));
-    fd.set("styleName", style?.name ?? "");
+    fd.set("styleId", styleId);
+    fd.set("styleName", styleName);
     onSubmit(fd);
   }
 
@@ -114,20 +123,24 @@ function TemplateForm({
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Style</label>
-          {allStyles.length > 0 ? (
-            <select
-              name="styleId"
-              value={styleId}
-              onChange={(e) => setStyleId(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
-            >
-              <option value="">— None —</option>
-              {allStyles.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          ) : (
-            <p className="mt-1 text-xs text-amber-600 italic py-2">No dance styles configured yet. Add styles in your database.</p>
+          <StyleCombobox
+            value={styleId}
+            styles={styles}
+            canCreate={canCreateStyle}
+            onChange={(id, name) => {
+              setStyleId(id);
+              setStyleName(name);
+              setStyleSuccess(null);
+            }}
+            onCreated={(s) => {
+              setStyles((prev) =>
+                prev.some((p) => p.id === s.id) ? prev : [...prev, { id: s.id, name: s.name }],
+              );
+              setStyleSuccess("Style created and selected.");
+            }}
+          />
+          {styleSuccess && (
+            <p className="mt-1 text-xs text-emerald-600">{styleSuccess}</p>
           )}
         </div>
       </div>
@@ -271,10 +284,12 @@ export function AddTemplateDialog({
   allStyles,
   allTerms,
   onClose,
+  canCreateStyle = false,
 }: {
   allStyles: StyleOption[];
   allTerms?: TermOption[];
   onClose: () => void;
+  canCreateStyle?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -294,7 +309,15 @@ export function AddTemplateDialog({
       <DialogContent>
         <DialogHeader><DialogTitle>Add Template</DialogTitle></DialogHeader>
         <DialogBody className="max-h-[70vh] overflow-y-auto">
-          <TemplateForm initial={{}} allStyles={allStyles} allTerms={allTerms} onSubmit={handleSubmit} isPending={isPending} error={error} />
+          <TemplateForm
+            initial={{}}
+            allStyles={allStyles}
+            allTerms={allTerms}
+            onSubmit={handleSubmit}
+            isPending={isPending}
+            error={error}
+            canCreateStyle={canCreateStyle}
+          />
         </DialogBody>
       </DialogContent>
     </Dialog>
@@ -308,11 +331,13 @@ export function EditTemplateDialog({
   allStyles,
   allTerms,
   onClose,
+  canCreateStyle = false,
 }: {
   template: MockClass;
   allStyles: StyleOption[];
   allTerms?: TermOption[];
   onClose: () => void;
+  canCreateStyle?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -332,7 +357,15 @@ export function EditTemplateDialog({
       <DialogContent>
         <DialogHeader><DialogTitle>Edit Template</DialogTitle></DialogHeader>
         <DialogBody className="max-h-[70vh] overflow-y-auto">
-          <TemplateForm initial={template} allStyles={allStyles} allTerms={allTerms} onSubmit={handleSubmit} isPending={isPending} error={error} />
+          <TemplateForm
+            initial={template}
+            allStyles={allStyles}
+            allTerms={allTerms}
+            onSubmit={handleSubmit}
+            isPending={isPending}
+            error={error}
+            canCreateStyle={canCreateStyle}
+          />
         </DialogBody>
       </DialogContent>
     </Dialog>
