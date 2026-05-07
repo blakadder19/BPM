@@ -335,10 +335,21 @@ export function AdminTemplates({
       )}
 
       {showAdd && permissions.canCreate && (
-        <AddTemplateDialog allStyles={allStyles} allTerms={allTerms} onClose={() => setShowAdd(false)} />
+        <AddTemplateDialog
+          allStyles={allStyles}
+          allTerms={allTerms}
+          onClose={() => setShowAdd(false)}
+          canCreateStyle={permissions.canCreate || permissions.canEdit}
+        />
       )}
       {editTarget && permissions.canEdit && (
-        <EditTemplateDialog template={editTarget} allStyles={allStyles} allTerms={allTerms} onClose={() => setEditTarget(null)} />
+        <EditTemplateDialog
+          template={editTarget}
+          allStyles={allStyles}
+          allTerms={allTerms}
+          onClose={() => setEditTarget(null)}
+          canCreateStyle={permissions.canCreate || permissions.canEdit}
+        />
       )}
 
       {deleteTarget && permissions.canDelete && (
