@@ -41,6 +41,7 @@ import {
 } from "@/lib/repositories";
 import {
   applyPricing,
+  productMatchesFirstTimeScope,
   type AppliedDiscount,
   type AppliedDiscountSnapshot,
   type DiscountRule,
@@ -92,20 +93,29 @@ export async function priceProductForStudent(
 ): Promise<PriceForStudentResult> {
   const now = input.now ?? new Date().toISOString();
 
-  const [rules, affiliations, isFirstTimeCandidate] = await Promise.all([
+  const [rules, affiliations] = await Promise.all([
     loadActiveRules(),
     loadStudentAffiliations(input.studentId),
-    input.skipFirstTimeCheck
-      ? Promise.resolve(false)
-      : computeIsFirstTimePurchase(input.studentId),
   ]);
+
+  // Per-rule first-time eligibility. The engine now evaluates each
+  // first-time rule against its own scope and claim, so a Beginners-
+  // only rule and a Yoga-only rule no longer compete for a single
+  // global "first-time" flag.
+  const firstTimeEligibleByRuleId = input.skipFirstTimeCheck
+    ? Object.fromEntries(
+        rules
+          .filter((r) => r.ruleType === "first_time_purchase")
+          .map((r) => [r.id, false]),
+      )
+    : await computeFirstTimeEligibilityByRule(input.studentId, rules);
 
   let result = applyPricing({
     product: input.product,
     now,
     rules,
     studentAffiliations: affiliations,
-    isFirstTimePurchase: isFirstTimeCandidate,
+    firstTimeEligibleByRuleId,
   });
 
   let claim: DiscountClaim | null = null;
@@ -133,15 +143,20 @@ export async function priceProductForStudent(
         claim = attempt.claim;
       } else {
         firstTimeDenied = true;
-        // Re-run the engine WITHOUT first-time eligibility so the caller
-        // gets a result that matches what was actually awarded. Other
-        // discounts (e.g. affiliation) can still apply.
+        // Re-run the engine WITHOUT this rule's first-time eligibility
+        // so the caller gets a result that matches what was actually
+        // awarded. Other discounts (e.g. affiliation, or other
+        // first-time rules with different scopes) can still apply.
+        const deniedRuleId = firstTimeApplied.ruleId;
         result = applyPricing({
           product: input.product,
           now,
           rules,
           studentAffiliations: affiliations,
-          isFirstTimePurchase: false,
+          firstTimeEligibleByRuleId: {
+            ...firstTimeEligibleByRuleId,
+            [deniedRuleId]: false,
+          },
         });
 
         try {
@@ -154,6 +169,7 @@ export async function priceProductForStudent(
             metadata: {
               anomaly: "first_time_claim_denied",
               source: input.commit.source,
+              ruleId: deniedRuleId,
               existingClaimId: attempt.existingClaim?.id ?? null,
               existingClaimSource: attempt.existingClaim?.source ?? null,
             },
@@ -237,11 +253,14 @@ export async function previewPricingForStudent(input: {
   now?: string;
 }): Promise<Map<string, PricingResult>> {
   const now = input.now ?? new Date().toISOString();
-  const [rules, affiliations, isFirstTime] = await Promise.all([
+  const [rules, affiliations] = await Promise.all([
     loadActiveRules(),
     loadStudentAffiliations(input.studentId),
-    computeIsFirstTimePurchase(input.studentId),
   ]);
+  const firstTimeEligibleByRuleId = await computeFirstTimeEligibilityByRule(
+    input.studentId,
+    rules,
+  );
 
   const out = new Map<string, PricingResult>();
   for (const product of input.products) {
@@ -250,7 +269,7 @@ export async function previewPricingForStudent(input: {
       now,
       rules,
       studentAffiliations: affiliations,
-      isFirstTimePurchase: isFirstTime,
+      firstTimeEligibleByRuleId,
     });
     out.set(product.id, result);
   }
@@ -272,37 +291,87 @@ async function loadStudentAffiliations(
 }
 
 /**
- * "First time" = the student has not yet consumed a first-time-purchase
- * discount, AND has zero prior subscriptions with paymentStatus "paid"
- * or "pending".
+ * Per-rule "first-time eligibility" map for a given student.
  *
- * The authoritative source post-hardening is the discount_claims table:
- * if any active claim exists for this student, they are not first-time.
- * The legacy fallback (subscription scan) is retained so historical
- * subscriptions that pre-date the claims table still block correctly
- * without requiring a backfill migration.
+ * For each `first_time_purchase` rule in the catalogue, returns whether
+ * the student is still eligible to receive that specific rule's
+ * discount (i.e. has NOT yet consumed its claim AND has no prior
+ * in-scope purchase that should have consumed it).
+ *
+ * Authoritative source: the per-rule `discount_claims` row. The legacy
+ * subscription scan is a defense-in-depth fallback for purchases that
+ * predate the claims table — it is now scope-aware so it never treats
+ * an out-of-scope prior purchase as having consumed a different rule's
+ * first-time eligibility.
  */
-async function computeIsFirstTimePurchase(studentId: string): Promise<boolean> {
-  // Authoritative gate: an active claim means first-time was already
-  // consumed. This is the same row that tryCreate would conflict on.
-  const active = await getDiscountClaimRepo().findActive(
-    studentId,
-    "first_time_purchase",
+async function computeFirstTimeEligibilityByRule(
+  studentId: string,
+  rules: DiscountRule[],
+): Promise<Record<string, boolean>> {
+  const firstTimeRules = rules.filter(
+    (r) => r.ruleType === "first_time_purchase",
   );
-  if (active) return false;
+  const out: Record<string, boolean> = {};
+  if (firstTimeRules.length === 0) return out;
 
-  // Legacy / defense-in-depth: inspect prior subscription rows.
-  const all = await getSubscriptionRepo().getByStudent(studentId);
-  for (const s of all) {
-    if (s.paymentStatus === "paid" || s.paymentStatus === "pending") {
-      return false;
+  // Load once: per-rule active claims and the student's prior subs.
+  const claimRepo = getDiscountClaimRepo();
+  const [claims, allSubs] = await Promise.all([
+    Promise.all(
+      firstTimeRules.map((r) => claimRepo.findActiveForRule(studentId, r.id)),
+    ),
+    getSubscriptionRepo().getByStudent(studentId),
+  ]);
+
+  for (let i = 0; i < firstTimeRules.length; i++) {
+    const rule = firstTimeRules[i]!;
+    if (claims[i]) {
+      out[rule.id] = false;
+      continue;
     }
+    out[rule.id] = !hasLegacyConsumptionFor(rule, allSubs);
+  }
+  return out;
+}
+
+/**
+ * Defense-in-depth: did the student already make a prior paid/pending
+ * purchase that should have counted as consuming this rule's
+ * first-time eligibility?
+ *
+ *   * If a prior subscription's frozen snapshot explicitly includes
+ *     this rule's id → consumed.
+ *   * Else, scope-aware fallback:
+ *       - "any_purchase":       any prior paid/pending subscription.
+ *       - "selected_products":  prior paid/pending whose `productId`
+ *                               is in the rule's `firstTimeProductIds`.
+ */
+function hasLegacyConsumptionFor(
+  rule: DiscountRule,
+  subs: Array<{
+    productId: string;
+    paymentStatus: string | null;
+    appliedDiscount?: unknown;
+  }>,
+): boolean {
+  for (const s of subs) {
+    const isPaidish =
+      s.paymentStatus === "paid" || s.paymentStatus === "pending";
     const snap = s.appliedDiscount as AppliedDiscountSnapshot | null;
-    if (snap?.appliedDiscounts?.some((d) => d.ruleType === "first_time_purchase")) {
-      return false;
+    if (
+      isPaidish &&
+      snap?.appliedDiscounts?.some((d) => d.ruleId === rule.id)
+    ) {
+      return true;
+    }
+    if (!isPaidish) continue;
+    if (
+      productMatchesFirstTimeScope(rule, { id: s.productId })
+    ) {
+      return true;
     }
   }
-  return true;
+  return false;
 }
 
 // ── Stripe metadata transit for frozen pricing ───────────────
@@ -481,6 +550,8 @@ function toEngineRule(r: MockDiscountRule): DiscountRule {
     stackable: r.stackable,
     validFrom: r.validFrom,
     validUntil: r.validUntil,
+    firstTimeScope: r.firstTimeScope ?? "any_purchase",
+    firstTimeProductIds: r.firstTimeProductIds ?? null,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

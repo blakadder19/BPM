@@ -2,12 +2,20 @@
  * In-memory store for atomic discount claims (Phase 4 hardening).
  *
  * The store enforces a single rule: at most one ACTIVE claim per
- * (studentId, claimType) tuple. The atomic primitive is `tryCreate` —
- * it performs the existence check + insert in a single synchronous
- * step, which is atomic in the Node.js single-threaded event loop.
+ * (studentId, claimType, ruleId) tuple. The atomic primitive is
+ * `tryCreate` — it performs the existence check + insert in a single
+ * synchronous step, which is atomic in the Node.js single-threaded
+ * event loop.
+ *
+ * Historical note: pre-00064 the uniqueness was (studentId, claimType)
+ * — i.e. one global first-time slot per student. That coarse grain
+ * caused Yoga purchases to consume the Beginners-only first-time
+ * discount. Now each first-time rule gets its own slot keyed by
+ * `ruleId`, so scoped rules coexist independently.
  *
  * In supabase mode the store is empty; the supabase repo enforces the
- * same invariant via a partial unique index (see migration 00057).
+ * same invariant via a partial unique index (see migrations 00057 /
+ * 00064).
  */
 
 import { generateId } from "@/lib/utils";
@@ -67,9 +75,60 @@ export function findActive(
 }
 
 /**
+ * Authoritative per-rule lookup. Mirrors the DB partial unique index
+ * `(student_id, rule_id) WHERE released_at IS NULL`.
+ */
+export function findActiveForRule(
+  studentId: string,
+  ruleId: string,
+): DiscountClaim | null {
+  return (
+    store().find(
+      (c) =>
+        c.studentId === studentId &&
+        c.ruleId === ruleId &&
+        c.releasedAt === null,
+    ) ?? null
+  );
+}
+
+/**
+ * Returns every active claim of the given `claimType` for a student.
+ * Useful for surfaces that want to display the full "what has this
+ * student already consumed" picture across all rules, and for the
+ * pricing service to compute per-rule first-time eligibility in one
+ * shot (instead of N round-trips).
+ */
+export function getActiveByStudent(
+  studentId: string,
+  claimType: ClaimType,
+): DiscountClaim[] {
+  return store().filter(
+    (c) =>
+      c.studentId === studentId &&
+      c.claimType === claimType &&
+      c.releasedAt === null,
+  );
+}
+
+/**
  * Atomic claim attempt. Synchronous from check → insert; no awaits in
  * between, so the Node event loop guarantees no two parallel callers
  * can both succeed.
+ *
+ * Uniqueness contract — mirrors the DB partial unique index
+ *   `(student_id, rule_id) WHERE released_at IS NULL AND rule_id IS NOT NULL`
+ * exactly so memory mode and supabase mode never diverge:
+ *
+ *   * Scoped attempt (`ruleId !== null`) conflicts ONLY with another
+ *     active row that has the SAME `(studentId, ruleId)`. Legacy
+ *     null-ruleId rows sit outside the unique index and do NOT block.
+ *     The scope-aware subscription-history scan in
+ *     `pricing-service.computeFirstTimeEligibilityByRule` is the
+ *     authoritative legacy-defense layer.
+ *   * Legacy-style attempt (`ruleId === null`) conflicts with another
+ *     active null-ruleId row of the same `claimType` (admin / repair
+ *     paths cannot accidentally double-mint a legacy block).
  */
 export function tryCreate(
   input: CreateClaimInput,
@@ -79,12 +138,18 @@ export function tryCreate(
   existingClaim: DiscountClaim | null;
 } {
   const list = store();
-  const existing = list.find(
-    (c) =>
-      c.studentId === input.studentId &&
-      c.claimType === input.claimType &&
-      c.releasedAt === null,
-  );
+  const existing = list.find((c) => {
+    if (c.releasedAt !== null) return false;
+    if (c.studentId !== input.studentId) return false;
+    if (c.claimType !== input.claimType) return false;
+    if (input.ruleId !== null) {
+      // Scoped path: only conflicts with same rule_id. Null rows are
+      // intentionally ignored (DB partial unique index excludes them).
+      return c.ruleId === input.ruleId;
+    }
+    // Legacy path: only conflicts with other null-ruleId rows.
+    return c.ruleId === null;
+  });
   if (existing) {
     return { granted: false, claim: null, existingClaim: existing };
   }

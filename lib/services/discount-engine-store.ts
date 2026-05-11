@@ -142,6 +142,8 @@ export function createDiscountRule(
     stackable: data.stackable,
     validFrom: data.validFrom,
     validUntil: data.validUntil,
+    firstTimeScope: data.firstTimeScope ?? "any_purchase",
+    firstTimeProductIds: data.firstTimeProductIds ?? null,
     createdAt: now,
     updatedAt: now,
   };

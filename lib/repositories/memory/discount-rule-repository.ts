@@ -27,6 +27,8 @@ export const memoryDiscountRuleRepo: IDiscountRuleRepository = {
       stackable: data.stackable ?? false,
       validFrom: data.validFrom ?? null,
       validUntil: data.validUntil ?? null,
+      firstTimeScope: data.firstTimeScope ?? "any_purchase",
+      firstTimeProductIds: data.firstTimeProductIds ?? null,
     }),
   update: async (id, patch: DiscountRulePatch) => store.updateDiscountRule(id, patch),
   delete: async (id) => store.deleteDiscountRule(id),

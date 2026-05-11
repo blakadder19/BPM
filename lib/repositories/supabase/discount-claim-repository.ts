@@ -30,7 +30,7 @@ function toMock(row: Row): DiscountClaim {
   };
 }
 
-async function findActiveRow(
+async function findActiveByClaimType(
   studentId: string,
   claimType: string,
 ): Promise<DiscountClaim | null> {
@@ -45,12 +45,58 @@ async function findActiveRow(
   return data ? toMock(data as Row) : null;
 }
 
+async function findActiveByRule(
+  studentId: string,
+  ruleId: string,
+): Promise<DiscountClaim | null> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("discount_claims")
+    .select("*")
+    .eq("student_id", studentId)
+    .eq("rule_id", ruleId)
+    .is("released_at", null)
+    .maybeSingle();
+  return data ? toMock(data as Row) : null;
+}
+
 export const supabaseDiscountClaimRepo: IDiscountClaimRepository = {
   async findActive(studentId, claimType) {
-    return findActiveRow(studentId, claimType);
+    return findActiveByClaimType(studentId, claimType);
+  },
+
+  async findActiveForRule(studentId, ruleId) {
+    return findActiveByRule(studentId, ruleId);
+  },
+
+  async getActiveByStudent(studentId, claimType) {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from("discount_claims")
+      .select("*")
+      .eq("student_id", studentId)
+      .eq("claim_type", claimType)
+      .is("released_at", null);
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as Row[]).map(toMock);
   },
 
   async tryCreate(input: CreateClaimInput): Promise<ClaimAttemptResult> {
+    // Defensive pre-check: a legacy null-rule_id active row represents
+    // "consumed first-time but for which rule is unknown". The new
+    // partial unique index does not cover it, so we look it up
+    // explicitly to keep the per-rule SCOPED insert from accidentally
+    // re-granting a benefit the student already consumed pre-migration.
+    if (input.ruleId) {
+      const legacy = await findActiveByClaimType(
+        input.studentId,
+        input.claimType,
+      );
+      if (legacy && legacy.ruleId === null) {
+        return { granted: false, claim: null, existingClaim: legacy };
+      }
+    }
+
     const supabase = createAdminClient();
     const id = input.id ?? generateId("dcl");
     const now = new Date().toISOString();
@@ -72,10 +118,13 @@ export const supabaseDiscountClaimRepo: IDiscountClaimRepository = {
       .single();
 
     if (error) {
-      // 23505 = unique_violation — the partial unique index already
-      // holds an active claim for (student_id, claim_type).
+      // 23505 = unique_violation — either:
+      //   * post-migration scoped path: (student_id, rule_id) partial unique
+      //   * legacy path (rule_id IS NULL): (student_id, claim_type) partial unique
       if ((error as { code?: string }).code === "23505") {
-        const existing = await findActiveRow(input.studentId, input.claimType);
+        const existing = input.ruleId
+          ? await findActiveByRule(input.studentId, input.ruleId)
+          : await findActiveByClaimType(input.studentId, input.claimType);
         return { granted: false, claim: null, existingClaim: existing };
       }
       throw new Error(error.message);

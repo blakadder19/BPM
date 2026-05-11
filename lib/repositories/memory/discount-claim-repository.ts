@@ -8,6 +8,12 @@ export const memoryDiscountClaimRepo: IDiscountClaimRepository = {
   async findActive(studentId, claimType) {
     return store.findActive(studentId, claimType);
   },
+  async findActiveForRule(studentId, ruleId) {
+    return store.findActiveForRule(studentId, ruleId);
+  },
+  async getActiveByStudent(studentId, claimType) {
+    return store.getActiveByStudent(studentId, claimType);
+  },
   async tryCreate(input): Promise<ClaimAttemptResult> {
     return store.tryCreate(input);
   },
