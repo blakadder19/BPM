@@ -6,6 +6,7 @@ import type {
   AffiliationType,
   DiscountKind,
   DiscountRuleType,
+  FirstTimeScope,
 } from "@/lib/domain/pricing-engine";
 import type { ProductType } from "@/types/domain";
 
@@ -26,6 +27,8 @@ export interface CreateDiscountRuleData {
   stackable?: boolean;
   validFrom?: string | null;
   validUntil?: string | null;
+  firstTimeScope?: FirstTimeScope;
+  firstTimeProductIds?: string[] | null;
 }
 
 export type DiscountRulePatch = Partial<CreateDiscountRuleData>;

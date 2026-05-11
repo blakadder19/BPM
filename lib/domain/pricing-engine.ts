@@ -61,6 +61,23 @@ export type DiscountRuleType = (typeof DISCOUNT_RULE_TYPES)[number];
 export const DISCOUNT_KINDS = ["percentage", "fixed_cents"] as const;
 export type DiscountKind = (typeof DISCOUNT_KINDS)[number];
 
+/**
+ * Per-rule "what counts as first-time" scope.
+ *
+ *   * "any_purchase"      — first purchase of ANY product (legacy semantics).
+ *   * "selected_products" — first purchase of one of the rule's explicit
+ *                           `firstTimeProductIds`. Other purchases neither
+ *                           receive nor consume the rule's claim.
+ *
+ * Levels / product-types may be added later — the engine treats unknown
+ * values defensively (no scope match → not eligible).
+ */
+export const FIRST_TIME_SCOPES = [
+  "any_purchase",
+  "selected_products",
+] as const;
+export type FirstTimeScope = (typeof FIRST_TIME_SCOPES)[number];
+
 export interface DiscountRule {
   id: string;
   code: string;
@@ -79,8 +96,40 @@ export interface DiscountRule {
   stackable: boolean;
   validFrom: string | null;
   validUntil: string | null;
+  /**
+   * Only meaningful for `ruleType === "first_time_purchase"`. Defaults
+   * to `"any_purchase"` for safe back-compat.
+   */
+  firstTimeScope: FirstTimeScope;
+  /**
+   * When `firstTimeScope === "selected_products"`, the explicit list of
+   * eligible product ids. A purchase outside this list neither receives
+   * the discount nor consumes the rule's claim.
+   */
+  firstTimeProductIds: string[] | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Returns true when `product` falls inside `rule`'s first-time scope.
+ * Always true for non-first-time rules — callers should not invoke this
+ * on those.
+ */
+export function productMatchesFirstTimeScope(
+  rule: Pick<DiscountRule, "ruleType" | "firstTimeScope" | "firstTimeProductIds">,
+  product: Pick<PricingProduct, "id">,
+): boolean {
+  if (rule.ruleType !== "first_time_purchase") return true;
+  const scope = rule.firstTimeScope ?? "any_purchase";
+  switch (scope) {
+    case "any_purchase":
+      return true;
+    case "selected_products":
+      return (rule.firstTimeProductIds ?? []).includes(product.id);
+    default:
+      return false;
+  }
 }
 
 // ── Engine inputs / outputs ──────────────────────────────────
@@ -99,8 +148,15 @@ export interface PricingContext {
   rules: DiscountRule[];
   /** Verified-or-other affiliation rows for this student. Engine ignores non-verified. */
   studentAffiliations: StudentAffiliation[];
-  /** True when the student has zero prior PAID subscriptions. */
-  isFirstTimePurchase: boolean;
+  /**
+   * Per-rule first-time eligibility. Keys are `DiscountRule.id`; the
+   * value is `true` when the student has NOT yet consumed that
+   * specific first-time rule's claim AND no prior in-scope purchase
+   * was made.
+   *
+   * Engine treats a missing key as `false` (deny-by-default).
+   */
+  firstTimeEligibleByRuleId: Record<string, boolean>;
 }
 
 export interface AppliedDiscount {
@@ -196,8 +252,18 @@ export function applyPricing(ctx: PricingContext): PricingResult {
     let affiliationId: string | null = null;
     switch (rule.ruleType) {
       case "first_time_purchase": {
-        if (!ctx.isFirstTimePurchase) {
-          skip("student is not first-time");
+        // First-time eligibility is two questions:
+        //   1) does THIS product fall within the rule's first-time scope?
+        //   2) has the student already consumed THIS rule's claim?
+        // Both must hold for the rule to fire. The scope check happens
+        // first so a non-eligible product can never accidentally
+        // consume a first-time claim downstream.
+        if (!productMatchesFirstTimeScope(rule, ctx.product)) {
+          skip("product not in first-time scope");
+          continue;
+        }
+        if (!ctx.firstTimeEligibleByRuleId?.[rule.id]) {
+          skip("student already consumed this first-time rule");
           continue;
         }
         break;

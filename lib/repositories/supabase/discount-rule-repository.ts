@@ -5,6 +5,7 @@ import type {
   AffiliationType,
   DiscountKind,
   DiscountRuleType,
+  FirstTimeScope,
 } from "@/lib/domain/pricing-engine";
 import type { ProductType } from "@/types/domain";
 import type {
@@ -34,6 +35,8 @@ function toMock(row: Row): MockDiscountRule {
     stackable: row.stackable,
     validFrom: row.valid_from,
     validUntil: row.valid_until,
+    firstTimeScope: (row.first_time_scope as FirstTimeScope) ?? "any_purchase",
+    firstTimeProductIds: row.first_time_product_ids,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -92,6 +95,8 @@ export const supabaseDiscountRuleRepo: IDiscountRuleRepository = {
         stackable: input.stackable ?? false,
         valid_from: input.validFrom ?? null,
         valid_until: input.validUntil ?? null,
+        first_time_scope: input.firstTimeScope ?? "any_purchase",
+        first_time_product_ids: input.firstTimeProductIds ?? null,
       } as never)
       .select()
       .single();
@@ -120,6 +125,10 @@ export const supabaseDiscountRuleRepo: IDiscountRuleRepository = {
     if (patch.stackable !== undefined) fields.stackable = patch.stackable;
     if (patch.validFrom !== undefined) fields.valid_from = patch.validFrom;
     if (patch.validUntil !== undefined) fields.valid_until = patch.validUntil;
+    if (patch.firstTimeScope !== undefined)
+      fields.first_time_scope = patch.firstTimeScope;
+    if (patch.firstTimeProductIds !== undefined)
+      fields.first_time_product_ids = patch.firstTimeProductIds;
     if (Object.keys(fields).length === 0) return this.getById(id);
 
     const { error } = await supabase

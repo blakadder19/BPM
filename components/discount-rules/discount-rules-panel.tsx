@@ -28,6 +28,7 @@ import {
   type AffiliationType,
   type DiscountKind,
   type DiscountRuleType,
+  type FirstTimeScope,
 } from "@/lib/domain/pricing-engine";
 import type { ProductType } from "@/types/domain";
 import {
@@ -58,6 +59,8 @@ interface RuleRow {
   stackable: boolean;
   validFrom: string | null;
   validUntil: string | null;
+  firstTimeScope: FirstTimeScope;
+  firstTimeProductIds: string[] | null;
 }
 
 interface ProductRow {
@@ -145,10 +148,25 @@ function ScopeCell({
 }) {
   const types = rule.appliesToProductTypes ?? [];
   const productIds = rule.appliesToProductIds ?? [];
-  const isAll = types.length === 0 && productIds.length === 0;
+  // For first-time rules with a "selected_products" scope we surface
+  // the scope chip even when no `appliesTo*` restriction is set —
+  // otherwise the table reads as "All products" which is misleading.
+  const firstTimeScopeChip =
+    rule.ruleType === "first_time_purchase" &&
+    rule.firstTimeScope === "selected_products"
+      ? (rule.firstTimeProductIds?.length ?? 0)
+      : 0;
+  const isAll =
+    types.length === 0 && productIds.length === 0 && firstTimeScopeChip === 0;
 
   if (isAll) {
-    return <span className="text-xs text-gray-500">All products</span>;
+    return (
+      <span className="text-xs text-gray-500">
+        {rule.ruleType === "first_time_purchase"
+          ? "Any first purchase"
+          : "All products"}
+      </span>
+    );
   }
 
   const productNames = productIds.map(
@@ -171,6 +189,15 @@ function ScopeCell({
       className="flex max-w-[260px] flex-col gap-1 whitespace-normal"
       title={tooltip}
     >
+      {rule.ruleType === "first_time_purchase" &&
+        rule.firstTimeScope === "selected_products" && (
+          <div>
+            <span className="inline-flex items-center rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+              First-time: {rule.firstTimeProductIds?.length ?? 0} product
+              {(rule.firstTimeProductIds?.length ?? 0) === 1 ? "" : "s"}
+            </span>
+          </div>
+        )}
       {types.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {types.map((t) => (
@@ -549,6 +576,15 @@ function RuleEditor({
   const [appliesToIds, setAppliesToIds] = useState<Set<string>>(
     new Set(rule?.appliesToProductIds ?? []),
   );
+  // First-time eligibility scope. Only applies when
+  // ruleType === "first_time_purchase"; ignored otherwise but kept in
+  // state so toggling type back and forth does not lose the selection.
+  const [firstTimeScope, setFirstTimeScope] = useState<FirstTimeScope>(
+    rule?.firstTimeScope ?? "any_purchase",
+  );
+  const [firstTimeProductIds, setFirstTimeProductIds] = useState<Set<string>>(
+    new Set(rule?.firstTimeProductIds ?? []),
+  );
   const [validFrom, setValidFrom] = useState<string>(rule?.validFrom ?? "");
   const [validUntil, setValidUntil] = useState<string>(rule?.validUntil ?? "");
   const [priority, setPriority] = useState<string>(String(rule?.priority ?? 0));
@@ -604,6 +640,13 @@ function RuleEditor({
       stackable,
       validFrom: validFrom || null,
       validUntil: validUntil || null,
+      firstTimeScope:
+        ruleType === "first_time_purchase" ? firstTimeScope : "any_purchase",
+      firstTimeProductIds:
+        ruleType === "first_time_purchase" &&
+        firstTimeScope === "selected_products"
+          ? [...firstTimeProductIds]
+          : null,
     };
   }
 
@@ -800,6 +843,94 @@ function RuleEditor({
               />
             </Field>
           </div>
+
+          {ruleType === "first_time_purchase" && (
+            <div className="rounded-md border border-amber-200 bg-amber-50/50 px-4 py-3 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-amber-900">
+                  First-time eligibility
+                </h3>
+                <p className="mt-1 text-xs text-amber-800/80">
+                  Only purchases matching this scope can receive or
+                  consume this first-time discount.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="first-time-scope"
+                    value="any_purchase"
+                    checked={firstTimeScope === "any_purchase"}
+                    onChange={() => setFirstTimeScope("any_purchase")}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium">Any first purchase</span>
+                    <span className="block text-xs text-gray-600">
+                      Applies to the student&apos;s very first paid purchase, of any product.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm cursor-pointer">
+                  <input
+                    type="radio"
+                    name="first-time-scope"
+                    value="selected_products"
+                    checked={firstTimeScope === "selected_products"}
+                    onChange={() => setFirstTimeScope("selected_products")}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    <span className="font-medium">
+                      First purchase of selected products
+                    </span>
+                    <span className="block text-xs text-gray-600">
+                      Other purchases neither receive the discount nor
+                      consume the claim.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              {firstTimeScope === "selected_products" && (
+                <Field
+                  label="Eligible products"
+                  hint="Select at least one product. Only first purchases of these products will trigger or consume this rule."
+                >
+                  <div className="max-h-40 overflow-y-auto rounded border border-gray-200 bg-white px-2 py-1">
+                    {products.length === 0 ? (
+                      <p className="text-xs text-gray-500 italic py-1.5">
+                        No products available.
+                      </p>
+                    ) : (
+                      products.map((p) => (
+                        <label
+                          key={p.id}
+                          className="flex items-center gap-2 py-1 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={firstTimeProductIds.has(p.id)}
+                            onChange={(e) => {
+                              const next = new Set(firstTimeProductIds);
+                              if (e.target.checked) next.add(p.id);
+                              else next.delete(p.id);
+                              setFirstTimeProductIds(next);
+                            }}
+                          />
+                          <span className="flex-1">{p.name}</span>
+                          <span className="text-xs text-gray-500">
+                            {PRODUCT_TYPE_LABELS[p.productType]} ·{" "}
+                            {formatCents(p.priceCents)}
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </Field>
+              )}
+            </div>
+          )}
 
           <Field
             label="Applies to product types (optional)"

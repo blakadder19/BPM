@@ -72,6 +72,8 @@ export default async function DiscountRulesPage() {
         stackable: r.stackable,
         validFrom: r.validFrom,
         validUntil: r.validUntil,
+        firstTimeScope: r.firstTimeScope ?? "any_purchase",
+        firstTimeProductIds: r.firstTimeProductIds,
       }))}
       products={products
         .filter((p) => !p.archivedAt)

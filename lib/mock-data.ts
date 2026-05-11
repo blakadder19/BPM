@@ -790,6 +790,8 @@ export interface MockDiscountRule {
   stackable: boolean;
   validFrom: string | null;
   validUntil: string | null;
+  firstTimeScope: import("./domain/pricing-engine").FirstTimeScope;
+  firstTimeProductIds: string[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -817,14 +819,15 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
   {
     id: "dr-first-time",
     code: "FIRST_TIME_10",
-    name: "First-time purchase 10% off",
-    description: "10% off the first paid subscription a student ever buys.",
+    name: "First-time Beginners 10% off",
+    description:
+      "10% off a student's first paid Beginners course (Beginners 1 & 2 Promo Pass or Latin Combo).",
     ruleType: "first_time_purchase",
     affiliationType: null,
     discountKind: "percentage",
     discountValue: 10,
     appliesToProductTypes: null,
-    appliesToProductIds: null,
+    appliesToProductIds: ["p-beg12", "p-latin-combo"],
     minPriceCents: null,
     maxDiscountCents: null,
     isActive: true,
@@ -832,6 +835,8 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     stackable: false,
     validFrom: null,
     validUntil: null,
+    firstTimeScope: "selected_products",
+    firstTimeProductIds: ["p-beg12", "p-latin-combo"],
     createdAt: "2026-04-01T00:00:00",
     updatedAt: "2026-04-01T00:00:00",
   },
@@ -853,6 +858,8 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     stackable: false,
     validFrom: null,
     validUntil: null,
+    firstTimeScope: "any_purchase",
+    firstTimeProductIds: null,
     createdAt: "2026-04-01T00:00:00",
     updatedAt: "2026-04-01T00:00:00",
   },
@@ -874,6 +881,8 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     stackable: false,
     validFrom: null,
     validUntil: null,
+    firstTimeScope: "any_purchase",
+    firstTimeProductIds: null,
     createdAt: "2026-04-01T00:00:00",
     updatedAt: "2026-04-01T00:00:00",
   },

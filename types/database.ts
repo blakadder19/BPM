@@ -574,6 +574,8 @@ export interface Database {
           stackable: boolean;
           valid_from: string | null;
           valid_until: string | null;
+          first_time_scope: string;
+          first_time_product_ids: string[] | null;
           created_at: string;
           updated_at: string;
         };

@@ -41,9 +41,11 @@ import {
   AFFILIATION_TYPES,
   DISCOUNT_KINDS,
   DISCOUNT_RULE_TYPES,
+  FIRST_TIME_SCOPES,
   type AffiliationType,
   type DiscountKind,
   type DiscountRuleType,
+  type FirstTimeScope,
 } from "@/lib/domain/pricing-engine";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import { previewPricingForStudent } from "@/lib/services/pricing-service";
@@ -52,6 +54,7 @@ import type { ProductType } from "@/types/domain";
 const RULE_TYPE_SET = new Set<string>(DISCOUNT_RULE_TYPES);
 const KIND_SET = new Set<string>(DISCOUNT_KINDS);
 const AFFILIATION_TYPE_SET = new Set<string>(AFFILIATION_TYPES);
+const FIRST_TIME_SCOPE_SET = new Set<string>(FIRST_TIME_SCOPES);
 const PRODUCT_TYPE_SET = new Set<ProductType>(["membership", "pass", "drop_in"]);
 
 // ── Input shape (shared by create + update) ──────────────────
@@ -73,11 +76,27 @@ export interface DiscountRuleInput {
   stackable: boolean;
   validFrom: string | null;
   validUntil: string | null;
+  /**
+   * First-time eligibility scope. Only meaningful when
+   * `ruleType === "first_time_purchase"`. Server normalizes to
+   * `"any_purchase"` when omitted.
+   */
+  firstTimeScope?: FirstTimeScope | null;
+  /**
+   * Selected product ids when `firstTimeScope === "selected_products"`.
+   * Server validates that every id exists.
+   */
+  firstTimeProductIds?: string[] | null;
 }
 
 // ── Validation ───────────────────────────────────────────────
 
-interface ValidatedRuleInput extends DiscountRuleInput {}
+interface ValidatedRuleInput extends DiscountRuleInput {
+  // Validation always normalizes these two to concrete values, even
+  // for non-first-time rules (defaults: "any_purchase" / null).
+  firstTimeScope: FirstTimeScope;
+  firstTimeProductIds: string[] | null;
+}
 
 /**
  * Strict server-side validation. UI hints exist but are advisory; this
@@ -129,6 +148,8 @@ async function validateInput(
   }
 
   // Type-specific consistency.
+  let firstTimeScope: FirstTimeScope = "any_purchase";
+  let firstTimeProductIds: string[] | null = null;
   if (raw.ruleType === "first_time_purchase") {
     if (raw.affiliationType) {
       return {
@@ -136,6 +157,26 @@ async function validateInput(
         error: "First-time rules must not require an affiliation type.",
       };
     }
+    const requestedScope = raw.firstTimeScope ?? "any_purchase";
+    if (!FIRST_TIME_SCOPE_SET.has(requestedScope)) {
+      return { ok: false, error: `Invalid first-time scope "${requestedScope}".` };
+    }
+    firstTimeScope = requestedScope as FirstTimeScope;
+    if (firstTimeScope === "selected_products") {
+      const ids = raw.firstTimeProductIds ?? [];
+      if (ids.length === 0) {
+        return {
+          ok: false,
+          error:
+            "Select at least one product for the first-time eligibility scope.",
+        };
+      }
+      firstTimeProductIds = [...new Set(ids)];
+    }
+  } else if (raw.firstTimeScope || raw.firstTimeProductIds) {
+    // Defensive: ignore irrelevant first-time payload on non-first-time rules.
+    firstTimeScope = "any_purchase";
+    firstTimeProductIds = null;
   }
   if (raw.ruleType === "affiliation") {
     if (!raw.affiliationType || !AFFILIATION_TYPE_SET.has(raw.affiliationType)) {
@@ -154,10 +195,15 @@ async function validateInput(
     }
   }
 
-  if (raw.appliesToProductIds && raw.appliesToProductIds.length > 0) {
+  // Combined product-id validation: every id referenced by either the
+  // generic applies-to list OR the first-time scope list must exist.
+  const allReferencedProductIds = new Set<string>();
+  for (const id of raw.appliesToProductIds ?? []) allReferencedProductIds.add(id);
+  for (const id of firstTimeProductIds ?? []) allReferencedProductIds.add(id);
+  if (allReferencedProductIds.size > 0) {
     const all = await getProductRepo().getAll();
     const valid = new Set(all.map((p) => p.id));
-    for (const id of raw.appliesToProductIds) {
+    for (const id of allReferencedProductIds) {
       if (!valid.has(id)) {
         return { ok: false, error: `Product id "${id}" does not exist.` };
       }
@@ -181,6 +227,8 @@ async function validateInput(
       code: code.toUpperCase(),
       name,
       description: raw.description?.trim() || null,
+      firstTimeScope,
+      firstTimeProductIds,
     },
   };
 }
@@ -214,6 +262,8 @@ export async function createDiscountRuleAction(
       stackable: v.value.stackable,
       validFrom: v.value.validFrom,
       validUntil: v.value.validUntil,
+      firstTimeScope: v.value.firstTimeScope,
+      firstTimeProductIds: v.value.firstTimeProductIds,
     });
 
     logFinanceEvent({
@@ -271,6 +321,8 @@ export async function updateDiscountRuleAction(
       stackable: v.value.stackable,
       validFrom: v.value.validFrom,
       validUntil: v.value.validUntil,
+      firstTimeScope: v.value.firstTimeScope,
+      firstTimeProductIds: v.value.firstTimeProductIds,
     });
 
     if (!updated) return { success: false, error: "Update failed." };
@@ -445,7 +497,10 @@ export async function previewDiscountRuleAction(
   const result = map.get(product.id);
   if (!result) return { success: false, error: "Engine returned no result." };
 
-  // Determine first-time status purely for display.
+  // Determine first-time status purely for display. The flag here is
+  // the coarse legacy "any first paid purchase" view — the engine
+  // result itself is the authoritative per-rule answer, and the
+  // result.reasons trace already explains scope misses.
   const subs = await getSubscriptionRepo().getByStudent(studentId);
   const hasPriorPaid = subs.some(
     (s) => s.paymentStatus === "paid" || s.paymentStatus === "pending",
