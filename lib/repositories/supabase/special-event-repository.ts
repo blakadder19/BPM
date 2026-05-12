@@ -94,6 +94,7 @@ function toProduct(r: any): MockEventProduct {
     inclusionRule: r.inclusion_rule as EventInclusionRule,
     includedSessionIds: r.included_session_ids ?? null,
     sortOrder: r.sort_order ?? 0,
+    membersOnly: r.members_only ?? false,
   };
 }
 
@@ -291,6 +292,7 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
         inclusion_rule: input.inclusionRule,
         included_session_ids: input.includedSessionIds ?? null,
         sort_order: input.sortOrder ?? 0,
+        members_only: input.membersOnly ?? false,
       } as never)
       .select()
       .single();
@@ -310,6 +312,7 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     if (patch.inclusionRule !== undefined) fields.inclusion_rule = patch.inclusionRule;
     if (patch.includedSessionIds !== undefined) fields.included_session_ids = patch.includedSessionIds;
     if (patch.sortOrder !== undefined) fields.sort_order = patch.sortOrder;
+    if (patch.membersOnly !== undefined) fields.members_only = patch.membersOnly;
     if (Object.keys(fields).length === 0) return null;
     const { error } = await sb.from("event_products").update(fields as never).eq("id", id);
     if (error) throw new Error(error.message);

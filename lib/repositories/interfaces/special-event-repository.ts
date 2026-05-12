@@ -99,6 +99,7 @@ export interface CreateEventProductData {
   inclusionRule: EventInclusionRule;
   includedSessionIds?: string[] | null;
   sortOrder?: number;
+  membersOnly?: boolean;
 }
 
 export type EventProductPatch = Partial<
@@ -113,6 +114,7 @@ export type EventProductPatch = Partial<
     | "inclusionRule"
     | "includedSessionIds"
     | "sortOrder"
+    | "membersOnly"
   >
 >;
 

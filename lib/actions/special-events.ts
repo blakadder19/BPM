@@ -311,6 +311,7 @@ export async function createEventProductAction(
   const includedSessionIdsRaw = formData.getAll("includedSessionIds") as string[];
   const includedSessionIds = includedSessionIdsRaw.filter(Boolean).length > 0 ? includedSessionIdsRaw.filter(Boolean) : null;
   const sortOrder = parseInt(formData.get("sortOrder") as string) || 0;
+  const membersOnly = formData.get("membersOnly") === "on" || formData.get("membersOnly") === "true";
 
   if (!eventId) return { success: false, error: "Missing event ID" };
   if (!name) return { success: false, error: "Name is required" };
@@ -323,7 +324,7 @@ export async function createEventProductAction(
     productType: productType as EventProductType,
     isVisible, salesOpen,
     inclusionRule: inclusionRule as EventInclusionRule,
-    includedSessionIds, sortOrder,
+    includedSessionIds, sortOrder, membersOnly,
   });
   if (result.success) revalidateEvents(eventId);
   return result;
@@ -347,6 +348,7 @@ export async function updateEventProductAction(
   const includedSessionIdsRaw = formData.getAll("includedSessionIds") as string[];
   const includedSessionIds = includedSessionIdsRaw.filter(Boolean).length > 0 ? includedSessionIdsRaw.filter(Boolean) : null;
   const sortOrder = parseInt(formData.get("sortOrder") as string) || 0;
+  const membersOnly = formData.get("membersOnly") === "on" || formData.get("membersOnly") === "true";
 
   if (!name) return { success: false, error: "Name is required" };
   if (isNaN(priceCents) || priceCents < 0) return { success: false, error: "Invalid price" };
@@ -358,7 +360,7 @@ export async function updateEventProductAction(
     productType: productType as EventProductType,
     isVisible, salesOpen,
     inclusionRule: inclusionRule as EventInclusionRule,
-    includedSessionIds, sortOrder,
+    includedSessionIds, sortOrder, membersOnly,
   });
   if (result.success) revalidateEvents(eventId);
   return result;

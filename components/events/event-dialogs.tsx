@@ -577,6 +577,24 @@ export function EventProductFormDialog({
                 Sales open
               </label>
             </div>
+
+            <div className="border-t border-gray-100 pt-3">
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="membersOnly"
+                  defaultChecked={defaults?.membersOnly ?? false}
+                  className={`${checkCls} mt-0.5`}
+                />
+                <span>
+                  <span className="font-medium text-gray-700">Members only</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Only students with an active membership can purchase this ticket.
+                  </span>
+                </span>
+              </label>
+            </div>
+
             <input type="hidden" name="sortOrder" value={defaults?.sortOrder ?? 0} />
 
             {error && <p className="text-sm text-red-600">{error}</p>}

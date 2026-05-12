@@ -590,16 +590,32 @@ export function AdminEventDetail({
         {products.length === 0 ? (
           <EmptyState icon={Package} title="No products yet" description="Add purchasable products (passes, tickets) for this event." />
         ) : (
-          <AdminTable headers={["Name", "Type", "Price", "Inclusion", "Visible", "Sales", ""]}>
+          <AdminTable headers={["Name", "Type", "Price", "Inclusion", "Access", "Visible", "Sales", ""]}>
             {products.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50">
-                <Td className="font-medium">{p.name}</Td>
+                <Td className="font-medium">
+                  <div className="flex items-center gap-1.5">
+                    <span>{p.name}</span>
+                    {p.membersOnly && (
+                      <Badge variant="info" title="Only students with an active membership can purchase this ticket.">
+                        Members only
+                      </Badge>
+                    )}
+                  </div>
+                </Td>
                 <Td>{PRODUCT_TYPE_LABELS[p.productType] ?? p.productType}</Td>
                 <Td>{centsToEuros(p.priceCents)}</Td>
                 <Td>
                   {INCLUSION_LABELS[p.inclusionRule] ?? p.inclusionRule}
                   {p.inclusionRule === "selected_sessions" && p.includedSessionIds && (
                     <span className="ml-1 text-gray-400 text-xs">({p.includedSessionIds.length})</span>
+                  )}
+                </Td>
+                <Td>
+                  {p.membersOnly ? (
+                    <Badge variant="info">Members only</Badge>
+                  ) : (
+                    <Badge variant="default">Public</Badge>
                   )}
                 </Td>
                 <Td>{p.isVisible ? <Badge variant="success">Yes</Badge> : <Badge variant="default">No</Badge>}</Td>

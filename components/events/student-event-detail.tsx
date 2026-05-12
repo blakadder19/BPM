@@ -13,6 +13,7 @@ import {
   QrCode,
   Clock,
   CheckCircle2,
+  Lock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { EventHero } from "./event-hero";
@@ -30,6 +31,8 @@ interface Props {
   products: MockEventProduct[];
   myPurchases: MockEventPurchase[];
   stripeEnabled: boolean;
+  /** Server-resolved: whether the current student has an active membership. */
+  isActiveMember: boolean;
 }
 
 import { formatEventDateRange, formatEventDT, isOvernightSession, formatSessionTimeRange } from "@/lib/utils";
@@ -54,7 +57,7 @@ const SESSION_TYPE_COLORS: Record<string, string> = {
   other: "bg-gray-100 text-gray-700",
 };
 
-export function StudentEventDetail({ event, sessions, products, myPurchases, stripeEnabled }: Props) {
+export function StudentEventDetail({ event, sessions, products, myPurchases, stripeEnabled, isActiveMember }: Props) {
   const [purchaseProduct, setPurchaseProduct] = useState<MockEventProduct | null>(null);
 
   const activePurchases = myPurchases.filter((p) => p.paymentStatus !== "refunded");
@@ -209,10 +212,18 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
               const isPaid = purchase?.paymentStatus === "paid";
               const isPending = purchase?.paymentStatus === "pending";
               const blockedByFullPass = hasFullPass && !purchased;
+              const blockedByMembersOnly = p.membersOnly && !isActiveMember && !purchased;
               return (
-                <div key={p.id} className={`rounded-xl border p-5 flex flex-col ${blockedByFullPass ? "border-gray-100 bg-gray-50 opacity-60" : "border-gray-200 bg-white"}`}>
+                <div key={p.id} className={`rounded-xl border p-5 flex flex-col ${blockedByFullPass || blockedByMembersOnly ? "border-gray-100 bg-gray-50 opacity-70" : "border-gray-200 bg-white"}`}>
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-gray-900">{p.name}</h3>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
+                      {p.membersOnly && (
+                        <Badge variant="info" className="shrink-0">
+                          <Lock className="h-2.5 w-2.5 mr-0.5" /> Members only
+                        </Badge>
+                      )}
+                    </div>
                     <span className="text-lg font-bold text-bpm-700 shrink-0">{centsToEuros(p.priceCents)}</span>
                   </div>
                   {p.description && <p className="mt-1 text-sm text-gray-500">{p.description}</p>}
@@ -228,6 +239,11 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
                     ) : blockedByFullPass ? (
                       <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 border border-gray-200 px-3 py-2 text-sm font-medium text-gray-500 w-full justify-center">
                         Included in Full Pass
+                      </span>
+                    ) : blockedByMembersOnly ? (
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 border border-gray-200 px-3 py-2 text-sm font-medium text-gray-500 w-full justify-center text-center">
+                        <Lock className="h-3.5 w-3.5 shrink-0" />
+                        This ticket is only available to active members.
                       </span>
                     ) : (
                       <button
