@@ -676,6 +676,8 @@ export interface MockEventProduct {
   inclusionRule: EventInclusionRule;
   includedSessionIds: string[] | null;
   sortOrder: number;
+  /** When true, only students with an active membership may purchase this ticket. */
+  membersOnly: boolean;
 }
 
 export interface MockEventPurchase {
@@ -748,11 +750,11 @@ export const EVENT_SESSIONS: MockEventSession[] = [
 ];
 
 export const EVENT_PRODUCTS: MockEventProduct[] = [
-  { id: "ep-1", eventId: "evt-1", name: "Full Weekend Pass", description: "Access to all workshops, masterclass, and Saturday social.", priceCents: 12000, productType: "full_pass", isVisible: true, salesOpen: true, inclusionRule: "all_sessions", includedSessionIds: null, sortOrder: 1 },
-  { id: "ep-2", eventId: "evt-1", name: "Saturday Pass", description: "Both Saturday workshops + Saturday social.", priceCents: 7500, productType: "combo_pass", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: ["es-1", "es-2", "es-3"], sortOrder: 2 },
-  { id: "ep-3", eventId: "evt-1", name: "Sunday Pass", description: "Both Sunday sessions.", priceCents: 5000, productType: "combo_pass", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: ["es-4", "es-5"], sortOrder: 3 },
-  { id: "ep-4", eventId: "evt-1", name: "Single Workshop", description: "Access to one workshop of your choice.", priceCents: 3000, productType: "single_session", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: null, sortOrder: 4 },
-  { id: "ep-5", eventId: "evt-1", name: "Social Ticket", description: "Saturday night social only.", priceCents: 1500, productType: "social_ticket", isVisible: true, salesOpen: true, inclusionRule: "socials_only", includedSessionIds: null, sortOrder: 5 },
+  { id: "ep-1", eventId: "evt-1", name: "Full Weekend Pass", description: "Access to all workshops, masterclass, and Saturday social.", priceCents: 12000, productType: "full_pass", isVisible: true, salesOpen: true, inclusionRule: "all_sessions", includedSessionIds: null, sortOrder: 1, membersOnly: false },
+  { id: "ep-2", eventId: "evt-1", name: "Saturday Pass", description: "Both Saturday workshops + Saturday social.", priceCents: 7500, productType: "combo_pass", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: ["es-1", "es-2", "es-3"], sortOrder: 2, membersOnly: false },
+  { id: "ep-3", eventId: "evt-1", name: "Sunday Pass", description: "Both Sunday sessions.", priceCents: 5000, productType: "combo_pass", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: ["es-4", "es-5"], sortOrder: 3, membersOnly: false },
+  { id: "ep-4", eventId: "evt-1", name: "Single Workshop", description: "Access to one workshop of your choice.", priceCents: 3000, productType: "single_session", isVisible: true, salesOpen: true, inclusionRule: "selected_sessions", includedSessionIds: null, sortOrder: 4, membersOnly: false },
+  { id: "ep-5", eventId: "evt-1", name: "Social Ticket", description: "Saturday night social only.", priceCents: 1500, productType: "social_ticket", isVisible: true, salesOpen: true, inclusionRule: "socials_only", includedSessionIds: null, sortOrder: 5, membersOnly: false },
 ];
 
 // ── Phase 4: Affiliations & Discount Rules ──────────────────

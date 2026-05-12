@@ -83,6 +83,7 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       inclusionRule: data.inclusionRule,
       includedSessionIds: data.includedSessionIds ?? null,
       sortOrder: data.sortOrder ?? 0,
+      membersOnly: data.membersOnly ?? false,
     });
   },
 

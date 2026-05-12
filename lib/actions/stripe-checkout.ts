@@ -41,6 +41,10 @@ import {
 import { paymentConfirmedEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { isEmailEnabled } from "@/lib/communications/email-provider";
+import { studentHasActiveMembership } from "@/lib/domain/active-membership";
+
+const MEMBERS_ONLY_BLOCKED_MESSAGE = "This ticket is only available to active members.";
+const MEMBERS_ONLY_GUEST_MESSAGE = "This ticket is only available to active members. Please log in with your member account to purchase.";
 
 /**
  * Fire a `payment_confirmed` notification + email for a successful
@@ -501,6 +505,21 @@ export async function createEventStripeCheckoutAction(input: {
   const { requireRole } = await import("@/lib/auth");
   const user = await requireRole(["student"]);
 
+  // Members-only enforcement: re-load the product on the server (never
+  // trust the client-supplied price/name), and if it's restricted,
+  // require an active membership before letting Stripe checkout start.
+  const { getSpecialEventRepo } = await import("@/lib/repositories");
+  const repo = getSpecialEventRepo();
+  const product = (await repo.getProductsByEvent(input.eventId)).find(
+    (p) => p.id === input.eventProductId,
+  );
+  if (!product) return { success: false, error: "Event product not found" };
+  if (!product.salesOpen) return { success: false, error: "Sales are not open for this product" };
+  if (product.membersOnly) {
+    const isMember = await studentHasActiveMembership(user.id);
+    if (!isMember) return { success: false, error: MEMBERS_ONLY_BLOCKED_MESSAGE };
+  }
+
   const appUrl = await resolveAppUrl();
 
   try {
@@ -515,10 +534,10 @@ export async function createEventStripeCheckoutAction(input: {
           price_data: {
             currency: "eur",
             product_data: {
-              name: input.eventProductName,
-              description: input.eventProductDescription ?? input.eventProductName,
+              name: product.name,
+              description: product.description ?? product.name,
             },
-            unit_amount: input.priceCents,
+            unit_amount: product.priceCents,
           },
           quantity: 1,
         },
@@ -571,6 +590,9 @@ export async function createGuestEventStripeCheckoutAction(input: {
   );
   if (!product) return { success: false, error: "Event product not found" };
   if (!product.salesOpen) return { success: false, error: "Sales are not open for this product" };
+  if (product.membersOnly) {
+    return { success: false, error: MEMBERS_ONLY_GUEST_MESSAGE };
+  }
 
   const allPurchases = await repo.getPurchasesByEvent(input.eventId);
 

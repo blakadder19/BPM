@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Loader2,
   XCircle,
+  Lock,
 } from "lucide-react";
 import { EventHero } from "./event-hero";
 import { createGuestEventPurchaseAction } from "@/lib/actions/event-purchase";
@@ -225,10 +226,17 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
               {products.map((p) => (
                 <div
                   key={p.id}
-                  className="rounded-xl border border-gray-200 bg-white p-5 flex flex-col"
+                  className={`rounded-xl border p-5 flex flex-col ${p.membersOnly ? "border-blue-200 bg-blue-50/40" : "border-gray-200 bg-white"}`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-semibold text-gray-900">{p.name}</h3>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{p.name}</h3>
+                      {p.membersOnly && (
+                        <span className="inline-flex items-center gap-0.5 rounded-full bg-blue-100 text-blue-700 px-2 py-0.5 text-[10px] font-medium shrink-0">
+                          <Lock className="h-2.5 w-2.5" /> Members only
+                        </span>
+                      )}
+                    </div>
                     <span className="text-lg font-bold text-bpm-700 shrink-0">
                       {centsToEuros(p.priceCents)}
                     </span>
@@ -236,6 +244,11 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
                   {p.description && (
                     <p className="mt-1 text-sm text-gray-500">
                       {p.description}
+                    </p>
+                  )}
+                  {p.membersOnly && (
+                    <p className="mt-2 text-xs text-blue-700">
+                      This ticket is only available to active members.
                     </p>
                   )}
                 </div>
@@ -300,8 +313,16 @@ function GuestPurchaseSection({
   stripeEnabled: boolean;
   allowReceptionPayment: boolean;
 }) {
+  // Guests can never purchase members-only tickets — membership cannot
+  // be verified without an authenticated account. Filter them out of the
+  // selectable list; the products section above still shows them with a
+  // "Members only" badge so non-members can see they exist.
+  const purchasableProducts = products.filter((p) => !p.membersOnly);
+  const hasMembersOnlyProducts = products.some((p) => p.membersOnly);
+  const onlyMembersOnly = purchasableProducts.length === 0 && hasMembersOnlyProducts;
+
   const [mode, setMode] = useState<"choice" | "guest" | "success">("choice");
-  const [selectedProductId, setSelectedProductId] = useState<string>(products[0]?.id ?? "");
+  const [selectedProductId, setSelectedProductId] = useState<string>(purchasableProducts[0]?.id ?? "");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -309,7 +330,7 @@ function GuestPurchaseSection({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const selectedProduct = purchasableProducts.find((p) => p.id === selectedProductId);
 
   function handleReceptionPurchase() {
     if (!firstName.trim() || !lastName.trim()) { setError("Please enter your full name."); return; }
@@ -366,6 +387,27 @@ function GuestPurchaseSection({
   }
 
   if (mode === "choice") {
+    if (onlyMembersOnly) {
+      return (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-6 text-center space-y-4">
+          <Lock className="h-8 w-8 text-blue-600 mx-auto" />
+          <div>
+            <h3 className="font-display text-lg font-semibold text-gray-900">Members only</h3>
+            <p className="mt-1 text-sm text-gray-600">
+              This ticket is only available to active members. Please log in with your member account to purchase.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
+            >
+              Log in <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="rounded-xl border border-bpm-200 bg-gradient-to-r from-bpm-50 to-white p-6 text-center space-y-4">
         <Ticket className="h-8 w-8 text-bpm-500 mx-auto" />
@@ -387,6 +429,11 @@ function GuestPurchaseSection({
             Buy as guest
           </button>
         </div>
+        {hasMembersOnlyProducts && (
+          <p className="text-xs text-blue-700">
+            Some tickets above are marked &ldquo;Members only&rdquo; and require an active member account — log in to purchase those.
+          </p>
+        )}
         <p className="text-xs text-gray-400">
           Don&apos;t have an account?{" "}
           <Link href="/signup" className="text-bpm-600 hover:underline">Create one</Link>{" "}
@@ -425,11 +472,11 @@ function GuestPurchaseSection({
         </div>
       </div>
 
-      {products.length > 1 && (
+      {purchasableProducts.length > 1 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Select ticket</label>
           <div className="space-y-2">
-            {products.map((p) => (
+            {purchasableProducts.map((p) => (
               <label
                 key={p.id}
                 className={`flex items-center justify-between rounded-lg border p-3 cursor-pointer transition-colors ${
@@ -456,10 +503,15 @@ function GuestPurchaseSection({
               </label>
             ))}
           </div>
+          {hasMembersOnlyProducts && (
+            <p className="mt-2 text-xs text-blue-700">
+              Members-only tickets are not shown here. Log in with your member account to purchase them.
+            </p>
+          )}
         </div>
       )}
 
-      {products.length === 1 && selectedProduct && (
+      {purchasableProducts.length === 1 && selectedProduct && (
         <div className="flex items-center justify-between rounded-lg border border-bpm-200 bg-bpm-50 p-3">
           <span className="text-sm font-medium text-gray-900">{selectedProduct.name}</span>
           <span className="text-sm font-bold text-bpm-700">{centsToEuros(selectedProduct.priceCents)}</span>

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, CreditCard, Building2 } from "lucide-react";
+import { Check, CreditCard, Building2, Lock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -106,9 +106,16 @@ export function EventPurchaseDialog({ open, onClose, product, sessions, stripeEn
           ) : (
             <>
               <div className="rounded-lg border border-gray-200 p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-gray-900">{product.name}</span>
-                  <span className="font-semibold text-bpm-700">{centsToEuros(product.priceCents)}</span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-medium text-gray-900 truncate">{product.name}</span>
+                    {product.membersOnly && (
+                      <Badge variant="info" className="shrink-0">
+                        <Lock className="h-2.5 w-2.5 mr-0.5" /> Members only
+                      </Badge>
+                    )}
+                  </div>
+                  <span className="font-semibold text-bpm-700 shrink-0">{centsToEuros(product.priceCents)}</span>
                 </div>
                 {product.description && (
                   <p className="text-sm text-gray-500">{product.description}</p>

@@ -11,6 +11,7 @@ import {
   cachedGetEventProducts,
   cachedGetEventPurchases,
   cachedGetStudentEventPurchases,
+  cachedGetStudentSubs,
   cachedGetAllStudents,
   cachedCocCheck,
 } from "@/lib/server/cached-queries";
@@ -19,6 +20,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { AdminEventDetail } from "@/components/events/admin-event-detail";
 import { StudentEventDetail } from "@/components/events/student-event-detail";
 import { isStripeEnabled } from "@/lib/stripe";
+import { hasActiveMembership } from "@/lib/domain/active-membership";
 
 export default async function EventDetailPage({
   params,
@@ -44,8 +46,13 @@ export default async function EventDetailPage({
     const cocDone = await cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version);
     if (!cocDone) redirect("/onboarding");
     if (event.status !== "published" || !event.isVisible) notFound();
-    const myPurchases = await cachedGetStudentEventPurchases(user.id);
+    const [myPurchases, mySubs] = await Promise.all([
+      cachedGetStudentEventPurchases(user.id),
+      cachedGetStudentSubs(user.id),
+    ]);
     const eventPurchases = myPurchases.filter((p) => p.eventId === id);
+    const today = new Date().toISOString().slice(0, 10);
+    const isActiveMember = hasActiveMembership(mySubs, today);
     return (
       <StudentEventDetail
         event={event}
@@ -53,6 +60,7 @@ export default async function EventDetailPage({
         products={products.filter((p) => p.isVisible)}
         myPurchases={eventPurchases}
         stripeEnabled={isStripeEnabled()}
+        isActiveMember={isActiveMember}
       />
     );
   }

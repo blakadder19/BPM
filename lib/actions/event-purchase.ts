@@ -9,6 +9,10 @@ import { sendEventPurchaseEmail, sendEventRefundEmail, type EmailSendResult } fr
 import { sendPaymentConfirmationEmail } from "@/lib/actions/event-emails";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { logFinanceEvent, type AuditPerformer } from "@/lib/services/finance-audit-log";
+import { studentHasActiveMembership } from "@/lib/domain/active-membership";
+
+const MEMBERS_ONLY_BLOCKED_MESSAGE = "This ticket is only available to active members.";
+const MEMBERS_ONLY_GUEST_MESSAGE = "This ticket is only available to active members. Please log in with your member account to purchase.";
 
 function performerFromUser(u: AuthUser): AuditPerformer {
   return { userId: u.id, email: u.email, name: u.fullName };
@@ -64,6 +68,11 @@ export async function createEventPurchaseAction(input: {
   );
   if (!product) return { success: false, error: "Event product not found" };
   if (!product.salesOpen) return { success: false, error: "Sales are not open for this product" };
+
+  if (product.membersOnly) {
+    const isMember = await studentHasActiveMembership(user.id);
+    if (!isMember) return { success: false, error: MEMBERS_ONLY_BLOCKED_MESSAGE };
+  }
 
   const event = await repo.getEventById(input.eventId);
   if (!event) return { success: false, error: "Event not found" };
@@ -146,6 +155,10 @@ export async function createGuestEventPurchaseAction(input: {
   );
   if (!product) return { success: false, error: "Event product not found" };
   if (!product.salesOpen) return { success: false, error: "Sales are not open for this product" };
+
+  if (product.membersOnly) {
+    return { success: false, error: MEMBERS_ONLY_GUEST_MESSAGE };
+  }
 
   const allPurchases = await repo.getPurchasesByEvent(input.eventId);
 
