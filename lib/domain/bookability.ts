@@ -24,6 +24,7 @@ import {
 import { canBook, type BookableClassCapacity } from "./booking-rules";
 import { isClassStarted, getTodayStr } from "./datetime";
 import { isBirthdayWeek } from "./member-benefits";
+import { canBookBeginnerIntakeClass } from "./beginner-advance-booking";
 
 // ── Result types ────────────────────────────────────────────
 
@@ -91,6 +92,21 @@ export interface BookabilityContext {
    * should pass `getSettings().beginnerLevelNames`.
    */
   beginnerLevelNames?: readonly string[];
+  /**
+   * Phase 1 advance-booking flag: when true (default), beginner intake
+   * classes in the first {@link beginnerIntakeBookingWeeks} weeks of the
+   * *next* published term are bookable in advance. When false the
+   * engine falls back to blocking next-term beginner classes the same
+   * way unpublished terms are blocked.
+   */
+  allowBeginnerNextTermAdvanceBooking?: boolean;
+  /**
+   * Phase 1: max 1-based term week into which a student can self-book a
+   * beginner intake class. Defaults to {@link DEFAULT_BEGINNER_INTAKE_MAX_WEEK}
+   * inside the helper; server callers should pass
+   * `getSettings().beginnerIntakeBookingWeeks`.
+   */
+  beginnerIntakeBookingWeeks?: number;
 }
 
 // ── Recommendation logic ────────────────────────────────────
@@ -195,10 +211,25 @@ export function computeBookability(ctx: BookabilityContext): BookabilityResult {
       };
     }
 
-    const effectiveTermStatus = deriveTermStatus(classTerm, getTodayStr());
+    const todayStr = getTodayStr();
+    const effectiveTermStatus = deriveTermStatus(classTerm, todayStr);
 
     if (effectiveTermStatus === "upcoming") {
-      // Term hasn't started yet — student can book normally.
+      // Term hasn't started yet. Beginner intake classes are gated by
+      // the Phase 1 advance-booking rule (only weeks 1–2 of a published
+      // next term may be booked). Non-beginner classes flow through
+      // unchanged so existing pass / membership rules still apply.
+      const advance = canBookBeginnerIntakeClass({
+        classInstance: { level: cls.level, date: cls.date, termBound: cls.termBound },
+        term: classTerm,
+        today: todayStr,
+        beginnerLevelNames: ctx.beginnerLevelNames,
+        allowAdvanceBooking: ctx.allowBeginnerNextTermAdvanceBooking ?? true,
+        maxIntakeWeek: ctx.beginnerIntakeBookingWeeks,
+      });
+      if (!advance.allowed) {
+        return { status: "blocked", reason: advance.message };
+      }
     } else if (effectiveTermStatus === "active") {
       // Birthday benefit can bypass term-start restriction for non-beginner classes.
       // Configured beginner levels always have term-start gating per academy rule.

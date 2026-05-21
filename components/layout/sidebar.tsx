@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Tag,
   KeyRound,
+  UserPlus,
   Circle,
   type LucideIcon,
 } from "lucide-react";
@@ -54,6 +55,7 @@ const NAV_ICONS: Record<NavIconKey, LucideIcon> = {
   penalties: AlertTriangle,
   finance: Wallet,
   affiliations: ShieldCheck,
+  referrals: UserPlus,
   discountRules: Tag,
   broadcasts: Megaphone,
   studioHire: Building2,

@@ -31,6 +31,8 @@ export interface CreateEventData {
   salesOpen?: boolean;
   overallCapacity?: number | null;
   allowReceptionPayment?: boolean;
+  /** Phase 4: when set, the event is created in an archived state. Rarely used; most events become archived later via `updateEvent`. */
+  archivedAt?: string | null;
 }
 
 export type EventPatch = Partial<
@@ -51,6 +53,7 @@ export type EventPatch = Partial<
     | "salesOpen"
     | "overallCapacity"
     | "allowReceptionPayment"
+    | "archivedAt"
   >
 >;
 
@@ -141,6 +144,15 @@ export interface CreatePurchaseData {
   currency?: string | null;
   productNameSnapshot?: string | null;
   productTypeSnapshot?: string | null;
+  /**
+   * Phase 2 — frozen discount snapshot (same shape as
+   * `student_subscriptions.applied_discount`). Persists into the
+   * `applied_discount` jsonb column added by migration 00066. Pass
+   * `null` (default) when no discount was applied.
+   */
+  appliedDiscount?:
+    | import("@/lib/domain/pricing-engine").AppliedDiscountSnapshot
+    | null;
 }
 
 // ── Repository Interface ─────────────────────────────────────

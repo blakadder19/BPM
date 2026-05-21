@@ -28,6 +28,9 @@ function toMock(row: Row): MockDiscountRule {
     discountValue: row.discount_value,
     appliesToProductTypes: (row.applies_to_product_types as ProductType[] | null) ?? null,
     appliesToProductIds: row.applies_to_product_ids,
+    appliesToEventProductIds:
+      ((row as unknown as { applies_to_event_product_ids: string[] | null })
+        .applies_to_event_product_ids) ?? null,
     minPriceCents: row.min_price_cents,
     maxDiscountCents: row.max_discount_cents,
     isActive: row.is_active,
@@ -88,6 +91,7 @@ export const supabaseDiscountRuleRepo: IDiscountRuleRepository = {
         discount_value: input.discountValue,
         applies_to_product_types: input.appliesToProductTypes ?? null,
         applies_to_product_ids: input.appliesToProductIds ?? null,
+        applies_to_event_product_ids: input.appliesToEventProductIds ?? null,
         min_price_cents: input.minPriceCents ?? null,
         max_discount_cents: input.maxDiscountCents ?? null,
         is_active: input.isActive ?? true,
@@ -118,6 +122,8 @@ export const supabaseDiscountRuleRepo: IDiscountRuleRepository = {
       fields.applies_to_product_types = patch.appliesToProductTypes;
     if (patch.appliesToProductIds !== undefined)
       fields.applies_to_product_ids = patch.appliesToProductIds;
+    if (patch.appliesToEventProductIds !== undefined)
+      fields.applies_to_event_product_ids = patch.appliesToEventProductIds;
     if (patch.minPriceCents !== undefined) fields.min_price_cents = patch.minPriceCents;
     if (patch.maxDiscountCents !== undefined) fields.max_discount_cents = patch.maxDiscountCents;
     if (patch.isActive !== undefined) fields.is_active = patch.isActive;

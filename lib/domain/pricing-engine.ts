@@ -12,7 +12,7 @@
  *     row at purchase time (snapshot safety: future rule edits never
  *     retroactively change historical purchases).
  */
-import type { ProductType } from "@/types/domain";
+import type { EventProductType, ProductType } from "@/types/domain";
 
 // ── Affiliation taxonomy ─────────────────────────────────────
 
@@ -89,6 +89,15 @@ export interface DiscountRule {
   discountValue: number;
   appliesToProductTypes: ProductType[] | null;
   appliesToProductIds: string[] | null;
+  /**
+   * Phase 2 — event-ticket scope. When non-null the rule is scoped to
+   * the listed event_product ids and will be considered for event
+   * checkouts. When null the rule never applies to event tickets. A
+   * rule may carry BOTH `appliesToProductIds` (subscription scope) AND
+   * `appliesToEventProductIds` (event scope) simultaneously — the
+   * engine picks whichever applies to the product being priced.
+   */
+  appliesToEventProductIds: string[] | null;
   minPriceCents: number | null;
   maxDiscountCents: number | null;
   isActive: boolean;
@@ -134,11 +143,27 @@ export function productMatchesFirstTimeScope(
 
 // ── Engine inputs / outputs ──────────────────────────────────
 
-export interface PricingProduct {
+/**
+ * Discriminator used by the engine to route a product through the
+ * right scope checks. Callers default to `"subscription_product"` for
+ * backwards compatibility; event-ticket callers must set it explicitly.
+ */
+export type PricingEntityKind = "subscription_product" | "event_product";
+
+interface PricingProductBase {
   id: string;
-  productType: ProductType;
   priceCents: number;
 }
+
+export type PricingProduct =
+  | (PricingProductBase & {
+      entityKind?: "subscription_product";
+      productType: ProductType;
+    })
+  | (PricingProductBase & {
+      entityKind: "event_product";
+      productType: EventProductType;
+    });
 
 export interface PricingContext {
   product: PricingProduct;
@@ -211,6 +236,10 @@ export function applyPricing(ctx: PricingContext): PricingResult {
     };
   }
 
+  const entityKind: PricingEntityKind =
+    ctx.product.entityKind ?? "subscription_product";
+  const isEvent = entityKind === "event_product";
+
   const eligible: { rule: DiscountRule; affiliationId: string | null }[] = [];
 
   for (const rule of ctx.rules) {
@@ -234,24 +263,68 @@ export function applyPricing(ctx: PricingContext): PricingResult {
       skip(`base price below min_price_cents (${rule.minPriceCents})`);
       continue;
     }
-    if (
-      rule.appliesToProductTypes &&
-      !rule.appliesToProductTypes.includes(ctx.product.productType)
-    ) {
-      skip("product type not in allow-list");
-      continue;
-    }
-    if (
-      rule.appliesToProductIds &&
-      !rule.appliesToProductIds.includes(ctx.product.id)
-    ) {
-      skip("product id not in allow-list");
-      continue;
+    // Phase 2 — scope routing.
+    //
+    //   * For event-ticket pricing the rule MUST explicitly list the
+    //     event_product id in `appliesToEventProductIds`. A null /
+    //     empty list means the rule was not designed for events and
+    //     is skipped — this preserves the existing "rules without
+    //     event scope never apply to events" invariant.
+    //   * For subscription pricing, any rule whose ONLY scope is
+    //     event-ticket ids is skipped (so admins can author event-
+    //     only rules without accidentally discounting memberships).
+    //   * Subscription-side `appliesToProductTypes` and
+    //     `appliesToProductIds` are only meaningful for subscription
+    //     pricing — they are ignored for event tickets.
+    if (isEvent) {
+      const ids = rule.appliesToEventProductIds;
+      if (!ids || ids.length === 0) {
+        skip("rule has no event-ticket scope");
+        continue;
+      }
+      if (!ids.includes(ctx.product.id)) {
+        skip("event-ticket id not in allow-list");
+        continue;
+      }
+    } else {
+      const eventIds = rule.appliesToEventProductIds;
+      const subIds = rule.appliesToProductIds;
+      const subTypes = rule.appliesToProductTypes;
+      const eventOnly =
+        eventIds != null &&
+        eventIds.length > 0 &&
+        (subIds == null || subIds.length === 0) &&
+        (subTypes == null || subTypes.length === 0);
+      if (eventOnly) {
+        skip("rule is event-ticket-only");
+        continue;
+      }
+      if (
+        rule.appliesToProductTypes &&
+        !rule.appliesToProductTypes.includes(ctx.product.productType as ProductType)
+      ) {
+        skip("product type not in allow-list");
+        continue;
+      }
+      if (
+        rule.appliesToProductIds &&
+        !rule.appliesToProductIds.includes(ctx.product.id)
+      ) {
+        skip("product id not in allow-list");
+        continue;
+      }
     }
 
     let affiliationId: string | null = null;
     switch (rule.ruleType) {
       case "first_time_purchase": {
+        if (isEvent) {
+          // Phase 2 deliberately keeps first-time discounts subscription-
+          // only — extending the atomic claim store to event purchases is
+          // out of scope for this change.
+          skip("first-time rules do not apply to event tickets in this phase");
+          continue;
+        }
         // First-time eligibility is two questions:
         //   1) does THIS product fall within the rule's first-time scope?
         //   2) has the student already consumed THIS rule's claim?

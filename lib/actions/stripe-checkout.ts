@@ -33,6 +33,7 @@ import {
 import { getProductRepo, getSubscriptionRepo, getStudentRepo } from "@/lib/repositories";
 import {
   priceProductForStudent,
+  priceEventTicketForStudent,
   serializePricingForStripe,
   deserializePricingFromStripe,
   releaseDiscountClaim,
@@ -522,6 +523,20 @@ export async function createEventStripeCheckoutAction(input: {
 
   const appUrl = await resolveAppUrl();
 
+  // Server-side pricing (Phase 2). BPM is the source of truth — never
+  // trust client-supplied amounts. The compact frozen snapshot is sent
+  // through Stripe metadata so the webhook persists exactly what the
+  // customer was charged, even if the rule changes later.
+  const pricing = await priceEventTicketForStudent({
+    studentId: user.id,
+    product: {
+      id: product.id,
+      productType: product.productType,
+      priceCents: product.priceCents,
+    },
+  });
+  const pricingSnapshotMeta = serializePricingForStripe(pricing);
+
   try {
     const stripe = getStripe();
 
@@ -537,7 +552,7 @@ export async function createEventStripeCheckoutAction(input: {
               name: product.name,
               description: product.description ?? product.name,
             },
-            unit_amount: product.priceCents,
+            unit_amount: pricing.finalPriceCents,
           },
           quantity: 1,
         },
@@ -547,6 +562,9 @@ export async function createEventStripeCheckoutAction(input: {
         bpm_student_id: user.id,
         bpm_event_product_id: input.eventProductId,
         bpm_event_id: input.eventId,
+        ...(pricingSnapshotMeta
+          ? { bpm_pricing_snapshot: pricingSnapshotMeta }
+          : {}),
       },
       success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/checkout/cancel`,

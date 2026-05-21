@@ -36,6 +36,7 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       salesOpen: data.salesOpen ?? false,
       overallCapacity: data.overallCapacity ?? null,
       allowReceptionPayment: data.allowReceptionPayment ?? false,
+      archivedAt: data.archivedAt ?? null,
       createdAt: now,
       updatedAt: now,
     });
@@ -122,6 +123,7 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       currency: data.currency ?? "eur",
       productNameSnapshot: data.productNameSnapshot ?? null,
       productTypeSnapshot: data.productTypeSnapshot ?? null,
+      appliedDiscount: data.appliedDiscount ?? null,
       checkedInAt: null,
       checkedInBy: null,
       refundedAt: null,

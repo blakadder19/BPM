@@ -35,6 +35,7 @@ async function gateDiscountRule(perm: Permission) {
 import {
   getDiscountRuleRepo,
   getProductRepo,
+  getSpecialEventRepo,
   getSubscriptionRepo,
 } from "@/lib/repositories";
 import {
@@ -48,7 +49,10 @@ import {
   type FirstTimeScope,
 } from "@/lib/domain/pricing-engine";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
-import { previewPricingForStudent } from "@/lib/services/pricing-service";
+import {
+  previewPricingForStudent,
+  priceEventTicketForStudent,
+} from "@/lib/services/pricing-service";
 import type { ProductType } from "@/types/domain";
 
 const RULE_TYPE_SET = new Set<string>(DISCOUNT_RULE_TYPES);
@@ -69,6 +73,12 @@ export interface DiscountRuleInput {
   discountValue: number;
   appliesToProductTypes: ProductType[] | null;
   appliesToProductIds: string[] | null;
+  /**
+   * Phase 2 — event-ticket scope. When non-null, the rule will be
+   * considered for event-ticket checkouts that match one of these ids.
+   * Validated server-side against the actual `event_products` catalogue.
+   */
+  appliesToEventProductIds?: string[] | null;
   minPriceCents: number | null;
   maxDiscountCents: number | null;
   isActive: boolean;
@@ -96,6 +106,8 @@ interface ValidatedRuleInput extends DiscountRuleInput {
   // for non-first-time rules (defaults: "any_purchase" / null).
   firstTimeScope: FirstTimeScope;
   firstTimeProductIds: string[] | null;
+  /** Always normalised: `null` when empty / unset. */
+  appliesToEventProductIds: string[] | null;
 }
 
 /**
@@ -210,6 +222,35 @@ async function validateInput(
     }
   }
 
+  // Phase 2 — event-ticket scope validation.
+  // Only meaningful for affiliation rules; first-time rules deliberately
+  // stay subscription-only this phase.
+  let appliesToEventProductIds: string[] | null = null;
+  const requestedEventIds = raw.appliesToEventProductIds ?? null;
+  if (requestedEventIds && requestedEventIds.length > 0) {
+    if (raw.ruleType !== "affiliation") {
+      return {
+        ok: false,
+        error:
+          "Event-ticket scope is only supported for affiliation rules in this phase.",
+      };
+    }
+    const unique = [...new Set(requestedEventIds)];
+    const repo = getSpecialEventRepo();
+    const events = await repo.getAllEvents();
+    const validIds = new Set<string>();
+    for (const e of events) {
+      const ps = await repo.getProductsByEvent(e.id);
+      for (const p of ps) validIds.add(p.id);
+    }
+    for (const id of unique) {
+      if (!validIds.has(id)) {
+        return { ok: false, error: `Event ticket id "${id}" does not exist.` };
+      }
+    }
+    appliesToEventProductIds = unique;
+  }
+
   // Code uniqueness — case-insensitive, ignore the row being edited.
   const existing = await getDiscountRuleRepo().getAll();
   const codeUpper = code.toUpperCase();
@@ -229,6 +270,7 @@ async function validateInput(
       description: raw.description?.trim() || null,
       firstTimeScope,
       firstTimeProductIds,
+      appliesToEventProductIds,
     },
   };
 }
@@ -255,6 +297,7 @@ export async function createDiscountRuleAction(
       discountValue: v.value.discountValue,
       appliesToProductTypes: v.value.appliesToProductTypes,
       appliesToProductIds: v.value.appliesToProductIds,
+      appliesToEventProductIds: v.value.appliesToEventProductIds,
       minPriceCents: v.value.minPriceCents,
       maxDiscountCents: v.value.maxDiscountCents,
       isActive: v.value.isActive,
@@ -314,6 +357,7 @@ export async function updateDiscountRuleAction(
       discountValue: v.value.discountValue,
       appliesToProductTypes: v.value.appliesToProductTypes,
       appliesToProductIds: v.value.appliesToProductIds,
+      appliesToEventProductIds: v.value.appliesToEventProductIds,
       minPriceCents: v.value.minPriceCents,
       maxDiscountCents: v.value.maxDiscountCents,
       isActive: v.value.isActive,
@@ -431,7 +475,10 @@ export async function deleteDiscountRuleAction(
 
 export interface DiscountRulePreviewInput {
   studentId: string;
-  productId: string;
+  /** Either a normal product id ... */
+  productId?: string;
+  /** ... or an event-ticket id. Exactly one must be supplied. */
+  eventProductId?: string;
   /** Optional ISO timestamp to evaluate against (defaults to "now"). */
   now?: string;
 }
@@ -475,27 +522,72 @@ export async function previewDiscountRuleAction(
 
   const studentId = input.studentId?.trim();
   const productId = input.productId?.trim();
+  const eventProductId = input.eventProductId?.trim();
   if (!studentId) return { success: false, error: "Select a student." };
-  if (!productId) return { success: false, error: "Select a product." };
+  if (!productId && !eventProductId) {
+    return { success: false, error: "Select a product or an event ticket." };
+  }
+  if (productId && eventProductId) {
+    return {
+      success: false,
+      error: "Choose either a product OR an event ticket, not both.",
+    };
+  }
 
-  const product = await getProductRepo().getById(productId);
-  if (!product) return { success: false, error: "Product not found." };
+  let result: Awaited<
+    ReturnType<typeof previewPricingForStudent>
+  > extends Map<string, infer R>
+    ? R
+    : never;
+  result = undefined as unknown as typeof result;
 
-  // Reuse the same batch helper used by /catalog so the preview can
-  // never drift from real student-facing pricing.
-  const map = await previewPricingForStudent({
-    studentId,
-    products: [
-      {
-        id: product.id,
-        productType: product.productType,
-        priceCents: product.priceCents,
-      },
-    ],
-    now: input.now,
-  });
-  const result = map.get(product.id);
-  if (!result) return { success: false, error: "Engine returned no result." };
+  if (eventProductId) {
+    // Locate the event ticket by id (we do not have a direct getById on
+    // products yet, so scan events).
+    const eventRepo = getSpecialEventRepo();
+    const allEvents = await eventRepo.getAllEvents();
+    let eventProduct: { id: string; priceCents: number; productType: string } | null = null;
+    for (const e of allEvents) {
+      const ps = await eventRepo.getProductsByEvent(e.id);
+      const found = ps.find((p) => p.id === eventProductId);
+      if (found) {
+        eventProduct = {
+          id: found.id,
+          priceCents: found.priceCents,
+          productType: found.productType,
+        };
+        break;
+      }
+    }
+    if (!eventProduct) {
+      return { success: false, error: "Event ticket not found." };
+    }
+    result = await priceEventTicketForStudent({
+      studentId,
+      product: eventProduct,
+      now: input.now,
+    });
+  } else {
+    const product = await getProductRepo().getById(productId!);
+    if (!product) return { success: false, error: "Product not found." };
+
+    // Reuse the same batch helper used by /catalog so the preview can
+    // never drift from real student-facing pricing.
+    const map = await previewPricingForStudent({
+      studentId,
+      products: [
+        {
+          id: product.id,
+          productType: product.productType,
+          priceCents: product.priceCents,
+        },
+      ],
+      now: input.now,
+    });
+    const r = map.get(product.id);
+    if (!r) return { success: false, error: "Engine returned no result." };
+    result = r;
+  }
 
   // Determine first-time status purely for display. The flag here is
   // the coarse legacy "any first paid purchase" view — the engine

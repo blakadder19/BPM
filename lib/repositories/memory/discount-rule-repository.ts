@@ -20,6 +20,7 @@ export const memoryDiscountRuleRepo: IDiscountRuleRepository = {
       discountValue: data.discountValue,
       appliesToProductTypes: data.appliesToProductTypes ?? null,
       appliesToProductIds: data.appliesToProductIds ?? null,
+      appliesToEventProductIds: data.appliesToEventProductIds ?? null,
       minPriceCents: data.minPriceCents ?? null,
       maxDiscountCents: data.maxDiscountCents ?? null,
       isActive: data.isActive ?? true,

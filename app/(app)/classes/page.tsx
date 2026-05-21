@@ -58,7 +58,11 @@ export default async function ClassesPage() {
     if (!cocDone) redirect("/onboarding");
 
     const accessRulesMap = buildDynamicAccessRulesMap(allProducts, danceStyles);
-    const { beginnerLevelNames } = getSettings();
+    const {
+      beginnerLevelNames,
+      allowBeginnerNextTermAdvanceBooking,
+      beginnerIntakeBookingWeeks,
+    } = getSettings();
 
     // Pre-index dance styles by name for O(1) lookup instead of per-class .find()
     const styleByName = new Map(danceStyles.map((s) => [s.name, s]));
@@ -190,6 +194,8 @@ export default async function ClassesPage() {
         birthdayBenefit: classesBirthdayBenefit,
         studentDateOfBirth: student?.dateOfBirth ?? null,
         beginnerLevelNames,
+        allowBeginnerNextTermAdvanceBooking,
+        beginnerIntakeBookingWeeks,
       };
 
       const bookability = computeBookability(ctx);

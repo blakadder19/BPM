@@ -15,6 +15,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { AdminEvents } from "@/components/events/admin-events";
 import { StudentEvents } from "@/components/events/student-events";
 import { getSpecialEventRepo } from "@/lib/repositories";
+import { shouldShowEventInPublicList } from "@/lib/domain/event-visibility";
 
 export default async function EventsPage() {
   const user = await requireAuth();
@@ -31,7 +32,10 @@ export default async function EventsPage() {
       cachedGetStudentEventPurchases(user.id),
     ]);
     if (!cocDone) redirect("/onboarding");
-    const published = events.filter((e) => e.status === "published" && e.isVisible);
+    // Phase 4: archived events are invisible to students even if the
+    // underlying purchase still exists. shouldShowEventInPublicList()
+    // bundles status / isVisible / archivedAt into one predicate.
+    const published = events.filter(shouldShowEventInPublicList);
     return <StudentEvents events={published} purchases={myPurchases} />;
   }
 

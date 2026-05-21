@@ -7,6 +7,7 @@ import {
   getAffiliationRepo,
   getDiscountRuleRepo,
   getProductRepo,
+  getSpecialEventRepo,
 } from "@/lib/repositories";
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -27,13 +28,41 @@ export default async function DiscountRulesPage() {
   await requirePermission("discounts:view");
   await ensureOperationalDataHydrated();
 
-  const [rules, products, students, affiliations, access] = await Promise.all([
-    getDiscountRuleRepo().getAll(),
-    getProductRepo().getAll(),
-    cachedGetAllStudents(),
-    getAffiliationRepo().getAll(),
-    getStaffAccess(),
-  ]);
+  const specialEventRepo = getSpecialEventRepo();
+  const [rules, products, students, affiliations, access, allEvents] =
+    await Promise.all([
+      getDiscountRuleRepo().getAll(),
+      getProductRepo().getAll(),
+      cachedGetAllStudents(),
+      getAffiliationRepo().getAll(),
+      getStaffAccess(),
+      specialEventRepo.getAllEvents(),
+    ]);
+
+  // Flatten event_products → admin pickable rows. Each row carries the
+  // parent event title so admins can disambiguate identical ticket names
+  // (e.g. multiple "Full Pass" across different events).
+  const eventProductsList: Array<{
+    id: string;
+    name: string;
+    eventTitle: string;
+    eventId: string;
+    productType: string;
+    priceCents: number;
+  }> = [];
+  for (const e of allEvents) {
+    const ps = await specialEventRepo.getProductsByEvent(e.id);
+    for (const p of ps) {
+      eventProductsList.push({
+        id: p.id,
+        name: p.name,
+        eventTitle: e.title,
+        eventId: e.id,
+        productType: p.productType,
+        priceCents: p.priceCents,
+      });
+    }
+  }
 
   const permissions = {
     canCreate: hasPermission(access, "discounts:create"),
@@ -65,6 +94,7 @@ export default async function DiscountRulesPage() {
         discountValue: r.discountValue,
         appliesToProductTypes: r.appliesToProductTypes,
         appliesToProductIds: r.appliesToProductIds,
+        appliesToEventProductIds: r.appliesToEventProductIds ?? null,
         minPriceCents: r.minPriceCents,
         maxDiscountCents: r.maxDiscountCents,
         isActive: r.isActive,
@@ -83,6 +113,7 @@ export default async function DiscountRulesPage() {
           productType: p.productType,
           priceCents: p.priceCents,
         }))}
+      eventProducts={eventProductsList}
       students={students.map((s) => ({
         id: s.id,
         fullName: s.fullName,

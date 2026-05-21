@@ -151,6 +151,16 @@ interface StudentDashboardProps {
   codeOfConductAccepted?: boolean;
   benefits?: MemberBenefitsSummary | null;
   qrToken?: string | null;
+  /** Stable per-student referral code (Phase 3). */
+  referralCode?: string | null;
+  /**
+   * Counts surfaced under the referral widget — purely informational.
+   * Rewards are always reviewed and applied manually by BPM admins.
+   */
+  referralCounts?: {
+    verified: number;
+    pending: number;
+  } | null;
   todayForYou?: TodayForYouItem[];
   studentPreferredRole?: DanceRole | null;
   featuredEvents?: MockSpecialEvent[];
@@ -169,6 +179,8 @@ export function StudentDashboard({
   codeOfConductAccepted,
   benefits,
   qrToken,
+  referralCode = null,
+  referralCounts = null,
   todayForYou = [],
   studentPreferredRole,
   featuredEvents = [],
@@ -179,6 +191,8 @@ export function StudentDashboard({
 
   const [bookTarget, setBookTarget] = useState<TodayForYouItem | null>(null);
   const [showQr, setShowQr] = useState(false);
+  const [showReferral, setShowReferral] = useState(false);
+  const [referralCopied, setReferralCopied] = useState(false);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const USABLE_PAYMENT = new Set(["paid", "complimentary", "waived"]);
@@ -360,8 +374,77 @@ export function StudentDashboard({
               <span className="text-sm sm:text-xs font-semibold text-violet-700">Show QR code</span>
             </button>
           )}
+
+          {referralCode && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowReferral(true);
+                setReferralCopied(false);
+              }}
+              className="flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3.5 sm:py-2.5 text-center transition-colors hover:bg-emerald-100 active:bg-emerald-150"
+            >
+              <Gift className="h-5 w-5 sm:h-4 sm:w-4 text-emerald-600 shrink-0" />
+              <span className="text-sm sm:text-xs font-semibold text-emerald-700">My referral code</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Referral code modal */}
+      {showReferral && referralCode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowReferral(false)}>
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setShowReferral(false)}
+              className="absolute top-3 right-3 rounded-full p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex flex-col items-center gap-3 text-center">
+              <Gift className="h-8 w-8 text-emerald-600" />
+              <p className="text-lg font-bold text-gray-900">Your referral code</p>
+              <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 px-5 py-3">
+                <code className="text-2xl font-mono font-bold tracking-wider text-emerald-900">
+                  {referralCode}
+                </code>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(referralCode);
+                    setReferralCopied(true);
+                    setTimeout(() => setReferralCopied(false), 2000);
+                  } catch {
+                    /* Clipboard unavailable — silently ignore. */
+                  }
+                }}
+                className="text-xs font-medium text-emerald-700 hover:text-emerald-900"
+              >
+                {referralCopied ? "Copied!" : "Copy code"}
+              </button>
+              <p className="text-xs text-gray-500 max-w-[260px]">
+                Share this code with friends. Referral rewards are reviewed manually by BPM.
+              </p>
+              {referralCounts && (referralCounts.verified > 0 || referralCounts.pending > 0) && (
+                <div className="mt-2 grid grid-cols-2 gap-2 w-full">
+                  <div className="rounded-lg bg-gray-50 px-3 py-2 text-center">
+                    <div className="text-xs text-gray-500">Verified</div>
+                    <div className="text-base font-bold text-gray-900">{referralCounts.verified}</div>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 px-3 py-2 text-center">
+                    <div className="text-xs text-gray-500">Pending</div>
+                    <div className="text-base font-bold text-gray-900">{referralCounts.pending}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QR modal */}
       {showQr && qrToken && (

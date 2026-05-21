@@ -82,6 +82,20 @@ export interface AppSettings {
    * never self-book once a beginner term has started).
    */
   beginnerLevelNames: string[];
+  /**
+   * Phase 1: when true, students can book Beginner-level classes for the
+   * *next* published term in advance, restricted to the first
+   * {@link beginnerIntakeBookingWeeks} weeks of that term. Later weeks
+   * stay blocked. Set false to disable advance booking entirely
+   * (existing current-term rules are unaffected).
+   */
+  allowBeginnerNextTermAdvanceBooking: boolean;
+  /**
+   * Maximum 1-based term week into which a new student can self-book a
+   * beginner intake class. Allowed range 1–4 (validated server-side).
+   * Default 2 matches the academy's "first two weeks" rule.
+   */
+  beginnerIntakeBookingWeeks: number;
 
   // Admin alert preferences
   disabledAlertIds: string[];
@@ -125,6 +139,8 @@ function defaults(): AppSettings {
     termPurchaseWindowDays: TERM_PURCHASE_WINDOW_DAYS,
     creditDeductionPriority: [...CREDIT_DEDUCTION_PRIORITY],
     beginnerLevelNames: [...DEFAULT_BEGINNER_LEVEL_NAMES],
+    allowBeginnerNextTermAdvanceBooking: true,
+    beginnerIntakeBookingWeeks: 2,
 
     disabledAlertIds: [],
 
