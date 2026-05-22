@@ -85,18 +85,22 @@ export function getNavigationForRole(role: UserRole): NavItem[] {
  * New permission-aware nav resolution.
  *
  * Precedence:
+ *   - Student-only items (those whose `roles` set is exactly
+ *     `["student"]`, e.g. Catalog) are reserved for student users.
+ *     They are NEVER shown to staff, admin, or super_admin sidebars,
+ *     regardless of permissions. Page-level guards (`requireRole
+ *     (["student"])`) enforce the same boundary server-side.
  *   - If the item declares a `permission`, it appears iff the access
- *     bag contains that permission (super_admin always passes).
+ *     bag contains that permission (super_admin always passes, but
+ *     only after the student-only filter above has had its say).
  *   - If the item has NO `permission`:
- *       • Student routes (e.g. /catalog) still use the legacy `roles`
- *         match — student nav is permission-free by design.
- *       • All OTHER permission-free items are super-admin-only. This
- *         closes the legacy bypass where a Custom/Front-Desk user with
- *         `users.role='admin'` (set by `legacyRoleForStaffRole`) would
- *         otherwise see /terms, /broadcasts, /studio-hire, /penalties
- *         in their sidebar despite having no granted permission for
- *         them. The matching server-side guards now use
- *         `requireSuperAdmin()`.
+ *       • Super_admin sees it (legacy permission-free admin tools).
+ *       • All others are denied. This closes the legacy bypass where a
+ *         Custom/Front-Desk user with `users.role='admin'` (set by
+ *         `legacyRoleForStaffRole`) would otherwise see /terms,
+ *         /broadcasts, /studio-hire, /penalties in their sidebar
+ *         despite having no granted permission for them. The matching
+ *         server-side guards now use `requireSuperAdmin()`.
  */
 export function getNavigationForAccess(input: {
   legacyRole: UserRole;
@@ -104,6 +108,14 @@ export function getNavigationForAccess(input: {
   isSuperAdmin: boolean;
 }): NavItem[] {
   return NAVIGATION.filter((item) => {
+    // Student-only short-circuit. Catalog and any future student-only
+    // item must never leak into staff/admin/super_admin sidebars.
+    const isStudentOnly =
+      item.roles.length === 1 && item.roles[0] === "student";
+    if (isStudentOnly) {
+      return input.legacyRole === "student";
+    }
+
     if (item.permission) {
       if (input.isSuperAdmin) return true;
       const required = Array.isArray(item.permission)
@@ -111,13 +123,8 @@ export function getNavigationForAccess(input: {
         : [item.permission];
       return required.some((p) => input.permissions.has(p));
     }
-    // No permission key: super-admin always sees it; otherwise only
-    // student-only items are visible (via legacy role match).
-    if (input.isSuperAdmin) return true;
-    if (item.roles.length === 1 && item.roles[0] === "student") {
-      return input.legacyRole === "student";
-    }
-    return false;
+    // No permission key, not student-only: super_admin only.
+    return input.isSuperAdmin;
   });
 }
 

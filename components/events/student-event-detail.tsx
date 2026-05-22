@@ -33,6 +33,8 @@ interface Props {
   stripeEnabled: boolean;
   /** Server-resolved: whether the current student has an active membership. */
   isActiveMember: boolean;
+  /** Server-resolved current student id — needed by promo-code preview. */
+  studentId: string;
 }
 
 import { formatEventDateRange, formatEventDT, isOvernightSession, formatSessionTimeRange } from "@/lib/utils";
@@ -57,7 +59,7 @@ const SESSION_TYPE_COLORS: Record<string, string> = {
   other: "bg-gray-100 text-gray-700",
 };
 
-export function StudentEventDetail({ event, sessions, products, myPurchases, stripeEnabled, isActiveMember }: Props) {
+export function StudentEventDetail({ event, sessions, products, myPurchases, stripeEnabled, isActiveMember, studentId }: Props) {
   const [purchaseProduct, setPurchaseProduct] = useState<MockEventProduct | null>(null);
 
   const activePurchases = myPurchases.filter((p) => p.paymentStatus !== "refunded");
@@ -269,6 +271,7 @@ export function StudentEventDetail({ event, sessions, products, myPurchases, str
           product={purchaseProduct}
           sessions={sessions}
           stripeEnabled={stripeEnabled}
+          studentId={studentId}
         />
       )}
     </div>

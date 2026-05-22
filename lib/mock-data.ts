@@ -823,6 +823,13 @@ export interface MockDiscountRule {
   validUntil: string | null;
   firstTimeScope: import("./domain/pricing-engine").FirstTimeScope;
   firstTimeProductIds: string[] | null;
+  /**
+   * Phase 5 — promo-code controls. See `DiscountRule` JSDoc in
+   * `lib/domain/pricing-engine.ts` for the engine semantics.
+   */
+  requiresCode: boolean;
+  maxUses: number | null;
+  oneUsePerEmail: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -869,6 +876,9 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     validUntil: null,
     firstTimeScope: "selected_products",
     firstTimeProductIds: ["p-beg12", "p-latin-combo"],
+    requiresCode: false,
+    maxUses: null,
+    oneUsePerEmail: false,
     createdAt: "2026-04-01T00:00:00",
     updatedAt: "2026-04-01T00:00:00",
   },
@@ -893,6 +903,9 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     validUntil: null,
     firstTimeScope: "any_purchase",
     firstTimeProductIds: null,
+    requiresCode: false,
+    maxUses: null,
+    oneUsePerEmail: false,
     createdAt: "2026-04-01T00:00:00",
     updatedAt: "2026-04-01T00:00:00",
   },
@@ -917,6 +930,9 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     validUntil: null,
     firstTimeScope: "any_purchase",
     firstTimeProductIds: null,
+    requiresCode: false,
+    maxUses: null,
+    oneUsePerEmail: false,
     createdAt: "2026-04-01T00:00:00",
     updatedAt: "2026-04-01T00:00:00",
   },

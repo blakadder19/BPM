@@ -185,6 +185,9 @@ function beginnersRule(): MockDiscountRule {
     validUntil: null,
     firstTimeScope: "selected_products",
     firstTimeProductIds: ["p-beginners"],
+    requiresCode: false,
+    maxUses: null,
+    oneUsePerEmail: false,
     createdAt: "2026-04-01T00:00:00",
     updatedAt: "2026-04-01T00:00:00",
   };

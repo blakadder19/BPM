@@ -40,6 +40,12 @@ function toMock(row: Row): MockDiscountRule {
     validUntil: row.valid_until,
     firstTimeScope: (row.first_time_scope as FirstTimeScope) ?? "any_purchase",
     firstTimeProductIds: row.first_time_product_ids,
+    requiresCode:
+      ((row as unknown as { requires_code?: boolean | null }).requires_code) ?? false,
+    maxUses:
+      ((row as unknown as { max_uses?: number | null }).max_uses) ?? null,
+    oneUsePerEmail:
+      ((row as unknown as { one_use_per_email?: boolean | null }).one_use_per_email) ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -101,6 +107,9 @@ export const supabaseDiscountRuleRepo: IDiscountRuleRepository = {
         valid_until: input.validUntil ?? null,
         first_time_scope: input.firstTimeScope ?? "any_purchase",
         first_time_product_ids: input.firstTimeProductIds ?? null,
+        requires_code: input.requiresCode ?? false,
+        max_uses: input.maxUses ?? null,
+        one_use_per_email: input.oneUsePerEmail ?? false,
       } as never)
       .select()
       .single();
@@ -135,6 +144,10 @@ export const supabaseDiscountRuleRepo: IDiscountRuleRepository = {
       fields.first_time_scope = patch.firstTimeScope;
     if (patch.firstTimeProductIds !== undefined)
       fields.first_time_product_ids = patch.firstTimeProductIds;
+    if (patch.requiresCode !== undefined) fields.requires_code = patch.requiresCode;
+    if (patch.maxUses !== undefined) fields.max_uses = patch.maxUses;
+    if (patch.oneUsePerEmail !== undefined)
+      fields.one_use_per_email = patch.oneUsePerEmail;
     if (Object.keys(fields).length === 0) return this.getById(id);
 
     const { error } = await supabase

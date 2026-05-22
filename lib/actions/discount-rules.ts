@@ -97,6 +97,13 @@ export interface DiscountRuleInput {
    * Server validates that every id exists.
    */
   firstTimeProductIds?: string[] | null;
+  /**
+   * Phase 5 — promo-code controls. Only meaningful when
+   * `ruleType === "event_promo_code"`.
+   */
+  requiresCode?: boolean;
+  maxUses?: number | null;
+  oneUsePerEmail?: boolean;
 }
 
 // ── Validation ───────────────────────────────────────────────
@@ -108,6 +115,10 @@ interface ValidatedRuleInput extends DiscountRuleInput {
   firstTimeProductIds: string[] | null;
   /** Always normalised: `null` when empty / unset. */
   appliesToEventProductIds: string[] | null;
+  /** Always normalised — promo-code rules force-set `requiresCode = true`. */
+  requiresCode: boolean;
+  maxUses: number | null;
+  oneUsePerEmail: boolean;
 }
 
 /**
@@ -223,16 +234,16 @@ async function validateInput(
   }
 
   // Phase 2 — event-ticket scope validation.
-  // Only meaningful for affiliation rules; first-time rules deliberately
-  // stay subscription-only this phase.
+  // Now also supports `event_promo_code` rules (Phase 5). First-time
+  // rules deliberately stay subscription-only.
   let appliesToEventProductIds: string[] | null = null;
   const requestedEventIds = raw.appliesToEventProductIds ?? null;
   if (requestedEventIds && requestedEventIds.length > 0) {
-    if (raw.ruleType !== "affiliation") {
+    if (raw.ruleType !== "affiliation" && raw.ruleType !== "event_promo_code") {
       return {
         ok: false,
         error:
-          "Event-ticket scope is only supported for affiliation rules in this phase.",
+          "Event-ticket scope is only supported for affiliation or promo-code rules.",
       };
     }
     const unique = [...new Set(requestedEventIds)];
@@ -251,6 +262,24 @@ async function validateInput(
     appliesToEventProductIds = unique;
   }
 
+  // Phase 5 — promo-code rules MUST list at least one eligible event
+  // ticket. A code with no scope would either always match (huge
+  // footgun) or never match (useless). Force the admin to pick.
+  if (raw.ruleType === "event_promo_code") {
+    if (!appliesToEventProductIds || appliesToEventProductIds.length === 0) {
+      return {
+        ok: false,
+        error: "Select at least one eligible event ticket for the promo code.",
+      };
+    }
+    if (raw.affiliationType) {
+      return {
+        ok: false,
+        error: "Promo-code rules must not require an affiliation type.",
+      };
+    }
+  }
+
   // Code uniqueness — case-insensitive, ignore the row being edited.
   const existing = await getDiscountRuleRepo().getAll();
   const codeUpper = code.toUpperCase();
@@ -260,6 +289,21 @@ async function validateInput(
   if (clash) {
     return { ok: false, error: `Code "${code}" is already used by another rule.` };
   }
+
+  // Phase 5 — normalise promo-code fields. We always coerce
+  // `requiresCode` to true for promo-code rules so the engine refuses
+  // to auto-apply them, regardless of UI state.
+  const isPromo = raw.ruleType === "event_promo_code";
+  const requiresCode = isPromo ? true : Boolean(raw.requiresCode);
+
+  let maxUses: number | null = null;
+  if (raw.maxUses != null) {
+    if (!Number.isInteger(raw.maxUses) || raw.maxUses <= 0) {
+      return { ok: false, error: "Max uses must be a positive integer." };
+    }
+    maxUses = raw.maxUses;
+  }
+  const oneUsePerEmail = isPromo ? Boolean(raw.oneUsePerEmail) : false;
 
   return {
     ok: true,
@@ -271,6 +315,9 @@ async function validateInput(
       firstTimeScope,
       firstTimeProductIds,
       appliesToEventProductIds,
+      requiresCode,
+      maxUses,
+      oneUsePerEmail,
     },
   };
 }
@@ -307,6 +354,9 @@ export async function createDiscountRuleAction(
       validUntil: v.value.validUntil,
       firstTimeScope: v.value.firstTimeScope,
       firstTimeProductIds: v.value.firstTimeProductIds,
+      requiresCode: v.value.requiresCode,
+      maxUses: v.value.maxUses,
+      oneUsePerEmail: v.value.oneUsePerEmail,
     });
 
     logFinanceEvent({
@@ -367,6 +417,9 @@ export async function updateDiscountRuleAction(
       validUntil: v.value.validUntil,
       firstTimeScope: v.value.firstTimeScope,
       firstTimeProductIds: v.value.firstTimeProductIds,
+      requiresCode: v.value.requiresCode,
+      maxUses: v.value.maxUses,
+      oneUsePerEmail: v.value.oneUsePerEmail,
     });
 
     if (!updated) return { success: false, error: "Update failed." };

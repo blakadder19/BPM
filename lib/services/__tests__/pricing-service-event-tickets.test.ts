@@ -63,6 +63,17 @@ vi.mock("@/lib/repositories", () => ({
       return null;
     },
   }),
+  // Phase 5 — promo-code usage tracking reads event purchases.
+  // No promo rule here uses max_uses / one_use_per_email, so an empty
+  // events list keeps the existing affiliation tests untouched.
+  getSpecialEventRepo: () => ({
+    async getAllEvents() {
+      return [];
+    },
+    async getPurchasesByEvent() {
+      return [];
+    },
+  }),
 }));
 
 import { priceEventTicketForStudent } from "../pricing-service";
@@ -93,6 +104,9 @@ function hseEventRule(
     validUntil: null,
     firstTimeScope: "any_purchase",
     firstTimeProductIds: null,
+    requiresCode: false,
+    maxUses: null,
+    oneUsePerEmail: false,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,

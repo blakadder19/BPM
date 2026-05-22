@@ -19,6 +19,7 @@ import {
 import { EventHero } from "./event-hero";
 import { createGuestEventPurchaseAction } from "@/lib/actions/event-purchase";
 import { createGuestEventStripeCheckoutAction } from "@/lib/actions/stripe-checkout";
+import { PromoCodeInput } from "@/components/events/promo-code-input";
 import type {
   MockSpecialEvent,
   MockEventSession,
@@ -329,6 +330,12 @@ function GuestPurchaseSection({
   const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [promo, setPromo] = useState<{
+    code: string;
+    basePriceCents: number;
+    discountAmountCents: number;
+    finalPriceCents: number;
+  } | null>(null);
 
   const selectedProduct = purchasableProducts.find((p) => p.id === selectedProductId);
 
@@ -345,6 +352,7 @@ function GuestPurchaseSection({
         lastName: lastName.trim(),
         email: email.trim(),
         phone: phone.trim() || undefined,
+        promoCode: promo?.code ?? null,
       });
       if (res.success) setMode("success");
       else setError(res.error ?? "Something went wrong. Please try again.");
@@ -363,6 +371,7 @@ function GuestPurchaseSection({
         guestName: `${firstName.trim()} ${lastName.trim()}`,
         guestEmail: email.trim(),
         guestPhone: phone.trim() || undefined,
+        promoCode: promo?.code ?? null,
       });
       if (res.success && res.url) {
         window.location.href = res.url;
@@ -516,6 +525,19 @@ function GuestPurchaseSection({
           <span className="text-sm font-medium text-gray-900">{selectedProduct.name}</span>
           <span className="text-sm font-bold text-bpm-700">{centsToEuros(selectedProduct.priceCents)}</span>
         </div>
+      )}
+
+      {selectedProduct && (
+        <PromoCodeInput
+          key={selectedProduct.id}
+          eventId={event.id}
+          eventProductId={selectedProduct.id}
+          studentId={null}
+          guestEmail={email}
+          basePriceCents={selectedProduct.priceCents}
+          onApplied={setPromo}
+          disabled={isPending}
+        />
       )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}

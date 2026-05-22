@@ -32,6 +32,9 @@ function rule(overrides: Partial<DiscountRule> = {}): DiscountRule {
     validUntil: null,
     firstTimeScope: "any_purchase",
     firstTimeProductIds: null,
+    requiresCode: false,
+    maxUses: null,
+    oneUsePerEmail: false,
     createdAt: NOW,
     updatedAt: NOW,
     ...overrides,
@@ -626,5 +629,168 @@ describe("snapshotPricingResult", () => {
     expect(snap!.finalPriceCents).toBe(15300);
     expect(snap!.appliedDiscounts).toHaveLength(1);
     expect(snap!.appliedDiscounts[0]?.code).toBe("TEST_10");
+  });
+});
+
+// ── Phase 5 — event promo codes ──────────────────────────────
+
+const PROMO_TICKET: PricingProduct = {
+  id: "ep-1",
+  entityKind: "event_product",
+  productType: "full_pass",
+  priceCents: 5000,
+};
+
+function promoRule(overrides: Partial<DiscountRule> = {}): DiscountRule {
+  return rule({
+    id: "r-promo",
+    code: "ANGELICA10",
+    name: "Angelica's friends 10% off",
+    ruleType: "event_promo_code",
+    appliesToEventProductIds: [PROMO_TICKET.id],
+    requiresCode: true,
+    priority: 0,
+    discountKind: "percentage",
+    discountValue: 10,
+    ...overrides,
+  });
+}
+
+describe("applyPricing — event promo codes", () => {
+  it("does NOT apply when no code is entered", () => {
+    const r = applyPricing({
+      product: PROMO_TICKET,
+      now: NOW,
+      rules: [promoRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(PROMO_TICKET.priceCents);
+  });
+
+  it("does NOT apply when the typed code does not match", () => {
+    const r = applyPricing({
+      product: PROMO_TICKET,
+      now: NOW,
+      rules: [promoRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      promoCode: "WRONG",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(PROMO_TICKET.priceCents);
+  });
+
+  it("applies when the typed code matches (case-insensitive)", () => {
+    const r = applyPricing({
+      product: PROMO_TICKET,
+      now: NOW,
+      rules: [promoRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      promoCode: "angelica10",
+    });
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.appliedDiscounts[0]?.code).toBe("ANGELICA10");
+    expect(r.appliedDiscounts[0]?.ruleType).toBe("event_promo_code");
+    expect(r.totalDiscountCents).toBe(500);
+    expect(r.finalPriceCents).toBe(4500);
+  });
+
+  it("does NOT apply when the event ticket is not in the rule's scope", () => {
+    const otherTicket: PricingProduct = {
+      ...PROMO_TICKET,
+      id: "ep-other",
+    };
+    const r = applyPricing({
+      product: otherTicket,
+      now: NOW,
+      rules: [promoRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      promoCode: "ANGELICA10",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+  });
+
+  it("NEVER applies to a subscription product even when the code matches", () => {
+    const r = applyPricing({
+      product: MEMBERSHIP,
+      now: NOW,
+      rules: [promoRule({ appliesToProductIds: [MEMBERSHIP.id] })],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      promoCode: "ANGELICA10",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(MEMBERSHIP.priceCents);
+  });
+
+  it("takes precedence over an automatic affiliation discount on the same ticket", () => {
+    const affiliationRule = rule({
+      id: "r-hse",
+      code: "HSE_10",
+      ruleType: "affiliation",
+      affiliationType: "hse",
+      appliesToEventProductIds: [PROMO_TICKET.id],
+      // Higher priority than the promo rule — promo should still win
+      // because Phase 5 sort puts matched promo rules first.
+      priority: 99,
+    });
+    const promo = promoRule({ priority: 0, discountValue: 25 });
+    const r = applyPricing({
+      product: PROMO_TICKET,
+      now: NOW,
+      rules: [affiliationRule, promo],
+      studentAffiliations: [affiliation()],
+      firstTimeEligibleByRuleId: {},
+      promoCode: "ANGELICA10",
+    });
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.appliedDiscounts[0]?.code).toBe("ANGELICA10");
+    expect(r.finalPriceCents).toBe(PROMO_TICKET.priceCents - 1250);
+  });
+
+  it("does NOT apply when the rule is inactive", () => {
+    const r = applyPricing({
+      product: PROMO_TICKET,
+      now: NOW,
+      rules: [promoRule({ isActive: false })],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      promoCode: "ANGELICA10",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+  });
+
+  it("does NOT apply when the rule is expired", () => {
+    const r = applyPricing({
+      product: PROMO_TICKET,
+      now: NOW,
+      rules: [promoRule({ validUntil: "2026-04-14T00:00:00Z" })],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      promoCode: "ANGELICA10",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+  });
+
+  it("supports a fixed-amount promo code", () => {
+    const r = applyPricing({
+      product: PROMO_TICKET,
+      now: NOW,
+      rules: [
+        promoRule({
+          discountKind: "fixed_cents",
+          discountValue: 1500,
+        }),
+      ],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      promoCode: "ANGELICA10",
+    });
+    expect(r.appliedDiscounts[0]?.amountCents).toBe(1500);
+    expect(r.finalPriceCents).toBe(3500);
   });
 });

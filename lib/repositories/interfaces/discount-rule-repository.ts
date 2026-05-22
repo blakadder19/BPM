@@ -30,6 +30,10 @@ export interface CreateDiscountRuleData {
   validUntil?: string | null;
   firstTimeScope?: FirstTimeScope;
   firstTimeProductIds?: string[] | null;
+  /** Phase 5 — promo-code controls; defaults are safe for legacy rules. */
+  requiresCode?: boolean;
+  maxUses?: number | null;
+  oneUsePerEmail?: boolean;
 }
 
 export type DiscountRulePatch = Partial<CreateDiscountRuleData>;

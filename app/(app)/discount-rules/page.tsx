@@ -50,6 +50,15 @@ export default async function DiscountRulesPage() {
     productType: string;
     priceCents: number;
   }> = [];
+  // Phase 5 — also gather every event purchase so we can compute promo-
+  // code usage counts (paid + pending, excluding refunded) and surface
+  // them in the admin table. Same scan we already do per event in
+  // `pricing-service.checkPromoCodeUsage` — pulled up to the page-level
+  // fetch so the panel can render usage without N+1 round trips.
+  const allPurchases: Array<{
+    paymentStatus: string | null;
+    appliedDiscount: unknown;
+  }> = [];
   for (const e of allEvents) {
     const ps = await specialEventRepo.getProductsByEvent(e.id);
     for (const p of ps) {
@@ -62,6 +71,27 @@ export default async function DiscountRulesPage() {
         priceCents: p.priceCents,
       });
     }
+    const purchases = await specialEventRepo.getPurchasesByEvent(e.id);
+    for (const pur of purchases) {
+      allPurchases.push({
+        paymentStatus: pur.paymentStatus,
+        appliedDiscount: pur.appliedDiscount,
+      });
+    }
+  }
+
+  function countRuleUsage(ruleId: string): number {
+    let n = 0;
+    for (const p of allPurchases) {
+      if (p.paymentStatus === "refunded") continue;
+      const snap = p.appliedDiscount as
+        | { appliedDiscounts?: Array<{ ruleId?: string }> }
+        | null;
+      if (snap?.appliedDiscounts?.some((d) => d.ruleId === ruleId)) {
+        n += 1;
+      }
+    }
+    return n;
   }
 
   const permissions = {
@@ -104,6 +134,10 @@ export default async function DiscountRulesPage() {
         validUntil: r.validUntil,
         firstTimeScope: r.firstTimeScope ?? "any_purchase",
         firstTimeProductIds: r.firstTimeProductIds,
+        requiresCode: r.requiresCode ?? false,
+        maxUses: r.maxUses ?? null,
+        oneUsePerEmail: r.oneUsePerEmail ?? false,
+        usedCount: countRuleUsage(r.id),
       }))}
       products={products
         .filter((p) => !p.archivedAt)
