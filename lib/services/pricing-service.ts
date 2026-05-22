@@ -287,12 +287,53 @@ export interface PriceEventTicketInput {
     productType: string; // EventProductType, kept as string here to avoid a cycle.
     priceCents: number;
   };
+  /**
+   * Phase 5 — customer-typed promo code. When provided, the engine
+   * also evaluates `event_promo_code` rules. Empty / null means the
+   * customer entered no code (same behaviour as Phase 2: affiliations
+   * only).
+   */
+  promoCode?: string | null;
+  /**
+   * Phase 5 — guest email used for `one_use_per_email` enforcement
+   * when there is no student id. Ignored when `studentId` is set
+   * (we enforce per-student in that case).
+   */
+  guestEmail?: string | null;
   now?: string;
 }
 
 export interface PriceEventTicketResult extends PricingResult {
   snapshot: AppliedDiscountSnapshot | null;
+  /**
+   * Phase 5 — when a promo code was supplied AND it produced an
+   * actionable engine outcome (matched-and-applied, or matched-but-
+   * gated-by-usage), this surfaces a structured error/info object the
+   * UI can show. `null` means "code was valid + applied" OR "no code
+   * was supplied".
+   */
+  promoCodeError: PromoCodeError | null;
 }
+
+export type PromoCodeError =
+  | { kind: "unknown_code"; message: string }
+  | { kind: "inactive"; message: string }
+  | { kind: "expired"; message: string }
+  | { kind: "not_eligible"; message: string }
+  | { kind: "max_uses_reached"; message: string }
+  | { kind: "already_used"; message: string }
+  | { kind: "guest_email_required"; message: string };
+
+const PROMO_CODE_ERROR_DEFAULTS: Record<PromoCodeError["kind"], string> = {
+  unknown_code: "This promo code is not valid for this ticket.",
+  inactive: "This promo code is not valid for this ticket.",
+  expired: "This promo code has expired.",
+  not_eligible: "This promo code is not valid for this ticket.",
+  max_uses_reached: "This promo code has reached its usage limit.",
+  already_used: "You have already used this promo code.",
+  guest_email_required:
+    "Please enter your email before applying a promo code.",
+};
 
 /**
  * Compute the final price of an event ticket for a student.
@@ -314,30 +355,27 @@ export async function priceEventTicketForStudent(
 ): Promise<PriceEventTicketResult> {
   const now = input.now ?? new Date().toISOString();
   const base = input.product.priceCents;
+  const typedCode = (input.promoCode ?? "").trim();
+  const hasTypedCode = typedCode.length > 0;
 
-  // Guest: no affiliations, so no affiliation discounts can ever fire.
-  // We still call the engine with an empty affiliation list to keep the
-  // result shape consistent.
-  if (input.studentId == null) {
-    const result = applyPricing({
-      product: {
-        entityKind: "event_product",
-        id: input.product.id,
-        productType: input.product.productType as never,
-        priceCents: base,
-      },
-      now,
-      rules: [],
-      studentAffiliations: [],
-      firstTimeEligibleByRuleId: {},
-    });
-    return { ...result, snapshot: null };
-  }
-
-  const [rules, affiliations] = await Promise.all([
-    loadActiveRules(),
-    loadStudentAffiliations(input.studentId),
+  // Load rules whenever we either (a) have a student (affiliations
+  // can apply) OR (b) the customer typed a promo code (event-only
+  // rules can apply for guests too). Skip the round-trip otherwise.
+  const needsRules = input.studentId != null || hasTypedCode;
+  const [rawRules, affiliations] = await Promise.all([
+    needsRules ? loadActiveRules() : Promise.resolve<DiscountRule[]>([]),
+    input.studentId != null
+      ? loadStudentAffiliations(input.studentId)
+      : Promise.resolve<StudentAffiliation[]>([]),
   ]);
+
+  // For guest pricing we ONLY consider event-promo-code rules — never
+  // affiliation rules (no verified affiliation row exists for guests).
+  // Filtering at the service layer keeps the engine's contract simple.
+  const rules =
+    input.studentId == null
+      ? rawRules.filter((r) => r.ruleType === "event_promo_code")
+      : rawRules;
 
   const result = applyPricing({
     product: {
@@ -349,24 +387,213 @@ export async function priceEventTicketForStudent(
     now,
     rules,
     studentAffiliations: affiliations,
-    // Event tickets do not participate in the first-time claim store in
-    // Phase 2 — pass an empty map so any first-time rule that survived
-    // the engine's event-scope guard is denied defensively.
+    // Event tickets do not participate in the first-time claim store —
+    // pass an empty map so any first-time rule that survived the
+    // engine's event-scope guard is denied defensively.
     firstTimeEligibleByRuleId: {},
+    promoCode: typedCode || null,
   });
 
+  // Phase 5 — promo-code error surfacing + usage-limit enforcement.
+  //
+  // The engine already decides whether the typed code matched an
+  // applicable rule. Here we run the service-layer gates that the
+  // pure engine deliberately doesn't know about:
+  //
+  //   * max_uses          → count paid+pending event purchases whose
+  //                         frozen snapshot references this rule.
+  //   * one_use_per_email → reject when the same student/email has a
+  //                         non-refunded prior purchase with this rule.
+  //
+  // When a gate fires we strip the promo discount from the result so
+  // the caller gets a clean (no-discount) pricing back AND a
+  // structured `promoCodeError` it can render in the UI.
+  let finalResult = result;
+  let promoCodeError: PromoCodeError | null = null;
+
+  if (hasTypedCode) {
+    const appliedPromo = result.appliedDiscounts.find(
+      (d) => d.ruleType === "event_promo_code",
+    );
+
+    if (!appliedPromo) {
+      promoCodeError = classifyPromoMiss(rules, typedCode, now, input.product.id);
+    } else {
+      const rule = rules.find((r) => r.id === appliedPromo.ruleId);
+      if (rule) {
+        const gate = await checkPromoCodeUsage(rule, {
+          studentId: input.studentId,
+          guestEmail: input.guestEmail ?? null,
+        });
+        if (gate) {
+          promoCodeError = gate;
+          finalResult = stripPromoFromResult(result);
+        }
+      }
+    }
+  }
+
   const snapshot: AppliedDiscountSnapshot | null =
-    result.appliedDiscounts.length > 0
+    finalResult.appliedDiscounts.length > 0
       ? {
           appliedAt: now,
-          basePriceCents: result.basePriceCents,
-          totalDiscountCents: result.totalDiscountCents,
-          finalPriceCents: result.finalPriceCents,
-          appliedDiscounts: result.appliedDiscounts.map((a) => ({ ...a })),
+          basePriceCents: finalResult.basePriceCents,
+          totalDiscountCents: finalResult.totalDiscountCents,
+          finalPriceCents: finalResult.finalPriceCents,
+          appliedDiscounts: finalResult.appliedDiscounts.map((a) => ({ ...a })),
         }
       : null;
 
-  return { ...result, snapshot };
+  return { ...finalResult, snapshot, promoCodeError };
+}
+
+function stripPromoFromResult(result: PricingResult): PricingResult {
+  const kept = result.appliedDiscounts.filter(
+    (d) => d.ruleType !== "event_promo_code",
+  );
+  const totalDiscountCents = kept.reduce((s, d) => s + d.amountCents, 0);
+  return {
+    basePriceCents: result.basePriceCents,
+    appliedDiscounts: kept,
+    totalDiscountCents,
+    finalPriceCents: Math.max(0, result.basePriceCents - totalDiscountCents),
+    reasons: result.reasons,
+  };
+}
+
+/**
+ * The customer typed a code but the engine did not apply it. Figure
+ * out which of the standard error reasons is the most informative.
+ *
+ *   * If NO active promo-code rule has this code → "unknown_code".
+ *   * If a rule exists but isn't in the validity window → "expired".
+ *   * Otherwise → "not_eligible" (wrong event ticket).
+ */
+function classifyPromoMiss(
+  rules: DiscountRule[],
+  typedCode: string,
+  nowIso: string,
+  eventProductId: string,
+): PromoCodeError {
+  const target = typedCode.toUpperCase();
+  const matching = rules.filter(
+    (r) =>
+      r.ruleType === "event_promo_code" &&
+      r.code.toUpperCase() === target,
+  );
+
+  if (matching.length === 0) {
+    return promoErr("unknown_code");
+  }
+
+  // The engine already filtered by isActive (it skips inactive rules),
+  // so `loadActiveRules()` should never return them — but keep the
+  // check defensively in case the caller passes a custom rule list.
+  if (!matching.some((r) => r.isActive)) {
+    return promoErr("inactive");
+  }
+
+  const inWindow = matching.find(
+    (r) =>
+      (!r.validFrom || r.validFrom <= nowIso) &&
+      (!r.validUntil || r.validUntil >= nowIso),
+  );
+  if (!inWindow) {
+    return promoErr("expired");
+  }
+
+  const eligible = matching.some(
+    (r) =>
+      r.appliesToEventProductIds &&
+      r.appliesToEventProductIds.includes(eventProductId),
+  );
+  if (!eligible) {
+    return promoErr("not_eligible");
+  }
+
+  return promoErr("not_eligible");
+}
+
+function promoErr(kind: PromoCodeError["kind"]): PromoCodeError {
+  return { kind, message: PROMO_CODE_ERROR_DEFAULTS[kind] } as PromoCodeError;
+}
+
+/**
+ * Service-layer enforcement of `maxUses` + `oneUsePerEmail`.
+ *
+ * Counts existing event purchases whose frozen `applied_discount`
+ * snapshot references the rule's id. We deliberately count paid AND
+ * pending (not refunded) so a partly-redeemed code can't be over-
+ * issued via a flood of pending pay-at-reception rows.
+ *
+ * Returns `null` when the redemption is allowed, or a
+ * `PromoCodeError` describing why it isn't.
+ */
+async function checkPromoCodeUsage(
+  rule: DiscountRule,
+  ctx: { studentId: string | null; guestEmail: string | null },
+): Promise<PromoCodeError | null> {
+  if (rule.maxUses == null && !rule.oneUsePerEmail) return null;
+
+  // Late-imported to avoid a server-only / circular import — the event
+  // repo pulls in repositories which import this service back.
+  const { getSpecialEventRepo } = await import("@/lib/repositories");
+  const { normalizeEmail } = await import("@/lib/utils/email");
+
+  const repo = getSpecialEventRepo();
+  // Single broad fetch keeps this O(n) on event purchases. Good enough
+  // for MVP — collaborator codes are low volume. If this becomes hot,
+  // add a Supabase view filtered by `applied_discount @> ...`.
+  const allPurchases = await (async () => {
+    const events = await repo.getAllEvents();
+    const out: Awaited<ReturnType<typeof repo.getPurchasesByEvent>> = [];
+    for (const e of events) {
+      const ps = await repo.getPurchasesByEvent(e.id);
+      out.push(...ps);
+    }
+    return out;
+  })();
+
+  const matchesRule = (
+    p: { paymentStatus: string | null; appliedDiscount: unknown },
+  ): boolean => {
+    if (p.paymentStatus === "refunded") return false;
+    const snap = p.appliedDiscount as AppliedDiscountSnapshot | null;
+    return Boolean(
+      snap?.appliedDiscounts?.some((d) => d.ruleId === rule.id),
+    );
+  };
+
+  if (rule.maxUses != null) {
+    const count = allPurchases.filter(matchesRule).length;
+    if (count >= rule.maxUses) {
+      return promoErr("max_uses_reached");
+    }
+  }
+
+  if (rule.oneUsePerEmail) {
+    if (ctx.studentId != null) {
+      const usedByStudent = allPurchases.some(
+        (p) =>
+          p.studentId === ctx.studentId && matchesRule(p),
+      );
+      if (usedByStudent) return promoErr("already_used");
+    } else {
+      const normEmail = normalizeEmail(ctx.guestEmail);
+      if (!normEmail) {
+        return promoErr("guest_email_required");
+      }
+      const usedByEmail = allPurchases.some(
+        (p) =>
+          p.guestEmail != null &&
+          normalizeEmail(p.guestEmail) === normEmail &&
+          matchesRule(p),
+      );
+      if (usedByEmail) return promoErr("already_used");
+    }
+  }
+
+  return null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -646,6 +873,9 @@ function toEngineRule(r: MockDiscountRule): DiscountRule {
     validUntil: r.validUntil,
     firstTimeScope: r.firstTimeScope ?? "any_purchase",
     firstTimeProductIds: r.firstTimeProductIds ?? null,
+    requiresCode: r.requiresCode ?? false,
+    maxUses: r.maxUses ?? null,
+    oneUsePerEmail: r.oneUsePerEmail ?? false,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

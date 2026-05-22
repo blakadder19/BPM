@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { getNavigationForAccess } from "../role-config";
+import { canAccessRoute, getNavigationForAccess } from "../role-config";
 import type { Permission } from "../domain/permissions";
 
 const NONE = new Set<Permission>();
 
 describe("getNavigationForAccess (sidebar visibility)", () => {
-  it("super_admin sees every nav item, including permission-free ones", () => {
+  it("super_admin sees every admin nav item, including permission-free ones", () => {
     const items = getNavigationForAccess({
       legacyRole: "admin",
       permissions: NONE,
@@ -21,6 +21,8 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
     expect(hrefs).toContain("/broadcasts");
     expect(hrefs).toContain("/studio-hire");
     expect(hrefs).toContain("/penalties");
+    // Catalog is student-only and must NEVER leak into a super_admin sidebar.
+    expect(hrefs).not.toContain("/catalog");
   });
 
   it("non-super-admin Custom user with only events:view sees Events and nothing else admin-y", () => {
@@ -92,5 +94,100 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
       isSuperAdmin: false,
     });
     expect(items.map((i) => i.href)).toContain("/finance");
+  });
+
+  describe("Catalog is student-only — never visible to staff/admin", () => {
+    function hrefsFor(input: {
+      legacyRole: "admin" | "teacher" | "student";
+      permissions: ReadonlySet<Permission>;
+      isSuperAdmin: boolean;
+    }): string[] {
+      return getNavigationForAccess(input).map((i) => i.href);
+    }
+
+    it("admin (non-super) never sees /catalog regardless of granted permissions", () => {
+      // A maximally-permissive non-super-admin still cannot see Catalog.
+      const everyPermission = new Set<Permission>([
+        "dashboard:view",
+        "classes:view",
+        "bookings:view",
+        "events:view",
+        "attendance:view",
+        "students:view",
+        "products:view",
+        "finance:view",
+        "affiliations:view",
+        "referrals:view",
+        "discounts:view",
+        "staff:view",
+        "settings:view",
+      ]);
+      expect(
+        hrefsFor({
+          legacyRole: "admin",
+          permissions: everyPermission,
+          isSuperAdmin: false,
+        }),
+      ).not.toContain("/catalog");
+    });
+
+    it("super_admin never sees /catalog", () => {
+      expect(
+        hrefsFor({
+          legacyRole: "admin",
+          permissions: NONE,
+          isSuperAdmin: true,
+        }),
+      ).not.toContain("/catalog");
+    });
+
+    it("teacher never sees /catalog", () => {
+      expect(
+        hrefsFor({
+          legacyRole: "teacher",
+          permissions: NONE,
+          isSuperAdmin: false,
+        }),
+      ).not.toContain("/catalog");
+    });
+
+    it("front-desk / read-only / custom staff (legacyRole 'admin', no super_admin) never see /catalog", () => {
+      // legacyRoleForStaffRole maps front_desk/read_only/custom → 'admin',
+      // so this case mirrors what the production layout passes for those
+      // staff personas.
+      expect(
+        hrefsFor({
+          legacyRole: "admin",
+          permissions: new Set<Permission>(["events:view"]),
+          isSuperAdmin: false,
+        }),
+      ).not.toContain("/catalog");
+    });
+
+    it("student sees /catalog (positive case)", () => {
+      expect(
+        hrefsFor({
+          legacyRole: "student",
+          permissions: NONE,
+          isSuperAdmin: false,
+        }),
+      ).toContain("/catalog");
+    });
+  });
+});
+
+describe("canAccessRoute — /catalog gate", () => {
+  it("student can access /catalog and nested URLs", () => {
+    expect(canAccessRoute("student", "/catalog")).toBe(true);
+    expect(canAccessRoute("student", "/catalog/some-product")).toBe(true);
+  });
+
+  it("admin cannot access /catalog", () => {
+    expect(canAccessRoute("admin", "/catalog")).toBe(false);
+    expect(canAccessRoute("admin", "/catalog/some-product")).toBe(false);
+  });
+
+  it("teacher cannot access /catalog", () => {
+    expect(canAccessRoute("teacher", "/catalog")).toBe(false);
   });
 });

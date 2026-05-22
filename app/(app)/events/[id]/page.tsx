@@ -64,6 +64,7 @@ export default async function EventDetailPage({
         myPurchases={eventPurchases}
         stripeEnabled={isStripeEnabled()}
         isActiveMember={isActiveMember}
+        studentId={user.id}
       />
     );
   }

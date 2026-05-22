@@ -495,6 +495,8 @@ export async function createEventStripeCheckoutAction(input: {
   eventProductName: string;
   eventProductDescription: string | null;
   priceCents: number;
+  /** Phase 5 — optional collaborator promo code. */
+  promoCode?: string | null;
 }): Promise<{ success: boolean; url?: string; error?: string }> {
   if (!isStripeEnabled()) {
     return {
@@ -534,7 +536,11 @@ export async function createEventStripeCheckoutAction(input: {
       productType: product.productType,
       priceCents: product.priceCents,
     },
+    promoCode: input.promoCode ?? null,
   });
+  if (pricing.promoCodeError) {
+    return { success: false, error: pricing.promoCodeError.message };
+  }
   const pricingSnapshotMeta = serializePricingForStripe(pricing);
 
   try {
@@ -591,6 +597,8 @@ export async function createGuestEventStripeCheckoutAction(input: {
   guestName: string;
   guestEmail: string;
   guestPhone?: string;
+  /** Phase 5 — optional collaborator promo code. */
+  promoCode?: string | null;
 }): Promise<{ success: boolean; url?: string; error?: string }> {
   if (!isStripeEnabled()) {
     return { success: false, error: "Online payment is not yet available." };
@@ -633,6 +641,26 @@ export async function createGuestEventStripeCheckoutAction(input: {
 
   const appUrl = await resolveAppUrl();
 
+  // Phase 5 — guest pricing now flows through the engine so promo
+  // codes can apply. Affiliations still cannot (no student id), but
+  // event-promo-code rules are evaluated for guests too. The frozen
+  // snapshot is forwarded to Stripe metadata so the webhook persists
+  // exactly what Stripe charged.
+  const pricing = await priceEventTicketForStudent({
+    studentId: null,
+    product: {
+      id: product.id,
+      productType: product.productType,
+      priceCents: product.priceCents,
+    },
+    promoCode: input.promoCode ?? null,
+    guestEmail: input.guestEmail,
+  });
+  if (pricing.promoCodeError) {
+    return { success: false, error: pricing.promoCodeError.message };
+  }
+  const guestPricingMeta = serializePricingForStripe(pricing);
+
   try {
     const stripe = getStripe();
 
@@ -648,7 +676,7 @@ export async function createGuestEventStripeCheckoutAction(input: {
               name: product.name,
               description: product.description ?? product.name,
             },
-            unit_amount: product.priceCents,
+            unit_amount: pricing.finalPriceCents,
           },
           quantity: 1,
         },
@@ -660,6 +688,9 @@ export async function createGuestEventStripeCheckoutAction(input: {
         bpm_guest_name: input.guestName,
         bpm_guest_email: input.guestEmail,
         bpm_guest_phone: input.guestPhone ?? "",
+        ...(guestPricingMeta
+          ? { bpm_pricing_snapshot: guestPricingMeta }
+          : {}),
       },
       success_url: `${appUrl}/event/${input.eventId}/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/event/${input.eventId}?purchase=cancelled`,

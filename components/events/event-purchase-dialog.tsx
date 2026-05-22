@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { createEventPurchaseAction } from "@/lib/actions/event-purchase";
 import { createEventStripeCheckoutAction } from "@/lib/actions/stripe-checkout";
+import { PromoCodeInput } from "@/components/events/promo-code-input";
 import type { MockEventProduct, MockEventSession } from "@/lib/mock-data";
 
 interface Props {
@@ -22,6 +23,14 @@ interface Props {
   product: MockEventProduct;
   sessions: MockEventSession[];
   stripeEnabled: boolean;
+  studentId: string;
+}
+
+interface AppliedPromo {
+  code: string;
+  basePriceCents: number;
+  discountAmountCents: number;
+  finalPriceCents: number;
 }
 
 function centsToEuros(c: number) {
@@ -34,12 +43,13 @@ const INCLUSION_DESCRIPTIONS: Record<string, string> = {
   socials_only: "Access to socials only",
 };
 
-export function EventPurchaseDialog({ open, onClose, product, sessions, stripeEnabled }: Props) {
+export function EventPurchaseDialog({ open, onClose, product, sessions, stripeEnabled, studentId }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"stripe" | "manual">(stripeEnabled ? "stripe" : "manual");
+  const [promo, setPromo] = useState<AppliedPromo | null>(null);
 
   function getIncludedSessions(): MockEventSession[] {
     if (product.inclusionRule === "all_sessions") return sessions;
@@ -63,6 +73,7 @@ export function EventPurchaseDialog({ open, onClose, product, sessions, stripeEn
           eventProductName: product.name,
           eventProductDescription: product.description,
           priceCents: product.priceCents,
+          promoCode: promo?.code ?? null,
         });
         if (res.success && res.url) {
           window.location.href = res.url;
@@ -73,6 +84,7 @@ export function EventPurchaseDialog({ open, onClose, product, sessions, stripeEn
         const res = await createEventPurchaseAction({
           eventProductId: product.id,
           eventId: product.eventId,
+          promoCode: promo?.code ?? null,
         });
         if (res.success) {
           setSuccess(true);
@@ -139,6 +151,15 @@ export function EventPurchaseDialog({ open, onClose, product, sessions, stripeEn
                   </ul>
                 )}
               </div>
+
+              <PromoCodeInput
+                eventId={product.eventId}
+                eventProductId={product.id}
+                studentId={studentId}
+                basePriceCents={product.priceCents}
+                onApplied={setPromo}
+                disabled={isPending}
+              />
 
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-2">Payment method</h4>

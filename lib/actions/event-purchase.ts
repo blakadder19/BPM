@@ -124,6 +124,8 @@ function buildFinancialSnapshotFromFrozen(
 export async function createEventPurchaseAction(input: {
   eventProductId: string;
   eventId: string;
+  /** Phase 5 — optional collaborator promo code. */
+  promoCode?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   const user = await requireRole(["student"]);
 
@@ -174,7 +176,15 @@ export async function createEventPurchaseAction(input: {
       productType: product.productType,
       priceCents: product.priceCents,
     },
+    promoCode: input.promoCode ?? null,
   });
+
+  // Reject the purchase outright if a promo code was typed but turned
+  // out to be invalid/exhausted server-side — the customer expected a
+  // discount and we won't silently charge the full price.
+  if (pricing.promoCodeError) {
+    return { success: false, error: pricing.promoCodeError.message };
+  }
 
   const snapshot = buildPricedFinancialSnapshot(product, pricing, false);
 
@@ -239,6 +249,8 @@ export async function createGuestEventPurchaseAction(input: {
   lastName: string;
   email: string;
   phone?: string;
+  /** Phase 5 — optional collaborator promo code. */
+  promoCode?: string | null;
 }): Promise<{ success: boolean; error?: string }> {
   const { firstName, lastName, email } = input;
   if (!firstName?.trim() || !lastName?.trim()) return { success: false, error: "Name is required" };
@@ -280,6 +292,24 @@ export async function createGuestEventPurchaseAction(input: {
     }
   }
 
+  // Server-side pricing — engine handles promo codes for guests too.
+  const pricing = await priceEventTicketForStudent({
+    studentId: null,
+    product: {
+      id: product.id,
+      productType: product.productType,
+      priceCents: product.priceCents,
+    },
+    promoCode: input.promoCode ?? null,
+    guestEmail: email,
+  });
+
+  if (pricing.promoCodeError) {
+    return { success: false, error: pricing.promoCodeError.message };
+  }
+
+  const guestSnapshot = buildPricedFinancialSnapshot(product, pricing, false);
+
   const result = await createPurchase({
     studentId: null,
     eventProductId: input.eventProductId,
@@ -289,7 +319,7 @@ export async function createGuestEventPurchaseAction(input: {
     guestPhone: input.phone?.trim() || null,
     paymentMethod: "manual",
     paymentStatus: "pending",
-    ...buildFinancialSnapshot(product, false),
+    ...guestSnapshot,
   });
 
   if (result.success) {
@@ -303,7 +333,7 @@ export async function createGuestEventPurchaseAction(input: {
       eventId: input.eventId,
       productName: product.name,
       productType: product.productType,
-      priceLabel: centsToEuros(product.priceCents),
+      priceLabel: centsToEuros(pricing.finalPriceCents),
       paymentStatus: "pending",
       inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
       coverImageUrl: event.coverImageUrl ?? undefined,
@@ -351,6 +381,14 @@ export async function fulfillGuestEventPurchase(
     repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
   ]);
 
+  // Phase 5 — rehydrate the frozen pricing snapshot the guest Stripe
+  // checkout action stuffed into Stripe metadata. Mirrors the
+  // student-side path so promo codes used by guests persist a frozen
+  // `applied_discount` snapshot on the purchase row.
+  const { deserializePricingFromStripe } = await import("@/lib/services/pricing-service");
+  const rawPricing = metadata.bpm_pricing_snapshot;
+  const frozen = rawPricing ? await deserializePricingFromStripe(rawPricing) : null;
+
   const result = await createPurchase({
     studentId: null,
     eventProductId,
@@ -363,7 +401,9 @@ export async function fulfillGuestEventPurchase(
     paymentStatus: "paid",
     paymentReference: paymentRef,
     paidAt: new Date().toISOString(),
-    ...(product ? buildFinancialSnapshot(product, true) : {}),
+    ...(product
+      ? buildFinancialSnapshotFromFrozen(product, frozen, true)
+      : {}),
   });
 
   if (!result.success) {
@@ -385,7 +425,7 @@ export async function fulfillGuestEventPurchase(
         eventId,
         productName: product.name,
         productType: product.productType,
-        priceLabel: centsToEuros(product.priceCents),
+        priceLabel: centsToEuros(frozen?.finalPriceCents ?? product.priceCents),
         paymentStatus: "paid",
         inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
         qrToken,

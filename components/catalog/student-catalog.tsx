@@ -49,7 +49,7 @@ export type StyleSelectionMode = "none" | "pick_one" | "pick_many";
 export interface AppliedDiscountSummary {
   code: string;
   name: string;
-  ruleType: "affiliation" | "first_time_purchase";
+  ruleType: "affiliation" | "first_time_purchase" | "event_promo_code";
   affiliationType: string | null;
   amountCents: number;
 }

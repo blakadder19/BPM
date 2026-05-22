@@ -62,6 +62,11 @@ interface RuleRow {
   validUntil: string | null;
   firstTimeScope: FirstTimeScope;
   firstTimeProductIds: string[] | null;
+  requiresCode: boolean;
+  maxUses: number | null;
+  oneUsePerEmail: boolean;
+  /** Phase 5 — derived count for "current uses" display. */
+  usedCount: number;
 }
 
 interface ProductRow {
@@ -110,6 +115,7 @@ interface PanelProps {
 const RULE_TYPE_LABELS: Record<DiscountRuleType, string> = {
   first_time_purchase: "First-time purchase",
   affiliation: "Affiliation",
+  event_promo_code: "Promo code",
 };
 
 const AFFILIATION_TYPE_LABELS: Record<AffiliationType, string> = {
@@ -457,6 +463,21 @@ export function DiscountRulesPanel({
                         )}
                       </div>
                     )}
+                    {r.ruleType === "event_promo_code" && (
+                      <div className="mt-1 space-y-0.5 text-gray-500">
+                        <div>
+                          uses: {r.usedCount}
+                          {r.maxUses != null
+                            ? ` / ${r.maxUses}`
+                            : " (no cap)"}
+                        </div>
+                        {r.oneUsePerEmail && (
+                          <div className="text-[10px] text-gray-400">
+                            one use per email/student
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </Td>
                 <Td>
@@ -650,6 +671,16 @@ function RuleEditor({
   const [stackable, setStackable] = useState<boolean>(rule?.stackable ?? false);
   const [isActive, setIsActive] = useState<boolean>(rule?.isActive ?? true);
 
+  // Phase 5 — promo-code controls. `requiresCode` is auto-derived from
+  // ruleType (always true for `event_promo_code`), so we only surface
+  // max-uses and one-use-per-email as user-editable inputs.
+  const [maxUsesRaw, setMaxUsesRaw] = useState<string>(
+    rule?.maxUses != null ? String(rule.maxUses) : "",
+  );
+  const [oneUsePerEmail, setOneUsePerEmail] = useState<boolean>(
+    rule?.oneUsePerEmail ?? false,
+  );
+
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -678,6 +709,17 @@ function RuleEditor({
       return { error: "Priority must be an integer." };
     }
 
+    let maxUses: number | null = null;
+    if (maxUsesRaw.trim()) {
+      const n = Number(maxUsesRaw);
+      if (!Number.isInteger(n) || n <= 0) {
+        return { error: "Max uses must be a positive whole number." };
+      }
+      maxUses = n;
+    }
+
+    const isPromo = ruleType === "event_promo_code";
+
     return {
       code,
       name,
@@ -690,8 +732,9 @@ function RuleEditor({
       discountKind,
       discountValue,
       appliesToProductTypes:
-        appliesToTypes.size > 0 ? [...appliesToTypes] : null,
-      appliesToProductIds: appliesToIds.size > 0 ? [...appliesToIds] : null,
+        isPromo ? null : appliesToTypes.size > 0 ? [...appliesToTypes] : null,
+      appliesToProductIds:
+        isPromo ? null : appliesToIds.size > 0 ? [...appliesToIds] : null,
       minPriceCents: min,
       maxDiscountCents: max,
       isActive,
@@ -707,9 +750,12 @@ function RuleEditor({
           ? [...firstTimeProductIds]
           : null,
       appliesToEventProductIds:
-        ruleType === "affiliation" && appliesToEventIds.size > 0
+        (ruleType === "affiliation" || isPromo) && appliesToEventIds.size > 0
           ? [...appliesToEventIds]
           : null,
+      requiresCode: isPromo ? true : false,
+      maxUses,
+      oneUsePerEmail: isPromo ? oneUsePerEmail : false,
     };
   }
 
@@ -853,6 +899,14 @@ function RuleEditor({
                   ))}
                 </select>
               </Field>
+            ) : ruleType === "event_promo_code" ? (
+              <Field label="Customer-typed code">
+                <p className="text-xs text-gray-500 italic px-1 py-1.5">
+                  Customers type the <span className="font-mono">Code</span>{" "}
+                  above at event checkout. Only applies when this code is
+                  entered.
+                </p>
+              </Field>
             ) : (
               <Field label="Affiliation requirement">
                 <p className="text-xs text-gray-500 italic px-1 py-1.5">
@@ -995,6 +1049,7 @@ function RuleEditor({
             </div>
           )}
 
+          {ruleType !== "event_promo_code" && (
           <Field
             label="Applies to product types (optional)"
             hint="Leave all unchecked to apply to ALL product types"
@@ -1017,7 +1072,9 @@ function RuleEditor({
               ))}
             </div>
           </Field>
+          )}
 
+          {ruleType !== "event_promo_code" && (
           <Field
             label="Applies to products (memberships, passes, drop-ins)"
             hint="Leave empty to apply to every product matching the type filter above. Event tickets are configured separately below."
@@ -1052,18 +1109,20 @@ function RuleEditor({
               )}
             </div>
           </Field>
+          )}
 
-          {ruleType === "affiliation" && (
+          {(ruleType === "affiliation" || ruleType === "event_promo_code") && (
             <div className="rounded-md border border-purple-200 bg-purple-50/50 px-4 py-3 space-y-3">
               <div>
                 <h3 className="text-sm font-semibold text-purple-900">
-                  Applies to event tickets (optional)
+                  {ruleType === "event_promo_code"
+                    ? "Eligible event tickets"
+                    : "Applies to event tickets (optional)"}
                 </h3>
                 <p className="mt-1 text-xs text-purple-800/80">
-                  Select specific event tickets this affiliation discount
-                  should apply to. Leave all unchecked to keep the rule
-                  scoped to products only. Event-ticket scope is independent
-                  of the product scope above — a rule may target both.
+                  {ruleType === "event_promo_code"
+                    ? "Only applies when this code is entered at event checkout for one of the tickets selected below. At least one ticket is required."
+                    : "Select specific event tickets this affiliation discount should apply to. Leave all unchecked to keep the rule scoped to products only. Event-ticket scope is independent of the product scope above — a rule may target both."}
                 </p>
                 <p className="mt-1 text-xs text-purple-800/80">
                   {appliesToEventIds.size > 0
@@ -1106,6 +1165,52 @@ function RuleEditor({
                     </label>
                   ))
                 )}
+              </div>
+            </div>
+          )}
+
+          {ruleType === "event_promo_code" && (
+            <div className="rounded-md border border-indigo-200 bg-indigo-50/50 px-4 py-3 space-y-3">
+              <h3 className="text-sm font-semibold text-indigo-900">
+                Promo code controls
+              </h3>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field
+                  label="Max total uses (optional)"
+                  hint="Counts paid + pending event purchases. Leave empty for unlimited."
+                >
+                  <input
+                    type="number"
+                    step="1"
+                    min="1"
+                    value={maxUsesRaw}
+                    onChange={(e) => setMaxUsesRaw(e.target.value)}
+                    placeholder="Unlimited"
+                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm tabular-nums"
+                  />
+                  {rule && (
+                    <p className="mt-1 text-xs text-indigo-800/80">
+                      Current usage: {rule.usedCount}
+                      {rule.maxUses != null
+                        ? ` of ${rule.maxUses}`
+                        : " (no cap)"}
+                    </p>
+                  )}
+                </Field>
+                <Field label="One use per customer">
+                  <label className="inline-flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={oneUsePerEmail}
+                      onChange={(e) => setOneUsePerEmail(e.target.checked)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      A student id (logged-in) or guest email cannot be
+                      reused for the same code.
+                    </span>
+                  </label>
+                </Field>
               </div>
             </div>
           )}

@@ -55,6 +55,15 @@ export interface StudentAffiliation {
 export const DISCOUNT_RULE_TYPES = [
   "affiliation",
   "first_time_purchase",
+  /**
+   * Phase 5 — event-ticket-only promo codes. Customer must type the
+   * matching `code` at event checkout for this rule to fire. Never
+   * applies to subscriptions/memberships. Usage limits (`maxUses`,
+   * `oneUsePerEmail`) are enforced by the pricing service layer (not
+   * the pure engine) so a single function can stay focused on
+   * applicability + amount math.
+   */
+  "event_promo_code",
 ] as const;
 export type DiscountRuleType = (typeof DISCOUNT_RULE_TYPES)[number];
 
@@ -116,6 +125,27 @@ export interface DiscountRule {
    * the discount nor consumes the rule's claim.
    */
   firstTimeProductIds: string[] | null;
+  /**
+   * Phase 5 — promo-code controls. Only meaningful for
+   * `ruleType === "event_promo_code"`; legacy rules default to safe
+   * values (no code required, no usage cap, no per-email limit).
+   *
+   *   * `requiresCode`     — the customer must type a code that
+   *                          (case-insensitively) matches `code`. Engine
+   *                          enforces. True for promo-code rules.
+   *   * `maxUses`          — null = unlimited. Service-layer counts
+   *                          paid+pending event purchases whose frozen
+   *                          snapshot references this rule's id and
+   *                          rejects further redemptions when the cap
+   *                          is reached. Engine ignores.
+   *   * `oneUsePerEmail`   — when true, the same student id or the
+   *                          same normalised guest email cannot use
+   *                          this rule twice. Service-layer enforces.
+   *                          Engine ignores.
+   */
+  requiresCode: boolean;
+  maxUses: number | null;
+  oneUsePerEmail: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -182,6 +212,13 @@ export interface PricingContext {
    * Engine treats a missing key as `false` (deny-by-default).
    */
   firstTimeEligibleByRuleId: Record<string, boolean>;
+  /**
+   * Phase 5 — customer-typed promo code, if any. Compared
+   * case-insensitively against `event_promo_code` rules'  `code`.
+   * Required to enable promo-code rules; ignored by every other rule
+   * type. `null` / `undefined` means "no code entered".
+   */
+  promoCode?: string | null;
 }
 
 export interface AppliedDiscount {
@@ -287,6 +324,14 @@ export function applyPricing(ctx: PricingContext): PricingResult {
         continue;
       }
     } else {
+      // Promo-code rules are event-only by construction. Skip them on
+      // any subscription/membership pricing path so they can never
+      // discount a non-event product even if an admin accidentally
+      // adds subscription scope.
+      if (rule.ruleType === "event_promo_code") {
+        skip("promo-code rules only apply to event tickets");
+        continue;
+      }
       const eventIds = rule.appliesToEventProductIds;
       const subIds = rule.appliesToProductIds;
       const subTypes = rule.appliesToProductTypes;
@@ -359,12 +404,40 @@ export function applyPricing(ctx: PricingContext): PricingResult {
         affiliationId = match.id;
         break;
       }
+      case "event_promo_code": {
+        // Promo-code rules are event-only (the subscription branch
+        // above already skipped them). They never auto-apply: the
+        // customer must type a matching code at checkout. Comparison
+        // is case-insensitive — we always store codes upper-cased.
+        const typed = (ctx.promoCode ?? "").trim().toUpperCase();
+        if (!typed) {
+          skip("promo code not entered");
+          continue;
+        }
+        if (typed !== rule.code.toUpperCase()) {
+          skip("promo code does not match");
+          continue;
+        }
+        break;
+      }
     }
 
     eligible.push({ rule, affiliationId });
   }
 
+  // Sort order:
+  //   1. Promo-code rules first (Phase 5) — when the customer types a
+  //      matching code we always honour it ahead of any automatic
+  //      affiliation discount. This is the documented MVP policy:
+  //      collaborator codes take precedence over affiliations and
+  //      do not silently stack with them (unless both rules are
+  //      explicitly `stackable`).
+  //   2. Then descending priority (admin can break ties).
+  //   3. Then ascending code (deterministic final tiebreak).
   eligible.sort((a, b) => {
+    const aPromo = a.rule.ruleType === "event_promo_code" ? 1 : 0;
+    const bPromo = b.rule.ruleType === "event_promo_code" ? 1 : 0;
+    if (aPromo !== bPromo) return bPromo - aPromo;
     if (b.rule.priority !== a.rule.priority) return b.rule.priority - a.rule.priority;
     return a.rule.code.localeCompare(b.rule.code);
   });
@@ -461,6 +534,8 @@ function describeReason(rule: DiscountRule): string {
       return "First-time purchase";
     case "affiliation":
       return `Verified ${rule.affiliationType ?? "affiliation"}`;
+    case "event_promo_code":
+      return `Promo code ${rule.code}`;
   }
 }
 

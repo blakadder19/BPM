@@ -145,6 +145,9 @@ export function createDiscountRule(
     validUntil: data.validUntil,
     firstTimeScope: data.firstTimeScope ?? "any_purchase",
     firstTimeProductIds: data.firstTimeProductIds ?? null,
+    requiresCode: data.requiresCode ?? false,
+    maxUses: data.maxUses ?? null,
+    oneUsePerEmail: data.oneUsePerEmail ?? false,
     createdAt: now,
     updatedAt: now,
   };
