@@ -177,6 +177,9 @@ export async function createStudentBooking(input: {
     birthdayBenefit,
     studentDateOfBirth: student.dateOfBirth,
     beginnerLevelNames: getSettings().beginnerLevelNames,
+    allowBeginnerNextTermAdvanceBooking:
+      getSettings().allowBeginnerNextTermAdvanceBooking,
+    beginnerIntakeBookingWeeks: getSettings().beginnerIntakeBookingWeeks,
   };
 
   if (!ctx.codeOfConductAccepted) {

@@ -5,7 +5,9 @@ import {
   getPenaltyRepo,
   getAttendanceRepo,
   getSpecialEventRepo,
+  getReferralRepo,
 } from "@/lib/repositories";
+import { summarizeReferrals } from "@/lib/domain/referrals";
 import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentById, cachedGetStudentSubs, cachedGetAllSubs, cachedGetAllStudents, cachedGetAllEvents } from "@/lib/server/cached-queries";
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
 import { getTodayStr, isClassEnded, isClassStarted, effectiveInstanceStatus, isEventEnded } from "@/lib/domain/datetime";
@@ -247,7 +249,11 @@ export default async function DashboardPage() {
       }
     }
 
-    const { beginnerLevelNames } = getSettings();
+    const {
+      beginnerLevelNames,
+      allowBeginnerNextTermAdvanceBooking,
+      beginnerIntakeBookingWeeks,
+    } = getSettings();
     const BEGINNER_LEVELS = new Set(beginnerLevelNames);
 
     const dashboardBirthdayBenefit = bdayEligibility.potentiallyEligible
@@ -305,6 +311,8 @@ export default async function DashboardPage() {
           birthdayBenefit: dashboardBirthdayBenefit,
           studentDateOfBirth: student?.dateOfBirth ?? null,
           beginnerLevelNames,
+          allowBeginnerNextTermAdvanceBooking,
+          beginnerIntakeBookingWeeks,
         };
 
         const result = computeBookability(ctx);
@@ -333,7 +341,12 @@ export default async function DashboardPage() {
 
     const allEvents = await cachedGetAllEvents();
     const promotedEvents = allEvents.filter(
-      (e) => e.status === "published" && e.isVisible && e.featuredOnDashboard && !isEventEnded(e.endDate),
+      (e) =>
+        e.status === "published" &&
+        e.isVisible &&
+        !e.archivedAt &&
+        e.featuredOnDashboard &&
+        !isEventEnded(e.endDate),
     );
 
     const evtRepo = getSpecialEventRepo();
@@ -353,7 +366,7 @@ export default async function DashboardPage() {
 
     for (const pur of activePurchases) {
       const evt = allEvents.find((e) => e.id === pur.eventId);
-      if (!evt || evt.status !== "published" || !evt.isVisible || isEventEnded(evt.endDate)) continue;
+      if (!evt || evt.status !== "published" || !evt.isVisible || evt.archivedAt || isEventEnded(evt.endDate)) continue;
       const evtProducts = await evtRepo.getProductsByEvent(evt.id);
       const product = evtProducts.find((p) => p.id === pur.eventProductId);
       const existing = dashboardEventsMap.get(evt.id);
@@ -373,6 +386,25 @@ export default async function DashboardPage() {
       return a.event.startDate.localeCompare(b.event.startDate);
     });
 
+    // Referral programme (Phase 3): lazily allocate a stable code and
+    // surface verified/pending counts on the dashboard widget. We swallow
+    // errors here so a referral-store outage cannot break the dashboard.
+    let referralCode: string | null = null;
+    let referralCounts: { verified: number; pending: number } | null = null;
+    try {
+      const referralRepo = getReferralRepo();
+      const [code, myReferrals] = await Promise.all([
+        referralRepo.getCodeForStudent(user.id),
+        referralRepo.getReferralsByReferrer(user.id),
+      ]);
+      referralCode = code;
+      const summary = summarizeReferrals(myReferrals);
+      referralCounts = { verified: summary.verified, pending: summary.pending };
+    } catch {
+      referralCode = null;
+      referralCounts = null;
+    }
+
     return (
       <StudentDashboard
         fullName={user.fullName}
@@ -386,6 +418,8 @@ export default async function DashboardPage() {
         codeOfConductAccepted={cocAccepted}
         benefits={benefits}
         qrToken={student?.qrToken ?? null}
+        referralCode={referralCode}
+        referralCounts={referralCounts}
         todayForYou={todayForYou}
         studentPreferredRole={student?.preferredRole ?? null}
         dashboardEvents={dashboardEventsList}
@@ -519,7 +553,7 @@ export default async function DashboardPage() {
         });
       }
     }
-    if (evt.status === "published" && !isEventEnded(evt.endDate)) {
+    if (evt.status === "published" && !evt.archivedAt && !isEventEnded(evt.endDate)) {
       const nonRefunded = purchases.filter((p) => p.paymentStatus !== "refunded");
       upcomingEvents.push({
         id: evt.id,

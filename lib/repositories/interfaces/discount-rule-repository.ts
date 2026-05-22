@@ -20,6 +20,7 @@ export interface CreateDiscountRuleData {
   discountValue: number;
   appliesToProductTypes?: ProductType[] | null;
   appliesToProductIds?: string[] | null;
+  appliesToEventProductIds?: string[] | null;
   minPriceCents?: number | null;
   maxDiscountCents?: number | null;
   isActive?: boolean;

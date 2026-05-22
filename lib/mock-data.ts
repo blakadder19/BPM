@@ -645,6 +645,18 @@ export interface MockSpecialEvent {
   salesOpen: boolean;
   overallCapacity: number | null;
   allowReceptionPayment: boolean;
+  /**
+   * Soft archival timestamp (Phase 4). When non-null, the event is
+   * hidden from every public surface (student events list, student
+   * event detail, `/event/[id]` public shareable page) but remains
+   * fully visible and editable in admin views. Set via
+   * `archiveEventAction` / cleared via `unarchiveEventAction`.
+   *
+   * Distinct from `status === "draft"` (content not finalised) and
+   * from `isVisible = false` (admin temporarily hiding while still
+   * editing).
+   */
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -705,6 +717,16 @@ export interface MockEventPurchase {
   currency: string | null;
   productNameSnapshot: string | null;
   productTypeSnapshot: string | null;
+  /**
+   * Frozen pricing snapshot — populated when an affiliation discount
+   * was applied at purchase time. Mirrors
+   * `student_subscriptions.applied_discount` so future rule edits never
+   * mutate historical event purchase totals. `null` for full-price
+   * purchases.
+   */
+  appliedDiscount:
+    | import("./domain/pricing-engine").AppliedDiscountSnapshot
+    | null;
   /** Event entry check-in (separate from class/session attendance) */
   checkedInAt: string | null;
   checkedInBy: string | null;
@@ -736,6 +758,7 @@ export const SPECIAL_EVENTS: MockSpecialEvent[] = [
     salesOpen: true,
     overallCapacity: 100,
     allowReceptionPayment: true,
+    archivedAt: null,
     createdAt: "2026-04-01T10:00:00",
     updatedAt: "2026-04-01T10:00:00",
   },
@@ -785,6 +808,12 @@ export interface MockDiscountRule {
   discountValue: number;
   appliesToProductTypes: ProductType[] | null;
   appliesToProductIds: string[] | null;
+  /**
+   * Phase 2 — when non-null, the rule is event-ticket scoped and
+   * targets the listed `event_products.id` values. NULL means the
+   * rule never applies to event tickets.
+   */
+  appliesToEventProductIds: string[] | null;
   minPriceCents: number | null;
   maxDiscountCents: number | null;
   isActive: boolean;
@@ -830,6 +859,7 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     discountValue: 10,
     appliesToProductTypes: null,
     appliesToProductIds: ["p-beg12", "p-latin-combo"],
+    appliesToEventProductIds: null,
     minPriceCents: null,
     maxDiscountCents: null,
     isActive: true,
@@ -853,6 +883,7 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     discountValue: 10,
     appliesToProductTypes: null,
     appliesToProductIds: null,
+    appliesToEventProductIds: null,
     minPriceCents: null,
     maxDiscountCents: null,
     isActive: true,
@@ -876,6 +907,7 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     discountValue: 10,
     appliesToProductTypes: null,
     appliesToProductIds: null,
+    appliesToEventProductIds: null,
     minPriceCents: null,
     maxDiscountCents: null,
     isActive: true,
@@ -891,6 +923,73 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
 ];
 
 export const EVENT_PURCHASES: MockEventPurchase[] = [
-  { id: "epur-1", studentId: "s-01", eventProductId: "ep-1", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "stripe", paymentStatus: "paid", paymentReference: "stripe:cs_evt_001", receptionMethod: null, purchasedAt: "2026-04-05T14:00:00", paidAt: "2026-04-05T14:00:00", notes: null, unitPriceCentsAtPurchase: 12000, originalAmountCents: 12000, discountAmountCents: 0, paidAmountCents: 12000, currency: "eur", productNameSnapshot: "Full Weekend Pass", productTypeSnapshot: "full_pass", checkedInAt: null, checkedInBy: null, refundedAt: null, refundedBy: null, refundReason: null, lastEmailType: null, lastEmailSentAt: null, lastEmailSuccess: null },
-  { id: "epur-2", studentId: "s-03", eventProductId: "ep-2", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "manual", paymentStatus: "pending", paymentReference: null, receptionMethod: null, purchasedAt: "2026-04-06T10:00:00", paidAt: null, notes: "Will pay at reception", unitPriceCentsAtPurchase: 7500, originalAmountCents: 7500, discountAmountCents: 0, paidAmountCents: 0, currency: "eur", productNameSnapshot: "Saturday Pass", productTypeSnapshot: "combo_pass", checkedInAt: null, checkedInBy: null, refundedAt: null, refundedBy: null, refundReason: null, lastEmailType: null, lastEmailSentAt: null, lastEmailSuccess: null },
+  { id: "epur-1", studentId: "s-01", eventProductId: "ep-1", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "stripe", paymentStatus: "paid", paymentReference: "stripe:cs_evt_001", receptionMethod: null, purchasedAt: "2026-04-05T14:00:00", paidAt: "2026-04-05T14:00:00", notes: null, unitPriceCentsAtPurchase: 12000, originalAmountCents: 12000, discountAmountCents: 0, paidAmountCents: 12000, currency: "eur", productNameSnapshot: "Full Weekend Pass", productTypeSnapshot: "full_pass", appliedDiscount: null, checkedInAt: null, checkedInBy: null, refundedAt: null, refundedBy: null, refundReason: null, lastEmailType: null, lastEmailSentAt: null, lastEmailSuccess: null },
+  { id: "epur-2", studentId: "s-03", eventProductId: "ep-2", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "manual", paymentStatus: "pending", paymentReference: null, receptionMethod: null, purchasedAt: "2026-04-06T10:00:00", paidAt: null, notes: "Will pay at reception", unitPriceCentsAtPurchase: 7500, originalAmountCents: 7500, discountAmountCents: 0, paidAmountCents: 0, currency: "eur", productNameSnapshot: "Saturday Pass", productTypeSnapshot: "combo_pass", appliedDiscount: null, checkedInAt: null, checkedInBy: null, refundedAt: null, refundedBy: null, refundReason: null, lastEmailType: null, lastEmailSentAt: null, lastEmailSuccess: null },
 ];
+
+// ── Referrals (Phase 3) ─────────────────────────────────────
+
+export const REFERRAL_STATUSES = [
+  "pending",
+  "verified",
+  "rejected",
+  "rewarded",
+] as const;
+export type ReferralStatus = (typeof REFERRAL_STATUSES)[number];
+
+export interface MockStudentReferral {
+  id: string;
+  referrerStudentId: string;
+  referredStudentId: string | null;
+  referredEmail: string | null;
+  referralCode: string | null;
+  status: ReferralStatus;
+  verifiedAt: string | null;
+  verifiedBy: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const REFERRAL_REWARD_STATUSES = [
+  "pending",
+  "approved",
+  "applied",
+  "cancelled",
+] as const;
+export type ReferralRewardStatus = (typeof REFERRAL_REWARD_STATUSES)[number];
+
+export const REFERRAL_DISCOUNT_KINDS = ["percentage", "fixed_cents"] as const;
+export type ReferralDiscountKind = (typeof REFERRAL_DISCOUNT_KINDS)[number];
+
+export interface MockReferralReward {
+  id: string;
+  referrerStudentId: string;
+  /** Optional link to the term the reward should apply against. */
+  termId: string | null;
+  /** Snapshot of how many verified referrals existed at creation time. */
+  verifiedReferralCount: number;
+  rewardType: "membership_discount";
+  discountKind: ReferralDiscountKind;
+  /** Percent (1–100) or cents (fixed_cents). */
+  discountValue: number;
+  status: ReferralRewardStatus;
+  approvedBy: string | null;
+  approvedAt: string | null;
+  /** Set when admin records that the reward was honoured on a specific subscription. */
+  appliedSubscriptionId: string | null;
+  appliedAt: string | null;
+  cancelledAt: string | null;
+  cancelledReason: string | null;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Seed empty in memory mode — referrals are entirely admin-driven and
+ * there is no historical mock data to preserve. The store generates
+ * stable codes for existing seed students lazily on first read.
+ */
+export const STUDENT_REFERRALS: MockStudentReferral[] = [];
+export const REFERRAL_REWARDS: MockReferralReward[] = [];

@@ -39,6 +39,32 @@ export async function deleteEvent(id: string): Promise<Result> {
   } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }
 }
 
+/**
+ * Phase 4: soft-archive an event so it disappears from every public
+ * surface while remaining visible to admins. Idempotent — calling
+ * twice is a no-op (the second call just refreshes `updated_at`).
+ */
+export async function archiveEvent(id: string): Promise<Result> {
+  try {
+    const result = await getSpecialEventRepo().updateEvent(id, {
+      archivedAt: new Date().toISOString(),
+    });
+    if (!result) return { success: false, error: "Event not found" };
+    return { success: true };
+  } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }
+}
+
+/** Phase 4: clear the archive timestamp, making the event eligible to appear publicly again (subject to the usual `status`/`isVisible`/`isPublic` flags). */
+export async function unarchiveEvent(id: string): Promise<Result> {
+  try {
+    const result = await getSpecialEventRepo().updateEvent(id, {
+      archivedAt: null,
+    });
+    if (!result) return { success: false, error: "Event not found" };
+    return { success: true };
+  } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }
+}
+
 // ── Sessions ─────────────────────────────────────────────────
 
 export async function getSessionsByEvent(eventId: string) { return getSpecialEventRepo().getSessionsByEvent(eventId); }

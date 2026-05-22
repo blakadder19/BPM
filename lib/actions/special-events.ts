@@ -6,6 +6,8 @@ import {
   createEvent,
   updateEvent,
   deleteEvent,
+  archiveEvent,
+  unarchiveEvent,
   getEvent,
   createSession,
   updateSession,
@@ -14,6 +16,11 @@ import {
   updateEventProduct,
   deleteEventProduct,
 } from "@/lib/services/special-event-service";
+import { getSpecialEventRepo } from "@/lib/repositories";
+import {
+  eventHasHistory,
+  DELETE_BLOCKED_MESSAGE,
+} from "@/lib/domain/event-visibility";
 import { uploadEventCover, removeEventCover } from "@/lib/services/event-image-storage";
 import { sessionRealDateTimes, formatEventDateRange } from "@/lib/utils";
 import type {
@@ -64,7 +71,12 @@ function parseOptionalInt(raw: string | null): number | null {
 
 function revalidateEvents(eventId?: string) {
   revalidatePath("/events");
-  if (eventId) revalidatePath(`/events/${eventId}`);
+  if (eventId) {
+    revalidatePath(`/events/${eventId}`);
+    // Public shareable surface — must refresh too so an archive
+    // immediately 404s for unauthenticated viewers.
+    revalidatePath(`/event/${eventId}`);
+  }
   revalidatePath("/dashboard");
 }
 
@@ -194,8 +206,67 @@ export async function deleteEventAction(
 ): Promise<{ success: boolean; error?: string }> {
   await requirePermission("events:delete");
   if (!id) return { success: false, error: "Missing event ID" };
+
+  // Phase 4 — server-side delete protection.
+  //
+  // Before letting the delete reach the repository we load any
+  // event_purchases for this event (a single row is enough to
+  // count as "history"). If any exist we refuse the delete with a
+  // clear message pointing the admin at the archive flow.
+  //
+  // We deliberately do this in the action, not in the service, so
+  // that:
+  //   * the service stays a thin pass-through (still callable from
+  //     any future tooling that has already established no history
+  //     exists),
+  //   * any direct call to the server action — even bypassing the
+  //     admin UI — is protected,
+  //   * the protection is co-located with the user-facing error
+  //     copy.
+  try {
+    const purchases = await getSpecialEventRepo().getPurchasesByEvent(id);
+    if (eventHasHistory(purchases)) {
+      return { success: false, error: DELETE_BLOCKED_MESSAGE };
+    }
+  } catch (e) {
+    return {
+      success: false,
+      error:
+        "Could not verify event history before delete: " +
+        (e instanceof Error ? e.message : "unknown error"),
+    };
+  }
+
   const result = await deleteEvent(id);
-  if (result.success) revalidateEvents();
+  if (result.success) revalidateEvents(id);
+  return result;
+}
+
+/**
+ * Phase 4: soft-archive an event. Permission-gated by `events:edit`
+ * (the spec calls archive a non-destructive editorial action — the
+ * destructive `events:delete` is reserved for hard delete which is
+ * blocked once history exists). Idempotent and instantly reflected
+ * on every public surface via `revalidateEvents`.
+ */
+export async function archiveEventAction(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  await requirePermission("events:edit");
+  if (!id) return { success: false, error: "Missing event ID" };
+  const result = await archiveEvent(id);
+  if (result.success) revalidateEvents(id);
+  return result;
+}
+
+/** Phase 4: clear archive on an event. Same permission as archive. */
+export async function unarchiveEventAction(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  await requirePermission("events:edit");
+  if (!id) return { success: false, error: "Missing event ID" };
+  const result = await unarchiveEvent(id);
+  if (result.success) revalidateEvents(id);
   return result;
 }
 

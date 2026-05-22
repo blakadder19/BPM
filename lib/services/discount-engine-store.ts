@@ -135,6 +135,7 @@ export function createDiscountRule(
     discountValue: data.discountValue,
     appliesToProductTypes: data.appliesToProductTypes,
     appliesToProductIds: data.appliesToProductIds,
+    appliesToEventProductIds: data.appliesToEventProductIds ?? null,
     minPriceCents: data.minPriceCents,
     maxDiscountCents: data.maxDiscountCents,
     isActive: data.isActive,

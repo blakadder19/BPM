@@ -170,6 +170,15 @@ export function AffiliationsClient({
         </div>
       )}
 
+      {!isReadOnly && permissions.canVerify && (
+        <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+          Verify only after checking the student&apos;s ID/card in person.
+          Verified affiliations are what unlock discounts at checkout, so
+          this gate is the only thing standing between BPM and incorrect
+          pricing.
+        </div>
+      )}
+
       {actionError && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {actionError}

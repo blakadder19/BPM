@@ -276,6 +276,99 @@ export async function previewPricingForStudent(input: {
   return out;
 }
 
+// ── Event-ticket pricing (Phase 2) ───────────────────────────
+
+export interface PriceEventTicketInput {
+  /** Student id; `null` for guest checkouts (no affiliation discounts). */
+  studentId: string | null;
+  /** Event product passed through to the engine. */
+  product: {
+    id: string;
+    productType: string; // EventProductType, kept as string here to avoid a cycle.
+    priceCents: number;
+  };
+  now?: string;
+}
+
+export interface PriceEventTicketResult extends PricingResult {
+  snapshot: AppliedDiscountSnapshot | null;
+}
+
+/**
+ * Compute the final price of an event ticket for a student.
+ *
+ * Mirrors `priceProductForStudent` but routes through the engine with
+ * `entityKind: "event_product"` so only event-scoped rules are
+ * considered. First-time rules are intentionally NOT extended to event
+ * tickets in this phase (the atomic claim store remains
+ * subscription-only). Guest checkouts (studentId === null) always come
+ * back at full price: affiliation discounts hinge on a verified
+ * student-affiliation row.
+ *
+ * Returned `snapshot` matches the shape stored in
+ * `event_purchases.applied_discount` and is what
+ * `serializePricingForStripe` consumes for Stripe metadata transit.
+ */
+export async function priceEventTicketForStudent(
+  input: PriceEventTicketInput,
+): Promise<PriceEventTicketResult> {
+  const now = input.now ?? new Date().toISOString();
+  const base = input.product.priceCents;
+
+  // Guest: no affiliations, so no affiliation discounts can ever fire.
+  // We still call the engine with an empty affiliation list to keep the
+  // result shape consistent.
+  if (input.studentId == null) {
+    const result = applyPricing({
+      product: {
+        entityKind: "event_product",
+        id: input.product.id,
+        productType: input.product.productType as never,
+        priceCents: base,
+      },
+      now,
+      rules: [],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+    });
+    return { ...result, snapshot: null };
+  }
+
+  const [rules, affiliations] = await Promise.all([
+    loadActiveRules(),
+    loadStudentAffiliations(input.studentId),
+  ]);
+
+  const result = applyPricing({
+    product: {
+      entityKind: "event_product",
+      id: input.product.id,
+      productType: input.product.productType as never,
+      priceCents: base,
+    },
+    now,
+    rules,
+    studentAffiliations: affiliations,
+    // Event tickets do not participate in the first-time claim store in
+    // Phase 2 — pass an empty map so any first-time rule that survived
+    // the engine's event-scope guard is denied defensively.
+    firstTimeEligibleByRuleId: {},
+  });
+
+  const snapshot: AppliedDiscountSnapshot | null =
+    result.appliedDiscounts.length > 0
+      ? {
+          appliedAt: now,
+          basePriceCents: result.basePriceCents,
+          totalDiscountCents: result.totalDiscountCents,
+          finalPriceCents: result.finalPriceCents,
+          appliedDiscounts: result.appliedDiscounts.map((a) => ({ ...a })),
+        }
+      : null;
+
+  return { ...result, snapshot };
+}
+
 // ── Helpers ──────────────────────────────────────────────────
 
 async function loadActiveRules(): Promise<DiscountRule[]> {
@@ -403,7 +496,7 @@ interface CompactPricingTransit {
 }
 
 export function serializePricingForStripe(
-  pricing: PriceForStudentResult,
+  pricing: PricingResult & { snapshot: AppliedDiscountSnapshot | null },
 ): string | null {
   if (!pricing.snapshot) return null;
   const payload: CompactPricingTransit = {
@@ -543,6 +636,7 @@ function toEngineRule(r: MockDiscountRule): DiscountRule {
     discountValue: r.discountValue,
     appliesToProductTypes: r.appliesToProductTypes,
     appliesToProductIds: r.appliesToProductIds,
+    appliesToEventProductIds: r.appliesToEventProductIds ?? null,
     minPriceCents: r.minPriceCents,
     maxDiscountCents: r.maxDiscountCents,
     isActive: r.isActive,

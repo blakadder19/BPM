@@ -60,6 +60,10 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
       initialSettings.creditDeductionPriority ?? ["pass", "drop_in", "membership"],
     beginnerLevelNames:
       initialSettings.beginnerLevelNames ?? ["Beginner 1", "Beginner 2"],
+    allowBeginnerNextTermAdvanceBooking:
+      initialSettings.allowBeginnerNextTermAdvanceBooking ?? true,
+    beginnerIntakeBookingWeeks:
+      initialSettings.beginnerIntakeBookingWeeks ?? 2,
   });
 
   function setNum(field: keyof AppSettings, value: string) {
@@ -486,6 +490,62 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
                 <p className="text-xs text-gray-400">
                   Default: passes first, drop-ins second, memberships last (use-it-or-lose-it before unlimited).
                 </p>
+              </div>
+
+              <div className="space-y-3 border-t border-gray-200 pt-4">
+                <p className="text-sm font-medium text-gray-700">
+                  Beginner intake booking
+                </p>
+                <p className="text-xs text-gray-500">
+                  Controls how new students can book beginner intake classes
+                  (such as Beginners 1) in the next term, before it starts.
+                </p>
+
+                <input
+                  type="hidden"
+                  name="__beginnerIntakeFormPresent"
+                  value="1"
+                />
+
+                <CheckboxField
+                  name="allowBeginnerNextTermAdvanceBooking"
+                  label="Allow next-term advance booking for beginner intake classes"
+                  checked={s.allowBeginnerNextTermAdvanceBooking}
+                  onChange={(v) =>
+                    setBool("allowBeginnerNextTermAdvanceBooking", v)
+                  }
+                />
+                <p className="-mt-1 ml-6 text-xs text-gray-400">
+                  When enabled, beginner intake classes in the next published
+                  term can be booked before the term starts.
+                </p>
+
+                <div>
+                  <Label
+                    htmlFor="beginnerIntakeBookingWeeks"
+                    className="text-sm"
+                  >
+                    Beginner intake weeks
+                  </Label>
+                  <Input
+                    id="beginnerIntakeBookingWeeks"
+                    name="beginnerIntakeBookingWeeks"
+                    type="number"
+                    min={1}
+                    max={4}
+                    step={1}
+                    value={s.beginnerIntakeBookingWeeks}
+                    onChange={(e) =>
+                      setNum("beginnerIntakeBookingWeeks", e.target.value)
+                    }
+                    className="mt-1 w-32"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Students can only join beginner intake classes during the
+                    first selected number of weeks in a term. Allowed range
+                    1–4. Default 2.
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-2 border-t border-gray-200 pt-4">

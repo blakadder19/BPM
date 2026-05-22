@@ -99,6 +99,31 @@ export async function saveSettings(
     VALID_CLASS_LEVELS.has(l),
   );
 
+  // --- Beginner intake booking window (Phase 1) ---
+  // Only validate when the form section was actually rendered (the
+  // hidden `__beginnerIntakeFormPresent` flag below tells us). When
+  // absent we preserve the persisted value via the merge later so a
+  // partial form submission can't silently disable the gate.
+  const beginnerIntakeFormPresent =
+    formData.get("__beginnerIntakeFormPresent") === "1";
+  let beginnerIntakeBookingWeeks: number | null = null;
+  if (beginnerIntakeFormPresent) {
+    const raw = Number(formData.get("beginnerIntakeBookingWeeks"));
+    if (
+      isNaN(raw) ||
+      !Number.isInteger(raw) ||
+      raw < 1 ||
+      raw > 4
+    ) {
+      return {
+        success: false,
+        settings: getSettings(),
+        error: "Beginner intake weeks must be an integer between 1 and 4",
+      };
+    }
+    beginnerIntakeBookingWeeks = raw;
+  }
+
   // --- Booleans (checkbox: present = "on" = true, absent = false) ---
   const booleanFields = {
     lateCancelPenaltiesEnabled: formData.get("lateCancelPenaltiesEnabled") === "on",
@@ -113,6 +138,14 @@ export async function saveSettings(
     refundCreditOnAbsent: formData.get("refundCreditOnAbsent") === "on",
     allowAdminLateEntryIntoTermBound: formData.get("allowAdminLateEntryIntoTermBound") === "on",
     studentTermSelectionEnabled: formData.get("studentTermSelectionEnabled") === "on",
+    // Phase 1 — beginner intake advance booking. A hidden companion
+    // field (`__beginnerIntakeFormPresent`) is rendered alongside the
+    // checkbox so we can tell "unchecked" apart from "form did not
+    // include this section". When the section is absent we preserve
+    // the existing value via the merge below.
+    allowBeginnerNextTermAdvanceBooking: beginnerIntakeFormPresent
+      ? formData.get("allowBeginnerNextTermAdvanceBooking") === "on"
+      : getSettings().allowBeginnerNextTermAdvanceBooking,
   };
 
   // --- Role balanced style names (multi-checkbox) ---
@@ -139,6 +172,9 @@ export async function saveSettings(
     termPurchaseWindowDays,
     creditDeductionPriority: validatedPriority,
     beginnerLevelNames,
+    ...(beginnerIntakeBookingWeeks !== null
+      ? { beginnerIntakeBookingWeeks }
+      : {}),
   };
 
   const updated = await updateSettings(patch);

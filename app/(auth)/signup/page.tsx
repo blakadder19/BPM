@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 /* eslint-disable @next/next/no-img-element */
@@ -9,6 +9,61 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { provisionCurrentUser } from "@/lib/actions/auth-provision";
+import {
+  maskEmail,
+  emailDomain,
+  newSignupAttemptId,
+  safeRedirectTarget,
+} from "@/lib/utils/auth-diagnostics";
+
+/**
+ * sessionStorage key used to remember the most recent signup attempt
+ * so the "Check your email" waiting screen can still offer Resend
+ * after a hard refresh (the router.replace soft-nav preserves React
+ * state, but a manual reload would clear it). sessionStorage is tab-
+ * scoped and never sent over the network, so a masked email + an
+ * attempt id is the worst that can leak.
+ */
+const SIGNUP_SESSION_KEY = "bpm:signup:lastAttempt";
+
+interface LastSignupAttempt {
+  /** Raw email — needed to call `supabase.auth.resend`. Stored tab-local only. */
+  email: string;
+  attemptId: string;
+  callbackUrl: string;
+}
+
+function readLastSignupAttempt(): LastSignupAttempt | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(SIGNUP_SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<LastSignupAttempt>;
+    if (
+      typeof parsed.email !== "string" ||
+      typeof parsed.attemptId !== "string" ||
+      typeof parsed.callbackUrl !== "string"
+    ) {
+      return null;
+    }
+    return parsed as LastSignupAttempt;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastSignupAttempt(attempt: LastSignupAttempt | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (attempt === null) {
+      window.sessionStorage.removeItem(SIGNUP_SESSION_KEY);
+    } else {
+      window.sessionStorage.setItem(SIGNUP_SESSION_KEY, JSON.stringify(attempt));
+    }
+  } catch {
+    // sessionStorage can throw in privacy modes; non-fatal.
+  }
+}
 
 export default function SignupPage() {
   const router = useRouter();
@@ -19,6 +74,39 @@ export default function SignupPage() {
     searchParams.get("awaiting") === "1"
   );
   const [existingEmail, setExistingEmail] = useState(false);
+  const [lastAttempt, setLastAttempt] = useState<LastSignupAttempt | null>(null);
+
+  // Resend state — kept on the page so it survives the soft nav from
+  // `router.replace("/signup?awaiting=1")`. Cooldown is purely client-
+  // side UX guardrail (Supabase already rate-limits server-side).
+  const [resendPending, setResendPending] = useState(false);
+  const [resendMessage, setResendMessage] = useState<
+    | { kind: "success"; text: string }
+    | { kind: "error"; text: string }
+    | null
+  >(null);
+  const [resendCooldownUntil, setResendCooldownUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Restore the last attempt on mount so a manual reload of
+  // /signup?awaiting=1 still shows the attempt id and enables Resend.
+  useEffect(() => {
+    if (confirmationSent && !lastAttempt) {
+      setLastAttempt(readLastSignupAttempt());
+    }
+  }, [confirmationSent, lastAttempt]);
+
+  // Tick the cooldown countdown.
+  useEffect(() => {
+    if (!resendCooldownUntil) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldownUntil]);
+
+  const cooldownSecondsLeft =
+    resendCooldownUntil && resendCooldownUntil > now
+      ? Math.ceil((resendCooldownUntil - now) / 1000)
+      : 0;
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -57,7 +145,21 @@ export default function SignupPage() {
 
     const supabase = createClient();
     const callbackUrl = `${window.location.origin}/auth/callback?next=/onboarding`;
+    const redirectOrigin = window.location.origin;
+    const attemptId = newSignupAttemptId();
+    const domain = emailDomain(email);
 
+    // ── DIAGNOSTICS — start ────────────────────────────────────
+    // Investigation of the 10–15 min signup-email delay. We log
+    // attempt id + domain + redirect ORIGIN (no full URL → no
+    // token leakage) so support can correlate user reports with
+    // Supabase Auth logs and Brevo transactional logs. The full
+    // email is never logged.
+    console.info(
+      `[signup] start attemptId=${attemptId} emailMasked=${maskEmail(email)} domain=${domain} redirectOrigin=${redirectOrigin} ts=${new Date().toISOString()}`,
+    );
+
+    const _t0 = performance.now();
     const { data, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -74,10 +176,12 @@ export default function SignupPage() {
         },
       },
     });
+    const _t1 = performance.now();
+    const signUpDurationMs = Math.round(_t1 - _t0);
 
     if (authError) {
       console.warn(
-        `[signup] supabase.auth.signUp error code=${authError.code ?? "?"} status=${authError.status ?? "?"} message=${authError.message}`,
+        `[signup] attemptId=${attemptId} supabase.auth.signUp returned ERROR durationMs=${signUpDurationMs} code=${authError.code ?? "?"} status=${authError.status ?? "?"} message=${authError.message}`,
       );
       setError(authError.message);
       setIsPending(false);
@@ -86,10 +190,31 @@ export default function SignupPage() {
 
     // Detect existing email: Supabase returns a user with empty identities
     // when the email is already registered (e.g. admin-created student).
-    if (
-      data.user &&
-      (!data.user.identities || data.user.identities.length === 0)
-    ) {
+    const existingEmailDetected =
+      !!data.user && (!data.user.identities || data.user.identities.length === 0);
+    const hasSession = !!data.session;
+    const hasUser = !!data.user;
+    const confirmationRequired = hasUser && !hasSession && !existingEmailDetected;
+
+    // ── DIAGNOSTICS — result ───────────────────────────────────
+    // This is the single most useful line for the investigation:
+    //   * `durationMs` answers "is Supabase slow to accept the
+    //     signup?" — if it's <2s the bottleneck is downstream
+    //     (SMTP → Brevo → recipient).
+    //   * `confirmationRequired=true` confirms the email path is
+    //     active.
+    //   * `existingEmail=true` explains "I never got an email" —
+    //     no email is generated for an already-registered address.
+    console.info(
+      `[signup] attemptId=${attemptId} supabase.signUp returned durationMs=${signUpDurationMs} hasUser=${hasUser} hasSession=${hasSession} confirmationRequired=${confirmationRequired} existingEmail=${existingEmailDetected} redirectTarget=${safeRedirectTarget(callbackUrl)}`,
+    );
+    if (process.env.NODE_ENV === "development") {
+      console.info(
+        `[perf signup] signUp=${signUpDurationMs}ms attemptId=${attemptId}`,
+      );
+    }
+
+    if (existingEmailDetected) {
       setExistingEmail(true);
       setIsPending(false);
       return;
@@ -98,7 +223,7 @@ export default function SignupPage() {
     // If Supabase returned a session, the user is auto-confirmed
     if (data.session) {
       console.info(
-        "[signup] auto-confirmed (session returned). Email confirmation is OFF in Supabase Auth → Settings.",
+        `[signup] attemptId=${attemptId} auto-confirmed (session returned). Email confirmation is OFF in Supabase Auth → Settings.`,
       );
       await provisionCurrentUser().catch((e) =>
         console.error("[signup] provisionCurrentUser threw:", e)
@@ -108,20 +233,74 @@ export default function SignupPage() {
       return;
     }
 
-    // No session means email confirmation is required. Diagnostic log
-    // is intentionally verbose: when QA reports "I never got the
-    // confirmation email", the very next thing to check is whether
-    // Supabase Auth is configured with custom SMTP (Brevo) AND whether
-    // the redirect URL is in the allow-list.
+    // No session means email confirmation is required.
+    //
+    // The send is handed off to Supabase Auth's SMTP relay (Brevo in
+    // production per supabase/config.toml / Dashboard → Auth → SMTP).
+    // BPM's own BREVO_API_KEY is NOT involved here; do not look in
+    // `lib/communications/email-provider.ts` logs for this email.
+    //
+    // To diagnose a delivery delay after this log line:
+    //   1. Supabase Dashboard → Authentication → Logs — find the
+    //      `signup` event for this user id and check the SMTP send
+    //      status / timestamp.
+    //   2. Brevo Dashboard → Transactional → Logs — search the
+    //      recipient email; check accepted/delivered timestamps.
+    //   See docs/diagnostics/signup-email-delay.md for the full
+    //   triage runbook.
     console.info(
-      `[signup] confirmation email expected: user=${data.user?.id ?? "?"} email=${email} redirect=${callbackUrl}. ` +
-        "Confirmation emails are sent by Supabase Auth (NOT by BPM/BREVO_API_KEY). " +
-        "If no email arrives: configure Custom SMTP under Supabase Dashboard → Authentication → SMTP Settings, " +
-        "and add this origin to Authentication → URL Configuration → Redirect URLs.",
+      `[signup] attemptId=${attemptId} confirmation email expected userId=${data.user?.id ?? "?"} domain=${domain} redirectTarget=${safeRedirectTarget(callbackUrl)}. ` +
+        "Email send is owned by Supabase Auth SMTP (NOT BPM/BREVO_API_KEY). " +
+        "See docs/diagnostics/signup-email-delay.md for triage.",
     );
+
+    const attempt: LastSignupAttempt = { email, attemptId, callbackUrl };
+    writeLastSignupAttempt(attempt);
+    setLastAttempt(attempt);
     setConfirmationSent(true);
     setIsPending(false);
+    setResendCooldownUntil(Date.now() + 60_000);
+    setNow(Date.now());
     router.replace("/signup?awaiting=1");
+  }
+
+  async function handleResend() {
+    if (!lastAttempt) return;
+    if (cooldownSecondsLeft > 0) return;
+    setResendPending(true);
+    setResendMessage(null);
+
+    const supabase = createClient();
+    const _t0 = performance.now();
+    const { error: resendError } = await supabase.auth.resend({
+      type: "signup",
+      email: lastAttempt.email,
+      options: { emailRedirectTo: lastAttempt.callbackUrl },
+    });
+    const _t1 = performance.now();
+    const durationMs = Math.round(_t1 - _t0);
+
+    if (resendError) {
+      console.warn(
+        `[signup] attemptId=${lastAttempt.attemptId} resend ERROR durationMs=${durationMs} code=${resendError.code ?? "?"} status=${resendError.status ?? "?"} message=${resendError.message}`,
+      );
+      setResendMessage({
+        kind: "error",
+        text: resendError.message || "Could not resend right now. Please try again in a minute.",
+      });
+    } else {
+      console.info(
+        `[signup] attemptId=${lastAttempt.attemptId} resend OK durationMs=${durationMs} domain=${emailDomain(lastAttempt.email)} redirectTarget=${safeRedirectTarget(lastAttempt.callbackUrl)}`,
+      );
+      setResendMessage({
+        kind: "success",
+        text: "Confirmation email re-sent. Please check your inbox and spam folder.",
+      });
+    }
+
+    setResendPending(false);
+    setResendCooldownUntil(Date.now() + 60_000);
+    setNow(Date.now());
   }
 
   if (existingEmail) {
@@ -156,24 +335,79 @@ export default function SignupPage() {
   }
 
   if (confirmationSent) {
+    const canResend = !!lastAttempt && !resendPending && cooldownSecondsLeft === 0;
     return (
       <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
         <Card className="w-full max-w-md shadow-xl">
-          <CardContent className="flex flex-col items-center py-12">
+          <CardContent className="flex flex-col items-center py-12 px-6">
             <CheckCircle2 className="h-12 w-12 text-bpm-500" />
             <h2 className="mt-4 text-lg font-semibold text-gray-900">
               Check your email
             </h2>
-            <p className="mt-2 text-center text-sm text-gray-500">
-              We sent a confirmation link to your email address.
-              Click the link to activate your account and start booking classes.
+            <p className="mt-2 text-center text-sm text-gray-600">
+              Please check your email to confirm your account. It can take a
+              few minutes. Please also check spam or promotions.
             </p>
+            {lastAttempt && (
+              <p className="mt-2 text-center text-xs text-gray-400">
+                Sent to {maskEmail(lastAttempt.email)}
+              </p>
+            )}
+
+            {/*
+             * Resend confirmation email. Useful both as a UX safety
+             * net and as a diagnostic — each click emits another
+             * `[signup] resend …` log line we can match against
+             * Supabase Auth logs / Brevo logs to time the next
+             * delivery attempt.
+             *
+             * Cooldown is purely client-side (60s) to keep users
+             * from spamming the button; Supabase still rate-limits
+             * server-side regardless.
+             */}
+            {lastAttempt && (
+              <div className="mt-6 flex w-full flex-col items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={!canResend}
+                  className="w-full"
+                  variant="outline"
+                >
+                  {resendPending
+                    ? "Resending…"
+                    : cooldownSecondsLeft > 0
+                      ? `Resend confirmation email (${cooldownSecondsLeft}s)`
+                      : "Resend confirmation email"}
+                </Button>
+                {resendMessage && (
+                  <p
+                    className={`text-xs text-center ${
+                      resendMessage.kind === "success"
+                        ? "text-green-700"
+                        : "text-red-700"
+                    }`}
+                  >
+                    {resendMessage.text}
+                  </p>
+                )}
+              </div>
+            )}
+
             <Link
               href="/login"
               className="mt-6 text-sm font-medium text-bpm-600 hover:text-bpm-500"
             >
               Back to sign in
             </Link>
+
+            {lastAttempt && (
+              <p className="mt-6 text-center text-[10px] text-gray-400">
+                Reference: <span className="font-mono">{lastAttempt.attemptId}</span>
+                <br />
+                Share this code with support if your email never arrives.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -22,6 +22,7 @@ function rule(overrides: Partial<DiscountRule> = {}): DiscountRule {
     discountValue: 10,
     appliesToProductTypes: null,
     appliesToProductIds: null,
+    appliesToEventProductIds: null,
     minPriceCents: null,
     maxDiscountCents: null,
     isActive: true,
@@ -459,6 +460,142 @@ describe("applyPricing — gates and caps", () => {
     });
     expect(r.finalPriceCents).toBe(0);
     expect(r.totalDiscountCents).toBe(1500);
+  });
+});
+
+// ── Phase 2 — event-ticket scope ──────────────────────────────
+
+const EVENT_TICKET: PricingProduct = {
+  entityKind: "event_product",
+  id: "ep-1",
+  productType: "full_pass",
+  priceCents: 12000,
+};
+
+const OTHER_EVENT_TICKET: PricingProduct = {
+  entityKind: "event_product",
+  id: "ep-2",
+  productType: "single_session",
+  priceCents: 3000,
+};
+
+describe("applyPricing — event-ticket scope (Phase 2)", () => {
+  it("affiliation rule scoped to the event ticket applies to a verified student", () => {
+    const rules = [
+      rule({
+        ruleType: "affiliation",
+        affiliationType: "hse",
+        appliesToEventProductIds: ["ep-1"],
+        discountValue: 20,
+      }),
+    ];
+    const r = applyPricing({
+      product: EVENT_TICKET,
+      now: NOW,
+      rules,
+      studentAffiliations: [affiliation()],
+      firstTimeEligibleByRuleId: {},
+    });
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.totalDiscountCents).toBe(2400);
+    expect(r.finalPriceCents).toBe(9600);
+  });
+
+  it("does NOT apply when the event ticket is outside the rule scope", () => {
+    const rules = [
+      rule({
+        ruleType: "affiliation",
+        affiliationType: "hse",
+        appliesToEventProductIds: ["ep-1"],
+      }),
+    ];
+    const r = applyPricing({
+      product: OTHER_EVENT_TICKET,
+      now: NOW,
+      rules,
+      studentAffiliations: [affiliation()],
+      firstTimeEligibleByRuleId: {},
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(OTHER_EVENT_TICKET.priceCents);
+  });
+
+  it("does NOT apply to events when the rule has no event-ticket scope", () => {
+    const rules = [
+      rule({
+        ruleType: "affiliation",
+        affiliationType: "hse",
+        appliesToEventProductIds: null,
+        appliesToProductTypes: ["membership"],
+      }),
+    ];
+    const r = applyPricing({
+      product: EVENT_TICKET,
+      now: NOW,
+      rules,
+      studentAffiliations: [affiliation()],
+      firstTimeEligibleByRuleId: {},
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(EVENT_TICKET.priceCents);
+  });
+
+  it("does NOT apply when student lacks a verified affiliation (pending)", () => {
+    const rules = [
+      rule({
+        ruleType: "affiliation",
+        affiliationType: "hse",
+        appliesToEventProductIds: ["ep-1"],
+      }),
+    ];
+    const r = applyPricing({
+      product: EVENT_TICKET,
+      now: NOW,
+      rules,
+      studentAffiliations: [affiliation({ verificationStatus: "pending" })],
+      firstTimeEligibleByRuleId: {},
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(EVENT_TICKET.priceCents);
+  });
+
+  it("event-only rule does NOT spill onto subscription products", () => {
+    const rules = [
+      rule({
+        ruleType: "affiliation",
+        affiliationType: "hse",
+        appliesToEventProductIds: ["ep-1"],
+        appliesToProductIds: null,
+        appliesToProductTypes: null,
+      }),
+    ];
+    const r = applyPricing({
+      product: MEMBERSHIP,
+      now: NOW,
+      rules,
+      studentAffiliations: [affiliation()],
+      firstTimeEligibleByRuleId: {},
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(MEMBERSHIP.priceCents);
+  });
+
+  it("first-time rules are NOT applied to event tickets in Phase 2", () => {
+    const rules = [
+      rule({
+        ruleType: "first_time_purchase",
+        appliesToEventProductIds: ["ep-1"],
+      }),
+    ];
+    const r = applyPricing({
+      product: EVENT_TICKET,
+      now: NOW,
+      rules,
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: eligibleFor(rules),
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(EVENT_TICKET.priceCents);
   });
 });
 

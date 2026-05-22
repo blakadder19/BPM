@@ -23,6 +23,7 @@ export type NavIconKey =
   | "penalties"
   | "finance"
   | "affiliations"
+  | "referrals"
   | "discountRules"
   | "broadcasts"
   | "studioHire"
@@ -68,6 +69,7 @@ export const NAVIGATION: NavItem[] = [
   { name: "Penalties", href: "/penalties", iconKey: "penalties", roles: ["admin"] },
   { name: "Finance", href: "/finance", iconKey: "finance", roles: ["admin"], permission: ["finance:view", "payments:view", "payments:view_limited"] },
   { name: "Affiliations", href: "/affiliations", iconKey: "affiliations", roles: ["admin"], permission: "affiliations:view" },
+  { name: "Referrals", href: "/referrals", iconKey: "referrals", roles: ["admin"], permission: "referrals:view" },
   { name: "Discount Rules", href: "/discount-rules", iconKey: "discountRules", roles: ["admin"], permission: "discounts:view" },
   { name: "Broadcasts", href: "/broadcasts", iconKey: "broadcasts", roles: ["admin"] },
   { name: "Studio Hire", href: "/studio-hire", iconKey: "studioHire", roles: ["admin"] },
@@ -135,6 +137,7 @@ const ROUTE_ACCESS: { prefix: string; roles: UserRole[] }[] = [
   { prefix: "/products", roles: ["admin", "teacher"] },
   { prefix: "/penalties", roles: ["admin"] },
   { prefix: "/affiliations", roles: ["admin", "teacher"] },
+  { prefix: "/referrals", roles: ["admin", "teacher"] },
   { prefix: "/discount-rules", roles: ["admin", "teacher"] },
   { prefix: "/broadcasts", roles: ["admin"] },
   { prefix: "/studio-hire", roles: ["admin"] },

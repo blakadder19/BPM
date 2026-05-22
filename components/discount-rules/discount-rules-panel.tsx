@@ -52,6 +52,7 @@ interface RuleRow {
   discountValue: number;
   appliesToProductTypes: ProductType[] | null;
   appliesToProductIds: string[] | null;
+  appliesToEventProductIds: string[] | null;
   minPriceCents: number | null;
   maxDiscountCents: number | null;
   isActive: boolean;
@@ -67,6 +68,15 @@ interface ProductRow {
   id: string;
   name: string;
   productType: ProductType;
+  priceCents: number;
+}
+
+interface EventProductRow {
+  id: string;
+  name: string;
+  eventTitle: string;
+  eventId: string;
+  productType: string;
   priceCents: number;
 }
 
@@ -91,6 +101,7 @@ export interface DiscountRulesPanelPermissions {
 interface PanelProps {
   rules: RuleRow[];
   products: ProductRow[];
+  eventProducts: EventProductRow[];
   students: StudentRow[];
   verifiedAffiliationCounts: Record<string, number>;
   permissions: DiscountRulesPanelPermissions;
@@ -142,12 +153,15 @@ function isWithinWindow(rule: RuleRow, nowIso: string): boolean {
 function ScopeCell({
   rule,
   products,
+  eventProducts,
 }: {
   rule: RuleRow;
   products: ProductRow[];
+  eventProducts: EventProductRow[];
 }) {
   const types = rule.appliesToProductTypes ?? [];
   const productIds = rule.appliesToProductIds ?? [];
+  const eventProductIds = rule.appliesToEventProductIds ?? [];
   // For first-time rules with a "selected_products" scope we surface
   // the scope chip even when no `appliesTo*` restriction is set —
   // otherwise the table reads as "All products" which is misleading.
@@ -157,7 +171,10 @@ function ScopeCell({
       ? (rule.firstTimeProductIds?.length ?? 0)
       : 0;
   const isAll =
-    types.length === 0 && productIds.length === 0 && firstTimeScopeChip === 0;
+    types.length === 0 &&
+    productIds.length === 0 &&
+    eventProductIds.length === 0 &&
+    firstTimeScopeChip === 0;
 
   if (isAll) {
     return (
@@ -172,17 +189,26 @@ function ScopeCell({
   const productNames = productIds.map(
     (id) => products.find((p) => p.id === id)?.name ?? id,
   );
+  const eventProductLabels = eventProductIds.map((id) => {
+    const ep = eventProducts.find((p) => p.id === id);
+    return ep ? `${ep.eventTitle} — ${ep.name}` : id;
+  });
   const tooltip = [
     types.length > 0
       ? `Types: ${types.map((t) => PRODUCT_TYPE_LABELS[t]).join(", ")}`
       : null,
     productNames.length > 0 ? `Products: ${productNames.join(", ")}` : null,
+    eventProductLabels.length > 0
+      ? `Event tickets: ${eventProductLabels.join(", ")}`
+      : null,
   ]
     .filter(Boolean)
     .join("\n");
 
   const visibleProducts = productNames.slice(0, 2);
   const extraProducts = productNames.length - visibleProducts.length;
+  const visibleEvents = eventProductLabels.slice(0, 2);
+  const extraEvents = eventProductLabels.length - visibleEvents.length;
 
   return (
     <div
@@ -228,6 +254,24 @@ function ScopeCell({
           )}
         </div>
       )}
+      {eventProductLabels.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {visibleEvents.map((label) => (
+            <span
+              key={label}
+              className="inline-flex max-w-[220px] items-center truncate rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700"
+              title={label}
+            >
+              Event: {label}
+            </span>
+          ))}
+          {extraEvents > 0 && (
+            <span className="inline-flex items-center rounded-full bg-purple-200 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+              +{extraEvents} more event ticket{extraEvents === 1 ? "" : "s"}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -237,6 +281,7 @@ function ScopeCell({
 export function DiscountRulesPanel({
   rules,
   products,
+  eventProducts,
   students,
   verifiedAffiliationCounts,
   permissions,
@@ -428,7 +473,11 @@ export function DiscountRulesPanel({
                   )}
                 </Td>
                 <Td className="align-top text-xs text-gray-600">
-                  <ScopeCell rule={r} products={products} />
+                  <ScopeCell
+                    rule={r}
+                    products={products}
+                    eventProducts={eventProducts}
+                  />
                 </Td>
                 <Td>
                   <Badge variant={r.stackable ? "success" : "neutral"}>
@@ -517,6 +566,7 @@ export function DiscountRulesPanel({
         <RuleEditor
           rule={editorRule}
           products={products}
+          eventProducts={eventProducts}
           students={students}
           onClose={() => setEditorOpen(false)}
           onError={(msg) => setActionError(msg)}
@@ -531,12 +581,14 @@ export function DiscountRulesPanel({
 function RuleEditor({
   rule,
   products,
+  eventProducts,
   students,
   onClose,
   onError,
 }: {
   rule: RuleRow | null;
   products: ProductRow[];
+  eventProducts: EventProductRow[];
   students: StudentRow[];
   onClose: () => void;
   onError: (msg: string | null) => void;
@@ -575,6 +627,13 @@ function RuleEditor({
   );
   const [appliesToIds, setAppliesToIds] = useState<Set<string>>(
     new Set(rule?.appliesToProductIds ?? []),
+  );
+  // Phase 2 — event-ticket scope (only meaningful for affiliation
+  // rules). We always keep the selection in state so toggling rule
+  // type back to "first_time_purchase" and then back to "affiliation"
+  // does not silently drop the admin's choices.
+  const [appliesToEventIds, setAppliesToEventIds] = useState<Set<string>>(
+    new Set(rule?.appliesToEventProductIds ?? []),
   );
   // First-time eligibility scope. Only applies when
   // ruleType === "first_time_purchase"; ignored otherwise but kept in
@@ -646,6 +705,10 @@ function RuleEditor({
         ruleType === "first_time_purchase" &&
         firstTimeScope === "selected_products"
           ? [...firstTimeProductIds]
+          : null,
+      appliesToEventProductIds:
+        ruleType === "affiliation" && appliesToEventIds.size > 0
+          ? [...appliesToEventIds]
           : null,
     };
   }
@@ -956,8 +1019,8 @@ function RuleEditor({
           </Field>
 
           <Field
-            label="Applies to specific products (optional)"
-            hint="Leave empty to apply to every product matching the type filter above"
+            label="Applies to products (memberships, passes, drop-ins)"
+            hint="Leave empty to apply to every product matching the type filter above. Event tickets are configured separately below."
           >
             <div className="max-h-40 overflow-y-auto rounded border border-gray-200 px-2 py-1">
               {products.length === 0 ? (
@@ -989,6 +1052,63 @@ function RuleEditor({
               )}
             </div>
           </Field>
+
+          {ruleType === "affiliation" && (
+            <div className="rounded-md border border-purple-200 bg-purple-50/50 px-4 py-3 space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-purple-900">
+                  Applies to event tickets (optional)
+                </h3>
+                <p className="mt-1 text-xs text-purple-800/80">
+                  Select specific event tickets this affiliation discount
+                  should apply to. Leave all unchecked to keep the rule
+                  scoped to products only. Event-ticket scope is independent
+                  of the product scope above — a rule may target both.
+                </p>
+                <p className="mt-1 text-xs text-purple-800/80">
+                  {appliesToEventIds.size > 0
+                    ? `${appliesToEventIds.size} event ticket${
+                        appliesToEventIds.size === 1 ? "" : "s"
+                      } selected.`
+                    : "No event tickets selected — rule will not apply to events."}
+                </p>
+              </div>
+              <div className="max-h-48 overflow-y-auto rounded border border-purple-200 bg-white px-2 py-1">
+                {eventProducts.length === 0 ? (
+                  <p className="text-xs text-gray-500 italic py-1.5">
+                    No event tickets available. Create an event with at
+                    least one ticket first.
+                  </p>
+                ) : (
+                  eventProducts.map((p) => (
+                    <label
+                      key={p.id}
+                      className="flex items-center gap-2 py-1 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={appliesToEventIds.has(p.id)}
+                        onChange={(e) => {
+                          const next = new Set(appliesToEventIds);
+                          if (e.target.checked) next.add(p.id);
+                          else next.delete(p.id);
+                          setAppliesToEventIds(next);
+                        }}
+                      />
+                      <span className="flex-1">
+                        <span className="text-gray-600">{p.eventTitle}</span>
+                        <span className="text-gray-400"> — </span>
+                        <span className="font-medium">{p.name}</span>
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {formatCents(p.priceCents)}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Min basket (€, optional)">
@@ -1053,7 +1173,12 @@ function RuleEditor({
           </div>
 
           <div className="border-t pt-4">
-            <PreviewPanel students={students} products={products} input={inputForPreview} />
+            <PreviewPanel
+              students={students}
+              products={products}
+              eventProducts={eventProducts}
+              input={inputForPreview}
+            />
           </div>
           </div>
           {/* /scrollable body */}
@@ -1116,21 +1241,31 @@ function Field({
 function PreviewPanel({
   students,
   products,
+  eventProducts,
   input,
 }: {
   students: StudentRow[];
   products: ProductRow[];
+  eventProducts: EventProductRow[];
   input: DiscountRuleInput | null;
 }) {
   const [studentId, setStudentId] = useState("");
-  const [productId, setProductId] = useState("");
+  // Encode the target as `"product:<id>"` or `"event:<id>"` so a single
+  // <select> can offer both choices without losing type info.
+  const [targetKey, setTargetKey] = useState("");
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<DiscountRulePreviewResult | null>(null);
 
   async function run() {
     setRunning(true);
     try {
-      const r = await previewDiscountRuleAction({ studentId, productId });
+      const isEvent = targetKey.startsWith("event:");
+      const id = targetKey.split(":", 2)[1] ?? "";
+      const r = await previewDiscountRuleAction(
+        isEvent
+          ? { studentId, eventProductId: id }
+          : { studentId, productId: id },
+      );
       setResult(r);
     } finally {
       setRunning(false);
@@ -1163,18 +1298,31 @@ function PreviewPanel({
             ))}
           </select>
         </Field>
-        <Field label="Product">
+        <Field label="Product or event ticket">
           <select
-            value={productId}
-            onChange={(e) => setProductId(e.target.value)}
+            value={targetKey}
+            onChange={(e) => setTargetKey(e.target.value)}
             className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
           >
-            <option value="">Select product…</option>
-            {products.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({formatCents(p.priceCents)})
-              </option>
-            ))}
+            <option value="">Select…</option>
+            {products.length > 0 && (
+              <optgroup label="Products">
+                {products.map((p) => (
+                  <option key={p.id} value={`product:${p.id}`}>
+                    {p.name} ({formatCents(p.priceCents)})
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {eventProducts.length > 0 && (
+              <optgroup label="Event tickets">
+                {eventProducts.map((p) => (
+                  <option key={p.id} value={`event:${p.id}`}>
+                    {p.eventTitle} — {p.name} ({formatCents(p.priceCents)})
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </Field>
         <Field label=" ">
@@ -1182,7 +1330,7 @@ function PreviewPanel({
             type="button"
             size="sm"
             variant="outline"
-            disabled={!studentId || !productId || running}
+            disabled={!studentId || !targetKey || running}
             onClick={run}
           >
             {running ? <Loader2 className="size-4 animate-spin" /> : <FlaskConical className="size-4" />}

@@ -21,6 +21,7 @@ import { AdminEventDetail } from "@/components/events/admin-event-detail";
 import { StudentEventDetail } from "@/components/events/student-event-detail";
 import { isStripeEnabled } from "@/lib/stripe";
 import { hasActiveMembership } from "@/lib/domain/active-membership";
+import { shouldShowEventToStudent } from "@/lib/domain/event-visibility";
 
 export default async function EventDetailPage({
   params,
@@ -45,7 +46,9 @@ export default async function EventDetailPage({
   if (user.role === "student") {
     const cocDone = await cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version);
     if (!cocDone) redirect("/onboarding");
-    if (event.status !== "published" || !event.isVisible) notFound();
+    // Phase 4: shouldShowEventToStudent additionally excludes archived
+    // events. Direct URL access to an archived event 404s.
+    if (!shouldShowEventToStudent(event)) notFound();
     const [myPurchases, mySubs] = await Promise.all([
       cachedGetStudentEventPurchases(user.id),
       cachedGetStudentSubs(user.id),

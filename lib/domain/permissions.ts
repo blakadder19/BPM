@@ -78,6 +78,13 @@ export const PERMISSION_KEYS = [
   "affiliations:delete",
   "affiliations:verify",
 
+  // Referrals (Phase 3 — referral programme MVP)
+  "referrals:view",
+  "referrals:create",
+  "referrals:verify",
+  "referrals:reward",
+  "referrals:cancel",
+
   // Events
   "events:view",
   "events:create",
@@ -142,6 +149,7 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "payments:refund",
   "discounts:edit",
   "discounts:delete",
+  "referrals:reward",
 ];
 
 const SENSITIVE_SET: ReadonlySet<string> = new Set(SENSITIVE_PERMISSIONS);
@@ -216,6 +224,11 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
     "affiliations:create",
     "affiliations:edit",
     "affiliations:verify",
+    "referrals:view",
+    "referrals:create",
+    "referrals:verify",
+    "referrals:reward",
+    "referrals:cancel",
     "events:view",
     "events:create",
     "events:edit",
@@ -246,6 +259,9 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
     "checkin:manual_checkin",
     "payments:view_limited",
     "payments:mark_paid_reception",
+    "referrals:view",
+    "referrals:create",
+    "referrals:verify",
   ],
 
   teacher: [
@@ -271,6 +287,7 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
     "products:view",
     "discounts:view",
     "affiliations:view",
+    "referrals:view",
     "events:view",
     "classes:view",
     "teachers:view",
@@ -446,6 +463,17 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "affiliations:edit", label: "Edit affiliations" },
       { key: "affiliations:delete", label: "Delete affiliations" },
       { key: "affiliations:verify", label: "Verify / reject / expire affiliations" },
+    ],
+  },
+  {
+    key: "referrals",
+    label: "Referrals",
+    permissions: [
+      { key: "referrals:view", label: "View referrals and rewards" },
+      { key: "referrals:create", label: "Add referrals (manual entry)" },
+      { key: "referrals:verify", label: "Verify or reject referrals" },
+      { key: "referrals:reward", label: "Create / approve / apply referral rewards", description: "Sensitive — rewards translate into discounts on future memberships." },
+      { key: "referrals:cancel", label: "Cancel rewards or delete referrals" },
     ],
   },
   {

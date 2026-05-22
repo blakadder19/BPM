@@ -200,4 +200,59 @@ describe("isSensitivePermission", () => {
     expect(isSensitivePermission("students:view")).toBe(false);
     expect(isSensitivePermission("finance:view")).toBe(false);
   });
+
+  it("flags referrals:reward as sensitive (manual money handling)", () => {
+    expect(isSensitivePermission("referrals:reward")).toBe(true);
+  });
+});
+
+describe("referral permissions", () => {
+  it("are all present in PERMISSION_KEYS", () => {
+    for (const k of [
+      "referrals:view",
+      "referrals:create",
+      "referrals:verify",
+      "referrals:reward",
+      "referrals:cancel",
+    ] as Permission[]) {
+      expect(isPermissionKey(k)).toBe(true);
+    }
+  });
+
+  it("admin preset includes all referral perms", () => {
+    const set = expandPermissions("admin", null);
+    for (const k of [
+      "referrals:view",
+      "referrals:create",
+      "referrals:verify",
+      "referrals:reward",
+      "referrals:cancel",
+    ] as Permission[]) {
+      expect(set.has(k)).toBe(true);
+    }
+  });
+
+  it("front_desk preset includes view+create+verify, NOT reward/cancel", () => {
+    const set = expandPermissions("front_desk", null);
+    expect(set.has("referrals:view")).toBe(true);
+    expect(set.has("referrals:create")).toBe(true);
+    expect(set.has("referrals:verify")).toBe(true);
+    expect(set.has("referrals:reward")).toBe(false);
+    expect(set.has("referrals:cancel")).toBe(false);
+  });
+
+  it("read_only sees referrals but cannot mutate", () => {
+    const set = expandPermissions("read_only", null);
+    expect(set.has("referrals:view")).toBe(true);
+    expect(set.has("referrals:create")).toBe(false);
+    expect(set.has("referrals:verify")).toBe(false);
+    expect(set.has("referrals:reward")).toBe(false);
+    expect(set.has("referrals:cancel")).toBe(false);
+  });
+
+  it("teacher has no referral perms", () => {
+    const set = expandPermissions("teacher", null);
+    expect(set.has("referrals:view")).toBe(false);
+    expect(set.has("referrals:create")).toBe(false);
+  });
 });

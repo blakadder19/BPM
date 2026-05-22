@@ -31,6 +31,8 @@ import {
   Mail,
   Send,
   Undo2,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminTable, Td } from "@/components/ui/admin-table";
@@ -56,6 +58,8 @@ import { markEventPurchasePaidAction, refundEventPurchaseAction } from "@/lib/ac
 import { resendEventPurchaseEmailAction, sendEventReminderAction } from "@/lib/actions/event-emails";
 import {
   updateEventAction,
+  archiveEventAction,
+  unarchiveEventAction,
   createSessionAction,
   updateSessionAction,
   deleteSessionAction,
@@ -63,6 +67,7 @@ import {
   updateEventProductAction,
   deleteEventProductAction,
 } from "@/lib/actions/special-events";
+import { isEventPast } from "@/lib/domain/event-visibility";
 import type {
   MockSpecialEvent,
   MockEventSession,
@@ -158,6 +163,8 @@ export function AdminEventDetail({
   const [showEditEvent, setShowEditEvent] = useState(false);
   const [showAnnouncement, setShowAnnouncement] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [archivePending, startArchiveTransition] = useTransition();
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   const isPublicReady = event.isPublic && event.status === "published";
   const publicPath = `/event/${event.id}`;
@@ -335,9 +342,49 @@ export function AdminEventDetail({
                     <Pencil className="h-3.5 w-3.5" /> Edit
                   </button>
                 )}
+                {permissions.canEdit && (
+                  <button
+                    onClick={() => {
+                      setArchiveError(null);
+                      startArchiveTransition(async () => {
+                        const action = event.archivedAt
+                          ? unarchiveEventAction
+                          : archiveEventAction;
+                        const result = await action(event.id);
+                        if (!result.success) {
+                          setArchiveError(result.error ?? "Action failed.");
+                          return;
+                        }
+                        router.refresh();
+                      });
+                    }}
+                    disabled={archivePending}
+                    title={
+                      event.archivedAt
+                        ? "Restore this event so it can appear on public surfaces again."
+                        : "Hide this event from public surfaces (students, /event/[id]) while keeping all purchases, payments, check-ins and finance records intact."
+                    }
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {event.archivedAt ? (
+                      <>
+                        <ArchiveRestore className="h-3.5 w-3.5" /> Unarchive
+                      </>
+                    ) : (
+                      <>
+                        <Archive className="h-3.5 w-3.5" /> Archive
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             }
           />
+          {archiveError && (
+            <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+              {archiveError}
+            </div>
+          )}
         </div>
       </div>
 
@@ -364,12 +411,27 @@ export function AdminEventDetail({
           <div className="p-5 space-y-3 flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={event.status} />
+              {event.archivedAt && (
+                <Badge variant="neutral" title={`Archived on ${new Date(event.archivedAt).toLocaleString()} — hidden from public surfaces`}>
+                  <Archive className="h-3 w-3 mr-0.5" /> Archived
+                </Badge>
+              )}
+              {isEventPast(event) && !event.archivedAt && (
+                <Badge variant="muted">Past</Badge>
+              )}
               {event.isFeatured && <Badge variant="warning"><Star className="h-3 w-3 mr-0.5 fill-current" /> Featured in listings</Badge>}
               {event.isVisible ? <Badge variant="success"><Eye className="h-3 w-3 mr-0.5" /> Visible</Badge> : <Badge variant="default"><EyeOff className="h-3 w-3 mr-0.5" /> Hidden</Badge>}
               {event.salesOpen && <Badge variant="success"><ShoppingCart className="h-3 w-3 mr-0.5" /> Sales open</Badge>}
               {event.featuredOnDashboard && <Badge variant="info"><LayoutDashboard className="h-3 w-3 mr-0.5" /> On student dashboard</Badge>}
               {event.isPublic && <Badge variant="info"><Globe className="h-3 w-3 mr-0.5" /> Public</Badge>}
             </div>
+            {event.archivedAt && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                This event is archived and hidden from students and the public
+                page. All purchases, payments, check-ins and finance records
+                remain intact. Use Unarchive above to restore public visibility.
+              </div>
+            )}
             <div className="grid sm:grid-cols-2 gap-3 text-sm">
               <div><span className="text-gray-500">When:</span> {formatEventDateRange(event.startDate, event.endDate)}</div>
               <div><span className="text-gray-500">Location:</span> {event.location || "—"}</div>

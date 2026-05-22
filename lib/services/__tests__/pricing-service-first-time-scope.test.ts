@@ -175,6 +175,7 @@ function beginnersRule(): MockDiscountRule {
     discountValue: 10,
     appliesToProductTypes: null,
     appliesToProductIds: ["p-beginners"],
+    appliesToEventProductIds: null,
     minPriceCents: null,
     maxDiscountCents: null,
     isActive: true,

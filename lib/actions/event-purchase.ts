@@ -10,6 +10,12 @@ import { sendPaymentConfirmationEmail } from "@/lib/actions/event-emails";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { logFinanceEvent, type AuditPerformer } from "@/lib/services/finance-audit-log";
 import { studentHasActiveMembership } from "@/lib/domain/active-membership";
+import {
+  buildAuditDiscountMetadata,
+  priceEventTicketForStudent,
+  type FrozenPricing,
+} from "@/lib/services/pricing-service";
+import type { AppliedDiscountSnapshot } from "@/lib/domain/pricing-engine";
 
 const MEMBERS_ONLY_BLOCKED_MESSAGE = "This ticket is only available to active members.";
 const MEMBERS_ONLY_GUEST_MESSAGE = "This ticket is only available to active members. Please log in with your member account to purchase.";
@@ -50,6 +56,65 @@ function buildFinancialSnapshot(product: { priceCents: number; name: string; pro
     currency: "eur",
     productNameSnapshot: product.name,
     productTypeSnapshot: product.productType,
+    appliedDiscount: null as AppliedDiscountSnapshot | null,
+  };
+}
+
+/**
+ * Phase 2 — discount-aware snapshot built from a frozen pricing result.
+ * Use this on every code path that actually creates an event purchase
+ * row for a logged-in student so the row, the audit log, and the
+ * downstream finance view all agree on the final amount.
+ *
+ * `final` is the amount the customer actually pays (cents). When `isPaid`
+ * is true that amount is mirrored into `paidAmountCents`; for "pending"
+ * pay-at-reception rows we keep 0 there so the existing
+ * `markEventPurchasePaidAction` flow continues to derive
+ * `paidAmountCents` as `original − discount`.
+ */
+function buildPricedFinancialSnapshot(
+  product: { name: string; productType: string },
+  pricing: {
+    basePriceCents: number;
+    totalDiscountCents: number;
+    finalPriceCents: number;
+    snapshot: AppliedDiscountSnapshot | null;
+  },
+  isPaid: boolean,
+) {
+  return {
+    unitPriceCentsAtPurchase: pricing.basePriceCents,
+    originalAmountCents: pricing.basePriceCents,
+    discountAmountCents: pricing.totalDiscountCents,
+    paidAmountCents: isPaid ? pricing.finalPriceCents : 0,
+    currency: "eur",
+    productNameSnapshot: product.name,
+    productTypeSnapshot: product.productType,
+    appliedDiscount: pricing.snapshot,
+  };
+}
+
+/**
+ * Rehydrate a financial snapshot from a frozen Stripe-metadata pricing
+ * payload. Falls back to the live product price when the session carried
+ * no pricing snapshot (e.g. older sessions, or full-price purchases
+ * that never went through the engine).
+ */
+function buildFinancialSnapshotFromFrozen(
+  product: { priceCents: number; name: string; productType: string },
+  frozen: FrozenPricing | null,
+  isPaid: boolean,
+) {
+  if (!frozen) return buildFinancialSnapshot(product, isPaid);
+  return {
+    unitPriceCentsAtPurchase: frozen.basePriceCents,
+    originalAmountCents: frozen.basePriceCents,
+    discountAmountCents: frozen.totalDiscountCents,
+    paidAmountCents: isPaid ? frozen.finalPriceCents : 0,
+    currency: "eur",
+    productNameSnapshot: product.name,
+    productTypeSnapshot: product.productType,
+    appliedDiscount: frozen.snapshot,
   };
 }
 
@@ -99,17 +164,53 @@ export async function createEventPurchaseAction(input: {
     }
   }
 
+  // Server-side pricing: BPM is the source of truth for the final
+  // amount. The customer sees this on the pending purchase row and the
+  // admin sees it when marking the purchase paid at reception.
+  const pricing = await priceEventTicketForStudent({
+    studentId: user.id,
+    product: {
+      id: product.id,
+      productType: product.productType,
+      priceCents: product.priceCents,
+    },
+  });
+
+  const snapshot = buildPricedFinancialSnapshot(product, pricing, false);
+
   const result = await createPurchase({
     studentId: user.id,
     eventProductId: input.eventProductId,
     eventId: input.eventId,
     paymentMethod: "manual",
     paymentStatus: "pending",
-    ...buildFinancialSnapshot(product, false),
+    ...snapshot,
   });
 
   if (result.success) {
     revalidateEventPaths(input.eventId);
+
+    if (pricing.totalDiscountCents > 0 && result.data) {
+      try {
+        logFinanceEvent({
+          entityType: "event_purchase",
+          entityId: result.data,
+          action: "created",
+          performer: performerFromUser(user),
+          detail: `Discounted event ticket pending: ${product.name}`,
+          newValue: centsToEuros(pricing.finalPriceCents),
+          metadata: {
+            ...(buildAuditDiscountMetadata(pricing) ?? {}),
+            kind: "event_purchase_discounted",
+          },
+        });
+      } catch (e) {
+        console.warn(
+          "[event-purchase] failed to log discount metadata:",
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
 
     sendEventPurchaseEmail({
       studentId: user.id,
@@ -118,7 +219,7 @@ export async function createEventPurchaseAction(input: {
       eventId: input.eventId,
       productName: product.name,
       productType: product.productType,
-      priceLabel: centsToEuros(product.priceCents),
+      priceLabel: centsToEuros(pricing.finalPriceCents),
       paymentStatus: "pending",
       inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
       coverImageUrl: event.coverImageUrl ?? undefined,
@@ -325,11 +426,24 @@ export async function fulfillEventPurchase(
   const alreadyFulfilled = existing.find((p) => p.paymentReference === paymentRef);
   if (alreadyFulfilled) return { success: true };
 
+  // Rehydrate the frozen pricing snapshot the checkout action stuffed
+  // into Stripe metadata. This is what makes pricing tamper-proof: the
+  // webhook NEVER re-runs the engine — it persists exactly what was
+  // calculated when the session was opened, even if the rule was
+  // edited or deleted in the interim.
+  const { deserializePricingFromStripe } = await import("@/lib/services/pricing-service");
+  const rawPricing = metadata.bpm_pricing_snapshot;
+  const frozen = rawPricing ? await deserializePricingFromStripe(rawPricing) : null;
+
   const [event, product, student] = await Promise.all([
     repo.getEventById(eventId).catch(() => null),
     repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
     import("@/lib/repositories").then((m) => m.getStudentRepo().getById(studentId)).catch(() => null),
   ]);
+
+  const snapshot = product
+    ? buildFinancialSnapshotFromFrozen(product, frozen, true)
+    : {};
 
   const result = await createPurchase({
     studentId,
@@ -339,12 +453,15 @@ export async function fulfillEventPurchase(
     paymentStatus: "paid",
     paymentReference: paymentRef,
     paidAt: new Date().toISOString(),
-    ...(product ? buildFinancialSnapshot(product, true) : {}),
+    ...snapshot,
   });
 
   if (result.success) {
     try {
       if (product) {
+        const paidLabel = centsToEuros(
+          frozen?.finalPriceCents ?? product.priceCents,
+        );
         sendEventPurchaseEmail({
           studentId,
           studentName: student?.fullName ?? "Student",
@@ -352,11 +469,33 @@ export async function fulfillEventPurchase(
           eventId,
           productName: product.name,
           productType: product.productType,
-          priceLabel: centsToEuros(product.priceCents),
+          priceLabel: paidLabel,
           paymentStatus: "paid",
           inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
           coverImageUrl: event?.coverImageUrl ?? undefined,
         }).catch((err) => console.warn("[event-purchase] Failed to send Stripe purchase email:", err));
+
+        if (frozen && frozen.totalDiscountCents > 0 && result.data) {
+          try {
+            logFinanceEvent({
+              entityType: "event_purchase",
+              entityId: result.data,
+              action: "created",
+              detail: `Stripe session ${sessionId} fulfilled with discount`,
+              newValue: paidLabel,
+              metadata: {
+                ...(buildAuditDiscountMetadata(frozen) ?? {}),
+                kind: "event_purchase_discounted",
+                source: "stripe_webhook",
+              },
+            });
+          } catch (e) {
+            console.warn(
+              "[event-purchase] failed to log webhook discount metadata:",
+              e instanceof Error ? e.message : e,
+            );
+          }
+        }
       }
     } catch (err) { console.warn("[event-purchase] Failed to resolve purchase email data:", err); }
   }

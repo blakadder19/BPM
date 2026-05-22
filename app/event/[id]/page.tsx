@@ -3,6 +3,7 @@ import { getSpecialEventRepo } from "@/lib/repositories";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { isStripeEnabled } from "@/lib/stripe";
 import { PublicEventPage } from "@/components/events/public-event-page";
+import { shouldShowEventOnPublicPage } from "@/lib/domain/event-visibility";
 
 export default async function PublicEventRoute({
   params,
@@ -18,7 +19,9 @@ export default async function PublicEventRoute({
   const repo = getSpecialEventRepo();
   const event = await repo.getEventById(id);
 
-  if (!event || event.status !== "published" || !event.isPublic) {
+  // Phase 4: shouldShowEventOnPublicPage additionally excludes
+  // archived events. Direct URL access to an archived event 404s.
+  if (!event || !shouldShowEventOnPublicPage(event)) {
     notFound();
   }
 

@@ -59,6 +59,7 @@ function toEvent(r: any): MockSpecialEvent {
     salesOpen: r.sales_open,
     overallCapacity: r.overall_capacity ?? null,
     allowReceptionPayment: r.allow_reception_payment ?? false,
+    archivedAt: r.archived_at ?? null,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -122,6 +123,7 @@ function toPurchase(r: any): MockEventPurchase {
     currency: r.currency ?? null,
     productNameSnapshot: r.product_name_snapshot ?? null,
     productTypeSnapshot: r.product_type_snapshot ?? null,
+    appliedDiscount: r.applied_discount ?? null,
     checkedInAt: r.checked_in_at ?? null,
     checkedInBy: r.checked_in_by ?? null,
     refundedAt: r.refunded_at ?? null,
@@ -173,6 +175,7 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
         sales_open: input.salesOpen ?? false,
         overall_capacity: input.overallCapacity ?? null,
         allow_reception_payment: input.allowReceptionPayment ?? false,
+        archived_at: input.archivedAt ?? null,
       } as never)
       .select()
       .single();
@@ -198,6 +201,7 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     if (patch.salesOpen !== undefined) fields.sales_open = patch.salesOpen;
     if (patch.overallCapacity !== undefined) fields.overall_capacity = patch.overallCapacity;
     if (patch.allowReceptionPayment !== undefined) fields.allow_reception_payment = patch.allowReceptionPayment;
+    if (patch.archivedAt !== undefined) fields.archived_at = patch.archivedAt;
     if (Object.keys(fields).length === 0) return this.getEventById(id);
     const { error } = await sb.from("special_events").update(fields as never).eq("id", id);
     if (error) throw new Error(error.message);
@@ -388,6 +392,7 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
         currency: input.currency ?? "eur",
         product_name_snapshot: input.productNameSnapshot ?? null,
         product_type_snapshot: input.productTypeSnapshot ?? null,
+        applied_discount: input.appliedDiscount ?? null,
       } as never)
       .select()
       .single();

@@ -24,6 +24,7 @@ import type { IAffiliationRepository } from "./interfaces/affiliation-repository
 import type { IDiscountRuleRepository } from "./interfaces/discount-rule-repository";
 import type { IDiscountClaimRepository } from "./interfaces/discount-claim-repository";
 import type { IStaffRepository } from "./interfaces/staff-repository";
+import type { IReferralRepository } from "./interfaces/referral-repository";
 
 import { memorySettingsRepo } from "./memory/settings-repository";
 import { memoryBookingRepo } from "./memory/booking-repository";
@@ -171,5 +172,13 @@ export function getStaffRepo(): IStaffRepository {
   return resolveRepo(memoryStaffRepo, () => {
     const { supabaseStaffRepo } = require("./supabase/staff-repository");
     return supabaseStaffRepo;
+  });
+}
+
+export function getReferralRepo(): IReferralRepository {
+  const { memoryReferralRepo } = require("./memory/referral-repository");
+  return resolveRepo(memoryReferralRepo, () => {
+    const { supabaseReferralRepo } = require("./supabase/referral-repository");
+    return supabaseReferralRepo;
   });
 }
