@@ -83,6 +83,8 @@ export interface AdminDashboardData {
   partnerClasses: DashboardClassSummary[];
   attendanceTotals: { present: number; late: number; absent: number; excused: number };
   attendanceTotal: number;
+  /** Rolling window (in days) used to scope `attendanceTotals`. */
+  attendanceWindowDays: number;
   byWeekday: number[];
   maxWeekday: number;
   subsByType: Record<string, number>;
@@ -190,6 +192,7 @@ export function AdminDashboard({ data }: { data: AdminDashboardData }) {
         <AttendanceSummaryCard
           totals={d.attendanceTotals}
           total={d.attendanceTotal}
+          windowDays={d.attendanceWindowDays}
         />
       </div>
 
@@ -470,9 +473,11 @@ function RoleBalanceCard({ classes }: { classes: DashboardClassSummary[] }) {
 function AttendanceSummaryCard({
   totals,
   total,
+  windowDays,
 }: {
   totals: { present: number; late: number; absent: number; excused: number };
   total: number;
+  windowDays: number;
 }) {
   const rows = [
     { label: "Present", count: totals.present, color: "bg-emerald-400" },
@@ -502,7 +507,7 @@ function AttendanceSummaryCard({
       <CardContent>
         {total === 0 ? (
           <p className="py-4 text-center text-sm text-gray-400">
-            No attendance records yet.
+            No attendance records in the last {windowDays} days.
           </p>
         ) : (
           <>
@@ -511,7 +516,7 @@ function AttendanceSummaryCard({
                 {attendanceRate}%
               </span>
               <span className="text-sm text-gray-500">
-                attendance rate ({total} records)
+                attendance rate ({total} records · last {windowDays} days)
               </span>
             </div>
 

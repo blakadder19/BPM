@@ -31,6 +31,7 @@ export const PERMISSION_KEYS = [
   "students:delete",
   "students:view_finance",
   "students:manage_affiliations",
+  "students:send_magic_link",
 
   // Bookings
   "bookings:view",
@@ -152,6 +153,7 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "discounts:edit",
   "discounts:delete",
   "referrals:reward",
+  "students:send_magic_link",
 ];
 
 const SENSITIVE_SET: ReadonlySet<string> = new Set(SENSITIVE_PERMISSIONS);
@@ -391,6 +393,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "students:delete", label: "Delete students", description: "Destructive — usually super-admin only." },
       { key: "students:view_finance", label: "See student finance details" },
       { key: "students:manage_affiliations", label: "Manage student affiliations" },
+      { key: "students:send_magic_link", label: "Send magic login link to a student", description: "Sensitive — triggers Supabase Auth to email a one-time login link to the student. Used when a student cannot reset their password themselves." },
     ],
   },
   {

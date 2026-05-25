@@ -238,6 +238,41 @@ describe("payments:manual_adjustment", () => {
   });
 });
 
+describe("students:send_magic_link", () => {
+  it("is part of the permission catalogue", () => {
+    expect(isPermissionKey("students:send_magic_link")).toBe(true);
+  });
+
+  it("is flagged sensitive", () => {
+    expect(isSensitivePermission("students:send_magic_link")).toBe(true);
+  });
+
+  it("super_admin gets it automatically", () => {
+    const set = expandPermissions("super_admin", null);
+    expect(set.has("students:send_magic_link")).toBe(true);
+  });
+
+  it("admin / front_desk / teacher / read_only do NOT get it by default", () => {
+    for (const role of [
+      "admin",
+      "front_desk",
+      "teacher",
+      "read_only",
+    ] as const) {
+      const set = expandPermissions(role, null);
+      expect(set.has("students:send_magic_link")).toBe(false);
+    }
+  });
+
+  it("custom roles can be granted it explicitly", () => {
+    const set = expandPermissions(
+      "custom",
+      ["students:send_magic_link"] as Permission[],
+    );
+    expect(set.has("students:send_magic_link")).toBe(true);
+  });
+});
+
 describe("referral permissions", () => {
   it("are all present in PERMISSION_KEYS", () => {
     for (const k of [

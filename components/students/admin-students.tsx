@@ -111,6 +111,8 @@ export interface AdminStudentsPermissions {
   canRunLifecycle: boolean;
   /** Server-resolved `payments:manual_adjustment` — gates the manual discount field in the assign dialog. */
   canApplyManualDiscount: boolean;
+  /** Server-resolved `students:send_magic_link` — gates the "Send magic login link" admin action on the student detail panel. */
+  canSendMagicLink: boolean;
 }
 
 interface AdminStudentsProps {
@@ -444,6 +446,7 @@ export function AdminStudents({
                     onAddSub={permissions.canEdit ? () => setAddSubStudentId(s.id) : null}
                     onEditSub={permissions.canEdit ? setEditSub : null}
                     canViewFinance={permissions.canViewFinance}
+                    canSendMagicLink={permissions.canSendMagicLink}
                     colSpan={TABLE_HEADERS.length}
                   />
                 )}
