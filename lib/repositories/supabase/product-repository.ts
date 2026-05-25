@@ -39,6 +39,7 @@ function toMockProduct(row: ProductRow): MockProduct {
     allowedClassTypes: (row.allowed_class_types as ClassType[] | null) ?? null,
     stripePriceId: row.stripe_price_id ?? null,
     archivedAt: row.archived_at ?? null,
+    allowMultipleActivePurchases: row.allow_multiple_active_purchases ?? true,
   };
 }
 
@@ -97,6 +98,7 @@ export const supabaseProductRepo: IProductRepository = {
         allowed_class_types: input.allowedClassTypes ?? null,
         stripe_price_id: input.stripePriceId ?? null,
         archived_at: input.archivedAt ?? null,
+        allow_multiple_active_purchases: input.allowMultipleActivePurchases ?? true,
       } as never)
       .select()
       .single();
@@ -134,6 +136,9 @@ export const supabaseProductRepo: IProductRepository = {
     if (patch.allowedClassTypes !== undefined) fields.allowed_class_types = patch.allowedClassTypes;
     if (patch.stripePriceId !== undefined) fields.stripe_price_id = patch.stripePriceId;
     if (patch.archivedAt !== undefined) fields.archived_at = patch.archivedAt;
+    if (patch.allowMultipleActivePurchases !== undefined) {
+      fields.allow_multiple_active_purchases = patch.allowMultipleActivePurchases;
+    }
 
     if (Object.keys(fields).length === 0) return this.getById(id);
 

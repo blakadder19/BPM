@@ -304,6 +304,7 @@ export interface Database {
           style_access_pick_count: number | null;
           allowed_class_types: string[] | null;
           archived_at: string | null;
+          allow_multiple_active_purchases: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -355,6 +356,9 @@ export interface Database {
           original_price_cents: number | null;
           discount_amount_cents: number;
           applied_discount: Record<string, unknown> | null;
+          manual_discount_cents: number;
+          manual_discount_reason: string | null;
+          manual_discount_by: string | null;
           created_at: string;
           updated_at: string;
         };

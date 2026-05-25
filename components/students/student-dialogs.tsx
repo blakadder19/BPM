@@ -563,6 +563,7 @@ export function AddSubscriptionDialog({
   products,
   terms,
   danceStyles,
+  canApplyManualDiscount = false,
   onClose,
   recommendedStyleName,
   qrClassId,
@@ -572,6 +573,12 @@ export function AddSubscriptionDialog({
   products: MockProduct[];
   terms: MockTerm[];
   danceStyles: MockDanceStyle[];
+  /**
+   * Server-resolved `payments:manual_adjustment` flag. When false the
+   * manual discount fields are hidden from the UI; the server action
+   * still re-checks the permission so a forged form post is rejected.
+   */
+  canApplyManualDiscount?: boolean;
   onClose: () => void;
   recommendedStyleName?: string | null;
   qrClassId?: string | null;
@@ -585,6 +592,8 @@ export function AddSubscriptionDialog({
   const [selectedStyleId, setSelectedStyleId] = useState("");
   const [selectedStyleIds, setSelectedStyleIds] = useState<string[]>([]);
   const [postAssignPrompt, setPostAssignPrompt] = useState<{ subscriptionId: string } | null>(null);
+  const [manualDiscountEuros, setManualDiscountEuros] = useState("");
+  const [manualDiscountReason, setManualDiscountReason] = useState("");
 
   const accessRulesMapFull = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
 
@@ -647,16 +656,46 @@ export function AddSubscriptionDialog({
     });
   }
 
+  const manualDiscountEurosNum = manualDiscountEuros ? Number(manualDiscountEuros) : 0;
+  const productPriceEuros = selectedProduct ? selectedProduct.priceCents / 100 : 0;
+  const manualDiscountInvalid =
+    canApplyManualDiscount &&
+    manualDiscountEuros !== "" &&
+    (Number.isNaN(manualDiscountEurosNum) ||
+      manualDiscountEurosNum < 0 ||
+      (selectedProduct && manualDiscountEurosNum > productPriceEuros));
+  const manualDiscountReasonMissing =
+    canApplyManualDiscount &&
+    manualDiscountEurosNum > 0 &&
+    !manualDiscountReason.trim();
+  const finalEurosAfterManual = Math.max(0, productPriceEuros - (manualDiscountEurosNum || 0));
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (spanTermError) {
       setError("Cannot assign — no next consecutive term exists. Create the next term first.");
       return;
     }
+    if (manualDiscountInvalid) {
+      setError("Manual discount must be a non-negative amount no greater than the product price.");
+      return;
+    }
+    if (manualDiscountReasonMissing) {
+      setError("A reason is required when applying a manual discount.");
+      return;
+    }
 
     const formData = new FormData(e.currentTarget);
     formData.set("productId", selectedProductId);
     formData.set("termId", selectedTermId);
+
+    if (canApplyManualDiscount && manualDiscountEurosNum > 0) {
+      formData.set("manualDiscountEuros", String(manualDiscountEurosNum));
+      formData.set("manualDiscountReason", manualDiscountReason.trim());
+    } else {
+      formData.delete("manualDiscountEuros");
+      formData.delete("manualDiscountReason");
+    }
 
     if (isSpanProduct && resolvedNextTerm) {
       formData.set("spanTerms", String(selectedProduct!.spanTerms));
@@ -891,6 +930,57 @@ export function AddSubscriptionDialog({
               </div>
             )}
 
+            {canApplyManualDiscount && selectedProduct && (
+              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <Label htmlFor="as-manualDiscountEuros" className="!mb-0 text-amber-900">
+                    Manual discount
+                  </Label>
+                  <span className="text-[10px] uppercase tracking-wide text-amber-700">
+                    Sensitive
+                  </span>
+                </div>
+                <p className="text-xs text-amber-800">
+                  Only authorised admins can apply manual discounts. A reason is required and will be stored in Finance.
+                </p>
+                <div className="grid grid-cols-[140px_1fr] gap-2">
+                  <Input
+                    id="as-manualDiscountEuros"
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min={0}
+                    max={productPriceEuros}
+                    value={manualDiscountEuros}
+                    onChange={(e) => setManualDiscountEuros(e.target.value)}
+                    placeholder="€0.00"
+                  />
+                  <Input
+                    id="as-manualDiscountReason"
+                    value={manualDiscountReason}
+                    onChange={(e) => setManualDiscountReason(e.target.value)}
+                    placeholder="Example: Drop-in converted towards Bronze Bachata Pass."
+                    required={manualDiscountEurosNum > 0}
+                  />
+                </div>
+                <div className="rounded-md bg-white/60 px-2 py-1.5 text-xs text-amber-900 space-y-0.5">
+                  <p><span className="font-medium">Original price:</span> €{productPriceEuros.toFixed(2)}</p>
+                  <p><span className="font-medium">Manual discount:</span> −€{(Number.isFinite(manualDiscountEurosNum) ? manualDiscountEurosNum : 0).toFixed(2)}</p>
+                  <p><span className="font-semibold">Final amount:</span> €{finalEurosAfterManual.toFixed(2)}</p>
+                </div>
+                {manualDiscountInvalid && (
+                  <p className="text-xs text-red-700">
+                    Manual discount must be between €0 and €{productPriceEuros.toFixed(2)}.
+                  </p>
+                )}
+                {manualDiscountReasonMissing && (
+                  <p className="text-xs text-red-700">
+                    Reason is required when applying a manual discount.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div className="space-y-1.5">
               <Label htmlFor="as-notes">Notes</Label>
               <textarea
@@ -908,7 +998,10 @@ export function AddSubscriptionDialog({
             <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isPending || !!spanTermError}>
+            <Button
+              type="submit"
+              disabled={isPending || !!spanTermError || !!manualDiscountInvalid || !!manualDiscountReasonMissing}
+            >
               {isPending ? "Assigning…" : "Assign Entitlement"}
             </Button>
           </DialogFooter>

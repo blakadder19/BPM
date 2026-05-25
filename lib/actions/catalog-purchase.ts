@@ -171,8 +171,17 @@ export async function validateAndPreparePurchase(
       assignedTermName = `${assignedTerm.name} + ${next.name}`;
     }
 
-    // Drop-ins are stackable — students can buy multiples of the same drop-in
-    if (product.productType !== "drop_in") {
+    // Stackability:
+    //   * Drop-ins are always stackable.
+    //   * Passes/memberships are stackable by default
+    //     (`allowMultipleActivePurchases=true`) — a Bronze Pass for Salsa
+    //     does NOT block a Bronze Pass for Bachata.
+    //   * Only block duplicates when the product is explicitly marked
+    //     non-stackable (`allowMultipleActivePurchases=false`).
+    const isStackable =
+      product.productType === "drop_in" ||
+      product.allowMultipleActivePurchases !== false;
+    if (!isStackable) {
       const hasDuplicate = studentSubs.some((s) => {
         if (s.productId !== product.id) return false;
         if (spanTerms >= 2) {

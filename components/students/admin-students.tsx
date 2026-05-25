@@ -109,6 +109,8 @@ export interface AdminStudentsPermissions {
   canViewFinance: boolean;
   canManageAffiliations: boolean;
   canRunLifecycle: boolean;
+  /** Server-resolved `payments:manual_adjustment` — gates the manual discount field in the assign dialog. */
+  canApplyManualDiscount: boolean;
 }
 
 interface AdminStudentsProps {
@@ -479,6 +481,7 @@ export function AdminStudents({
           products={products}
           terms={terms}
           danceStyles={danceStyles}
+          canApplyManualDiscount={permissions.canApplyManualDiscount}
           onClose={() => setAddSubStudentId(null)}
           recommendedStyleName={searchParams.get("style")}
           qrClassId={searchParams.get("classId")}

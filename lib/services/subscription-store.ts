@@ -71,6 +71,9 @@ export function createSubscription(data: {
   originalPriceCents?: number | null;
   discountAmountCents?: number;
   appliedDiscount?: AppliedDiscountSnapshot | null;
+  manualDiscountCents?: number;
+  manualDiscountReason?: string | null;
+  manualDiscountBy?: string | null;
 }): MockSubscription {
   const list = init();
   const sub: MockSubscription = {
@@ -111,6 +114,9 @@ export function createSubscription(data: {
     originalPriceCents: data.originalPriceCents ?? null,
     discountAmountCents: data.discountAmountCents ?? 0,
     appliedDiscount: data.appliedDiscount ?? null,
+    manualDiscountCents: data.manualDiscountCents ?? 0,
+    manualDiscountReason: data.manualDiscountReason ?? null,
+    manualDiscountBy: data.manualDiscountBy ?? null,
   };
   list.push(sub);
   return sub;

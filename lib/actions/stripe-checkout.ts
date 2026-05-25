@@ -355,25 +355,36 @@ export async function fulfillStripeCheckout(
     return { success: true };
   }
 
-  // Also check for duplicate product+term subscription
-  const hasDuplicate = allSubs.some(
-    (s) =>
-      s.studentId === studentId &&
-      s.productId === productId &&
-      s.status === "active" &&
-      s.paymentStatus === "paid" &&
-      (termId ? s.termId === termId : true),
-  );
-  if (hasDuplicate) {
-    console.warn(
-      `[stripe-fulfill] Duplicate active+paid subscription for student=${studentId} product=${productId} — skipping.`,
-    );
-    return { success: true };
-  }
-
   const product = await getProductRepo().getById(productId);
   if (!product) {
     return { success: false, error: `Product ${productId} not found.` };
+  }
+
+  // Also check for duplicate product+term subscription. Stackability:
+  //   * drop-ins are always stackable
+  //   * passes/memberships are stackable unless explicitly marked
+  //     non-stackable on the product row.
+  // Without this gate the webhook would silently swallow every second
+  // legitimate purchase (e.g. Bronze Pass — Salsa, then Bronze Pass —
+  // Bachata) as a "duplicate".
+  const isStackable =
+    product.productType === "drop_in" ||
+    product.allowMultipleActivePurchases !== false;
+  if (!isStackable) {
+    const hasDuplicate = allSubs.some(
+      (s) =>
+        s.studentId === studentId &&
+        s.productId === productId &&
+        s.status === "active" &&
+        s.paymentStatus === "paid" &&
+        (termId ? s.termId === termId : true),
+    );
+    if (hasDuplicate) {
+      console.warn(
+        `[stripe-fulfill] Duplicate active+paid subscription for student=${studentId} product=${productId} — skipping.`,
+      );
+      return { success: true };
+    }
   }
 
   const prepared: PreparedPurchase = {

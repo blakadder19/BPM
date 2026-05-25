@@ -65,6 +65,7 @@ export function createProduct(data: {
   allowedClassTypes?: ClassType[] | null;
   stripePriceId?: string | null;
   archivedAt?: string | null;
+  allowMultipleActivePurchases?: boolean;
 }): MockProduct {
   const list = init();
   const product: MockProduct = {
@@ -97,6 +98,7 @@ export function createProduct(data: {
     allowedClassTypes: data.allowedClassTypes ?? null,
     stripePriceId: data.stripePriceId ?? null,
     archivedAt: data.archivedAt ?? null,
+    allowMultipleActivePurchases: data.allowMultipleActivePurchases ?? true,
   };
   list.push(product);
   return product;
@@ -133,6 +135,7 @@ type ProductPatch = Partial<
     | "allowedClassTypes"
     | "stripePriceId"
     | "archivedAt"
+    | "allowMultipleActivePurchases"
   >
 >;
 
@@ -172,6 +175,9 @@ export function updateProduct(
   if (patch.allowedClassTypes !== undefined) product.allowedClassTypes = patch.allowedClassTypes;
   if (patch.stripePriceId !== undefined) product.stripePriceId = patch.stripePriceId;
   if (patch.archivedAt !== undefined) product.archivedAt = patch.archivedAt;
+  if (patch.allowMultipleActivePurchases !== undefined) {
+    product.allowMultipleActivePurchases = patch.allowMultipleActivePurchases;
+  }
 
   return { ...product };
 }

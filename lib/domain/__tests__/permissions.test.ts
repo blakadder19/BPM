@@ -193,6 +193,7 @@ describe("isSensitivePermission", () => {
     expect(isSensitivePermission("products:edit")).toBe(true);
     expect(isSensitivePermission("staff:edit_permissions")).toBe(true);
     expect(isSensitivePermission("payments:mark_paid_reception")).toBe(true);
+    expect(isSensitivePermission("payments:manual_adjustment")).toBe(true);
   });
 
   it("does not flag pure view perms", () => {
@@ -203,6 +204,37 @@ describe("isSensitivePermission", () => {
 
   it("flags referrals:reward as sensitive (manual money handling)", () => {
     expect(isSensitivePermission("referrals:reward")).toBe(true);
+  });
+});
+
+describe("payments:manual_adjustment", () => {
+  it("is part of the permission catalogue", () => {
+    expect(isPermissionKey("payments:manual_adjustment")).toBe(true);
+  });
+
+  it("super_admin gets it automatically", () => {
+    const set = expandPermissions("super_admin", null);
+    expect(set.has("payments:manual_adjustment")).toBe(true);
+  });
+
+  it("admin preset does NOT get it by default", () => {
+    const set = expandPermissions("admin", null);
+    expect(set.has("payments:manual_adjustment")).toBe(false);
+  });
+
+  it("front_desk / teacher / read_only do NOT get it", () => {
+    for (const role of ["front_desk", "teacher", "read_only"] as const) {
+      const set = expandPermissions(role, null);
+      expect(set.has("payments:manual_adjustment")).toBe(false);
+    }
+  });
+
+  it("custom roles can be granted it explicitly", () => {
+    const set = expandPermissions(
+      "custom",
+      ["payments:manual_adjustment"] as Permission[],
+    );
+    expect(set.has("payments:manual_adjustment")).toBe(true);
   });
 });
 

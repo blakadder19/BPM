@@ -381,7 +381,7 @@ function ProductCard({
               <div className="space-y-2 pt-1">
                 {p.activeDropInCount > 0 && (
                   <p className="text-center text-xs font-medium text-green-700">
-                    {p.activeDropInCount} active drop-in{p.activeDropInCount !== 1 ? "s" : ""}
+                    {p.activeDropInCount} active {p.productType === "drop_in" ? "drop-in" : p.productType === "pass" ? "pass" : "subscription"}{p.activeDropInCount !== 1 ? "s" : ""}
                   </p>
                 )}
                 <Button className="w-full" size="sm" onClick={(e) => { e.stopPropagation(); onSelect(p); }}>
