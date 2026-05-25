@@ -63,6 +63,7 @@ export default async function StudentsPage({
     canViewFinance: hasPermission(access, "students:view_finance"),
     canManageAffiliations: hasPermission(access, "students:manage_affiliations"),
     canRunLifecycle: hasPermission(access, "students:edit"),
+    canApplyManualDiscount: hasPermission(access, "payments:manual_adjustment"),
   };
   const _tDb = performance.now();
 

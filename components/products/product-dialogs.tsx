@@ -625,6 +625,26 @@ function ProductFormFields({
               Optional. Paste an existing Stripe price ID. Auto-create / sync of Stripe prices is not implemented in this phase.
             </p>
           </div>
+
+          <div className="space-y-1.5">
+            <input type="hidden" name="allowMultipleProvided" value="1" />
+            <div className="flex items-center gap-2">
+              <input
+                id="pf-allowMultipleActivePurchases"
+                name="allowMultipleActivePurchases"
+                type="checkbox"
+                defaultChecked={defaults?.allowMultipleActivePurchases ?? true}
+                className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
+              />
+              <Label htmlFor="pf-allowMultipleActivePurchases" className="!mb-0">
+                Allow multiple active purchases
+              </Label>
+            </div>
+            <p className="text-xs text-gray-500">
+              Students can hold more than one active purchase of this product.
+              Leave on for stackable passes (e.g. one Bronze Pass per dance style).
+            </p>
+          </div>
         </div>
       </details>
     </>

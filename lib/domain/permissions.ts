@@ -56,6 +56,7 @@ export const PERMISSION_KEYS = [
   "payments:mark_paid_reception",
   "payments:refund",
   "payments:delete_test_data",
+  "payments:manual_adjustment",
 
   // Products
   "products:view",
@@ -147,6 +148,7 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "staff:edit_permissions",
   "payments:mark_paid_reception",
   "payments:refund",
+  "payments:manual_adjustment",
   "discounts:edit",
   "discounts:delete",
   "referrals:reward",
@@ -430,6 +432,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "payments:mark_paid_reception", label: "Mark reception payments as paid", description: "Allows marking pending purchases as paid at the desk." },
       { key: "payments:refund", label: "Refund payments", description: "Sensitive — affects finance ledger." },
       { key: "payments:delete_test_data", label: "Delete test payments" },
+      { key: "payments:manual_adjustment", label: "Apply manual discounts / adjustments", description: "Sensitive — lets admins override the price on a manual subscription assignment. Requires a written reason that is stored in Finance." },
     ],
   },
   {

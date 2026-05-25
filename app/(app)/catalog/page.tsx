@@ -168,10 +168,17 @@ export default async function CatalogPage() {
       const curSub = currentSubByProduct.get(p.id);
       const renSub = renewalSubByProduct.get(p.id);
       const isDropIn = p.productType === "drop_in";
+      // Stackability: a product is stackable when it's a drop-in OR
+      // when its `allowMultipleActivePurchases` flag is true (default).
+      // For stackable products we still want to show the student how
+      // many active copies they already hold, but we must NOT mark
+      // them as already-entitled — that hides the buy button.
+      const isStackable = isDropIn || p.allowMultipleActivePurchases !== false;
 
-      // Drop-ins are stackable: count active ones instead of blocking purchase
-      const activeDropInCount = isDropIn
-        ? studentSubs.filter((s) => s.productId === p.id).length
+      // Count active copies the student already holds (drop-ins + any
+      // other stackable product). Renders as "{n} active …" hint.
+      const activeDropInCount = isStackable
+        ? studentSubs.filter((s) => s.productId === p.id && s.status === "active").length
         : 0;
 
       const preview = pricingPreview.get(p.id);
@@ -206,8 +213,8 @@ export default async function CatalogPage() {
         recurring: p.recurring,
         spanTerms: p.spanTerms,
         termName,
-        currentEntitlement: isDropIn ? null : curSub ? { paymentStatus: curSub.paymentStatus } : null,
-        renewalEntitlement: isDropIn ? null : renSub
+        currentEntitlement: isStackable ? null : curSub ? { paymentStatus: curSub.paymentStatus } : null,
+        renewalEntitlement: isStackable ? null : renSub
           ? { paymentStatus: renSub.paymentStatus, termName: renSub.termId ? termsById.get(renSub.termId)?.name ?? null : null, isRenewal: !!renSub.renewedFromId }
           : null,
         activeDropInCount,

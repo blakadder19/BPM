@@ -47,6 +47,9 @@ function toMockSubscription(row: SubRow): MockSubscription {
     originalPriceCents: row.original_price_cents ?? null,
     discountAmountCents: row.discount_amount_cents ?? 0,
     appliedDiscount: (row.applied_discount as AppliedDiscountSnapshot | null) ?? null,
+    manualDiscountCents: row.manual_discount_cents ?? 0,
+    manualDiscountReason: row.manual_discount_reason ?? null,
+    manualDiscountBy: row.manual_discount_by ?? null,
   };
 }
 
@@ -134,6 +137,9 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
         original_price_cents: input.originalPriceCents ?? null,
         discount_amount_cents: input.discountAmountCents ?? 0,
         applied_discount: input.appliedDiscount ?? null,
+        manual_discount_cents: input.manualDiscountCents ?? 0,
+        manual_discount_reason: input.manualDiscountReason ?? null,
+        manual_discount_by: input.manualDiscountBy ?? null,
       } as never)
       .select("*, products(name, product_type)")
       .single();

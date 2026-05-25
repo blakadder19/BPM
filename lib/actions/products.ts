@@ -122,6 +122,18 @@ function parseStripePriceId(formData: FormData): string | null {
   return raw ? raw : null;
 }
 
+/**
+ * Parse the "Allow multiple active purchases" checkbox. The editor sends
+ * a hidden `allowMultipleProvided=1` marker whenever the field is on
+ * screen, so we can distinguish "checkbox unchecked" (→ false) from
+ * "field not part of this form" (→ undefined, default true preserved).
+ */
+function parseAllowMultipleActivePurchases(formData: FormData): boolean | undefined {
+  if (formData.get("allowMultipleProvided") !== "1") return undefined;
+  return formData.get("allowMultipleActivePurchases") === "on"
+    || formData.get("allowMultipleActivePurchases") === "true";
+}
+
 function eurosToCents(raw: string | null): number {
   if (!raw || raw.trim() === "") return 0;
   const euros = parseFloat(raw);
@@ -160,6 +172,7 @@ export async function createProductAction(
   const styleAccessPickCount = parseStyleAccessPickCount(formData, styleAccessMode);
   const allowedClassTypes = parseAllowedClassTypes(formData);
   const stripePriceId = parseStripePriceId(formData);
+  const allowMultipleActivePurchases = parseAllowMultipleActivePurchases(formData);
 
   if (!name) return { success: false, error: "Name is required" };
   if (!VALID_TYPES.has(productType)) return { success: false, error: "Invalid product type" };
@@ -203,6 +216,7 @@ export async function createProductAction(
     styleAccessPickCount,
     allowedClassTypes,
     stripePriceId,
+    allowMultipleActivePurchases,
   });
 
   if (result.success) {
@@ -245,6 +259,7 @@ export async function updateProductAction(
   const styleAccessPickCount = parseStyleAccessPickCount(formData, styleAccessMode);
   const allowedClassTypes = parseAllowedClassTypes(formData);
   const stripePriceId = parseStripePriceId(formData);
+  const allowMultipleActivePurchases = parseAllowMultipleActivePurchases(formData);
 
   if (!id) return { success: false, error: "Missing product ID" };
   if (!name) return { success: false, error: "Name is required" };
@@ -290,6 +305,7 @@ export async function updateProductAction(
     styleAccessPickCount,
     allowedClassTypes,
     stripePriceId,
+    allowMultipleActivePurchases,
   });
 
   if (result.success) {

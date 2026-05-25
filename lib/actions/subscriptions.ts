@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermission, requirePermissionForAction } from "@/lib/staff-permissions";
+import { hasPermission, requirePermission, requirePermissionForAction } from "@/lib/staff-permissions";
 import {
   createSubscription,
   updateSubscription,
@@ -70,6 +70,47 @@ export async function createSubscriptionAction(
   const notes = (formData.get("notes") as string)?.trim() || null;
   const selectedStyleId = (formData.get("selectedStyleId") as string)?.trim() || null;
   const selectedStyleName = (formData.get("selectedStyleName") as string)?.trim() || null;
+
+  // ── Manual discount (sensitive — permission-gated) ────────
+  //
+  // The admin form may submit a manual one-off discount in euros plus
+  // a free-text reason. This bypasses the rule engine entirely and
+  // requires `payments:manual_adjustment`. We re-read permissions
+  // here (rather than trust the client) so a forged form post from
+  // a user without the permission is rejected server-side.
+  const rawManualDiscountEuros = (formData.get("manualDiscountEuros") as string | null)?.trim();
+  const rawManualDiscountCents = (formData.get("manualDiscountCents") as string | null)?.trim();
+  const manualDiscountReason = (formData.get("manualDiscountReason") as string | null)?.trim() || null;
+
+  let manualDiscountCents = 0;
+  if (rawManualDiscountCents && rawManualDiscountCents !== "") {
+    const n = Math.round(Number(rawManualDiscountCents));
+    if (!Number.isFinite(n) || n < 0) {
+      return { success: false, error: "Manual discount must be a non-negative number." };
+    }
+    manualDiscountCents = n;
+  } else if (rawManualDiscountEuros && rawManualDiscountEuros !== "") {
+    const euros = Number(rawManualDiscountEuros);
+    if (!Number.isFinite(euros) || euros < 0) {
+      return { success: false, error: "Manual discount must be a non-negative number." };
+    }
+    manualDiscountCents = Math.round(euros * 100);
+  }
+
+  if (manualDiscountCents > 0) {
+    if (!hasPermission(adminAccess, "payments:manual_adjustment")) {
+      return {
+        success: false,
+        error: "You do not have permission to apply manual discounts.",
+      };
+    }
+    if (!manualDiscountReason) {
+      return {
+        success: false,
+        error: "A reason is required when applying a manual discount.",
+      };
+    }
+  }
 
   let selectedStyleIds: string[] | null = null;
   let selectedStyleNames: string[] | null = null;
@@ -145,6 +186,46 @@ export async function createSubscriptionAction(
     commit: { source: "admin_manual" },
   });
 
+  // Stackability: only block when the product is explicitly marked
+  // non-stackable. Drop-ins are always stackable. Otherwise an admin
+  // assigning a second pass (e.g. Bronze Bachata for a student who
+  // already holds Bronze Salsa) must succeed.
+  const isStackable =
+    product.productType === "drop_in" ||
+    product.allowMultipleActivePurchases !== false;
+  if (!isStackable) {
+    const existingActive = (await getSubscriptionRepo().getByStudent(studentId)).filter(
+      (s) => s.status === "active" && s.productId === product.id,
+    );
+    if (existingActive.length > 0) {
+      return {
+        success: false,
+        error: `${product.name} is configured as non-stackable and the student already has an active one.`,
+      };
+    }
+  }
+
+  // Manual discount: subtract from the engine-derived final price.
+  // Cap at the engine final price so we never charge a negative amount.
+  // Reject if the requested manual discount exceeds the engine final
+  // price — admins should set the engine-applied discount aside (or
+  // not apply it) rather than silently zeroing it.
+  const engineFinalCents = pricing.finalPriceCents;
+  if (manualDiscountCents > engineFinalCents) {
+    return {
+      success: false,
+      error: `Manual discount (€${(manualDiscountCents / 100).toFixed(2)}) cannot exceed the product price (€${(engineFinalCents / 100).toFixed(2)}).`,
+    };
+  }
+  const finalPriceAfterManualCents = engineFinalCents - manualDiscountCents;
+  const combinedDiscountCents = pricing.totalDiscountCents + manualDiscountCents;
+  const notesWithManualReason =
+    manualDiscountCents > 0 && manualDiscountReason
+      ? notes
+        ? `${notes}\nManual discount reason: ${manualDiscountReason}`
+        : `Manual discount reason: ${manualDiscountReason}`
+      : notes;
+
   const result = await createSubscription({
     studentId,
     productId: product.id,
@@ -155,7 +236,7 @@ export async function createSubscriptionAction(
     remainingCredits,
     validFrom,
     validUntil,
-    notes,
+    notes: notesWithManualReason,
     termId,
     paymentMethod: paymentMethodRaw as PaymentMethod,
     paymentStatus: paymentStatusRaw as SalePaymentStatus,
@@ -173,27 +254,55 @@ export async function createSubscriptionAction(
     selectedStyleName,
     selectedStyleIds,
     selectedStyleNames,
-    priceCentsAtPurchase: pricing.finalPriceCents,
+    priceCentsAtPurchase: finalPriceAfterManualCents,
     currencyAtPurchase: "EUR",
     productSnapshot,
     originalPriceCents: pricing.basePriceCents,
-    discountAmountCents: pricing.totalDiscountCents,
+    discountAmountCents: combinedDiscountCents,
     appliedDiscount: pricing.snapshot,
+    manualDiscountCents,
+    manualDiscountReason,
+    manualDiscountBy: manualDiscountCents > 0 ? adminUser.id : null,
   });
 
   if (result.success && result.subscriptionId) {
+    const baseMetadata = buildAuditDiscountMetadata(pricing);
+    const auditMetadata: Record<string, unknown> = {
+      ...(baseMetadata ?? {}),
+    };
+    if (manualDiscountCents > 0) {
+      auditMetadata.manualDiscount = {
+        amountCents: manualDiscountCents,
+        reason: manualDiscountReason,
+        performedByUserId: adminUser.id,
+        performedByEmail: adminUser.email,
+        performedByName: adminUser.fullName,
+        engineFinalCents,
+        finalAfterManualCents: finalPriceAfterManualCents,
+        basePriceCents: pricing.basePriceCents,
+        appliedAt: new Date().toISOString(),
+      };
+    }
+
+    const detail = manualDiscountCents > 0
+      ? `Admin assigned subscription with manual discount €${(manualDiscountCents / 100).toFixed(2)} (reason: ${manualDiscountReason ?? "—"})`
+      : pricing.snapshot
+        ? `Admin assigned subscription with ${pricing.appliedDiscounts.length} discount(s) applied`
+        : "Admin assigned subscription";
+    const newValue = manualDiscountCents > 0
+      ? `final ${finalPriceAfterManualCents}c (manual −${manualDiscountCents}c, engine −${pricing.totalDiscountCents}c)`
+      : pricing.snapshot
+        ? `final ${pricing.finalPriceCents}c (saved ${pricing.totalDiscountCents}c)`
+        : null;
+
     logFinanceEvent({
       entityType: "subscription",
       entityId: result.subscriptionId,
-      action: "created",
+      action: manualDiscountCents > 0 ? "manual_edit" : "created",
       performer: { userId: adminUser.id, email: adminUser.email, name: adminUser.fullName },
-      detail: pricing.snapshot
-        ? `Admin assigned subscription with ${pricing.appliedDiscounts.length} discount(s) applied`
-        : "Admin assigned subscription",
-      newValue: pricing.snapshot
-        ? `final ${pricing.finalPriceCents}c (saved ${pricing.totalDiscountCents}c)`
-        : null,
-      metadata: buildAuditDiscountMetadata(pricing),
+      detail,
+      newValue,
+      metadata: Object.keys(auditMetadata).length > 0 ? auditMetadata : null,
     });
 
     // Phase 4 hardening: link the discount claim row to the resulting
@@ -218,9 +327,11 @@ export async function createSubscriptionAction(
       const term = termId ? await getTermRepo().getById(termId) : null;
       // Phase 4 / Bug 2: use frozen pricing from the engine result so
       // the email shows the discounted amount, not raw product price.
-      const finalCents = pricing.finalPriceCents ?? product.priceCents ?? null;
-      const summary = pricing.appliedDiscounts
-        .map((d) => d.name || d.reason || d.ruleType)
+      const finalCents = finalPriceAfterManualCents ?? pricing.finalPriceCents ?? product.priceCents ?? null;
+      const summary = [
+        ...pricing.appliedDiscounts.map((d) => d.name || d.reason || d.ruleType),
+        manualDiscountCents > 0 ? `Manual discount (${manualDiscountReason ?? "—"})` : null,
+      ]
         .filter(Boolean)
         .join(" + ");
       await dispatchCommEvents([
@@ -232,8 +343,8 @@ export async function createSubscriptionAction(
           termName: term?.name ?? null,
           amountLabel: finalCents != null ? `€${(finalCents / 100).toFixed(2)}` : null,
           originalPriceCents: pricing.basePriceCents,
-          discountAmountCents: pricing.totalDiscountCents,
-          finalPriceCents: pricing.finalPriceCents,
+          discountAmountCents: combinedDiscountCents,
+          finalPriceCents: finalPriceAfterManualCents,
           appliedDiscountSummary: summary || null,
         }),
       ]);

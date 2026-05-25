@@ -30,6 +30,7 @@ export interface CreateProductData {
   allowedClassTypes?: ClassType[] | null;
   stripePriceId?: string | null;
   archivedAt?: string | null;
+  allowMultipleActivePurchases?: boolean;
 }
 
 export type ProductPatch = Partial<
@@ -62,6 +63,7 @@ export type ProductPatch = Partial<
     | "allowedClassTypes"
     | "stripePriceId"
     | "archivedAt"
+    | "allowMultipleActivePurchases"
   >
 >;
 

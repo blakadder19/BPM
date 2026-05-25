@@ -60,6 +60,9 @@ export async function createSubscription(data: {
   originalPriceCents?: number | null;
   discountAmountCents?: number;
   appliedDiscount?: AppliedDiscountSnapshot | null;
+  manualDiscountCents?: number;
+  manualDiscountReason?: string | null;
+  manualDiscountBy?: string | null;
 }): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
   try {
     const sub = await getSubscriptionRepo().create(data);

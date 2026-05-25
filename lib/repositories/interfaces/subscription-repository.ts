@@ -46,6 +46,12 @@ export interface CreateSubscriptionData {
   discountAmountCents?: number;
   /** Phase 4 — frozen applied-discount snapshot (null when no discount). */
   appliedDiscount?: AppliedDiscountSnapshot | null;
+  /** Manual admin-applied discount in cents. 0 = none. Requires `payments:manual_adjustment`. */
+  manualDiscountCents?: number;
+  /** Reason for the manual discount. Required at the action layer when manualDiscountCents > 0. */
+  manualDiscountReason?: string | null;
+  /** Auth user id of the admin who authorised the manual discount. */
+  manualDiscountBy?: string | null;
 }
 
 export interface SubscriptionPatch {

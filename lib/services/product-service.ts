@@ -43,6 +43,7 @@ export async function createProduct(data: {
   allowedClassTypes?: ClassType[] | null;
   stripePriceId?: string | null;
   archivedAt?: string | null;
+  allowMultipleActivePurchases?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     await getProductRepo().create(data);
@@ -83,6 +84,7 @@ export async function updateProduct(
     allowedClassTypes?: ClassType[] | null;
     stripePriceId?: string | null;
     archivedAt?: string | null;
+    allowMultipleActivePurchases?: boolean;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const result = await getProductRepo().update(id, patch);
