@@ -22,6 +22,12 @@ import { getBirthdayRedemption } from "@/lib/services/birthday-benefit-store";
 import { birthdayBenefitAvailableEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import {
+  buildPerClassBookingStats,
+  computeBookingsByWeekday,
+  getClassStats,
+  summarizeAttendanceWindow,
+} from "@/lib/domain/admin-dashboard-stats";
 import { isStripeEnabled } from "@/lib/stripe";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -457,70 +463,100 @@ export default async function DashboardPage() {
       .map((bc) => bc.id)
   );
 
-  const ACTIVE_BOOKING_STATUSES = new Set(["confirmed", "checked_in"]);
-  let upcomingBookingCount = 0;
-  for (const b of bookingSvc.bookings) {
-    if (ACTIVE_BOOKING_STATUSES.has(b.status) && upcomingClassIds.has(b.bookableClassId)) {
-      upcomingBookingCount++;
-    }
-  }
+  // ── Per-class booking stats from canonical bookings table ──
+  //
+  // The Supabase schedule repo always returns `bookedCount=0` etc.
+  // on the instance row (those denormalised fields exist only in
+  // the mock-data schema). Derive real counts from the bookings
+  // service — same source the Classes admin page uses via
+  // `getConfirmedBookingsForClass()`. Without this fix, Upcoming
+  // Classes / Highest Demand / Leader-Follower / Bookings by
+  // Weekday all show zero in production.
+  const classStatsTable = buildPerClassBookingStats(
+    bookingSvc.bookings,
+    bookingSvc.waitlist,
+  );
 
-  const activeWaitlistCount = bookingSvc.waitlist.filter(
-    (w) => w.status === "waiting" && upcomingClassIds.has(w.bookableClassId)
-  ).length;
+  let upcomingBookingCount = 0;
+  for (const classId of upcomingClassIds) {
+    upcomingBookingCount += getClassStats(classStatsTable, classId).bookedCount;
+  }
+  const activeWaitlistCount = Array.from(upcomingClassIds).reduce(
+    (sum, classId) => sum + getClassStats(classStatsTable, classId).waitlistCount,
+    0,
+  );
 
   const unresolvedPenalties = penaltySvc.penalties.filter(
     (p) => p.resolution === "monetary_pending"
   );
 
-  const toSummary = (bc: typeof allInstances[number]): DashboardClassSummary => ({
-    id: bc.id,
-    title: bc.title,
-    date: bc.date,
-    startTime: bc.startTime,
-    endTime: bc.endTime,
-    location: bc.location,
-    status: effectiveInstanceStatus(bc.status, bc.date, bc.startTime, bc.endTime),
-    maxCapacity: bc.maxCapacity,
-    bookedCount: bc.bookedCount,
-    waitlistCount: bc.waitlistCount,
-    leaderCap: bc.leaderCap,
-    followerCap: bc.followerCap,
-    leaderCount: bc.leaderCount,
-    followerCount: bc.followerCount,
-    styleName: bc.styleName,
-  });
+  const toSummary = (bc: typeof allInstances[number]): DashboardClassSummary => {
+    const stats = getClassStats(classStatsTable, bc.id);
+    return {
+      id: bc.id,
+      title: bc.title,
+      date: bc.date,
+      startTime: bc.startTime,
+      endTime: bc.endTime,
+      location: bc.location,
+      status: effectiveInstanceStatus(bc.status, bc.date, bc.startTime, bc.endTime),
+      maxCapacity: bc.maxCapacity,
+      bookedCount: stats.bookedCount,
+      waitlistCount: stats.waitlistCount,
+      leaderCap: bc.leaderCap,
+      followerCap: bc.followerCap,
+      leaderCount: stats.leaderCount,
+      followerCount: stats.followerCount,
+      styleName: bc.styleName,
+    };
+  };
 
   const demandClasses: DashboardDemandItem[] = upcomingInstances
     .filter((bc) => bc.maxCapacity && bc.maxCapacity > 0)
-    .map((bc) => ({
-      ...toSummary(bc),
-      fillRate: bc.bookedCount / bc.maxCapacity!,
-    }))
+    .map((bc) => {
+      const summary = toSummary(bc);
+      return {
+        ...summary,
+        fillRate: summary.bookedCount / bc.maxCapacity!,
+      };
+    })
     .sort((a, b) => b.fillRate - a.fillRate)
     .slice(0, 5);
 
   const partnerClasses = upcomingInstances
-    .filter((bc) => bc.leaderCap !== null && bc.followerCap !== null && bc.bookedCount > 0)
-    .map(toSummary);
+    .filter((bc) => bc.leaderCap !== null && bc.followerCap !== null)
+    .map(toSummary)
+    // Only surface partner classes that actually have role bookings
+    // — using the freshly-computed leader/follower counts, not the
+    // stale instance fields that used to filter this list to empty.
+    .filter((bc) => bc.leaderCount > 0 || bc.followerCount > 0);
 
-  const attendanceTotals = { present: 0, late: 0, absent: 0, excused: 0 };
-  for (const a of attendanceSvc.records) {
-    if (a.status === "present") attendanceTotals.present++;
-    else if (a.status === "late") attendanceTotals.late++;
-    else if (a.status === "absent") attendanceTotals.absent++;
-    else if (a.status === "excused") attendanceTotals.excused++;
-  }
-  const attendanceTotal =
-    attendanceTotals.present + attendanceTotals.late +
-    attendanceTotals.absent + attendanceTotals.excused;
+  // ── Attendance summary (last 30 days) ──────────────────────
+  //
+  // Scoped to a rolling 30-day window to match operational
+  // reality: the closure job has been writing records for months
+  // and an all-time aggregate is dominated by stale data, which is
+  // what produced the misleading 100% / 62 reading in production.
+  const ATTENDANCE_WINDOW_DAYS = 30;
+  const attendanceSummary = summarizeAttendanceWindow(
+    attendanceSvc.records,
+    todayStr,
+    ATTENDANCE_WINDOW_DAYS,
+  );
+  const attendanceTotals = attendanceSummary.totals;
+  const attendanceTotal = attendanceSummary.total;
 
-  const byWeekday = [0, 0, 0, 0, 0, 0, 0];
-  for (const bc of upcomingInstances) {
-    const dow = new Date(bc.date + "T12:00:00Z").getUTCDay();
-    const idx = dow === 0 ? 6 : dow - 1;
-    byWeekday[idx] += bc.bookedCount;
-  }
+  // ── Bookings by weekday ────────────────────────────────────
+  //
+  // Counts active (confirmed + checked-in) bookings, bucketed by
+  // the class instance's weekday. Uses real bookings — the
+  // previous implementation summed the stale `bc.bookedCount`
+  // (always 0 in Supabase mode), which is why production showed
+  // "No booking data available yet".
+  const instanceDateById = new Map(allInstances.map((bc) => [bc.id, bc.date]));
+  const byWeekday = computeBookingsByWeekday(bookingSvc.bookings, {
+    getClassDate: (id) => instanceDateById.get(id) ?? null,
+  });
   const maxWeekday = Math.max(...byWeekday, 1);
 
   const [allSubs, allStudents, allProducts] = await Promise.all([
@@ -584,6 +620,7 @@ export default async function DashboardPage() {
     partnerClasses,
     attendanceTotals,
     attendanceTotal,
+    attendanceWindowDays: ATTENDANCE_WINDOW_DAYS,
     byWeekday,
     maxWeekday,
     subsByType,

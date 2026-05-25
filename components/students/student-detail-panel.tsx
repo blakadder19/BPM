@@ -63,6 +63,10 @@ interface StudentDetailPanelProps {
   /** True when the current user can see finance-sensitive blocks
    * (wallet, penalties, payment status). */
   canViewFinance?: boolean;
+  /** True when the current user has `students:send_magic_link` —
+   * shows the "Send magic login link" admin action in the Profile
+   * section. */
+  canSendMagicLink?: boolean;
   colSpan: number;
 }
 
@@ -97,6 +101,7 @@ export function StudentDetailPanel({
   onAddSub,
   onEditSub,
   canViewFinance = false,
+  canSendMagicLink = false,
   colSpan,
 }: StudentDetailPanelProps) {
   const router = useRouter();
@@ -199,6 +204,14 @@ export function StudentDetailPanel({
               <DL label="Emergency Phone" value={student.emergencyContactPhone} />
             )}
             {student.notes && <DL label="Notes" value={student.notes} />}
+            {canSendMagicLink && (
+              <div className="pt-2">
+                <SendMagicLinkControl
+                  studentId={student.id}
+                  studentEmail={student.email}
+                />
+              </div>
+            )}
           </Section>
 
           {/* ── Affiliations (Phase E — visibility integration) ── */}
@@ -1342,5 +1355,134 @@ function DeleteSubscriptionDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ── Send magic login link (admin action) ─────────────────────
+//
+// Renders a "Send magic login link" button + confirmation modal in
+// the student detail Profile section. Gated upstream by the
+// `students:send_magic_link` permission — the parent only renders
+// this control when the current admin holds that permission. The
+// server action re-checks the permission, so removing the button
+// alone never grants access.
+//
+// Safety notes:
+//  * We never display, store, or even receive the raw magic link —
+//    `sendStudentMagicLinkAction` returns only a success flag and a
+//    masked email for the success toast.
+//  * The button is disabled while the request is in flight to
+//    prevent accidental double-sends (Supabase will rate-limit
+//    anyway, but a clean UX avoids the user seeing that error).
+function SendMagicLinkControl({
+  studentId,
+  studentEmail,
+}: {
+  studentId: string;
+  studentEmail: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [feedback, setFeedback] = useState<
+    | { kind: "success"; text: string }
+    | { kind: "error"; text: string }
+    | null
+  >(null);
+
+  async function handleConfirm() {
+    setPending(true);
+    setFeedback(null);
+    try {
+      // Dynamic import keeps the action's server-only deps
+      // (`headers()`, repositories) out of the client bundle until
+      // an admin actually clicks the button.
+      const { sendStudentMagicLinkAction } = await import(
+        "@/lib/actions/auth-magic-link"
+      );
+      const result = await sendStudentMagicLinkAction(studentId);
+      if (result.success) {
+        setFeedback({
+          kind: "success",
+          text: `Magic login link sent to ${result.emailMasked ?? studentEmail}.`,
+        });
+        setOpen(false);
+      } else {
+        setFeedback({
+          kind: "error",
+          text: result.error ?? "Could not send the magic login link.",
+        });
+      }
+    } catch (e) {
+      setFeedback({
+        kind: "error",
+        text: e instanceof Error ? e.message : "Unexpected error.",
+      });
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="flex flex-col gap-1">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setFeedback(null);
+            setOpen(true);
+          }}
+          className="w-fit"
+        >
+          Send magic login link
+        </Button>
+        {feedback && (
+          <p
+            className={`text-xs ${
+              feedback.kind === "success" ? "text-green-700" : "text-red-700"
+            }`}
+          >
+            {feedback.text}
+          </p>
+        )}
+      </div>
+
+      <Dialog open={open} onClose={() => !pending && setOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send magic login link?</DialogTitle>
+          </DialogHeader>
+          <DialogBody>
+            <p className="text-sm text-gray-700">
+              This will send a secure login link to the student&apos;s email
+              address.
+            </p>
+            {studentEmail && (
+              <p className="mt-2 text-xs text-gray-500">
+                Recipient: <span className="font-medium">{studentEmail}</span>
+              </p>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirm}
+              disabled={pending}
+            >
+              {pending ? "Sending…" : "Send link"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
