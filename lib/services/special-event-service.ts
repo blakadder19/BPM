@@ -142,10 +142,23 @@ export async function updatePurchasePayment(
 
 export async function refundPurchase(
   id: string,
-  patch: { refundedAt: string; refundedBy: string; refundReason: string | null },
+  patch: {
+    refundedAt: string;
+    refundedBy: string;
+    refundReason: string | null;
+    /** True for full refunds (flips paymentStatus to "refunded"). Default true preserves legacy behaviour. */
+    fullRefund?: boolean;
+    stripeRefundId?: string | null;
+    refundedAmountCents?: number;
+    refundStatus?: "succeeded" | "pending" | "failed" | null;
+  },
 ): Promise<Result> {
   try {
-    const result = await getSpecialEventRepo().refundPurchase(id, patch);
+    // Legacy callers (manual BPM refund flow) didn't pass `fullRefund`; default to true so
+    // their behaviour (flip status → refunded) is unchanged. The new Stripe-side refund
+    // action passes it explicitly based on whether the cumulative refund equals the paid amount.
+    const fullRefund = patch.fullRefund ?? true;
+    const result = await getSpecialEventRepo().refundPurchase(id, { ...patch, fullRefund });
     if (!result) return { success: false, error: "Purchase not found" };
     return { success: true };
   } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }

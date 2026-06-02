@@ -54,6 +54,24 @@ export interface FinanceTransaction {
    * by the Finance super-admin tooling — does NOT affect normal display.
    */
   isTest: boolean;
+  /**
+   * Stripe refund metadata (Phase 5). Only populated when the underlying
+   * row was paid through Stripe AND/OR has a Stripe refund recorded:
+   *   * `refundedAmountCents` — cumulative amount refunded so far. 0
+   *     when no refund has been issued yet.
+   *   * `stripeRefundId`      — the most recent Stripe refund id.
+   *   * `refundStatus`        — Stripe-side refund state when the
+   *                              action returned.
+   *
+   * Used by the Finance UI to:
+   *   * Show the "Issue Stripe refund" button only on Stripe-paid rows
+   *     that still have refundable amount remaining.
+   *   * Render a "partially refunded" badge for rows where a partial
+   *     refund has been issued but the row is still paymentStatus=paid.
+   */
+  refundedAmountCents?: number;
+  stripeRefundId?: string | null;
+  refundStatus?: "succeeded" | "pending" | "failed" | null;
 }
 
 const TEST_MARKER_PATTERNS = ["[test]", "#test", "test:"];
@@ -191,6 +209,9 @@ export function buildSubscriptionTransactions(
       relatedEntityId: sub.id,
       relatedEventId: null,
       isTest: carriesTestMarker(sub.paymentNotes, sub.notes, sub.paymentReference, sub.refundReason),
+      refundedAmountCents: sub.refundedAmountCents ?? 0,
+      stripeRefundId: sub.stripeRefundId ?? null,
+      refundStatus: sub.refundStatus ?? null,
     };
   });
 }
@@ -252,6 +273,9 @@ export function buildEventPurchaseTransactions(
       relatedEntityId: p.id,
       relatedEventId: p.eventId,
       isTest: carriesTestMarker(p.notes, p.paymentReference, p.refundReason),
+      refundedAmountCents: p.refundedAmountCents ?? 0,
+      stripeRefundId: p.stripeRefundId ?? null,
+      refundStatus: p.refundStatus ?? null,
     };
   });
 }

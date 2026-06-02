@@ -80,6 +80,9 @@ export interface SubscriptionPatch {
   refundedAt?: string | null;
   refundedBy?: string | null;
   refundReason?: string | null;
+  stripeRefundId?: string | null;
+  refundedAmountCents?: number;
+  refundStatus?: "succeeded" | "pending" | "failed" | null;
 }
 
 export interface ISubscriptionRepository {

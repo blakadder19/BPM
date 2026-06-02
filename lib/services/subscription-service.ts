@@ -100,6 +100,9 @@ export async function updateSubscription(
     refundedAt?: string | null;
     refundedBy?: string | null;
     refundReason?: string | null;
+    stripeRefundId?: string | null;
+    refundedAmountCents?: number;
+    refundStatus?: "succeeded" | "pending" | "failed" | null;
   }
 ): Promise<{ success: boolean; error?: string }> {
   const result = await getSubscriptionRepo().update(id, patch);

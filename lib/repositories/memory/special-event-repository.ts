@@ -129,6 +129,9 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       refundedAt: null,
       refundedBy: null,
       refundReason: null,
+      stripeRefundId: null,
+      refundedAmountCents: 0,
+      refundStatus: null,
       lastEmailType: null,
       lastEmailSentAt: null,
       lastEmailSuccess: null,
@@ -153,13 +156,28 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
     });
   },
 
-  async refundPurchase(id, patch: { refundedAt: string; refundedBy: string; refundReason: string | null }) {
-    const p = store.patchPurchase(id, {
-      paymentStatus: "refunded" as const,
+  async refundPurchase(
+    id,
+    patch: {
+      refundedAt: string;
+      refundedBy: string;
+      refundReason: string | null;
+      fullRefund?: boolean;
+      stripeRefundId?: string | null;
+      refundedAmountCents?: number;
+      refundStatus?: "succeeded" | "pending" | "failed" | null;
+    },
+  ) {
+    const fields: Parameters<typeof store.patchPurchase>[1] = {
       refundedAt: patch.refundedAt,
       refundedBy: patch.refundedBy,
       refundReason: patch.refundReason,
-    });
+    };
+    if (patch.stripeRefundId !== undefined) fields.stripeRefundId = patch.stripeRefundId;
+    if (patch.refundedAmountCents !== undefined) fields.refundedAmountCents = patch.refundedAmountCents;
+    if (patch.refundStatus !== undefined) fields.refundStatus = patch.refundStatus;
+    if (patch.fullRefund) fields.paymentStatus = "refunded" as const;
+    const p = store.patchPurchase(id, fields);
     return p ?? null;
   },
 

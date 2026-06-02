@@ -110,6 +110,9 @@ export function createSubscription(data: {
     refundedAt: null,
     refundedBy: null,
     refundReason: null,
+    stripeRefundId: null,
+    refundedAmountCents: 0,
+    refundStatus: null,
     productSnapshot: data.productSnapshot ?? null,
     originalPriceCents: data.originalPriceCents ?? null,
     discountAmountCents: data.discountAmountCents ?? 0,
@@ -150,6 +153,9 @@ export function updateSubscription(
     refundedAt?: string | null;
     refundedBy?: string | null;
     refundReason?: string | null;
+    stripeRefundId?: string | null;
+    refundedAmountCents?: number;
+    refundStatus?: "succeeded" | "pending" | "failed" | null;
   }
 ): MockSubscription | null {
   const list = init();
@@ -181,6 +187,9 @@ export function updateSubscription(
   if (patch.refundedAt !== undefined) sub.refundedAt = patch.refundedAt;
   if (patch.refundedBy !== undefined) sub.refundedBy = patch.refundedBy;
   if (patch.refundReason !== undefined) sub.refundReason = patch.refundReason;
+  if (patch.stripeRefundId !== undefined) sub.stripeRefundId = patch.stripeRefundId;
+  if (patch.refundedAmountCents !== undefined) sub.refundedAmountCents = patch.refundedAmountCents;
+  if (patch.refundStatus !== undefined) sub.refundStatus = patch.refundStatus;
 
   return { ...sub };
 }

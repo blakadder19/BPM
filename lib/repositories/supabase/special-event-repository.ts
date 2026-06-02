@@ -129,6 +129,9 @@ function toPurchase(r: any): MockEventPurchase {
     refundedAt: r.refunded_at ?? null,
     refundedBy: r.refunded_by ?? null,
     refundReason: r.refund_reason ?? null,
+    stripeRefundId: r.stripe_refund_id ?? null,
+    refundedAmountCents: r.refunded_amount_cents ?? 0,
+    refundStatus: (r.refund_status as MockEventPurchase["refundStatus"]) ?? null,
     lastEmailType: r.last_email_type ?? null,
     lastEmailSentAt: r.last_email_sent_at ?? null,
     lastEmailSuccess: r.last_email_success ?? null,
@@ -427,12 +430,23 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
 
   async refundPurchase(id, patch) {
     const sb = createAdminClient();
-    const { error } = await sb.from("event_purchases").update({
-      payment_status: "refunded",
+    const fields: Record<string, unknown> = {
       refunded_at: patch.refundedAt,
       refunded_by: patch.refundedBy,
       refund_reason: patch.refundReason,
-    } as never).eq("id", id);
+    };
+    // Stripe-side refund metadata (new in 00072). Only persisted when the
+    // caller actually issued a refund through Stripe; manual refund paths
+    // leave these undefined so the columns stay null/0.
+    if (patch.stripeRefundId !== undefined) fields.stripe_refund_id = patch.stripeRefundId;
+    if (patch.refundedAmountCents !== undefined) fields.refunded_amount_cents = patch.refundedAmountCents;
+    if (patch.refundStatus !== undefined) fields.refund_status = patch.refundStatus;
+    // Only flip the row to "refunded" when the refund is full. Partial
+    // refunds keep paymentStatus="paid" and surface the partial state
+    // via refunded_amount_cents (consumed by the Finance UI). Callers
+    // that issue a full refund must pass `fullRefund: true`.
+    if (patch.fullRefund) fields.payment_status = "refunded";
+    const { error } = await sb.from("event_purchases").update(fields as never).eq("id", id);
     if (error) throw new Error(error.message);
     const { data } = await sb.from("event_purchases").select("*").eq("id", id).single();
     return data ? toPurchase(data) : null;

@@ -84,7 +84,12 @@ export default async function EventDetailPage({
     canEdit: hasPermission(access, "events:edit"),
     canDelete: hasPermission(access, "events:delete"),
     canMarkPaid: hasPermission(access, "events:mark_paid"),
-    canRefund: hasPermission(access, "events:edit"),
+    // Phase 5 (Stripe refunds): refunds are now gated on the dedicated
+    // finance:refund / payments:refund permissions rather than the
+    // broad events:edit permission. UI hiding is just the surface — the
+    // server actions (`refundEventPurchaseAction`, `issueStripeRefundAction`)
+    // independently enforce the same gate.
+    canRefund: hasPermission(access, "finance:refund") || hasPermission(access, "payments:refund"),
     canScan: hasPermission(access, "checkin:scan"),
   };
 
