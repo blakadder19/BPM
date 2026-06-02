@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { markFinanceTransactionPaidAction } from "@/lib/actions/finance-row-actions";
+import { StripeRefundModal, type StripeRefundTarget } from "@/components/finance/stripe-refund-modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
 import { SearchInput } from "@/components/ui/search-input";
@@ -219,6 +220,10 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
   // Bumped after a successful toggle so the danger zone re-fetches candidates
   // when it is currently expanded.
   const [candidatesRefreshKey, setCandidatesRefreshKey] = useState(0);
+
+  // Phase 5 — Issue Stripe refund. Holds the target row + amount that the
+  // currently-open <StripeRefundModal/> is refunding. Null when no modal.
+  const [refundTarget, setRefundTarget] = useState<StripeRefundTarget | null>(null);
 
   const datePresets = useMemo(() => getDatePresets(), []);
 
@@ -454,6 +459,20 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
                   isToggling={togglingId === tx.id}
                   isMarkingPaid={markingPaidId === tx.id}
                   wasJustMarkedPaid={wasMarkedPaidLocally}
+                  onIssueStripeRefund={
+                    permissions.canRefund && tx.relatedEntityId && (tx.source === "subscription" || tx.source === "event_purchase")
+                      ? () => {
+                          setRefundTarget({
+                            kind: tx.source === "subscription" ? "subscription" : "event_purchase",
+                            id: tx.relatedEntityId!,
+                            label: `${tx.buyerName} — ${tx.productName}`,
+                            paidAmountCents: tx.amountCents,
+                            refundedAmountCents: tx.refundedAmountCents ?? 0,
+                            currency: tx.currency ?? "eur",
+                          });
+                        }
+                      : undefined
+                  }
                   onMarkPaid={permissions.canMarkPaid ? async () => {
                     setMarkPaidError(null);
                     setMarkingPaidId(tx.id);
@@ -515,6 +534,21 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
 
       {/* Super-admin danger zone */}
       {superAdminStatus?.canDelete && permissions.canDangerZone && <FinanceDangerZone refreshKey={candidatesRefreshKey} />}
+
+      {/* Stripe refund modal — only mounted when an admin clicked "Issue Stripe refund". */}
+      {refundTarget && (
+        <StripeRefundModal
+          target={refundTarget}
+          onClose={() => setRefundTarget(null)}
+          onSuccess={() => {
+            // Server action already calls revalidatePath, but force a client
+            // refresh so the row's status / partial-refund badge updates
+            // immediately without waiting for the next navigation.
+            setRefundTarget(null);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -594,6 +628,7 @@ function TxRow({
   wasJustMarkedPaid = false,
   onMarkPaid,
   onToggleTest,
+  onIssueStripeRefund,
 }: {
   tx: FinanceTransaction;
   superAdmin?: boolean;
@@ -603,6 +638,8 @@ function TxRow({
   wasJustMarkedPaid?: boolean;
   onMarkPaid?: () => void;
   onToggleTest?: () => void;
+  /** When set, the "Issue Stripe refund" button is rendered on Stripe-paid rows. */
+  onIssueStripeRefund?: () => void;
 }) {
   const statusColor = STATUS_COLORS[tx.status] ?? "bg-gray-100 text-gray-600";
   const dateStr = tx.date.includes("T") ? formatDate(tx.date.slice(0, 10)) : formatDate(tx.date);
@@ -623,6 +660,20 @@ function TxRow({
   const canMarkPaid = isPending
     && (tx.source === "subscription" || tx.source === "event_purchase")
     && !!onMarkPaid;
+
+  // Phase 5 — Stripe refund: the button is only offered when (a) the row
+  // was actually paid through Stripe, (b) there's refundable amount left,
+  // and (c) the parent (i.e. permissions.canRefund) wired a handler.
+  const refundedSoFar = tx.refundedAmountCents ?? 0;
+  const remainingRefundable = (tx.amountCents ?? 0) - refundedSoFar;
+  const isStripePaid = tx.paymentMethod === "stripe";
+  const canIssueStripeRefund =
+    !!onIssueStripeRefund
+    && isStripePaid
+    && (tx.source === "subscription" || tx.source === "event_purchase")
+    && (tx.status === "paid")
+    && remainingRefundable > 0;
+  const isPartiallyRefunded = isStripePaid && refundedSoFar > 0 && tx.status !== "refunded";
 
   // Discount indicator (Bug 3): show only when the frozen subscription
   // snapshot recorded a non-zero discount.
@@ -692,6 +743,26 @@ function TxRow({
                 <CheckCircle2 className="h-3 w-3" />
               )}
               Mark paid
+            </button>
+          )}
+          {isPartiallyRefunded && (
+            <span
+              className="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700"
+              title={`Partially refunded — ${formatCents(refundedSoFar)} of ${formatCents(tx.amountCents)}`}
+            >
+              <RotateCcw className="h-2.5 w-2.5" />
+              −{formatCents(refundedSoFar)}
+            </span>
+          )}
+          {canIssueStripeRefund && (
+            <button
+              type="button"
+              onClick={onIssueStripeRefund}
+              className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700 hover:bg-red-100"
+              title="Issue a real Stripe refund for this transaction"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Issue Stripe refund
             </button>
           )}
         </div>

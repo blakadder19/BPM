@@ -196,7 +196,24 @@ export interface ISpecialEventRepository {
 
   refundPurchase(
     id: string,
-    patch: { refundedAt: string; refundedBy: string; refundReason: string | null },
+    patch: {
+      refundedAt: string;
+      refundedBy: string;
+      refundReason: string | null;
+      /**
+       * When true, flips payment_status to "refunded". Partial refunds
+       * leave the status untouched and surface the partial state via
+       * `refundedAmountCents` so the row keeps appearing as "paid"
+       * minus the amount returned to the customer.
+       */
+      fullRefund?: boolean;
+      /** Stripe-side refund identifier (re_...). Optional — manual refund paths omit it. */
+      stripeRefundId?: string | null;
+      /** Cumulative refunded amount AFTER this refund (in cents). */
+      refundedAmountCents?: number;
+      /** Stripe refund status at the time of the action. */
+      refundStatus?: "succeeded" | "pending" | "failed" | null;
+    },
   ): Promise<MockEventPurchase | null>;
 
   /**

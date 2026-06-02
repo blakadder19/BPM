@@ -33,7 +33,9 @@ import {
   Undo2,
   Archive,
   ArchiveRestore,
+  RotateCcw,
 } from "lucide-react";
+import { StripeRefundModal, type StripeRefundTarget } from "@/components/finance/stripe-refund-modal";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminTable, Td } from "@/components/ui/admin-table";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -193,6 +195,10 @@ export function AdminEventDetail({
   const [payError, setPayError] = useState<string | null>(null);
 
   const [refundPurchase, setRefundPurchase] = useState<MockEventPurchase | null>(null);
+  // Phase 5 — Stripe refund target for the <StripeRefundModal/>. Distinct
+  // from `refundPurchase` (the legacy BPM-only refund dialog used for
+  // cash/Revolut/at-reception refunds).
+  const [stripeRefundTarget, setStripeRefundTarget] = useState<StripeRefundTarget | null>(null);
   const [refundReason, setRefundReason] = useState("");
   const [refundPending, startRefundTransition] = useTransition();
   const [refundError, setRefundError] = useState<string | null>(null);
@@ -812,12 +818,39 @@ export function AdminEventDetail({
                         </button>
                       )}
                       {pur.paymentStatus === "paid" && permissions.canRefund && (
-                        <button
-                          onClick={() => { setRefundPurchase(pur); setRefundReason(""); setRefundError(null); }}
-                          className="text-xs font-medium text-red-600 hover:underline inline-flex items-center gap-0.5"
-                        >
-                          <Undo2 className="h-3 w-3" /> Refund
-                        </button>
+                        pur.paymentMethod === "stripe" ? (
+                          // Stripe-paid → use the dedicated Stripe refund modal so the
+                          // customer actually gets their money back via stripe.refunds.create.
+                          <button
+                            onClick={() => {
+                              const buyerLabel = pur.studentId
+                                ? (studentInfoMap[pur.studentId]?.fullName ?? pur.studentId)
+                                : (pur.guestName ?? "Guest");
+                              const productLabel = products.find((p) => p.id === pur.eventProductId)?.name ?? "Event product";
+                              setStripeRefundTarget({
+                                kind: "event_purchase",
+                                id: pur.id,
+                                label: `${buyerLabel} — ${productLabel}`,
+                                paidAmountCents: pur.paidAmountCents ?? pur.originalAmountCents ?? 0,
+                                refundedAmountCents: pur.refundedAmountCents ?? 0,
+                                currency: pur.currency ?? "eur",
+                              });
+                            }}
+                            className="text-xs font-medium text-red-600 hover:underline inline-flex items-center gap-0.5"
+                            title="Issue a real Stripe refund — calls the Stripe API"
+                          >
+                            <RotateCcw className="h-3 w-3" /> Issue Stripe refund
+                          </button>
+                        ) : (
+                          // Cash/Revolut/manual → BPM-only mark-as-refunded flow.
+                          <button
+                            onClick={() => { setRefundPurchase(pur); setRefundReason(""); setRefundError(null); }}
+                            className="text-xs font-medium text-red-600 hover:underline inline-flex items-center gap-0.5"
+                            title="Mark this purchase refunded in BPM (the actual refund must be issued outside BPM)"
+                          >
+                            <Undo2 className="h-3 w-3" /> Mark refunded
+                          </button>
+                        )
                       )}
                       {canResend && permissions.canEdit && (
                         <button
@@ -1040,6 +1073,19 @@ export function AdminEventDetail({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* Phase 5 — real Stripe refund modal. Only mounted when an admin
+          clicked "Issue Stripe refund" on a stripe-paid purchase row. */}
+      {stripeRefundTarget && (
+        <StripeRefundModal
+          target={stripeRefundTarget}
+          onClose={() => setStripeRefundTarget(null)}
+          onSuccess={() => {
+            setStripeRefundTarget(null);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

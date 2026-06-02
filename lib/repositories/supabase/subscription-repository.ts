@@ -50,6 +50,9 @@ function toMockSubscription(row: SubRow): MockSubscription {
     manualDiscountCents: row.manual_discount_cents ?? 0,
     manualDiscountReason: row.manual_discount_reason ?? null,
     manualDiscountBy: row.manual_discount_by ?? null,
+    stripeRefundId: row.stripe_refund_id ?? null,
+    refundedAmountCents: row.refunded_amount_cents ?? 0,
+    refundStatus: (row.refund_status as MockSubscription["refundStatus"]) ?? null,
   };
 }
 
@@ -182,6 +185,9 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
     if (patch.refundedAt !== undefined) fields.refunded_at = patch.refundedAt;
     if (patch.refundedBy !== undefined) fields.refunded_by = patch.refundedBy;
     if (patch.refundReason !== undefined) fields.refund_reason = patch.refundReason;
+    if (patch.stripeRefundId !== undefined) fields.stripe_refund_id = patch.stripeRefundId;
+    if (patch.refundedAmountCents !== undefined) fields.refunded_amount_cents = patch.refundedAmountCents;
+    if (patch.refundStatus !== undefined) fields.refund_status = patch.refundStatus;
 
     if (Object.keys(fields).length === 0) return this.getById(id);
 

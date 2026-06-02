@@ -566,6 +566,25 @@ export async function applyPaymentChangeAction(params: {
     };
   }
 
+  // Finance hardening (Phase 5 / Stripe refunds): the dropdown change
+  // is the legacy BPM-only refund path. Refusing it for Stripe-paid
+  // subscriptions prevents the situation where BPM looks refunded but
+  // the customer was never actually credited. Stripe-paid subscriptions
+  // must go through `issueStripeRefundAction`, which calls Stripe first
+  // and only marks BPM refunded after the refund is accepted.
+  if (
+    params.newPaymentStatus === "refunded" &&
+    sub.paymentMethod === "stripe" &&
+    (sub.refundedAmountCents ?? 0) === 0 &&
+    !sub.stripeRefundId
+  ) {
+    return {
+      success: false,
+      error:
+        "This subscription was paid through Stripe. Use the Issue Stripe refund action so the customer actually gets their money back.",
+    };
+  }
+
   const patch: Parameters<typeof updateSubscription>[1] = {
     paymentStatus: params.newPaymentStatus,
   };

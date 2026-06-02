@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole, type AuthUser } from "@/lib/auth";
-import { requirePermission } from "@/lib/staff-permissions";
+import { requirePermission, requireAnyPermissionForAction } from "@/lib/staff-permissions";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { createPurchase, updatePurchasePayment, refundPurchase } from "@/lib/services/special-event-service";
 import { sendEventPurchaseEmail, sendEventRefundEmail, type EmailSendResult } from "@/lib/communications/event-emails";
@@ -696,8 +696,15 @@ export async function refundEventPurchaseAction(input: {
   eventId: string;
   refundReason: string | null;
 }): Promise<{ success: boolean; error?: string }> {
-  const access = await requirePermission("events:edit");
-  const user = access.user;
+  // Finance hardening: this is the BPM-only manual refund path (used
+  // for cash/Revolut/at-reception payments that were already refunded
+  // outside Stripe). It must NOT be reachable for Stripe-paid purchases
+  // — those go through `issueStripeRefundAction`, which actually moves
+  // the money. We require the dedicated refund permission rather than
+  // the events:edit gate it used historically.
+  const guard = await requireAnyPermissionForAction(["finance:refund", "payments:refund"]);
+  if (!guard.ok) return { success: false, error: guard.error };
+  const user = guard.access.user;
 
   const repo = getSpecialEventRepo();
   const purchases = await repo.getPurchasesByEvent(input.eventId);
@@ -713,6 +720,15 @@ export async function refundEventPurchaseAction(input: {
   }
   if (purchase.paymentStatus !== "paid") {
     return { success: false, error: `Cannot refund a purchase with status "${purchase.paymentStatus}"` };
+  }
+  // Stripe-paid purchases MUST go through issueStripeRefundAction so the
+  // customer actually gets their money back; refusing them here keeps a
+  // mis-clicked "manual refund" button from desynchronising BPM and Stripe.
+  if (purchase.paymentMethod === "stripe") {
+    return {
+      success: false,
+      error: "This purchase was paid through Stripe. Use the Issue Stripe refund action instead.",
+    };
   }
 
   const refundedAt = new Date().toISOString();

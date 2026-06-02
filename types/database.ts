@@ -359,6 +359,9 @@ export interface Database {
           manual_discount_cents: number;
           manual_discount_reason: string | null;
           manual_discount_by: string | null;
+          stripe_refund_id: string | null;
+          refunded_amount_cents: number;
+          refund_status: string | null;
           created_at: string;
           updated_at: string;
         };
