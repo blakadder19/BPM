@@ -357,6 +357,8 @@ function NotificationDetailModal({
                 <img
                   src={bc.imageUrl}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className="aspect-[4/5] w-full object-cover"
                 />
               </div>

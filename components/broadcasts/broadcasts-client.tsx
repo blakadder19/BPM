@@ -340,6 +340,8 @@ function BroadcastTableRow({
                   <img
                     src={b.imageUrl}
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     className="w-full max-h-40 object-cover"
                   />
                 </div>
@@ -835,6 +837,8 @@ function ComposerDialog({
                     <img
                       src={imageUrl}
                       alt=""
+                      loading="lazy"
+                      decoding="async"
                       className="w-full max-h-32 object-cover"
                     />
                   </div>
