@@ -571,16 +571,56 @@ export default async function DashboardPage() {
   }
   const studentsWithSub = new Set(activeSubs.map((s) => s.studentId)).size;
 
+  // ── Event purchases / pending payments ────────────────────
+  //
+  // Previously this section did one `getPurchasesByEvent` and one
+  // `getProductsByEvent` query per event, serially. With ~N events
+  // that's 2N round trips just to render the dashboard. We replace
+  // that fan-out with a single `getAllPurchases()` (one query) and
+  // a single per-upcoming-event product fetch — performed in
+  // parallel and only for events that actually appear in
+  // `upcomingEvents` or contribute to `pendingEventPayments`.
   const evtRepo = getSpecialEventRepo();
   const allEvts = await evtRepo.getAllEvents();
+  const allPurchases = await evtRepo.getAllPurchases();
+
+  // Index purchases by event_id for O(1) per-event lookup below.
+  const purchasesByEventId = new Map<string, typeof allPurchases>();
+  for (const pur of allPurchases) {
+    const list = purchasesByEventId.get(pur.eventId);
+    if (list) list.push(pur);
+    else purchasesByEventId.set(pur.eventId, [pur]);
+  }
+
+  // Resolve the union of event ids we still need product names for
+  // (only pending-payment lines use a product name).
+  const eventIdsNeedingProducts = new Set<string>();
+  for (const pur of allPurchases) {
+    if (pur.paymentStatus === "pending") eventIdsNeedingProducts.add(pur.eventId);
+  }
+  const productMapsByEventId = new Map<string, Map<string, { id: string; name: string }>>();
+  if (eventIdsNeedingProducts.size > 0) {
+    const productLists = await Promise.all(
+      Array.from(eventIdsNeedingProducts).map(async (eid) => ({
+        eid,
+        products: await evtRepo.getProductsByEvent(eid),
+      })),
+    );
+    for (const { eid, products } of productLists) {
+      productMapsByEventId.set(
+        eid,
+        new Map(products.map((p) => [p.id, { id: p.id, name: p.name }])),
+      );
+    }
+  }
+
   const pendingEventPayments: { studentId: string | null; eventTitle: string; productName: string; eventId: string }[] = [];
   const upcomingEvents: DashboardEventSummary[] = [];
   for (const evt of allEvts) {
-    const purchases = await evtRepo.getPurchasesByEvent(evt.id);
-    const products = await evtRepo.getProductsByEvent(evt.id);
+    const purchases = purchasesByEventId.get(evt.id) ?? [];
     for (const pur of purchases) {
       if (pur.paymentStatus === "pending") {
-        const prod = products.find((p) => p.id === pur.eventProductId);
+        const prod = productMapsByEventId.get(evt.id)?.get(pur.eventProductId);
         pendingEventPayments.push({
           studentId: pur.studentId,
           eventTitle: evt.title,

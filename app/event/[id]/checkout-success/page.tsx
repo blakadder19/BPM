@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import { getSpecialEventRepo } from "@/lib/repositories";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { fulfillGuestEventPurchase } from "@/lib/actions/event-purchase";
 import type { EmailSendResult } from "@/lib/communications/event-emails";
 
@@ -96,7 +95,12 @@ export default async function GuestCheckoutSuccessPage({
     notFound();
   }
 
-  await ensureOperationalDataHydrated();
+  // Public guest-checkout return URL. Fulfillment is handled entirely
+  // by `fulfillGuestEventPurchase`, which writes directly via the
+  // event repository and never reads the operational hydration cache.
+  // We therefore skip `ensureOperationalDataHydrated()` here — this
+  // route was previously pulling every booking / attendance / penalty
+  // row from Supabase on every Stripe redirect.
   const result = await verifyAndFulfill(eventId, sessionId);
 
   if (result.status === "not_paid") {

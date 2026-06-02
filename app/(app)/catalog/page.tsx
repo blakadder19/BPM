@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth";
 import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentSubs } from "@/lib/server/cached-queries";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getCurrentTerm, getNextTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -66,9 +65,14 @@ function resolveStyleSelection(
 export default async function CatalogPage() {
   const user = await requireRole(["student"]);
 
-  // Run hydration AND direct-DB queries in parallel
-  const [, cocDone, products, terms, allStudentSubs] = await Promise.all([
-    ensureOperationalDataHydrated(),
+  // Catalog reads no operational data (bookings, attendance,
+  // penalties, finance audit) so we skip `ensureOperationalDataHydrated()`.
+  // Skipping it here removes a large recurring Supabase egress hit for
+  // every student visit to the catalog (it was previously called
+  // for free from the layout, but this page used to await it
+  // explicitly, which deferred render until the full hydration round
+  // trip completed).
+  const [cocDone, products, terms, allStudentSubs] = await Promise.all([
     cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
     cachedGetProducts(),
     cachedGetTerms(),

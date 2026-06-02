@@ -1,10 +1,16 @@
 import { notFound } from "next/navigation";
 import { getSpecialEventRepo } from "@/lib/repositories";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { isStripeEnabled } from "@/lib/stripe";
 import { PublicEventPage } from "@/components/events/public-event-page";
 import { shouldShowEventOnPublicPage } from "@/lib/domain/event-visibility";
 
+// Public marketing route. We deliberately do NOT call
+// `ensureOperationalDataHydrated()` here: this page only renders the
+// event + sessions + visible products and never touches bookings,
+// waitlist, attendance, penalties, or the finance audit log. Pulling
+// the whole operational dataset for every social-link / bot / share
+// preview hit was a major contributor to Supabase egress overage on
+// the free tier.
 export default async function PublicEventRoute({
   params,
   searchParams,
@@ -14,7 +20,6 @@ export default async function PublicEventRoute({
 }) {
   const { id } = await params;
   const sp = await searchParams;
-  await ensureOperationalDataHydrated();
 
   const repo = getSpecialEventRepo();
   const event = await repo.getEventById(id);

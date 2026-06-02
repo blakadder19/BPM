@@ -248,6 +248,8 @@ export function MediaPicker({
                       <img
                         src={item.publicUrl}
                         alt={item.altText || ""}
+                        loading="lazy"
+                        decoding="async"
                         className="h-20 w-full object-cover"
                         onClick={() => {
                           onChange(item.publicUrl);

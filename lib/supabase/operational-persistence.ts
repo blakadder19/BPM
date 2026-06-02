@@ -29,6 +29,58 @@ function getClient() {
   return _cachedClient;
 }
 
+// ── Hydration date window ────────────────────────────────────
+//
+// Most BPM pages only care about recent operational history:
+//
+//   * Dashboard windows attendance to the last 30 days.
+//   * Bookings / attendance / penalties admin pages render the
+//     student's recent activity; nothing renders 1+ year-old
+//     bookings.
+//   * The bookings service is rebuilt on every request from this
+//     hydration step, so any row not loaded here is simply
+//     invisible until somebody queries it directly.
+//
+// We pull a generous 365-day window so all current UI is covered
+// while bounding the per-request Supabase payload. Configurable
+// via env so we can widen it without redeploying if a regression
+// surfaces; `BPM_HYDRATION_WINDOW_DAYS=0` disables the window
+// entirely as an emergency escape hatch.
+const DEFAULT_HYDRATION_WINDOW_DAYS = 365;
+
+function hydrationWindowDays(): number {
+  const raw = process.env.BPM_HYDRATION_WINDOW_DAYS;
+  if (raw == null) return DEFAULT_HYDRATION_WINDOW_DAYS;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return DEFAULT_HYDRATION_WINDOW_DAYS;
+  return parsed;
+}
+
+/**
+ * Return the lower bound (ISO YYYY-MM-DD) for the hydration window.
+ * Returns null when windowing is disabled (`BPM_HYDRATION_WINDOW_DAYS=0`).
+ */
+function hydrationWindowFromDate(): string | null {
+  const days = hydrationWindowDays();
+  if (days === 0) return null;
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Same as `hydrationWindowFromDate` but returns a full ISO timestamp
+ * for columns like `booked_at` / `marked_at`. Returns null when
+ * windowing is disabled.
+ */
+function hydrationWindowFromTimestamp(): string | null {
+  const days = hydrationWindowDays();
+  if (days === 0) return null;
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString();
+}
+
 // ── Bookings ───────────────────────────────────────────────
 
 function str(v: unknown, fallback = ""): string {
@@ -75,7 +127,15 @@ export async function loadBookingsFromDB(): Promise<StoredBooking[]> {
   const client = getClient();
   if (!client) return [];
   try {
-    const { data, error } = await client.from("op_bookings").select("*");
+    // Bounded by the hydration window so admin pages don't pay
+    // egress for years-old bookings on every request. We filter on
+    // `booked_at` (the row creation timestamp) so cancelled rows
+    // from the same window stay visible to finance / penalty
+    // reconciliation views.
+    const fromTs = hydrationWindowFromTimestamp();
+    let q = client.from("op_bookings").select("*");
+    if (fromTs) q = q.gte("booked_at", fromTs);
+    const { data, error } = await q;
     if (error) { console.warn("[op-persistence] loadBookings:", error.message); return []; }
     return (data ?? []).map(rowToBooking);
   } catch (e) {
@@ -222,7 +282,14 @@ export async function loadAttendanceFromDB(): Promise<StoredAttendance[]> {
   const client = getClient();
   if (!client) return [];
   try {
-    const { data, error } = await client.from("op_attendance").select("*");
+    // Window by `date` (the class date) — the Attendance Summary
+    // card and the per-student attendance page both render recent
+    // activity. The closure job rolls forward daily so 365 days of
+    // attendance covers every screen that consumes this dataset.
+    const fromDate = hydrationWindowFromDate();
+    let q = client.from("op_attendance").select("*");
+    if (fromDate) q = q.gte("date", fromDate);
+    const { data, error } = await q;
     if (error) { console.warn("[op-persistence] loadAttendance:", error.message); return []; }
     return (data ?? []).map(rowToAttendance);
   } catch (e) {
