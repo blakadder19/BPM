@@ -25,6 +25,7 @@ import type {
   SubscriptionRefundedPayload,
   RenewalPreparedPayload,
   RenewalDueSoonPayload,
+  RenewalReminderPayload,
   WaitlistPromotedPayload,
   BookingReminderPayload,
   BirthdayBenefitAvailablePayload,
@@ -231,6 +232,64 @@ function renewalDueSoon(
   };
 }
 
+/**
+ * "Heads-up before auto-renewal" reminder.
+ *
+ * Wording rule (from the renewal-reminder brief):
+ *   * If `autoRenewConfirmed === true`, the body says the membership
+ *     is "set to renew automatically" on the renewal date.
+ *   * Otherwise the body uses the safer "approaching its renewal date"
+ *     phrasing so we never imply an automatic charge when BPM can't
+ *     guarantee that's true.
+ *
+ * BPM today only auto-creates a pending next-term subscription row —
+ * it does NOT auto-charge the customer through Stripe — so the
+ * confirmed branch deliberately stops short of saying "you will be
+ * charged"; it only promises the entitlement will roll over.
+ */
+function renewalReminder(
+  studentName: string,
+  p: RenewalReminderPayload
+): EmailContent {
+  const appUrl = getAppUrl();
+  const dayWord = p.daysUntilRenewal === 1 ? "day" : "days";
+
+  const intro = p.autoRenewConfirmed
+    ? `Your <strong>${p.productName}</strong> membership is set to renew automatically on <strong>${p.renewalDate}</strong>.`
+    : `Your BPM membership (<strong>${p.productName}</strong>) is approaching its renewal date on <strong>${p.renewalDate}</strong>.`;
+
+  const rows: Parameters<typeof bpmDetailsCard>[0] = [
+    { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
+    { label: "Renewal date", valueHtml: p.renewalDate },
+    { label: "Heads-up", valueHtml: `${p.daysUntilRenewal} ${dayWord} from now` },
+  ];
+  if (p.amountLabel) {
+    rows.splice(2, 0, { label: "Amount", valueHtml: p.amountLabel });
+  }
+  if (p.autoRenewConfirmed) {
+    rows.push({ label: "Auto-renew", valueHtml: "On" });
+  }
+
+  const bodyHtml = [
+    paragraph(intro),
+    bpmDetailsCard(rows, "Renewal details"),
+    paragraph(
+      "If everything looks correct, you do not need to do anything. If you have any questions or need to make a change before the renewal, please contact BPM before that date.",
+    ),
+    bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
+  ].join("\n");
+
+  return {
+    subject: "Your BPM membership renewal is coming up",
+    html: bpmEmailWrap({
+      appUrl,
+      recipientName: studentName,
+      heading: "Your membership renewal is coming up",
+      bodyHtml,
+    }),
+  };
+}
+
 function waitlistPromoted(
   studentName: string,
   p: WaitlistPromotedPayload
@@ -380,6 +439,7 @@ const TEMPLATES: {
   subscription_refunded: subscriptionRefunded,
   renewal_prepared: renewalPrepared,
   renewal_due_soon: renewalDueSoon,
+  renewal_reminder: renewalReminder,
   waitlist_promoted: waitlistPromoted,
   booking_reminder: bookingReminder,
   birthday_benefit_available: birthdayBenefitAvailable,
