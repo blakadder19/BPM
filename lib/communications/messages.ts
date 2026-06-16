@@ -19,6 +19,7 @@ import type {
   SubscriptionRefundedPayload,
   RenewalPreparedPayload,
   RenewalDueSoonPayload,
+  RenewalReminderPayload,
   WaitlistPromotedPayload,
   BookingReminderPayload,
   BirthdayBenefitAvailablePayload,
@@ -98,6 +99,16 @@ const buildRenewalDueSoon: MessageBuilder<"renewal_due_soon"> = (
   href: "/dashboard",
 });
 
+const buildRenewalReminder: MessageBuilder<"renewal_reminder"> = (
+  p: RenewalReminderPayload
+) => ({
+  title: "Your membership renewal is coming up",
+  body: p.autoRenewConfirmed
+    ? `Your "${p.productName}" membership is set to renew automatically on ${p.renewalDate} (${p.daysUntilRenewal} day${p.daysUntilRenewal !== 1 ? "s" : ""} away).`
+    : `Your BPM membership ("${p.productName}") is approaching its renewal date on ${p.renewalDate}.`,
+  href: "/dashboard",
+});
+
 const buildWaitlistPromoted: MessageBuilder<"waitlist_promoted"> = (
   p: WaitlistPromotedPayload
 ) => ({
@@ -149,6 +160,7 @@ const BUILDERS: {
   subscription_refunded: buildSubscriptionRefunded,
   renewal_prepared: buildRenewalPrepared,
   renewal_due_soon: buildRenewalDueSoon,
+  renewal_reminder: buildRenewalReminder,
   waitlist_promoted: buildWaitlistPromoted,
   booking_reminder: buildBookingReminder,
   birthday_benefit_available: buildBirthdayBenefitAvailable,

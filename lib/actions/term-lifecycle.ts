@@ -16,9 +16,14 @@ import {
   type RenewalInstruction,
 } from "@/lib/domain/term-lifecycle";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { renewalPreparedEvent, renewalDueSoonEvent } from "@/lib/communications/builders";
+import { renewalPreparedEvent, renewalDueSoonEvent, renewalReminderEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import type { CommEvent } from "@/lib/communications/events";
+import {
+  findRenewalReminderCandidates,
+  formatRenewalAmount,
+  resolveReminderDaysBefore,
+} from "@/lib/domain/renewal-reminders";
 
 // ── Concurrency guard ────────────────────────────────────────
 // Prevents overlapping lifecycle runs in the same server process.
@@ -161,6 +166,55 @@ export async function runTermLifecycleAction(
             })
           );
         }
+      }
+    }
+
+    // ── renewal_reminder: heads-up BEFORE the current active sub auto-renews
+    //
+    // Distinct from `renewal_due_soon`, which fires once the new pending
+    // row exists. This loop fires earlier — against the CURRENT active
+    // subscription's `validUntil` — so the student knows the renewal
+    // is coming up. Idempotency is handled by the comm-event key
+    // (`renewal_reminder:<subId>:<renewalDate>:<daysBefore>`).
+    const reminderCadence = resolveReminderDaysBefore();
+    const reminderCandidates = findRenewalReminderCandidates({
+      subscriptions: freshSubs,
+      today,
+      daysBeforeCadence: reminderCadence,
+    });
+    if (reminderCandidates.length > 0) {
+      // Pre-load students in one batch to avoid N+1 reads against the
+      // student repo when many subscriptions land on the same cadence day.
+      const studentIds = Array.from(new Set(reminderCandidates.map((c) => c.subscription.studentId)));
+      const students = await Promise.all(studentIds.map((id) => getStudentRepo().getById(id)));
+      const studentById = new Map(students.filter((s): s is NonNullable<typeof s> => !!s).map((s) => [s.id, s]));
+      let reminderCount = 0;
+      for (const c of reminderCandidates) {
+        const student = studentById.get(c.subscription.studentId);
+        // Skip silently when we can't resolve the student or they have no email —
+        // the dispatch layer would skip anyway, but bailing early keeps the
+        // audit logs (`reminderCount`) honest.
+        if (!student) continue;
+        if (!student.email || !student.email.includes("@")) continue;
+        commEvents.push(
+          renewalReminderEvent({
+            studentId: c.subscription.studentId,
+            studentName: student.fullName,
+            productName: c.subscription.productName,
+            subscriptionId: c.subscription.id,
+            renewalDate: c.renewalDate,
+            daysUntilRenewal: c.daysUntilRenewal,
+            autoRenewConfirmed: c.autoRenewConfirmed,
+            amountLabel: formatRenewalAmount(c.subscription),
+            daysBefore: c.daysBefore,
+          }),
+        );
+        reminderCount += 1;
+      }
+      if (reminderCount > 0) {
+        result.details.push(
+          `Queued ${reminderCount} renewal reminder${reminderCount === 1 ? "" : "s"} (cadence=${reminderCadence.join(",")})`,
+        );
       }
     }
 

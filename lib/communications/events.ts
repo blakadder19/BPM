@@ -17,6 +17,7 @@ export const COMM_EVENT_TYPES = [
   "subscription_refunded",
   "renewal_prepared",
   "renewal_due_soon",
+  "renewal_reminder",
   "waitlist_promoted",
   "booking_reminder",
   "birthday_benefit_available",
@@ -66,6 +67,39 @@ export interface RenewalDueSoonPayload {
   subscriptionId: string;
   termName: string;
   daysUntilStart: number;
+}
+
+/**
+ * Heads-up reminder fired BEFORE the current active subscription
+ * reaches its `validUntil` (the auto-renewal trigger date).
+ *
+ * Distinct from `renewal_due_soon`:
+ *   * `renewal_due_soon` fires once the *next* pending subscription row
+ *     already exists and that term is about to start.
+ *   * `renewal_reminder` fires earlier — against the CURRENT active
+ *     subscription — to warn the student that their membership is
+ *     about to roll over.
+ *
+ * Wording note (per the renewal-reminder spec):
+ *   * `autoRenewConfirmed = true` → safe to say "set to renew automatically".
+ *   * `autoRenewConfirmed = false` → use safer wording ("approaching its
+ *      renewal date"). The template enforces this at render time so the
+ *      wrong phrasing cannot leak even if a caller sets `autoRenew=true`
+ *      by accident.
+ */
+export interface RenewalReminderPayload {
+  productName: string;
+  subscriptionId: string;
+  /** ISO date (YYYY-MM-DD) the current subscription expires / auto-renews. */
+  renewalDate: string;
+  /** Whole-day delta between today and `renewalDate`. Always ≥ 1 in practice. */
+  daysUntilRenewal: number;
+  /** True only when the subscription is genuinely configured to auto-renew. */
+  autoRenewConfirmed: boolean;
+  /** Optional pre-formatted price (e.g. "€58.50"). Null when the price is unknown. */
+  amountLabel: string | null;
+  /** Reminder cadence bucket (e.g. 7, 14, 1). Used by the idempotency key. */
+  daysBefore: number;
 }
 
 export interface WaitlistPromotedPayload {
@@ -142,6 +176,7 @@ export type CommEventPayloadMap = {
   subscription_refunded: SubscriptionRefundedPayload;
   renewal_prepared: RenewalPreparedPayload;
   renewal_due_soon: RenewalDueSoonPayload;
+  renewal_reminder: RenewalReminderPayload;
   waitlist_promoted: WaitlistPromotedPayload;
   booking_reminder: BookingReminderPayload;
   birthday_benefit_available: BirthdayBenefitAvailablePayload;

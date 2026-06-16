@@ -193,6 +193,51 @@ export function renewalDueSoonEvent(input: {
   };
 }
 
+// ── renewal_reminder ─────────────────────────────────────────
+
+/**
+ * Build a "heads-up before auto-renewal" reminder for an active
+ * subscription. Idempotency key composition:
+ *
+ *   renewal_reminder:<subscriptionId>:<renewalDate>:<daysBefore>
+ *
+ * Combining `renewalDate` and `daysBefore` lets us safely fire multiple
+ * cadence reminders (e.g. 14 / 7 / 1 day before) without ever
+ * re-sending the same one. If a subscription's renewal date later
+ * shifts (e.g. an admin extends `validUntil`), the new date creates a
+ * new key and the reminder loop is allowed to fire again — which is
+ * the correct behaviour.
+ */
+export function renewalReminderEvent(input: {
+  studentId: string;
+  studentName: string;
+  productName: string;
+  subscriptionId: string;
+  renewalDate: string;
+  daysUntilRenewal: number;
+  autoRenewConfirmed: boolean;
+  amountLabel: string | null;
+  daysBefore: number;
+}): CommEvent<"renewal_reminder"> {
+  return {
+    id: generateId("rmr"),
+    studentId: input.studentId,
+    studentName: input.studentName,
+    type: "renewal_reminder",
+    payload: {
+      productName: input.productName,
+      subscriptionId: input.subscriptionId,
+      renewalDate: input.renewalDate,
+      daysUntilRenewal: input.daysUntilRenewal,
+      autoRenewConfirmed: input.autoRenewConfirmed,
+      amountLabel: input.amountLabel,
+      daysBefore: input.daysBefore,
+    },
+    createdAt: new Date().toISOString(),
+    idempotencyKey: `renewal_reminder:${input.subscriptionId}:${input.renewalDate}:${input.daysBefore}`,
+  };
+}
+
 // ── waitlist_promoted ─────────────────────────────────────────
 
 export function waitlistPromotedEvent(input: {
