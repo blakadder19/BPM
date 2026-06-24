@@ -234,5 +234,12 @@ export default async function CatalogPage() {
     })
     .sort((a, b) => a.finalPriceCents - b.finalPriceCents);
 
-  return <StudentCatalog products={catalog} stripeEnabled={stripeAvailable} />;
+  return (
+    <StudentCatalog
+      products={catalog}
+      stripeEnabled={stripeAvailable}
+      currentStudentId={user.id}
+      currentStudentEmail={user.email ?? null}
+    />
+  );
 }

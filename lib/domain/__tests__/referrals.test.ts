@@ -11,6 +11,7 @@ import {
   validateReferralCreate,
   validateRewardInput,
   formatReferralReward,
+  resolveReferralCode,
 } from "@/lib/domain/referrals";
 
 function referral(
@@ -296,5 +297,120 @@ describe("formatReferralReward", () => {
       discountValue: 1250,
     });
     expect(formatReferralReward(r)).toBe("€12.50");
+  });
+});
+
+describe("resolveReferralCode (Phase 7 checkout flow)", () => {
+  it("returns empty when the code is whitespace", () => {
+    const r = resolveReferralCode({
+      code: "   ",
+      resolvedReferrerId: null,
+      applicantStudentId: "beg-1",
+      applicantEmail: null,
+      existingForReferrer: [],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("empty");
+  });
+
+  it("returns not_found when the referrer lookup yielded null", () => {
+    const r = resolveReferralCode({
+      code: "BPM-XXXX",
+      resolvedReferrerId: null,
+      applicantStudentId: "beg-1",
+      applicantEmail: null,
+      existingForReferrer: [],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.code).toBe("not_found");
+      // Friendly message — verifies UX brief copy contract.
+      expect(r.message).toMatch(/couldn't find/i);
+    }
+  });
+
+  it("blocks self-referral when applicant id matches referrer id", () => {
+    const r = resolveReferralCode({
+      code: "BPM-AAAA",
+      resolvedReferrerId: "s-1",
+      applicantStudentId: "s-1",
+      applicantEmail: null,
+      existingForReferrer: [],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("self_referral");
+  });
+
+  it("blocks duplicate referral by referred_student_id", () => {
+    const r = resolveReferralCode({
+      code: "BPM-AAAA",
+      resolvedReferrerId: "s-1",
+      applicantStudentId: "beg-1",
+      applicantEmail: null,
+      existingForReferrer: [
+        referral({
+          referrerStudentId: "s-1",
+          referredStudentId: "beg-1",
+          status: "pending",
+        }),
+      ],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("already_referred");
+  });
+
+  it("blocks duplicate referral by referred_email (case-insensitive)", () => {
+    const r = resolveReferralCode({
+      code: "BPM-AAAA",
+      resolvedReferrerId: "s-1",
+      applicantStudentId: null,
+      applicantEmail: "Beg@Example.com",
+      existingForReferrer: [
+        referral({
+          referrerStudentId: "s-1",
+          referredStudentId: null,
+          referredEmail: "beg@example.com",
+          status: "verified",
+        }),
+      ],
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe("already_referred");
+  });
+
+  it("ignores rejected referrals when deduping (admin can re-allow)", () => {
+    const r = resolveReferralCode({
+      code: "BPM-AAAA",
+      resolvedReferrerId: "s-1",
+      applicantStudentId: "beg-1",
+      applicantEmail: null,
+      existingForReferrer: [
+        referral({
+          referrerStudentId: "s-1",
+          referredStudentId: "beg-1",
+          status: "rejected",
+        }),
+      ],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.referrerStudentId).toBe("s-1");
+      expect(r.normalizedCode).toBe("BPM-AAAA");
+    }
+  });
+
+  it("returns ok with upper-cased normalised code on success", () => {
+    const r = resolveReferralCode({
+      code: "  bpm-aaaa  ",
+      resolvedReferrerId: "s-1",
+      applicantStudentId: "beg-1",
+      applicantEmail: "beg@example.com",
+      existingForReferrer: [],
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.normalizedCode).toBe("BPM-AAAA");
+      expect(r.referrerStudentId).toBe("s-1");
+    }
   });
 });

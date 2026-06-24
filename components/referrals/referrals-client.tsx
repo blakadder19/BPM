@@ -95,7 +95,9 @@ function statusBadge(s: MockStudentReferral["status"]) {
     case "rewarded":
       return <Badge variant="info">{REFERRAL_STATUS_LABELS[s]}</Badge>;
     default:
-      return <Badge variant="warning">{REFERRAL_STATUS_LABELS[s]}</Badge>;
+      // UX brief: pending referrals read as "Pending review" so admins
+      // know they're waiting on a manual decision.
+      return <Badge variant="warning">Pending review</Badge>;
   }
 }
 
@@ -145,8 +147,16 @@ export function ReferralsClient({
   function run(action: () => Promise<{ success: boolean; error?: string }>) {
     setActionError(null);
     startTransition(async () => {
-      const res = await action();
-      if (!res.success) setActionError(res.error ?? "Action failed.");
+      try {
+        const res = await action();
+        if (!res.success) setActionError(res.error ?? "Action failed.");
+      } catch (e) {
+        // Defence-in-depth: server actions now wrap their bodies in a
+        // safeAction try/catch (lib/actions/referrals.ts) so this should
+        // never fire. Catch here too so a transport-level rejection
+        // never reaches the React error boundary.
+        setActionError(e instanceof Error ? e.message : "Action failed.");
+      }
     });
   }
 
@@ -410,7 +420,7 @@ export function ReferralsClient({
                               run(() => verifyReferralAction(fd));
                             }}
                           >
-                            <CheckCircle2 className="h-3 w-3" /> Verify
+                            <CheckCircle2 className="h-3 w-3" /> Approve referral
                           </Button>
                           <Button
                             variant="outline"
@@ -422,7 +432,7 @@ export function ReferralsClient({
                               run(() => rejectReferralAction(fd));
                             }}
                           >
-                            <XCircle className="h-3 w-3" /> Reject
+                            <XCircle className="h-3 w-3" /> Reject referral
                           </Button>
                         </>
                       )}
@@ -552,12 +562,16 @@ export function ReferralsClient({
         onSubmit={(fd) =>
           startTransition(async () => {
             setActionError(null);
-            const res = await addReferralAction(fd);
-            if (!res.success) {
-              setActionError(res.error ?? "Failed.");
-              return;
+            try {
+              const res = await addReferralAction(fd);
+              if (!res.success) {
+                setActionError(res.error ?? "Failed.");
+                return;
+              }
+              setShowAdd(false);
+            } catch (e) {
+              setActionError(e instanceof Error ? e.message : "Failed.");
             }
-            setShowAdd(false);
           })
         }
       />
@@ -571,12 +585,16 @@ export function ReferralsClient({
         onSubmit={(fd) =>
           startTransition(async () => {
             setActionError(null);
-            const res = await createRewardAction(fd);
-            if (!res.success) {
-              setActionError(res.error ?? "Failed.");
-              return;
+            try {
+              const res = await createRewardAction(fd);
+              if (!res.success) {
+                setActionError(res.error ?? "Failed.");
+                return;
+              }
+              setRewardFor(null);
+            } catch (e) {
+              setActionError(e instanceof Error ? e.message : "Failed.");
             }
-            setRewardFor(null);
           })
         }
       />
@@ -592,12 +610,16 @@ export function ReferralsClient({
         onSubmit={(fd) =>
           startTransition(async () => {
             setActionError(null);
-            const res = await applyRewardAction(fd);
-            if (!res.success) {
-              setActionError(res.error ?? "Failed.");
-              return;
+            try {
+              const res = await applyRewardAction(fd);
+              if (!res.success) {
+                setActionError(res.error ?? "Failed.");
+                return;
+              }
+              setApplyFor(null);
+            } catch (e) {
+              setActionError(e instanceof Error ? e.message : "Failed.");
             }
-            setApplyFor(null);
           })
         }
       />
@@ -637,18 +659,25 @@ function AddReferralDialog({
   const [referredId, setReferredId] = useState("");
   const [referredEmail, setReferredEmail] = useState("");
   const [note, setNote] = useState("");
+  const [localError, setLocalError] = useState<string | null>(null);
 
   function reset() {
     setReferrerId("");
     setReferredId("");
     setReferredEmail("");
     setNote("");
+    setLocalError(null);
   }
 
   function handleClose() {
     reset();
     onClose();
   }
+
+  const trimmedEmail = referredEmail.trim();
+  const hasReferred = Boolean(referredId || trimmedEmail);
+  const isSelf = Boolean(referredId) && referredId === referrerId;
+  const canSubmit = Boolean(referrerId) && hasReferred && !isSelf;
 
   return (
     <Dialog open={open} onClose={handleClose}>
@@ -659,10 +688,29 @@ function AddReferralDialog({
         <form
           onSubmit={(e) => {
             e.preventDefault();
+            setLocalError(null);
+            if (!referrerId) {
+              setLocalError("Please choose a referrer.");
+              return;
+            }
+            if (!hasReferred) {
+              setLocalError(
+                "Provide either a referred student or a referred email.",
+              );
+              return;
+            }
+            if (isSelf) {
+              setLocalError("A student cannot refer themselves.");
+              return;
+            }
+            if (trimmedEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(trimmedEmail)) {
+              setLocalError("Referred email looks invalid.");
+              return;
+            }
             const fd = new FormData();
             fd.set("referrerStudentId", referrerId);
             if (referredId) fd.set("referredStudentId", referredId);
-            if (referredEmail) fd.set("referredEmail", referredEmail);
+            if (trimmedEmail) fd.set("referredEmail", trimmedEmail);
             if (note) fd.set("note", note);
             onSubmit(fd);
           }}
@@ -716,15 +764,20 @@ function AddReferralDialog({
               />
             </Field>
             <p className="text-xs text-gray-500">
-              New referrals start as <strong>pending</strong> — they must be
-              verified before they count toward a reward.
+              New referrals start as <strong>Pending review</strong> — admin
+              must approve them before they count toward a reward.
             </p>
+            {localError && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                {localError}
+              </div>
+            )}
           </DialogBody>
           <DialogFooter>
             <Button variant="ghost" type="button" onClick={handleClose}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button variant="primary" type="submit" disabled={!canSubmit}>
               Add referral
             </Button>
           </DialogFooter>
