@@ -28,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { formatCents } from "@/lib/utils";
 import { createStudentPurchaseAction } from "@/lib/actions/catalog-purchase";
 import { createStripeCheckoutAction } from "@/lib/actions/stripe-checkout";
+import { ReferralCodeInput } from "@/components/catalog/referral-code-input";
 import type { ProductType } from "@/types/domain";
 
 type CheckoutChoice = "online" | "reception";
@@ -102,9 +103,18 @@ const TYPE_ORDER: ProductType[] = ["membership", "pass", "drop_in"];
 interface StudentCatalogProps {
   products: CatalogProduct[];
   stripeEnabled?: boolean;
+  /** Phase 7 — purchaser id; passed to the checkout referral-code input. */
+  currentStudentId?: string;
+  /** Phase 7 — purchaser email; used for self-referral / dedup checks. */
+  currentStudentEmail?: string | null;
 }
 
-export function StudentCatalog({ products, stripeEnabled = false }: StudentCatalogProps) {
+export function StudentCatalog({
+  products,
+  stripeEnabled = false,
+  currentStudentId,
+  currentStudentEmail = null,
+}: StudentCatalogProps) {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [purchaseTarget, setPurchaseTarget] = useState<CatalogProduct | null>(null);
 
@@ -183,6 +193,8 @@ export function StudentCatalog({ products, stripeEnabled = false }: StudentCatal
         <PurchaseDialog
           product={purchaseTarget}
           stripeEnabled={stripeEnabled}
+          currentStudentId={currentStudentId}
+          currentStudentEmail={currentStudentEmail}
           onClose={() => setPurchaseTarget(null)}
         />
       )}
@@ -399,10 +411,14 @@ function ProductCard({
 function PurchaseDialog({
   product: p,
   stripeEnabled,
+  currentStudentId,
+  currentStudentEmail,
   onClose,
 }: {
   product: CatalogProduct;
   stripeEnabled: boolean;
+  currentStudentId?: string;
+  currentStudentEmail?: string | null;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -422,6 +438,10 @@ function PurchaseDialog({
     stripeEnabled ? "online" : "reception",
   );
   const [autoRenew, setAutoRenew] = useState(p.autoRenew);
+  // Phase 7 — optional referral code from another student.
+  const [appliedReferralCode, setAppliedReferralCode] = useState<string | null>(
+    null,
+  );
 
   const needsStylePick = p.styleSelectionMode !== "none";
   const styleValid =
@@ -469,6 +489,7 @@ function PurchaseDialog({
       selectedStyleNames,
       selectedTermId: selectedTerm?.id ?? null,
       autoRenew: p.autoRenew ? autoRenew : null,
+      referralCode: appliedReferralCode,
     };
   }
 
@@ -712,6 +733,20 @@ function PurchaseDialog({
                   </p>
                 </div>
               </label>
+            </div>
+          )}
+
+          {/* Phase 7 — optional referral code from another student */}
+          {!success && currentStudentId && (
+            <div className="pt-1">
+              <ReferralCodeInput
+                studentId={currentStudentId}
+                studentEmail={currentStudentEmail}
+                onApplied={(applied) =>
+                  setAppliedReferralCode(applied?.code ?? null)
+                }
+                disabled={isPending}
+              />
             </div>
           )}
 

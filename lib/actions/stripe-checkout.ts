@@ -202,6 +202,9 @@ export async function createStripeCheckoutAction(
         // Atomic first-time claim id (if any), so fulfillment can attach
         // the resulting subscription id for audit traceability.
         bpm_first_time_claim_id: pricing.claim?.id ?? "",
+        // Phase 7 — referral code (referrer's BPM-XXXX). Re-validated
+        // server-side at fulfillment; an invalid code is silently dropped.
+        bpm_referral_code: prepared.referralCode ?? "",
       },
       success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/checkout/cancel`,
@@ -387,10 +390,28 @@ export async function fulfillStripeCheckout(
     }
   }
 
+  // Phase 7 — pull the referral code (if any) out of session metadata
+  // so createPurchaseSubscription can create the pending referral row.
+  const referralCode = (metadata.bpm_referral_code ?? "").trim() || null;
+
+  // Phase 7 — webhook context lacks a populated AuthUser, so hydrate
+  // the purchaser's email from the student repo. The referral-code
+  // helper uses it for dedup against guest/email-only referrals.
+  let purchaserEmail = "";
+  try {
+    const purchaser = await getStudentRepo().getById(studentId);
+    purchaserEmail = purchaser?.email ?? "";
+  } catch (e) {
+    console.warn(
+      "[stripe-fulfill] purchaser email lookup failed (non-fatal):",
+      e instanceof Error ? e.message : e,
+    );
+  }
+
   const prepared: PreparedPurchase = {
     user: {
       id: studentId,
-      email: "",
+      email: purchaserEmail,
       fullName: "",
       role: "student",
       avatarUrl: null,
@@ -407,6 +428,7 @@ export async function fulfillStripeCheckout(
     selectedStyleIds,
     selectedStyleNames,
     autoRenew: autoRenewMeta === "true" ? true : autoRenewMeta === "false" ? false : product.autoRenew,
+    referralCode,
   };
 
   // Phase 4 hardening: rehydrate the frozen pricing computed at session

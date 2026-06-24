@@ -34,6 +34,12 @@ export interface PurchaseInput {
   selectedStyleNames?: string[] | null;
   selectedTermId?: string | null;
   autoRenew?: boolean | null;
+  /**
+   * Phase 7 — optional referral code from another student.
+   * Validated server-side; an invalid code is silently dropped so it
+   * never blocks a legitimate purchase (per UX brief rules #7/#8).
+   */
+  referralCode?: string | null;
 }
 
 export interface PreparedPurchase {
@@ -48,6 +54,8 @@ export interface PreparedPurchase {
   selectedStyleIds: string[] | null;
   selectedStyleNames: string[] | null;
   autoRenew: boolean;
+  /** Trimmed referral code passed through to subscription creation. */
+  referralCode: string | null;
 }
 
 // ── Shared validation ────────────────────────────────────────
@@ -221,6 +229,7 @@ export async function validateAndPreparePurchase(
     selectedStyleIds: input.selectedStyleIds ?? null,
     selectedStyleNames: input.selectedStyleNames ?? null,
     autoRenew,
+    referralCode: (input.referralCode ?? "").trim() || null,
   };
 }
 
@@ -356,6 +365,42 @@ export async function createPurchaseSubscription(
     } catch (e) {
       console.warn("[catalog-purchase] first-time race detection failed:",
         e instanceof Error ? e.message : e);
+    }
+
+    // Phase 7 — referral-code: if the purchaser entered a referrer's
+    // code, create a `pending` referral row so admin can review and
+    // approve. Best-effort: helper never throws, never blocks the
+    // purchase, never rolls back. Self-referral / duplicate / unknown
+    // codes are silently dropped (validation logged inside helper).
+    if (prepared.referralCode) {
+      try {
+        const { applyPendingReferralForPurchase } = await import(
+          "./referral-code"
+        );
+        const referralResult = await applyPendingReferralForPurchase({
+          rawCode: prepared.referralCode,
+          applicantStudentId: user.id,
+          applicantEmail: user.email,
+        });
+        if (referralResult.created) {
+          logFinanceEvent({
+            entityType: "subscription",
+            entityId: result.subscriptionId,
+            action: "manual_edit",
+            detail: `Pending referral recorded (code ${prepared.referralCode}).`,
+            metadata: {
+              referralId: referralResult.referralId,
+              referrerStudentId: referralResult.referrerStudentId,
+              referralCode: prepared.referralCode,
+            },
+          });
+        }
+      } catch (e) {
+        console.warn(
+          "[catalog-purchase] referral linking failed (purchase unaffected):",
+          e instanceof Error ? e.message : e,
+        );
+      }
     }
   } else if (pricingClaimId) {
     // Subscription creation FAILED after we successfully claimed
