@@ -4,6 +4,11 @@ import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { fulfillGuestEventPurchase } from "@/lib/actions/event-purchase";
 import type { EmailSendResult } from "@/lib/communications/event-emails";
+import { ConversionTracker } from "@/components/analytics/conversion-tracker";
+import {
+  googleAdsSendTo,
+  isMetaPixelConfigured,
+} from "@/lib/analytics/tracking";
 
 interface FulfillmentResult {
   status: "fulfilled" | "already_fulfilled" | "not_paid" | "error";
@@ -12,6 +17,10 @@ interface FulfillmentResult {
   guestEmail?: string;
   emailResult?: EmailSendResult;
   error?: string;
+  /** Phase 8 — amount charged, used to fire the correct purchase value. */
+  amountTotalCents?: number | null;
+  /** ISO-4217 currency, uppercased. */
+  currency?: string | null;
 }
 
 async function verifyAndFulfill(
@@ -77,6 +86,9 @@ async function verifyAndFulfill(
     productName: product?.name,
     guestEmail: metadata.bpm_guest_email,
     emailResult: result.emailResult,
+    amountTotalCents:
+      typeof session.amount_total === "number" ? session.amount_total : null,
+    currency: session.currency ? session.currency.toUpperCase() : null,
   };
 }
 
@@ -147,8 +159,28 @@ export default async function GuestCheckoutSuccessPage({
     );
   }
 
+  // Phase 8 — Purchase conversion for the guest event ticket flow.
+  // Fires ONLY on the "fulfilled" (or already-fulfilled) branch, which
+  // guarantees Stripe returned payment_status=paid. The sessionStorage
+  // dedup inside ConversionTracker plus the Stripe session id as
+  // transaction id together mean refresh / reload cannot double-count.
+  const googlePurchaseSendTo = googleAdsSendTo("purchase");
+  const metaPurchaseEvent = isMetaPixelConfigured() ? "Purchase" : null;
+  const purchaseValue =
+    typeof result.amountTotalCents === "number"
+      ? result.amountTotalCents / 100
+      : null;
+
   return (
     <Shell>
+      <ConversionTracker
+        googleSendTo={googlePurchaseSendTo}
+        metaEventName={metaPurchaseEvent}
+        value={purchaseValue}
+        currency={result.currency ?? null}
+        transactionId={sessionId}
+        dedupEventName="event_ticket_purchase"
+      />
       <div className="rounded-xl border border-emerald-200 bg-white p-8 text-center space-y-6">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
           <svg className="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>

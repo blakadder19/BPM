@@ -17,6 +17,8 @@ import { createStudentBooking } from "@/lib/actions/booking";
 import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
 import type { DanceRole } from "@/types/domain";
+import { ConversionTracker } from "@/components/analytics/conversion-tracker";
+import { isMetaPixelConfigured } from "@/lib/analytics/tracking";
 
 export interface BookDialogClass {
   id: string;
@@ -67,6 +69,8 @@ export function StudentBookDialog({
     status: "confirmed" | "waitlisted";
     className: string;
     position?: number;
+    /** Stable booking id — passed to Meta Pixel `Schedule` as eventID / dedup id. */
+    bookingId?: string;
   } | null>(null);
 
   const selectedEntitlement = entitlements.find(
@@ -99,6 +103,7 @@ export function StudentBookDialog({
           status: res.status!,
           className: res.className ?? cls.title,
           position: res.waitlistPosition,
+          bookingId: res.bookingId,
         });
         router.refresh();
       } else {
@@ -158,9 +163,26 @@ export function StudentBookDialog({
           {result ? (
             <div className="space-y-2">
               {result.status === "confirmed" ? (
-                <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
-                  You're booked for <strong>{result.className}</strong>!
-                </div>
+                <>
+                  <div className="rounded-lg bg-green-50 p-3 text-sm text-green-800">
+                    You're booked for <strong>{result.className}</strong>!
+                  </div>
+                  {/*
+                    Meta Pixel: fire `Schedule` only on a confirmed
+                    booking (never on waitlist). Server just returned
+                    success, so no risk of firing on a failed action.
+                    Dedup on `bpm:conv:<path>:class_booking:<bookingId>`
+                    plus the useRef guard prevents refresh double-fire
+                    even when the dialog stays mounted after success.
+                  */}
+                  <ConversionTracker
+                    metaEventName={isMetaPixelConfigured() ? "Schedule" : null}
+                    transactionId={result.bookingId ?? null}
+                    dedupEventName="class_booking"
+                    contentName={result.className}
+                    contentCategory={cls.styleName ?? null}
+                  />
+                </>
               ) : (
                 <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
                   You've been added to the waitlist for <strong>{result.className}</strong> (position #{result.position}).

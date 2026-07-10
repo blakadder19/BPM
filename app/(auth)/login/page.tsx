@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
 import { provisionCurrentUser } from "@/lib/actions/auth-provision";
+import { ConversionTracker } from "@/components/analytics/conversion-tracker";
+import { isMetaPixelConfigured } from "@/lib/analytics/tracking";
 
 const DEMO_USERS = [
   { label: "Admin", email: "admin@bpm.dance" },
@@ -168,6 +170,24 @@ export default function LoginPage() {
             <div className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">
               Email confirmed successfully. Please sign in.
             </div>
+          )}
+
+          {/*
+            Meta Pixel: fire CompleteRegistration exactly once when the
+            user lands here from the email-confirmation callback. The
+            auth callback signs the user out and hard-navigates to
+            `/login?confirmed=1`, so this URL is the only reliable
+            client-side moment the account is provably confirmed. The
+            ConversionTracker's sessionStorage dedup ensures a refresh
+            or back-navigation cannot fire it twice.
+          */}
+          {confirmed && (
+            <ConversionTracker
+              metaEventName={
+                isMetaPixelConfigured() ? "CompleteRegistration" : null
+              }
+              dedupEventName="signup_confirmed"
+            />
           )}
 
           {error && (

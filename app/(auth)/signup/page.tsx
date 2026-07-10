@@ -228,7 +228,11 @@ export default function SignupPage() {
       await provisionCurrentUser().catch((e) =>
         console.error("[signup] provisionCurrentUser threw:", e)
       );
-      router.push("/onboarding");
+      // `?welcome=1` marks the first-time landing so the onboarding
+      // page can fire the Meta Pixel CompleteRegistration event. The
+      // confirmation-required branch fires the same event on
+      // `/login?confirmed=1` instead.
+      router.push("/onboarding?welcome=1");
       router.refresh();
       return;
     }

@@ -37,6 +37,23 @@ export interface ReconcileResult {
   /** Where the session is in Stripe's payment lifecycle. */
   paymentStatus?: string;
   branch?: string;
+  /**
+   * Phase 8 — the amount actually charged in the smallest currency
+   * unit (cents). Populated when Stripe returns a paid session, used
+   * by the success page to fire a Google Ads / Meta Pixel purchase
+   * conversion with the correct value.
+   */
+  amountTotalCents?: number | null;
+  /** ISO-4217 currency code from the Stripe session (e.g. "eur"). */
+  currency?: string | null;
+  /**
+   * Phase 9 — the BPM product type ("membership" | "pass" | "drop_in")
+   * from Stripe metadata. Used to gate the Meta Pixel `Subscribe`
+   * event on real memberships only.
+   */
+  productType?: string | null;
+  /** Phase 9 — human-readable product name from Stripe metadata. */
+  productName?: string | null;
 }
 
 export async function reconcileStripeSessionAction(
@@ -61,18 +78,36 @@ export async function reconcileStripeSessionAction(
     return { success: false, error: msg };
   }
 
+  const amountTotalCents =
+    typeof session.amount_total === "number" ? session.amount_total : null;
+  const currency = session.currency ?? null;
+  const rawMetadata = (session.metadata ?? {}) as Record<string, string>;
+  const productType =
+    typeof rawMetadata.bpm_product_type === "string" &&
+    rawMetadata.bpm_product_type.trim().length > 0
+      ? rawMetadata.bpm_product_type
+      : null;
+  const productName =
+    typeof rawMetadata.bpm_product_name === "string" &&
+    rawMetadata.bpm_product_name.trim().length > 0
+      ? rawMetadata.bpm_product_name
+      : null;
+
   if (session.payment_status !== "paid") {
     return {
       success: true,
       paid: false,
       paymentStatus: session.payment_status ?? "unknown",
+      amountTotalCents,
+      currency,
+      productType,
+      productName,
     };
   }
 
-  const metadata = (session.metadata ?? {}) as Record<string, string>;
   const result = await routeStripeSessionFulfillment(
     session.id,
-    metadata,
+    rawMetadata,
     "success_page",
   );
 
@@ -89,5 +124,9 @@ export async function reconcileStripeSessionAction(
     paid: true,
     paymentStatus: session.payment_status,
     branch: result.branch,
+    amountTotalCents,
+    currency,
+    productType,
+    productName,
   };
 }

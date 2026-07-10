@@ -3,6 +3,11 @@ import { CheckCircle2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAuthUser } from "@/lib/auth";
 import { reconcileStripeSessionAction } from "@/lib/actions/stripe-reconcile";
+import { ConversionTracker } from "@/components/analytics/conversion-tracker";
+import {
+  googleAdsSendTo,
+  isMetaPixelConfigured,
+} from "@/lib/analytics/tracking";
 
 /**
  * Stripe Checkout success redirect page.
@@ -56,6 +61,35 @@ export default async function CheckoutSuccessPage({
   const stillProvisioning =
     !reconciled || (reconciled && !reconciled.paid) || (reconciled && reconciled.paid && !reconciled.success);
 
+  // Phase 8 — fire a real Purchase conversion ONLY when Stripe confirms
+  // payment succeeded. If the session is provisioning / not paid we
+  // must never fire a conversion (that would inflate reported spend
+  // against pending payments and refunded/failed transactions).
+  const shouldFireConversion = Boolean(
+    sessionId && reconciled?.paid === true,
+  );
+  const purchaseValue =
+    shouldFireConversion && typeof reconciled?.amountTotalCents === "number"
+      ? reconciled.amountTotalCents / 100
+      : null;
+  const purchaseCurrency = reconciled?.currency
+    ? reconciled.currency.toUpperCase()
+    : null;
+  const googlePurchaseSendTo = shouldFireConversion
+    ? googleAdsSendTo("purchase")
+    : null;
+  const metaPurchaseEvent =
+    shouldFireConversion && isMetaPixelConfigured() ? "Purchase" : null;
+
+  // Phase 9 — fire a Meta Pixel `Subscribe` alongside `Purchase` only
+  // when the paid product is a membership. Pass and drop-in purchases
+  // continue to fire only `Purchase`. Distinct sessionStorage dedup key
+  // guarantees the two events are recorded separately by Meta.
+  const isMembershipActivation =
+    shouldFireConversion && reconciled?.productType === "membership";
+  const metaSubscribeEvent =
+    isMembershipActivation && isMetaPixelConfigured() ? "Subscribe" : null;
+
   return (
     <div className="flex min-h-screen items-center justify-center bpm-auth-bg px-4">
       <Card className="w-full max-w-md shadow-xl">
@@ -104,6 +138,31 @@ export default async function CheckoutSuccessPage({
           </div>
         </CardContent>
       </Card>
+
+      {shouldFireConversion && (
+        <ConversionTracker
+          googleSendTo={googlePurchaseSendTo}
+          metaEventName={metaPurchaseEvent}
+          value={purchaseValue}
+          currency={purchaseCurrency}
+          transactionId={sessionId}
+          dedupEventName="stripe_purchase"
+          contentName={reconciled?.productName ?? null}
+          contentCategory={reconciled?.productType ?? null}
+        />
+      )}
+
+      {metaSubscribeEvent && (
+        <ConversionTracker
+          metaEventName={metaSubscribeEvent}
+          value={purchaseValue}
+          currency={purchaseCurrency}
+          transactionId={sessionId}
+          dedupEventName="stripe_membership_subscribe"
+          contentName={reconciled?.productName ?? null}
+          contentCategory="membership"
+        />
+      )}
     </div>
   );
 }

@@ -179,6 +179,13 @@ export async function createStripeCheckoutAction(
       metadata: {
         bpm_student_id: user.id,
         bpm_product_id: product.id,
+        // Persist product type + name in Stripe metadata so the
+        // reconcile action can surface them to the checkout success
+        // page without re-hitting the product repository. Powers the
+        // Meta Pixel `Subscribe` event for memberships specifically
+        // (Phase 9 tracking).
+        bpm_product_type: product.productType,
+        bpm_product_name: product.name,
         bpm_term_id: termId ?? "",
         bpm_valid_from: validFrom,
         bpm_valid_until: validUntil ?? "",
