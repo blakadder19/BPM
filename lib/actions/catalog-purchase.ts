@@ -271,7 +271,14 @@ export async function createPurchaseSubscription(
             id: product.id,
             productType: product.productType,
             priceCents: product.priceCents,
+            // Phase 10 — the referral rule keys off `allowedLevels`
+            // so the engine can gate the discount to beginner products.
+            allowedLevels: product.allowedLevels ?? null,
           },
+          // Phase 10 — pay-at-reception path: pass the referral code
+          // so the engine can apply the 10% beginner discount BEFORE
+          // the reception amount due is persisted.
+          referralCode: prepared.referralCode ?? null,
           commit: { source: "catalog_purchase" },
         });
         pricingClaimId = live.claim?.id ?? null;

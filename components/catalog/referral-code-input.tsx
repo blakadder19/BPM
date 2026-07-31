@@ -37,6 +37,16 @@ interface Props {
   /** Called after a successful preview with the validated code. */
   onApplied: (applied: AppliedReferral | null) => void;
   disabled?: boolean;
+  /**
+   * Phase 10 — parent-supplied banner shown under the applied pill.
+   * Used to communicate whether the referral code also unlocked a
+   * beginner discount for the currently-selected product. Parent
+   * decides the exact copy so the widget stays product-agnostic.
+   *   * "discount" → green success ("Referral code applied — 10% beginner discount added.")
+   *   * "not_eligible" → neutral info ("Referral code applied. This product isn't eligible for the beginner discount.")
+   *   * "recording_only" → neutral info (default admin-review copy).
+   */
+  applicationNote?: "discount" | "not_eligible" | "recording_only";
 }
 
 export function ReferralCodeInput({
@@ -44,6 +54,7 @@ export function ReferralCodeInput({
   studentEmail,
   onApplied,
   disabled,
+  applicationNote = "recording_only",
 }: Props) {
   const [code, setCode] = useState("");
   const [applied, setApplied] = useState<AppliedReferral | null>(null);
@@ -99,28 +110,69 @@ export function ReferralCodeInput({
   }
 
   if (applied) {
+    // Container / headline copy vary with whether the code also
+    // unlocked a beginner discount for the current product. All three
+    // states remain reversible via Remove.
+    const isDiscount = applicationNote === "discount";
     return (
-      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm">
+      <div
+        className={
+          isDiscount
+            ? "rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm"
+            : "rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+        }
+      >
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-emerald-800">
+          <div
+            className={
+              isDiscount
+                ? "flex items-center gap-2 text-emerald-800"
+                : "flex items-center gap-2 text-gray-800"
+            }
+          >
             <Check className="size-4" />
-            <span className="font-medium">Referral code applied.</span>
+            <span className="font-medium">
+              {isDiscount
+                ? "Referral code applied \u2014 10% beginner discount added."
+                : "Referral code applied."}
+            </span>
             <span className="font-mono text-xs">{applied.code}</span>
           </div>
           <button
             type="button"
             onClick={handleRemove}
             disabled={disabled || pending}
-            className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900"
+            className={
+              isDiscount
+                ? "inline-flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-900"
+                : "inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900"
+            }
             aria-label="Remove referral code"
           >
             <X className="size-3" />
             Remove
           </button>
         </div>
-        <p className="mt-1 text-xs text-emerald-800/90">
-          We&apos;ll record this referral for {applied.referrerName} — admin
-          reviews it before any reward is granted.
+        <p
+          className={
+            isDiscount
+              ? "mt-1 text-xs text-emerald-800/90"
+              : "mt-1 text-xs text-gray-600"
+          }
+        >
+          {applicationNote === "not_eligible" ? (
+            <>
+              Referral code recognised, but the 10% discount only applies
+              to beginner products. We&apos;ll still record the referral
+              for {applied.referrerName} — admin reviews it before any
+              reward is granted.
+            </>
+          ) : (
+            <>
+              We&apos;ll record this referral for {applied.referrerName} —
+              admin reviews it before any reward is granted.
+            </>
+          )}
         </p>
       </div>
     );

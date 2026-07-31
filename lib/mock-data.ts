@@ -983,6 +983,42 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     createdAt: "2026-04-01T00:00:00",
     updatedAt: "2026-04-01T00:00:00",
   },
+  {
+    // Phase 10 — student-referral 10% beginner discount. Eligibility
+    // is driven by product `allowedLevels` inside the engine, so the
+    // `appliesToProductIds` allow-list here is a defensive belt: even
+    // if a non-beginner product ever gets listed accidentally, the
+    // engine still gates on the beginner-level predicate.
+    id: "dr-referral-beginners-10",
+    code: "REFERRAL_BEGINNERS_10",
+    name: "Referral 10% off Beginners",
+    description:
+      "10% off eligible beginner products (Beginners 1 & 2 Promo Pass, Latin Combo) when a purchaser applies another student's referral code.",
+    ruleType: "referral",
+    affiliationType: null,
+    discountKind: "percentage",
+    discountValue: 10,
+    appliesToProductTypes: null,
+    appliesToProductIds: ["p-beg12", "p-latin-combo"],
+    appliesToEventProductIds: null,
+    minPriceCents: null,
+    maxDiscountCents: null,
+    isActive: true,
+    // Below first-time (priority 5) so a beginner in the first-time
+    // window doesn't lose their first-time discount to a referral —
+    // they receive whichever discount was created earlier (deterministic).
+    priority: 4,
+    stackable: false,
+    validFrom: null,
+    validUntil: null,
+    firstTimeScope: "any_purchase",
+    firstTimeProductIds: null,
+    requiresCode: false,
+    maxUses: null,
+    oneUsePerEmail: false,
+    createdAt: "2026-07-10T00:00:00",
+    updatedAt: "2026-07-10T00:00:00",
+  },
 ];
 
 export const EVENT_PURCHASES: MockEventPurchase[] = [

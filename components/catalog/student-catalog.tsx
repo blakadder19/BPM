@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useTransition } from "react";
+import { useState, useMemo, useTransition, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CreditCard,
@@ -29,6 +29,7 @@ import { formatCents } from "@/lib/utils";
 import { createStudentPurchaseAction } from "@/lib/actions/catalog-purchase";
 import { createStripeCheckoutAction } from "@/lib/actions/stripe-checkout";
 import { ReferralCodeInput } from "@/components/catalog/referral-code-input";
+import { previewProductPricingAction } from "@/lib/actions/catalog-preview";
 import type { ProductType } from "@/types/domain";
 
 type CheckoutChoice = "online" | "reception";
@@ -50,7 +51,11 @@ export type StyleSelectionMode = "none" | "pick_one" | "pick_many";
 export interface AppliedDiscountSummary {
   code: string;
   name: string;
-  ruleType: "affiliation" | "first_time_purchase" | "event_promo_code";
+  ruleType:
+    | "affiliation"
+    | "first_time_purchase"
+    | "event_promo_code"
+    | "referral";
   affiliationType: string | null;
   amountCents: number;
 }
@@ -442,6 +447,76 @@ function PurchaseDialog({
   const [appliedReferralCode, setAppliedReferralCode] = useState<string | null>(
     null,
   );
+  // Phase 10 — live re-pricing when the referral code changes. The
+  // catalog page pre-computes the pricing snapshot without the
+  // referral code; when the purchaser applies one we ask the server
+  // for a fresh preview so the "Referral discount (10%)" line shows
+  // up in-dialog. Falls back to the page-level snapshot when null.
+  const [livePricing, setLivePricing] = useState<{
+    originalPriceCents: number;
+    discountAmountCents: number;
+    finalPriceCents: number;
+    appliedDiscounts: AppliedDiscountSummary[];
+  } | null>(null);
+  const [pricingLoading, setPricingLoading] = useState(false);
+
+  useEffect(() => {
+    if (!appliedReferralCode) {
+      setLivePricing(null);
+      return;
+    }
+    let cancelled = false;
+    setPricingLoading(true);
+    previewProductPricingAction({
+      productId: p.id,
+      referralCode: appliedReferralCode,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.pricing) {
+          setLivePricing({
+            originalPriceCents: res.pricing.originalPriceCents,
+            discountAmountCents: res.pricing.discountAmountCents,
+            finalPriceCents: res.pricing.finalPriceCents,
+            appliedDiscounts: res.pricing.appliedDiscounts.map((d) => ({
+              code: d.code,
+              name: d.name,
+              ruleType: d.ruleType as AppliedDiscountSummary["ruleType"],
+              affiliationType: d.affiliationType,
+              amountCents: d.amountCents,
+            })),
+          });
+        } else {
+          // Preview failed — fall back silently to the pre-loaded price.
+          setLivePricing(null);
+        }
+      })
+      .catch(() => {
+        setLivePricing(null);
+      })
+      .finally(() => {
+        if (!cancelled) setPricingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedReferralCode, p.id]);
+
+  const effectiveOriginal =
+    livePricing?.originalPriceCents ?? p.originalPriceCents;
+  const effectiveDiscount =
+    livePricing?.discountAmountCents ?? p.discountAmountCents;
+  const effectiveFinal = livePricing?.finalPriceCents ?? p.finalPriceCents;
+  const effectiveApplied = livePricing?.appliedDiscounts ?? p.appliedDiscounts;
+  const referralRuleApplied = effectiveApplied.some(
+    (d) => d.ruleType === "referral",
+  );
+  // Referral was accepted upstream but the pricing preview did NOT
+  // include a referral discount → product is not an eligible beginner
+  // product. Show a friendly explanation per the UX brief.
+  const referralRecognisedButNotEligible = Boolean(
+    appliedReferralCode && !referralRuleApplied && !pricingLoading,
+  );
 
   const needsStylePick = p.styleSelectionMode !== "none";
   const styleValid =
@@ -533,25 +608,34 @@ function PurchaseDialog({
             </div>
             <p className="text-sm text-gray-600">{p.description}</p>
             <div className="flex items-baseline gap-2">
-              {p.discountAmountCents > 0 && (
+              {effectiveDiscount > 0 && (
                 <span className="text-sm text-gray-400 line-through">
-                  {formatCents(p.originalPriceCents)}
+                  {formatCents(effectiveOriginal)}
                 </span>
               )}
               <span className="text-lg font-bold text-gray-900">
-                {formatCents(p.finalPriceCents)}
+                {formatCents(effectiveFinal)}
               </span>
               {p.recurring && (
                 <span className="text-xs text-gray-400">/ term</span>
               )}
+              {pricingLoading && (
+                <span className="text-xs text-gray-400">Updating…</span>
+              )}
             </div>
-            {p.discountAmountCents > 0 && (
+            {effectiveDiscount > 0 && (
               <DiscountBreakdown
-                originalPriceCents={p.originalPriceCents}
-                discountAmountCents={p.discountAmountCents}
-                finalPriceCents={p.finalPriceCents}
-                appliedDiscounts={p.appliedDiscounts}
+                originalPriceCents={effectiveOriginal}
+                discountAmountCents={effectiveDiscount}
+                finalPriceCents={effectiveFinal}
+                appliedDiscounts={effectiveApplied}
               />
+            )}
+            {referralRecognisedButNotEligible && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1.5">
+                Referral code recognised, but the 10% discount only
+                applies to beginner products.
+              </p>
             )}
           </div>
 
@@ -746,6 +830,13 @@ function PurchaseDialog({
                   setAppliedReferralCode(applied?.code ?? null)
                 }
                 disabled={isPending}
+                applicationNote={
+                  referralRuleApplied
+                    ? "discount"
+                    : appliedReferralCode
+                      ? "not_eligible"
+                      : "recording_only"
+                }
               />
             </div>
           )}
@@ -921,6 +1012,10 @@ function describeDiscountSource(d: AppliedDiscountSummary): string {
       : "Affiliation";
     return `${aff} affiliation`;
   }
+  // Phase 10 — always show the referral discount line with the exact
+  // human copy from the brief so students see the same label at
+  // checkout, in Stripe line description, and on receipts.
+  if (d.ruleType === "referral") return "Referral discount (10%)";
   return d.name || d.code;
 }
 

@@ -64,6 +64,14 @@ export interface PriceForStudentInput {
   /** When true, bypass the "first paid subscription" lookup and treat as not-first. */
   skipFirstTimeCheck?: boolean;
   /**
+   * Phase 10 — optional referral code the purchaser typed at checkout.
+   * Empty / null means "no referral code entered" and referral rules
+   * are skipped. Duplicate / self-referral / unknown-code validation
+   * lives upstream in `resolveReferralCode`; the engine trusts the
+   * caller and only checks presence + product eligibility.
+   */
+  referralCode?: string | null;
+  /**
    * Commit mode: when present, atomically claim eligibility for any
    * one-time discount (currently first_time_purchase) BEFORE the result
    * is returned. If the atomic claim fails the engine is re-run without
@@ -116,6 +124,7 @@ export async function priceProductForStudent(
     rules,
     studentAffiliations: affiliations,
     firstTimeEligibleByRuleId,
+    referralCode: input.referralCode ?? null,
   });
 
   let claim: DiscountClaim | null = null;
@@ -157,6 +166,7 @@ export async function priceProductForStudent(
             ...firstTimeEligibleByRuleId,
             [deniedRuleId]: false,
           },
+          referralCode: input.referralCode ?? null,
         });
 
         try {
@@ -251,6 +261,13 @@ export async function previewPricingForStudent(input: {
   studentId: string;
   products: PricingProduct[];
   now?: string;
+  /**
+   * Phase 10 — optional referral code the purchaser has applied. Passed
+   * to the engine so beginner products preview the 10% referral
+   * discount live in the checkout dialog. `null` / `undefined` means
+   * "no code applied yet".
+   */
+  referralCode?: string | null;
 }): Promise<Map<string, PricingResult>> {
   const now = input.now ?? new Date().toISOString();
   const [rules, affiliations] = await Promise.all([
@@ -270,6 +287,7 @@ export async function previewPricingForStudent(input: {
       rules,
       studentAffiliations: affiliations,
       firstTimeEligibleByRuleId,
+      referralCode: input.referralCode ?? null,
     });
     out.set(product.id, result);
   }

@@ -144,7 +144,19 @@ export async function createStripeCheckoutAction(
   // recorded amount remain in lockstep across the whole flow.
   const pricing = await priceProductForStudent({
     studentId: user.id,
-    product: { id: product.id, productType: product.productType, priceCents: product.priceCents },
+    product: {
+      id: product.id,
+      productType: product.productType,
+      priceCents: product.priceCents,
+      // Phase 10 — pass the level metadata so the engine's `referral`
+      // rule can gate the discount to beginner products only.
+      allowedLevels: product.allowedLevels ?? null,
+    },
+    // Phase 10 — thread the purchaser's referral code so Stripe
+    // charges the DISCOUNTED total when the code applies. The frozen
+    // pricing then rides through Stripe metadata and the webhook
+    // fulfillment restores the same appliedDiscount snapshot.
+    referralCode: prepared.referralCode ?? null,
     commit: { source: "stripe_checkout" },
   });
   const pricingTransit = serializePricingForStripe(pricing);
@@ -212,6 +224,22 @@ export async function createStripeCheckoutAction(
         // Phase 7 — referral code (referrer's BPM-XXXX). Re-validated
         // server-side at fulfillment; an invalid code is silently dropped.
         bpm_referral_code: prepared.referralCode ?? "",
+        // Phase 10 — referral-discount audit trail on the Stripe side.
+        // The frozen pricing snapshot above (`bpm_pricing_snapshot`)
+        // is the authoritative source; these fields duplicate the
+        // referral discount cents/percent so finance queries against
+        // Stripe metadata can filter without decoding the snapshot.
+        // Empty when no referral rule fired.
+        bpm_referral_discount_cents: String(
+          pricing.appliedDiscounts
+            .filter((a) => a.ruleType === "referral")
+            .reduce((s, a) => s + a.amountCents, 0),
+        ),
+        bpm_referral_discount_percent: pricing.appliedDiscounts.some(
+          (a) => a.ruleType === "referral",
+        )
+          ? "10"
+          : "",
       },
       success_url: `${appUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/checkout/cancel`,

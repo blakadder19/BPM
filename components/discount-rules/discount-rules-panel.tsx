@@ -116,6 +116,7 @@ const RULE_TYPE_LABELS: Record<DiscountRuleType, string> = {
   first_time_purchase: "First-time purchase",
   affiliation: "Affiliation",
   event_promo_code: "Promo code",
+  referral: "Referral",
 };
 
 const AFFILIATION_TYPE_LABELS: Record<AffiliationType, string> = {

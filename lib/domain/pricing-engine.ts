@@ -13,6 +13,7 @@
  *     retroactively change historical purchases).
  */
 import type { EventProductType, ProductType } from "@/types/domain";
+import { isReferralDiscountEligibleProduct } from "./referral-discounts";
 
 // ── Affiliation taxonomy ─────────────────────────────────────
 
@@ -64,6 +65,18 @@ export const DISCOUNT_RULE_TYPES = [
    * applicability + amount math.
    */
   "event_promo_code",
+  /**
+   * Phase 10 — student referral codes. When a purchaser applies
+   * another student's per-account referral code at checkout, this
+   * rule fires only for eligible beginner products (see
+   * {@link isReferralDiscountEligibleProduct}). The rule's own
+   * `code` field is IGNORED for matching: any non-empty referral
+   * code drives eligibility, and the referral relationship itself
+   * is validated upstream by `resolveReferralCode`. Priority is
+   * expected to be lower than `first_time_purchase` so the two
+   * rules don't accidentally double-discount when both apply.
+   */
+  "referral",
 ] as const;
 export type DiscountRuleType = (typeof DISCOUNT_RULE_TYPES)[number];
 
@@ -183,6 +196,13 @@ export type PricingEntityKind = "subscription_product" | "event_product";
 interface PricingProductBase {
   id: string;
   priceCents: number;
+  /**
+   * Phase 10 — optional level metadata used by the `referral` rule to
+   * detect beginner products in a data-driven way (see
+   * `isReferralDiscountEligibleProduct`). Callers may omit this field
+   * for legacy behaviour; only referral pricing consumes it.
+   */
+  allowedLevels?: string[] | null;
 }
 
 export type PricingProduct =
@@ -219,6 +239,15 @@ export interface PricingContext {
    * type. `null` / `undefined` means "no code entered".
    */
   promoCode?: string | null;
+  /**
+   * Phase 10 — purchaser-supplied referral code (another student's
+   * per-account code). Required to enable `referral` rules; ignored
+   * by every other rule type. The rule fires regardless of the code
+   * value — the code's identity + duplicate/self-referral checks are
+   * done upstream by `resolveReferralCode`. `null` / `undefined`
+   * means "no referral code entered".
+   */
+  referralCode?: string | null;
 }
 
 export interface AppliedDiscount {
@@ -314,6 +343,12 @@ export function applyPricing(ctx: PricingContext): PricingResult {
     //     `appliesToProductIds` are only meaningful for subscription
     //     pricing — they are ignored for event tickets.
     if (isEvent) {
+      // Referral rules are subscription-only by construction — event
+      // tickets have no notion of referrer/referred relationship.
+      if (rule.ruleType === "referral") {
+        skip("referral rules only apply to subscription products");
+        continue;
+      }
       const ids = rule.appliesToEventProductIds;
       if (!ids || ids.length === 0) {
         skip("rule has no event-ticket scope");
@@ -416,6 +451,34 @@ export function applyPricing(ctx: PricingContext): PricingResult {
         }
         if (typed !== rule.code.toUpperCase()) {
           skip("promo code does not match");
+          continue;
+        }
+        break;
+      }
+      case "referral": {
+        // Phase 10 — student referral code discount.
+        //
+        // Eligibility is deliberately split between three layers:
+        //   * `resolveReferralCode` (upstream) validates the code is
+        //     real, not self-issued, and not a duplicate — the pure
+        //     engine trusts that and only checks presence.
+        //   * This branch checks the purchaser supplied SOME code
+        //     (any non-empty string; the rule's own `code` value is
+        //     never matched against the customer's code).
+        //   * `isReferralDiscountEligibleProduct` gates the product
+        //     type via `allowedLevels`, so a future beginner product
+        //     auto-qualifies without touching the rule.
+        //
+        // Skipping when a rule accidentally lists non-beginner
+        // products in `appliesToProductIds` is intentional — the
+        // level check remains the source of truth.
+        const referral = (ctx.referralCode ?? "").trim();
+        if (!referral) {
+          skip("referral code not entered");
+          continue;
+        }
+        if (!isReferralDiscountEligibleProduct(ctx.product)) {
+          skip("product is not an eligible beginner product");
           continue;
         }
         break;
@@ -536,6 +599,8 @@ function describeReason(rule: DiscountRule): string {
       return `Verified ${rule.affiliationType ?? "affiliation"}`;
     case "event_promo_code":
       return `Promo code ${rule.code}`;
+    case "referral":
+      return "Student referral";
   }
 }
 

@@ -794,3 +794,271 @@ describe("applyPricing — event promo codes", () => {
     expect(r.finalPriceCents).toBe(3500);
   });
 });
+
+// ── Phase 10 — referral rule ─────────────────────────────────
+
+describe("applyPricing — referral rule", () => {
+  const BEG_SALSA: PricingProduct = {
+    id: "p-latin-combo",
+    productType: "pass",
+    priceCents: 12000,
+    allowedLevels: ["Beginner 1"],
+  };
+  const BEG_1_2: PricingProduct = {
+    id: "p-beg12",
+    productType: "pass",
+    priceCents: 14000,
+    allowedLevels: ["Beginner 1", "Beginner 2"],
+  };
+  const BEG_BACHATA: PricingProduct = {
+    id: "p-bachata-beg",
+    productType: "pass",
+    priceCents: 12000,
+    allowedLevels: ["Beginner 1"],
+  };
+  const NON_BEGINNER: PricingProduct = {
+    id: "p-mem-gold",
+    productType: "membership",
+    priceCents: 17000,
+    allowedLevels: ["Intermediate", "Advanced"],
+  };
+  const NO_LEVELS: PricingProduct = {
+    id: "p-generic",
+    productType: "pass",
+    priceCents: 10000,
+    allowedLevels: null,
+  };
+
+  function referralRule(overrides: Partial<DiscountRule> = {}): DiscountRule {
+    return rule({
+      id: "dr-referral-beginners-10",
+      code: "REFERRAL_BEGINNERS_10",
+      name: "Referral 10% off Beginners",
+      ruleType: "referral",
+      discountKind: "percentage",
+      discountValue: 10,
+      appliesToProductTypes: null,
+      appliesToProductIds: null,
+      appliesToEventProductIds: null,
+      priority: 4,
+      stackable: false,
+      firstTimeScope: "any_purchase",
+      firstTimeProductIds: null,
+      ...overrides,
+    });
+  }
+
+  it("applies 10% off Beginners 1 (Latin Combo) with a referral code", () => {
+    const r = applyPricing({
+      product: BEG_SALSA,
+      now: NOW,
+      rules: [referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.appliedDiscounts[0]?.ruleType).toBe("referral");
+    expect(r.appliedDiscounts[0]?.amountCents).toBe(1200); // 10% of 12000
+    expect(r.finalPriceCents).toBe(10800);
+  });
+
+  it("applies 10% off Beginners 1 & 2 Combo Pass", () => {
+    const r = applyPricing({
+      product: BEG_1_2,
+      now: NOW,
+      rules: [referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.appliedDiscounts[0]?.amountCents).toBe(1400);
+    expect(r.finalPriceCents).toBe(12600);
+  });
+
+  it("applies 10% off a Beginners 1 Bachata product (level match — no ID hardcoding)", () => {
+    // Product isn't in `appliesToProductIds` — the level-driven
+    // predicate is the source of truth and this future/hypothetical
+    // beginner product must qualify automatically.
+    const r = applyPricing({
+      product: BEG_BACHATA,
+      now: NOW,
+      rules: [referralRule({ appliesToProductIds: null })],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.finalPriceCents).toBe(10800);
+  });
+
+  it("does NOT apply to a non-beginner product even with a referral code", () => {
+    const r = applyPricing({
+      product: NON_BEGINNER,
+      now: NOW,
+      rules: [referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+    expect(r.finalPriceCents).toBe(NON_BEGINNER.priceCents);
+  });
+
+  it("does NOT apply to a product with no allowedLevels metadata", () => {
+    const r = applyPricing({
+      product: NO_LEVELS,
+      now: NOW,
+      rules: [referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+  });
+
+  it("does NOT apply when NO referral code is provided", () => {
+    const r = applyPricing({
+      product: BEG_SALSA,
+      now: NOW,
+      rules: [referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      // referralCode omitted
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+  });
+
+  it("treats whitespace-only referral code as no code", () => {
+    const r = applyPricing({
+      product: BEG_SALSA,
+      now: NOW,
+      rules: [referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "   ",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+  });
+
+  it("does NOT apply on the event branch (subscription-only)", () => {
+    const eventTicket: PricingProduct = {
+      entityKind: "event_product",
+      id: "ep-1",
+      productType: "full_pass",
+      priceCents: 12000,
+      allowedLevels: ["Beginner 1"],
+    };
+    const r = applyPricing({
+      product: eventTicket,
+      now: NOW,
+      rules: [referralRule({ appliesToEventProductIds: ["ep-1"] })],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+  });
+
+  it("loses to a higher-priority first-time rule (deterministic, no double-discount)", () => {
+    // First-time rule (priority 5) + referral rule (priority 4) both
+    // eligible; only one applies because both are stackable=false.
+    // The engine sorts by priority desc so first-time wins.
+    const firstTime = rule({
+      id: "dr-first-time",
+      code: "FIRST_TIME_10",
+      ruleType: "first_time_purchase",
+      discountKind: "percentage",
+      discountValue: 10,
+      appliesToProductIds: [BEG_SALSA.id],
+      priority: 5,
+      firstTimeScope: "selected_products",
+      firstTimeProductIds: [BEG_SALSA.id],
+    });
+    const r = applyPricing({
+      product: BEG_SALSA,
+      now: NOW,
+      rules: [firstTime, referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: { "dr-first-time": true },
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.appliedDiscounts[0]?.ruleType).toBe("first_time_purchase");
+    expect(r.totalDiscountCents).toBe(1200); // still 10%, never 20%
+  });
+
+  it("applies once the first-time rule has been consumed", () => {
+    // Same rules as above but the student has already used the
+    // first-time discount elsewhere → referral rule now wins the
+    // sole discount slot.
+    const firstTime = rule({
+      id: "dr-first-time",
+      code: "FIRST_TIME_10",
+      ruleType: "first_time_purchase",
+      discountKind: "percentage",
+      discountValue: 10,
+      appliesToProductIds: [BEG_SALSA.id],
+      priority: 5,
+      firstTimeScope: "selected_products",
+      firstTimeProductIds: [BEG_SALSA.id],
+    });
+    const r = applyPricing({
+      product: BEG_SALSA,
+      now: NOW,
+      rules: [firstTime, referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: { "dr-first-time": false },
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.appliedDiscounts[0]?.ruleType).toBe("referral");
+    expect(r.totalDiscountCents).toBe(1200);
+  });
+
+  it("does NOT apply when the rule is inactive", () => {
+    const r = applyPricing({
+      product: BEG_SALSA,
+      now: NOW,
+      rules: [referralRule({ isActive: false })],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts).toHaveLength(0);
+  });
+
+  it("rounds the amount to nearest cent for odd subtotals", () => {
+    // 12345 * 10% = 1234.5 → rounds to 1235.
+    const oddPrice: PricingProduct = {
+      ...BEG_SALSA,
+      priceCents: 12345,
+    };
+    const r = applyPricing({
+      product: oddPrice,
+      now: NOW,
+      rules: [referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    expect(r.appliedDiscounts[0]?.amountCents).toBe(1235);
+    expect(r.finalPriceCents).toBe(12345 - 1235);
+  });
+
+  it("carries the referral snapshot through snapshotPricingResult", () => {
+    const r = applyPricing({
+      product: BEG_SALSA,
+      now: NOW,
+      rules: [referralRule()],
+      studentAffiliations: [],
+      firstTimeEligibleByRuleId: {},
+      referralCode: "BPM-1234",
+    });
+    const snap = snapshotPricingResult(r, NOW);
+    expect(snap).not.toBeNull();
+    expect(snap?.appliedDiscounts[0]?.ruleType).toBe("referral");
+    expect(snap?.finalPriceCents).toBe(10800);
+  });
+});
