@@ -23,10 +23,68 @@ interface FulfillmentResult {
   currency?: string | null;
 }
 
+/**
+ * Phase 11 — €0 comped guest event purchases arrive here with a
+ * synthetic `session_id` of the shape `comp:<uuid>`. There is no
+ * Stripe session to retrieve, so we look up the already-created
+ * `event_purchases` row by `paymentReference` and return a
+ * FulfillmentResult shaped identically to the paid branch. That lets
+ * the exact same success-page render code (and the same
+ * `<ConversionTracker>` mount site) run — just with value=0.
+ *
+ * Idempotency is intrinsic here: `createFreeGuestEventPurchaseAction`
+ * already wrote the row, so refresh just re-reads it. The
+ * ConversionTracker's sessionStorage dedup key is
+ * `bpm:conv:/event/<id>/checkout-success:event_ticket_purchase:comp:<uuid>`,
+ * unique per free registration.
+ */
+async function verifyAndFulfillComped(
+  eventId: string,
+  paymentReference: string,
+): Promise<FulfillmentResult> {
+  const tag = `[checkout-success event=${eventId} comp=${paymentReference.slice(5, 17)}...]`;
+  const repo = getSpecialEventRepo();
+  const purchases = await repo.getPurchasesByEvent(eventId).catch(() => []);
+  const purchase = purchases.find((p) => p.paymentReference === paymentReference);
+  if (!purchase) {
+    console.warn(`${tag} No comped purchase found for reference`);
+    return { status: "error", error: "Free registration not found" };
+  }
+  if (purchase.paymentStatus !== "paid") {
+    console.warn(`${tag} Comped purchase not in paid state: ${purchase.paymentStatus}`);
+    return { status: "error", error: "Free registration is not confirmed" };
+  }
+  const [event, products] = await Promise.all([
+    repo.getEventById(eventId).catch(() => null),
+    repo.getProductsByEvent(eventId).catch(() => [] as Awaited<ReturnType<typeof repo.getProductsByEvent>>),
+  ]);
+  const product = products.find((p) => p.id === purchase.eventProductId);
+  console.info(`${tag} Comped fulfilment resolved. purchaseId=${purchase.id}`);
+  return {
+    status: "already_fulfilled",
+    eventTitle: event?.title,
+    productName: product?.name,
+    guestEmail: purchase.guestEmail ?? undefined,
+    // Email was sent by the free-action itself; we do not resend on
+    // refresh. Mirror the "Already fulfilled" reason so the shared
+    // EmailStatusBlock renders the "sent earlier" panel.
+    emailResult: { sent: false, reason: "Already fulfilled" },
+    amountTotalCents: 0,
+    currency: (purchase.currency ?? "eur").toUpperCase(),
+  };
+}
+
 async function verifyAndFulfill(
   eventId: string,
   sessionId: string,
 ): Promise<FulfillmentResult> {
+  // Phase 11 — comped/€0 flow short-circuit. `comp:` references never
+  // hit Stripe (there is no session to retrieve). Everything else
+  // continues down the Stripe verify+fulfill path unchanged.
+  if (sessionId.startsWith("comp:")) {
+    return verifyAndFulfillComped(eventId, sessionId);
+  }
+
   const tag = `[checkout-success event=${eventId} session=${sessionId.slice(0, 12)}...]`;
 
   if (!isStripeEnabled()) {

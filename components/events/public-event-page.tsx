@@ -17,7 +17,10 @@ import {
   Lock,
 } from "lucide-react";
 import { EventHero } from "./event-hero";
-import { createGuestEventPurchaseAction } from "@/lib/actions/event-purchase";
+import {
+  createGuestEventPurchaseAction,
+  createFreeGuestEventPurchaseAction,
+} from "@/lib/actions/event-purchase";
 import { createGuestEventStripeCheckoutAction } from "@/lib/actions/stripe-checkout";
 import { PromoCodeInput } from "@/components/events/promo-code-input";
 import type {
@@ -338,6 +341,10 @@ function GuestPurchaseSection({
   } | null>(null);
 
   const selectedProduct = purchasableProducts.find((p) => p.id === selectedProductId);
+  // Phase 11 — a valid promo that brings the total to €0 collapses
+  // the payment choice: no Stripe session, no reception queue, just a
+  // free registration.
+  const isZeroTotal = !!promo && promo.finalPriceCents === 0;
 
   function handleReceptionPurchase() {
     if (!firstName.trim() || !lastName.trim()) { setError("Please enter your full name."); return; }
@@ -365,6 +372,31 @@ function GuestPurchaseSection({
     if (!selectedProductId) { setError("Please select a product."); return; }
     setError(null);
     startTransition(async () => {
+      // Phase 11 — if an applied promo brings the total to €0 we skip
+      // Stripe entirely (Stripe rejects zero-amount sessions) and go
+      // through the dedicated comped-purchase server action. The
+      // server re-validates the code + eligibility, so a tampered
+      // client cannot force a free ticket. On success we redirect to
+      // the SAME event checkout-success page — the conversion tracker
+      // still mounts and fires Purchase(value=0, currency=EUR).
+      if (promo && promo.finalPriceCents === 0 && promo.code) {
+        const free = await createFreeGuestEventPurchaseAction({
+          eventProductId: selectedProductId,
+          eventId: event.id,
+          firstName: firstName.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
+          phone: phone.trim() || undefined,
+          promoCode: promo.code,
+        });
+        if (free.success && free.redirectUrl) {
+          window.location.href = free.redirectUrl;
+        } else {
+          setError(free.error ?? "Could not complete free registration. Please try again.");
+        }
+        return;
+      }
+
       const res = await createGuestEventStripeCheckoutAction({
         eventProductId: selectedProductId,
         eventId: event.id,
@@ -407,8 +439,17 @@ function GuestPurchaseSection({
             </p>
           </div>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            {/*
+              Phase 11 — this callout appears when the only tickets on
+              the event are "Members only". The user needs an active
+              membership before they can buy, so on successful login we
+              deliberately redirect to the passes catalog rather than
+              the neutral /dashboard. `next` is URL-encoded so
+              /catalog?tab=passes round-trips correctly through
+              `safeRedirectPath` in the login page.
+            */}
             <Link
-              href="/login"
+              href={`/login?next=${encodeURIComponent("/catalog?tab=passes")}`}
               className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
             >
               Log in <ArrowRight className="h-4 w-4" />
@@ -425,8 +466,15 @@ function GuestPurchaseSection({
           <p className="mt-1 text-sm text-gray-500">Already have an account, or buy as a guest.</p>
         </div>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          {/*
+            Phase 11 — "Log in to purchase" appears on public event
+            landings where the user has expressed purchase intent. Send
+            them to the passes catalog after login so returning members
+            land somewhere useful; users who intend to log in for other
+            reasons still have the /login top-bar link.
+          */}
           <Link
-            href="/login"
+            href={`/login?next=${encodeURIComponent("/catalog?tab=passes")}`}
             className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 transition-colors"
           >
             Log in to purchase <ArrowRight className="h-4 w-4" />
@@ -543,25 +591,45 @@ function GuestPurchaseSection({
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-        {stripeEnabled && (
+        {/*
+          Phase 11 — when the promo brings the total to €0 we hide
+          "Pay at reception" (nothing to pay there) and relabel the
+          primary button to make it clear this is a free registration
+          rather than a payment. The action wiring behind the button
+          still short-circuits to createFreeGuestEventPurchaseAction.
+        */}
+        {isZeroTotal ? (
           <button
             onClick={handleStripePurchase}
             disabled={isPending}
             className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 transition-colors disabled:opacity-50"
           >
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
-            Pay online
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            Register for free
           </button>
-        )}
-        {allowReceptionPayment && (
-          <button
-            onClick={handleReceptionPurchase}
-            disabled={isPending}
-            className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
-          >
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />}
-            Pay at reception
-          </button>
+        ) : (
+          <>
+            {stripeEnabled && (
+              <button
+                onClick={handleStripePurchase}
+                disabled={isPending}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 transition-colors disabled:opacity-50"
+              >
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}
+                Pay online
+              </button>
+            )}
+            {allowReceptionPayment && (
+              <button
+                onClick={handleReceptionPurchase}
+                disabled={isPending}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Banknote className="h-4 w-4" />}
+                Pay at reception
+              </button>
+            )}
+          </>
         )}
       </div>
 

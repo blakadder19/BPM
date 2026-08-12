@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useTransition, useCallback, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CreditCard,
   CalendarRange,
@@ -30,6 +30,7 @@ import { createStudentPurchaseAction } from "@/lib/actions/catalog-purchase";
 import { createStripeCheckoutAction } from "@/lib/actions/stripe-checkout";
 import { ReferralCodeInput } from "@/components/catalog/referral-code-input";
 import { previewProductPricingAction } from "@/lib/actions/catalog-preview";
+import { resolveInitialTypeFilter } from "@/components/catalog/catalog-tab-mapping";
 import type { ProductType } from "@/types/domain";
 
 type CheckoutChoice = "online" | "reception";
@@ -105,6 +106,21 @@ const TYPE_LABELS: Record<string, string> = {
 
 const TYPE_ORDER: ProductType[] = ["membership", "pass", "drop_in"];
 
+/**
+ * Phase 11 — public-facing `?tab=<friendly>` URL params map to the
+ * catalog's internal `typeFilter` values. Keeping this off to the side
+ * so callers (e.g. a login redirect from a passes CTA on the public
+ * event page) can deep-link to a specific tab without needing to know
+ * the internal ProductType names.
+ *
+ * Also accepts singular / plural / hyphenated variants so URLs shared
+ * externally are forgiving.
+ */
+// Phase 11 — accepted `?tab=<friendly>` URL params → internal
+// `typeFilter` mapping lives in `./catalog-tab-mapping.ts` so it can
+// be unit-tested without dragging in the server-only import chain
+// (catalog-purchase / stripe-checkout / catalog-preview).
+
 interface StudentCatalogProps {
   products: CatalogProduct[];
   stripeEnabled?: boolean;
@@ -120,7 +136,13 @@ export function StudentCatalog({
   currentStudentId,
   currentStudentEmail = null,
 }: StudentCatalogProps) {
-  const [typeFilter, setTypeFilter] = useState<string>("all");
+  // Phase 11 — accept `?tab=passes|memberships|drop-ins` from a
+  // login-redirect deep-link so users landing on /catalog after
+  // clicking a passes CTA see the passes tab pre-selected.
+  const searchParams = useSearchParams();
+  const [typeFilter, setTypeFilter] = useState<string>(() =>
+    resolveInitialTypeFilter(searchParams?.get("tab") ?? null),
+  );
   const [purchaseTarget, setPurchaseTarget] = useState<CatalogProduct | null>(null);
 
   const filtered = useMemo(() => {

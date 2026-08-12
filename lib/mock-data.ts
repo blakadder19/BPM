@@ -984,6 +984,45 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
     updatedAt: "2026-04-01T00:00:00",
   },
   {
+    // Phase 11 — INTERNAL TESTING ONLY. 100% event-promo-code rule
+    // scoped to a mock event product so QA can complete a €0 guest
+    // checkout end-to-end (and validate GTM / Meta conversion firing).
+    // Do NOT ship this row into production seeds; the equivalent prod
+    // row is created via the admin /discount-rules panel and scoped to
+    // the real event ticket. `maxUses` is capped so a leaked local
+    // seed cannot be abused in staging; `oneUsePerEmail` is off so a
+    // single tester email can loop.
+    id: "dr-internal-test-100",
+    code: "BPM_TEST_100",
+    name: "Internal QA — 100% off event ticket",
+    description:
+      "Internal test promo code used by BPM QA to verify guest event checkout, GTM and Meta Pixel conversion firing end-to-end at €0 total. Restricted to specific event tickets only.",
+    ruleType: "event_promo_code",
+    affiliationType: null,
+    discountKind: "percentage",
+    discountValue: 100,
+    appliesToProductTypes: null,
+    appliesToProductIds: null,
+    // Local dev / staging: scoped to the seeded mock event ticket
+    // `ep-1` (Full Weekend Pass). Prod scoping happens via the admin
+    // panel against the real event product id.
+    appliesToEventProductIds: ["ep-1"],
+    minPriceCents: null,
+    maxDiscountCents: null,
+    isActive: true,
+    priority: 10,
+    stackable: false,
+    validFrom: null,
+    validUntil: null,
+    firstTimeScope: "any_purchase",
+    firstTimeProductIds: null,
+    requiresCode: true,
+    maxUses: 20,
+    oneUsePerEmail: false,
+    createdAt: "2026-08-01T00:00:00",
+    updatedAt: "2026-08-01T00:00:00",
+  },
+  {
     // Phase 10 — student-referral 10% beginner discount. Eligibility
     // is driven by product `allowedLevels` inside the engine, so the
     // `appliesToProductIds` allow-list here is a defensive belt: even

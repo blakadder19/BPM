@@ -291,4 +291,59 @@ describe("priceEventTicketForStudent — promo codes (service)", () => {
     });
     expect(r.promoCodeError?.kind).toBe("guest_email_required");
   });
+
+  // Phase 11 — internal QA 100% test code. Contract check that the
+  // pricing service actually produces `finalPriceCents === 0` given a
+  // 100% event-promo-code rule. This is the invariant the
+  // `createFreeGuestEventPurchaseAction` short-circuit relies on: if
+  // this test regresses, guests will hit the Stripe zero-amount path
+  // and get an error instead of a comped ticket.
+  it("100% event promo code brings final total to €0 and produces a snapshot", async () => {
+    RULES.push(
+      promoRule({
+        id: "dr-internal-test-100",
+        code: "BPM_TEST_100",
+        name: "Internal QA — 100% off",
+        discountValue: 100,
+        maxUses: 20,
+      }),
+    );
+    const r = await priceEventTicketForStudent({
+      studentId: null,
+      product: TICKET,
+      promoCode: "BPM_TEST_100",
+      guestEmail: "qa@bpm.test",
+      now: NOW,
+    });
+    expect(r.promoCodeError).toBeNull();
+    expect(r.finalPriceCents).toBe(0);
+    expect(r.totalDiscountCents).toBe(TICKET.priceCents);
+    expect(r.appliedDiscounts).toHaveLength(1);
+    expect(r.appliedDiscounts[0].code).toBe("BPM_TEST_100");
+    expect(r.appliedDiscounts[0].ruleType).toBe("event_promo_code");
+    expect(r.snapshot?.finalPriceCents).toBe(0);
+  });
+
+  it("100% event promo code still respects max_uses cap", async () => {
+    RULES.push(
+      promoRule({
+        id: "dr-internal-test-100",
+        code: "BPM_TEST_100",
+        discountValue: 100,
+        maxUses: 1,
+      }),
+    );
+    PURCHASES.push(
+      priorPurchaseUsing("dr-internal-test-100", { paymentStatus: "paid" }),
+    );
+    const r = await priceEventTicketForStudent({
+      studentId: null,
+      product: TICKET,
+      promoCode: "BPM_TEST_100",
+      guestEmail: "qa2@bpm.test",
+      now: NOW,
+    });
+    expect(r.promoCodeError?.kind).toBe("max_uses_reached");
+    expect(r.finalPriceCents).toBe(TICKET.priceCents);
+  });
 });

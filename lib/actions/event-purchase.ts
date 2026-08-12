@@ -343,6 +343,201 @@ export async function createGuestEventPurchaseAction(input: {
 }
 
 /**
+ * Phase 11 — zero-total guest event purchase.
+ *
+ * When a 100% event-promo-code brings the ticket total to €0 we cannot
+ * (and must not) create a Stripe Checkout Session — Stripe rejects a
+ * `unit_amount` below the currency's minimum. Instead this action:
+ *
+ *   1. Re-validates guest + product + promo code server-side (the
+ *      client is never trusted).
+ *   2. Runs the SAME `priceEventTicketForStudent` the paid path uses
+ *      so the frozen discount snapshot on the row is identical to
+ *      what would have gone through Stripe.
+ *   3. Asserts `finalPriceCents === 0`. If it isn't, the caller must
+ *      fall back to Stripe — we never create a $0-flag row for a
+ *      $10 ticket.
+ *   4. Generates a QR token, writes the `event_purchases` row as
+ *      `paymentMethod: "manual"` + `paymentStatus: "paid"` with a
+ *      synthetic `paymentReference: "comp:<uuid>"` (the `comp:` prefix
+ *      is the dedup key + the trigger the `/checkout-success` page
+ *      uses to skip Stripe session retrieval).
+ *   5. Sends the same confirmation email the Stripe path sends so QR
+ *      delivery is uniform across paid and comped tickets.
+ *   6. Returns the redirect URL the client should navigate to so the
+ *      existing conversion tracker mounts on the success page.
+ *
+ * Idempotency:
+ *   * We check for an existing purchase on the same `paymentReference`
+ *     before writing. `paymentReference` collisions are astronomically
+ *     unlikely (crypto.randomUUID) but the guard costs nothing.
+ *   * Duplicate-guest guard is intentionally the same as the
+ *     reception path so a tester can't accidentally create two comps
+ *     for the same product+email.
+ */
+export async function createFreeGuestEventPurchaseAction(input: {
+  eventProductId: string;
+  eventId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  promoCode: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  /** Client navigates here so ConversionTracker fires. */
+  redirectUrl?: string;
+}> {
+  const { firstName, lastName, email, promoCode } = input;
+  if (!firstName?.trim() || !lastName?.trim()) return { success: false, error: "Name is required" };
+  if (!email?.trim() || !email.includes("@")) return { success: false, error: "A valid email is required" };
+  if (!promoCode?.trim()) return { success: false, error: "A promo code is required for free registration" };
+  const guestName = `${firstName.trim()} ${lastName.trim()}`;
+
+  const repo = getSpecialEventRepo();
+  const event = await repo.getEventById(input.eventId);
+  if (!event) return { success: false, error: "Event not found" };
+  if (!event.isPublic) return { success: false, error: "This event is not available for public purchase" };
+
+  const product = (await repo.getProductsByEvent(input.eventId)).find(
+    (p) => p.id === input.eventProductId,
+  );
+  if (!product) return { success: false, error: "Event product not found" };
+  if (!product.salesOpen) return { success: false, error: "Sales are not open for this product" };
+  if (product.membersOnly) {
+    return { success: false, error: MEMBERS_ONLY_GUEST_MESSAGE };
+  }
+
+  const allPurchases = await repo.getPurchasesByEvent(input.eventId);
+
+  const duplicateGuest = allPurchases.find(
+    (p) =>
+      p.guestEmail?.toLowerCase() === email.trim().toLowerCase() &&
+      p.eventProductId === input.eventProductId &&
+      p.paymentStatus !== "refunded",
+  );
+  if (duplicateGuest) {
+    return { success: false, error: "A purchase for this product already exists for this email. Please check your email or contact the academy if you need help." };
+  }
+
+  if (event.overallCapacity != null) {
+    const totalSold = allPurchases.filter((p) => p.paymentStatus !== "refunded").length;
+    if (totalSold >= event.overallCapacity) {
+      return { success: false, error: "This event is fully booked. No more tickets are currently available." };
+    }
+  }
+
+  // Same pricing engine as the paid flow — one source of truth. The
+  // engine handles the max_uses / one_use_per_email gates for the
+  // seeded test rule too so we can't loop past the caps by accident.
+  const pricing = await priceEventTicketForStudent({
+    studentId: null,
+    product: {
+      id: product.id,
+      productType: product.productType,
+      priceCents: product.priceCents,
+    },
+    promoCode: promoCode.trim(),
+    guestEmail: email,
+  });
+
+  if (pricing.promoCodeError) {
+    return { success: false, error: pricing.promoCodeError.message };
+  }
+  if (pricing.finalPriceCents !== 0) {
+    // Defence-in-depth: the client only routes here when the previewed
+    // total was €0. If a race edit disabled or narrowed the rule
+    // between preview and commit, bail loud so the caller can retry
+    // via the paid Stripe path.
+    return {
+      success: false,
+      error: "This promo code no longer brings the total to €0. Please refresh and try again.",
+    };
+  }
+
+  const qrToken = generateGuestPurchaseQrToken();
+  const paymentReference = `comp:${crypto.randomUUID()}`;
+
+  const financials = buildPricedFinancialSnapshot(product, pricing, /*isPaid*/ true);
+
+  const result = await createPurchase({
+    studentId: null,
+    eventProductId: input.eventProductId,
+    eventId: input.eventId,
+    guestName,
+    guestEmail: email.trim(),
+    guestPhone: input.phone?.trim() || null,
+    qrToken,
+    paymentMethod: "manual",
+    paymentStatus: "paid",
+    paymentReference,
+    paidAt: new Date().toISOString(),
+    ...financials,
+  });
+
+  if (!result.success) {
+    return { success: false, error: result.error ?? "Could not register free ticket." };
+  }
+
+  revalidateEventPaths(input.eventId);
+
+  // Finance audit: record the free registration explicitly so
+  // /admin/finance queries can filter comped rows without decoding
+  // the appliedDiscount snapshot.
+  try {
+    logFinanceEvent({
+      entityType: "event_purchase",
+      entityId: result.data ?? paymentReference,
+      action: "created",
+      detail: `Free guest event ticket via promo code ${promoCode.trim().toUpperCase()} (€0 total).`,
+      newValue: `final 0c (saved ${pricing.totalDiscountCents}c)`,
+      metadata: {
+        ...(buildAuditDiscountMetadata(pricing) ?? {}),
+        promoCode: promoCode.trim().toUpperCase(),
+        paymentReference,
+        eventId: input.eventId,
+        eventProductId: input.eventProductId,
+        guestEmail: email.trim().toLowerCase(),
+      },
+    });
+  } catch (e) {
+    console.warn(
+      "[free-event-purchase] failed to log finance event (non-fatal):",
+      e instanceof Error ? e.message : e,
+    );
+  }
+
+  // Confirmation email — mirrors the Stripe branch so the recipient
+  // always gets the same QR delivery UX. Best-effort; a failure here
+  // must not roll back the €0 registration.
+  sendEventPurchaseEmail({
+    studentId: null,
+    studentName: guestName,
+    directEmail: email.trim(),
+    eventTitle: event.title,
+    eventId: input.eventId,
+    productName: product.name,
+    productType: product.productType,
+    priceLabel: centsToEuros(pricing.finalPriceCents),
+    paymentStatus: "paid",
+    inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
+    qrToken,
+    coverImageUrl: event.coverImageUrl ?? undefined,
+  }).catch((err) =>
+    console.warn(
+      "[free-event-purchase] failed to send confirmation email (non-fatal):",
+      err instanceof Error ? err.message : err,
+    ),
+  );
+
+  return {
+    success: true,
+    redirectUrl: `/event/${input.eventId}/checkout-success?session_id=${paymentReference}`,
+  };
+}
+
+/**
  * Webhook fulfillment for guest event purchases paid via Stripe.
  * Generates QR immediately since payment is already confirmed.
  */
