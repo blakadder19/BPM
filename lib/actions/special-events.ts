@@ -127,6 +127,9 @@ export async function createEventAction(
   const isPublic = formData.get("isPublic") === "on" || formData.get("isPublic") === "true";
   const salesOpen = formData.get("salesOpen") === "on" || formData.get("salesOpen") === "true";
   const allowReceptionPayment = formData.get("allowReceptionPayment") === "on" || formData.get("allowReceptionPayment") === "true";
+  // Phase 13 — same "checkbox → boolean" pattern as the other flags so
+  // the admin form can toggle the marketing-landing UX per event.
+  const isMarketingLanding = formData.get("isMarketingLanding") === "on" || formData.get("isMarketingLanding") === "true";
   const rawCapacity = (formData.get("overallCapacity") as string)?.trim();
   const overallCapacity = rawCapacity ? parseInt(rawCapacity, 10) : null;
 
@@ -140,6 +143,7 @@ export async function createEventAction(
     title, subtitle, description, coverImageUrl: urlInput, location,
     startDate, endDate, status: status as EventStatus,
     isVisible, isFeatured, featuredOnDashboard, isPublic, salesOpen, overallCapacity, allowReceptionPayment,
+    isMarketingLanding,
   });
 
   if (result.success && result.id) {
@@ -179,6 +183,7 @@ export async function updateEventAction(
   const isPublic = formData.get("isPublic") === "on" || formData.get("isPublic") === "true";
   const salesOpen = formData.get("salesOpen") === "on" || formData.get("salesOpen") === "true";
   const allowReceptionPayment = formData.get("allowReceptionPayment") === "on" || formData.get("allowReceptionPayment") === "true";
+  const isMarketingLanding = formData.get("isMarketingLanding") === "on" || formData.get("isMarketingLanding") === "true";
   const rawCapacity = (formData.get("overallCapacity") as string)?.trim();
   const overallCapacity = rawCapacity ? parseInt(rawCapacity, 10) : null;
 
@@ -196,6 +201,7 @@ export async function updateEventAction(
     title, subtitle, description, coverImageUrl, location,
     startDate, endDate, status: status as EventStatus,
     isVisible, isFeatured, featuredOnDashboard, isPublic, salesOpen, overallCapacity, allowReceptionPayment,
+    isMarketingLanding,
   });
   if (result.success) revalidateEvents(id);
   return result;

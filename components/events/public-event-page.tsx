@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   CalendarDays,
@@ -15,6 +15,7 @@ import {
   Loader2,
   XCircle,
   Lock,
+  Sparkles,
 } from "lucide-react";
 import { EventHero } from "./event-hero";
 import {
@@ -23,6 +24,14 @@ import {
 } from "@/lib/actions/event-purchase";
 import { createGuestEventStripeCheckoutAction } from "@/lib/actions/stripe-checkout";
 import { PromoCodeInput } from "@/components/events/promo-code-input";
+import {
+  HeroBookNowButton,
+  StickyBookNowBar,
+} from "@/components/events/mobile-book-now-cta";
+import {
+  isBeginnerFriendlyEvent,
+  summarizeEventPrices,
+} from "@/lib/analytics/event-cta";
 import type {
   MockSpecialEvent,
   MockEventSession,
@@ -70,6 +79,50 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
   );
   const sortedDates = Object.keys(sessionsByDate).sort();
 
+  // Phase 12 — Book-now CTAs.
+  //
+  // Phase 13 gate — the paid-ads mobile UX (mobile summary card,
+  // hero Book-now button, sticky bottom bar, extra bottom padding)
+  // only renders when the admin has explicitly opted this event in
+  // via `event.isMarketingLanding`. Any pre-Phase-13 event stays on
+  // the standard layout untouched.
+  //
+  // Guest-only tickets (i.e. anything NOT members-only) are the ones
+  // the CTAs can actually take a beginner into. If the entire event
+  // is members-only there's nothing a guest can book, so we hide the
+  // sticky bar and disable the hero button. The mobile summary card
+  // itself always renders when campaign mode is on.
+  const isCampaignMode = event.isMarketingLanding === true;
+  const purchasableProducts = products.filter((p) => !p.membersOnly);
+  const canGuestBook = purchasableProducts.length > 0;
+  const priceSummary = summarizeEventPrices(purchasableProducts);
+  const beginnerFriendly = isBeginnerFriendlyEvent({
+    title: event.title,
+    subtitle: event.subtitle,
+    description: event.description,
+    productNames: products.map((p) => p.name),
+  });
+
+  // `openSignal` is a monotonically-increasing counter the child
+  // `GuestPurchaseSection` watches to imperatively open the guest
+  // form (and skip the "choice" screen). Keeps GuestPurchaseSection's
+  // internal `mode` state encapsulated while letting the CTAs above
+  // trigger it. Every click bumps the counter — including a repeat
+  // click once the form is already open, which is a no-op inside the
+  // child effect (the `mode` transition is idempotent).
+  const [openSignal, setOpenSignal] = useState(0);
+
+  function scrollToBooking() {
+    if (typeof document === "undefined") return;
+    const el = document.getElementById("book-tickets");
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleBookNow() {
+    setOpenSignal((s) => s + 1);
+    scrollToBooking();
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* ── Top bar ─────────────────────────────────────────── */}
@@ -78,6 +131,11 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
           <span className="font-display text-lg font-semibold tracking-tight">
             BPM Dance Academy
           </span>
+          {/*
+            Phase 12 — Log in stays secondary on the public event page
+            (small pill, faded background). Guest checkout is the
+            primary path via the CTAs below.
+          */}
           <Link
             href="/login"
             className="rounded-lg bg-white/10 px-3 py-1.5 text-sm font-medium hover:bg-white/20 transition-colors"
@@ -87,7 +145,20 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8 space-y-8">
+      {/*
+        Phase 12 — extra bottom padding on mobile so the sticky bar
+        never occludes the last section (footer / promo code helper).
+        Phase 13 — only add that reserve when campaign mode is on;
+        non-campaign events keep the original spacing so we don't
+        introduce dead space on the standard layout.
+      */}
+      <main
+        className={
+          isCampaignMode
+            ? "mx-auto max-w-3xl px-4 py-8 space-y-8 pb-32 md:pb-8"
+            : "mx-auto max-w-3xl px-4 py-8 space-y-8"
+        }
+      >
         {/* ── Hero ────────────────────────────────────────────── */}
         <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
           {!event.coverImageUrl && (
@@ -133,6 +204,39 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
             </div>
           </div>
         </div>
+
+        {/* ── Phase 12 — Compact mobile summary + hero CTA ────
+            A conversion-focused summary card that surfaces the most
+            important facts (date/time, location, price, beginner
+            note) above the fold on mobile. Hidden on `md+` because
+            the hero above already shows all of this comfortably.
+            Phase 13 — only rendered when this event has been opted
+            in to campaign mode by an admin. */}
+        {isCampaignMode && (
+          <>
+            <MobileSummaryCard
+              event={event}
+              fromPriceCents={priceSummary.fromCents}
+              allSamePrice={priceSummary.allSamePrice}
+              beginnerFriendly={beginnerFriendly}
+            />
+            <div className="md:hidden">
+              <HeroBookNowButton
+                eventId={event.id}
+                eventName={event.title}
+                fromPriceCents={priceSummary.fromCents}
+                allSamePrice={priceSummary.allSamePrice}
+                onBookNow={handleBookNow}
+                disabled={!canGuestBook}
+              />
+              {!canGuestBook && (
+                <p className="mt-2 text-center text-xs text-blue-700">
+                  This event has members-only tickets. Log in with your member account to purchase.
+                </p>
+              )}
+            </div>
+          </>
+        )}
 
         {/* ── Post-checkout cancel banner ─────────────────── */}
         {purchaseStatus === "cancelled" && (
@@ -262,34 +366,43 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
         )}
 
         {/* ── CTA / Guest purchase ─────────────────────────────── */}
-        {products.length > 0 ? (
-          <GuestPurchaseSection
-            event={event}
-            products={products}
-            stripeEnabled={stripeEnabled}
-            allowReceptionPayment={allowReceptionPayment}
-          />
-        ) : (
-          <div className="rounded-xl border border-bpm-200 bg-gradient-to-r from-bpm-50 to-white p-6 text-center space-y-4">
-            <Ticket className="h-8 w-8 text-bpm-500 mx-auto" />
-            <div>
-              <h3 className="font-display text-lg font-semibold text-gray-900">
-                Interested?
-              </h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Log in or create an account for more details.
-              </p>
+        {/*
+          Phase 12 — the `book-tickets` id is the target of the
+          mobile Book-now CTAs' scrollIntoView. Kept on the wrapper
+          (not the section) so scrolling lands on the section
+          header for context, not mid-form.
+        */}
+        <section id="book-tickets" aria-label="Book tickets">
+          {products.length > 0 ? (
+            <GuestPurchaseSection
+              event={event}
+              products={products}
+              stripeEnabled={stripeEnabled}
+              allowReceptionPayment={allowReceptionPayment}
+              openSignal={openSignal}
+            />
+          ) : (
+            <div className="rounded-xl border border-bpm-200 bg-gradient-to-r from-bpm-50 to-white p-6 text-center space-y-4">
+              <Ticket className="h-8 w-8 text-bpm-500 mx-auto" />
+              <div>
+                <h3 className="font-display text-lg font-semibold text-gray-900">
+                  Interested?
+                </h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Log in or create an account for more details.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Link href="/login" className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 transition-colors">
+                  Log in <ArrowRight className="h-4 w-4" />
+                </Link>
+                <Link href="/signup" className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                  Create account
+                </Link>
+              </div>
             </div>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Link href="/login" className="inline-flex items-center gap-2 rounded-lg bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white hover:bg-zinc-800 transition-colors">
-                Log in <ArrowRight className="h-4 w-4" />
-              </Link>
-              <Link href="/signup" className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-5 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                Create account
-              </Link>
-            </div>
-          </div>
-        )}
+          )}
+        </section>
 
         {/* ── Footer ──────────────────────────────────────────── */}
         <footer className="text-center pt-4 pb-8">
@@ -298,6 +411,87 @@ export function PublicEventPage({ event, sessions, products, stripeEnabled, allo
           </p>
         </footer>
       </main>
+
+      {/*
+        Phase 12 — mobile-only sticky bottom CTA.
+        Phase 13 — gated behind campaign mode: only renders when the
+        admin has ticked "Optimise this event page for new students /
+        ads" AND the event actually has a guest-purchasable ticket.
+        Hidden automatically on `md+` via `md:hidden` inside the
+        component.
+      */}
+      {isCampaignMode && canGuestBook && (
+        <StickyBookNowBar
+          eventId={event.id}
+          eventName={event.title}
+          fromPriceCents={priceSummary.fromCents}
+          allSamePrice={priceSummary.allSamePrice}
+          onBookNow={handleBookNow}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Phase 12 — Mobile summary card ───────────────────────────
+//
+// Renders on mobile only. Repeats the essentials (date/time,
+// location, from-price, "no account needed", optional
+// beginner-friendly badge) in a scannable card, right under the hero.
+// On desktop the hero already contains all this info comfortably in
+// one row, so the card is `md:hidden`.
+
+function MobileSummaryCard({
+  event,
+  fromPriceCents,
+  allSamePrice,
+  beginnerFriendly,
+}: {
+  event: MockSpecialEvent;
+  fromPriceCents: number | null;
+  allSamePrice: boolean;
+  beginnerFriendly: boolean;
+}) {
+  const priceLabel =
+    typeof fromPriceCents === "number"
+      ? allSamePrice
+        ? `€${(fromPriceCents / 100).toFixed(0)}`
+        : `from €${(fromPriceCents / 100).toFixed(0)}`
+      : null;
+
+  return (
+    <div className="md:hidden rounded-xl border border-gray-200 bg-white p-4 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        {beginnerFriendly && (
+          <span
+            data-testid="beginner-friendly-badge"
+            className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5 text-[11px] font-medium border border-emerald-100"
+          >
+            <Sparkles className="h-3 w-3" />
+            Beginner-friendly
+          </span>
+        )}
+        {priceLabel && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-bpm-50 text-bpm-700 px-2 py-0.5 text-[11px] font-semibold border border-bpm-100">
+            {priceLabel}
+          </span>
+        )}
+        <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 text-gray-600 px-2 py-0.5 text-[11px] font-medium border border-gray-200">
+          No account needed
+        </span>
+      </div>
+      <div className="space-y-1.5 text-sm text-gray-700">
+        <div className="flex items-start gap-2">
+          <CalendarDays className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+          <span>{formatEventDateRange(event.startDate, event.endDate)}</span>
+        </div>
+        {event.location && (
+          <div className="flex items-start gap-2">
+            <MapPin className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+            <span>{event.location}</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -311,11 +505,20 @@ function GuestPurchaseSection({
   products,
   stripeEnabled,
   allowReceptionPayment,
+  openSignal = 0,
 }: {
   event: MockSpecialEvent;
   products: MockEventProduct[];
   stripeEnabled: boolean;
   allowReceptionPayment: boolean;
+  /**
+   * Phase 12 — monotonically-increasing counter from the parent.
+   * When it changes we auto-open the guest form (skipping the
+   * "choice" screen). Callers only bump this when the user
+   * explicitly hits a Book-now CTA above, so the current behaviour
+   * of showing the choice screen on first render is unchanged.
+   */
+  openSignal?: number;
 }) {
   // Guests can never purchase members-only tickets — membership cannot
   // be verified without an authenticated account. Filter them out of the
@@ -326,6 +529,19 @@ function GuestPurchaseSection({
   const onlyMembersOnly = purchasableProducts.length === 0 && hasMembersOnlyProducts;
 
   const [mode, setMode] = useState<"choice" | "guest" | "success">("choice");
+
+  // Phase 12 — react to Book-now CTA. Only advance from "choice" to
+  // "guest"; a repeat click while already on "guest" or "success" is
+  // a no-op. Never overrides a completed "success" state.
+  useEffect(() => {
+    if (openSignal <= 0) return;
+    if (mode === "choice" && purchasableProducts.length > 0) {
+      setMode("guest");
+    }
+    // Intentionally omit `mode` from deps — we want to react to
+    // signal changes only, not to internal mode transitions.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openSignal]);
   const [selectedProductId, setSelectedProductId] = useState<string>(purchasableProducts[0]?.id ?? "");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");

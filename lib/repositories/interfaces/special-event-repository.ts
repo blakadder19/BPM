@@ -33,6 +33,11 @@ export interface CreateEventData {
   allowReceptionPayment?: boolean;
   /** Phase 4: when set, the event is created in an archived state. Rarely used; most events become archived later via `updateEvent`. */
   archivedAt?: string | null;
+  /**
+   * Phase 13 — opt-in for the mobile paid-ads landing UX.
+   * Defaults to `false`; must be explicitly ticked by an admin.
+   */
+  isMarketingLanding?: boolean;
 }
 
 export type EventPatch = Partial<
@@ -54,6 +59,7 @@ export type EventPatch = Partial<
     | "overallCapacity"
     | "allowReceptionPayment"
     | "archivedAt"
+    | "isMarketingLanding"
   >
 >;
 

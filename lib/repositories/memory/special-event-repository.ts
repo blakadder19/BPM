@@ -37,6 +37,7 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       overallCapacity: data.overallCapacity ?? null,
       allowReceptionPayment: data.allowReceptionPayment ?? false,
       archivedAt: data.archivedAt ?? null,
+      isMarketingLanding: data.isMarketingLanding ?? false,
       createdAt: now,
       updatedAt: now,
     });

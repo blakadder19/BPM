@@ -302,6 +302,34 @@ export function EventFormDialog({
                 </div>
                 <p className="text-xs text-gray-400">&ldquo;Featured in listings&rdquo; highlights the event with a star. &ldquo;Show on student dashboard&rdquo; places a card on every student&rsquo;s dashboard.</p>
               </div>
+
+              {/*
+                Phase 13 — per-event opt-in for the mobile paid-ads
+                landing UX (sticky Book-now CTA, above-the-fold summary,
+                guest-checkout-first). Lives next to the existing
+                Promotion group because it's a public-page display
+                setting; grouping it there keeps the admin form's
+                mental model clean (visibility → promotion → campaign
+                mode). Defaults OFF so existing events are never
+                changed unexpectedly.
+              */}
+              <div className="space-y-2 border-t border-gray-100 pt-3">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Campaign mode</p>
+                <label className="flex items-start gap-2 text-sm" title="Enables the mobile paid-ads landing layout for this event">
+                  <input
+                    type="checkbox"
+                    name="isMarketingLanding"
+                    defaultChecked={defaults?.isMarketingLanding ?? false}
+                    className={`${checkCls} mt-0.5`}
+                  />
+                  <span>
+                    Optimise this event page for new students / ads
+                  </span>
+                </label>
+                <p className="text-xs text-gray-400">
+                  Shows a mobile sticky Book Now button, prioritises guest checkout, and makes the page easier to use for paid campaigns and new enquiries.
+                </p>
+              </div>
             </div>
 
             {/* Live student/public appearance preview */}

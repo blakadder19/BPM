@@ -695,6 +695,15 @@ export interface MockSpecialEvent {
    * editing).
    */
   archivedAt: string | null;
+  /**
+   * Phase 13 — per-event opt-in for the conversion-focused mobile
+   * landing UX (sticky Book-now CTA, above-the-fold summary,
+   * guest-checkout-first flow). Default false — the standard event
+   * page layout is preserved for every event unless an admin ticks
+   * "Optimise this event page for new students / ads" in
+   * Admin → Events. Stored as `special_events.is_marketing_landing`.
+   */
+  isMarketingLanding: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -806,6 +815,7 @@ export const SPECIAL_EVENTS: MockSpecialEvent[] = [
     overallCapacity: 100,
     allowReceptionPayment: true,
     archivedAt: null,
+    isMarketingLanding: false,
     createdAt: "2026-04-01T10:00:00",
     updatedAt: "2026-04-01T10:00:00",
   },

@@ -60,6 +60,10 @@ function toEvent(r: any): MockSpecialEvent {
     overallCapacity: r.overall_capacity ?? null,
     allowReceptionPayment: r.allow_reception_payment ?? false,
     archivedAt: r.archived_at ?? null,
+    // Phase 13 — coalesce to `false` so rows written before migration
+    // 00075 (or on databases where the column hasn't been added yet
+    // in local dev) never surface as `undefined` on the domain type.
+    isMarketingLanding: r.is_marketing_landing ?? false,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -179,6 +183,7 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
         overall_capacity: input.overallCapacity ?? null,
         allow_reception_payment: input.allowReceptionPayment ?? false,
         archived_at: input.archivedAt ?? null,
+        is_marketing_landing: input.isMarketingLanding ?? false,
       } as never)
       .select()
       .single();
@@ -205,6 +210,7 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     if (patch.overallCapacity !== undefined) fields.overall_capacity = patch.overallCapacity;
     if (patch.allowReceptionPayment !== undefined) fields.allow_reception_payment = patch.allowReceptionPayment;
     if (patch.archivedAt !== undefined) fields.archived_at = patch.archivedAt;
+    if (patch.isMarketingLanding !== undefined) fields.is_marketing_landing = patch.isMarketingLanding;
     if (Object.keys(fields).length === 0) return this.getEventById(id);
     const { error } = await sb.from("special_events").update(fields as never).eq("id", id);
     if (error) throw new Error(error.message);
