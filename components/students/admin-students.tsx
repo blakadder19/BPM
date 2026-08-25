@@ -22,6 +22,7 @@ import {
   DeleteStudentDialog,
   AddSubscriptionDialog,
   EditSubscriptionDialog,
+  ExtendSubscriptionDialog,
 } from "./student-dialogs";
 import { runTermLifecycleAction, getLifecycleRunInfo } from "@/lib/actions/term-lifecycle";
 import { qrWalkInCheckInAction } from "@/lib/actions/qr-checkin";
@@ -111,6 +112,8 @@ export interface AdminStudentsPermissions {
   canRunLifecycle: boolean;
   /** Server-resolved `payments:manual_adjustment` — gates the manual discount field in the assign dialog. */
   canApplyManualDiscount: boolean;
+  /** Server-resolved `payments:manual_adjustment` — gates the "Extend expiry" affordance on the subscription card. */
+  canExtendSubscription: boolean;
   /** Server-resolved `students:send_magic_link` — gates the "Send magic login link" admin action on the student detail panel. */
   canSendMagicLink: boolean;
 }
@@ -169,6 +172,7 @@ export function AdminStudents({
   const [showAdd, setShowAdd] = useState(false);
   const [addSubStudentId, setAddSubStudentId] = useState<string | null>(null);
   const [editSub, setEditSub] = useState<MockSubscription | null>(null);
+  const [extendSub, setExtendSub] = useState<MockSubscription | null>(null);
   const [lifecycleMsg, setLifecycleMsg] = useState<string | null>(null);
   const [lifecyclePending, startLifecycle] = useTransition();
   const [lastRunTs, setLastRunTs] = useState<string | null>(null);
@@ -445,6 +449,7 @@ export function AdminStudents({
                     })}
                     onAddSub={permissions.canEdit ? () => setAddSubStudentId(s.id) : null}
                     onEditSub={permissions.canEdit ? setEditSub : null}
+                    onExtendSub={permissions.canExtendSubscription ? setExtendSub : null}
                     canViewFinance={permissions.canViewFinance}
                     canSendMagicLink={permissions.canSendMagicLink}
                     colSpan={TABLE_HEADERS.length}
@@ -499,6 +504,14 @@ export function AdminStudents({
 
       {editSub && permissions.canEdit && (
         <EditSubscriptionDialog subscription={editSub} products={products} danceStyles={danceStyles} onClose={() => setEditSub(null)} />
+      )}
+
+      {extendSub && permissions.canExtendSubscription && (
+        <ExtendSubscriptionDialog
+          subscription={extendSub}
+          terms={terms}
+          onClose={() => setExtendSub(null)}
+        />
       )}
     </div>
   );

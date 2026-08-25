@@ -15,6 +15,10 @@ import {
   attachClaimRelations,
 } from "@/lib/services/pricing-service";
 import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
+import {
+  computeSubscriptionValidity,
+  validateSubscriptionExtension,
+} from "@/lib/domain/subscription-validity";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getBookingService } from "@/lib/services/booking-store";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
@@ -22,6 +26,7 @@ import { getTodayStr } from "@/lib/domain/datetime";
 import { paymentPendingEvent, paymentConfirmedEvent, subscriptionRefundedEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
+import type { MockTerm } from "@/lib/mock-data";
 
 const VALID_STATUSES = new Set<string>([
   "active",
@@ -135,37 +140,44 @@ export async function createSubscriptionAction(
   const product = await getProductRepo().getById(productId);
   if (!product) return { success: false, error: "Product not found" };
 
-  let validFrom: string;
-  let validUntil: string | null;
-
+  // Term-based vs fixed-duration vs open-ended expiry math is now
+  // owned by a single pure helper — see lib/domain/subscription-validity.ts.
+  // Look up the term (and its consecutive follower for spanTerms >= 2)
+  // if the admin picked one, then delegate.
+  let chosenTerm: MockTerm | null = null;
+  let nextConsecutive: MockTerm | null = null;
   if (termId) {
-    const term = await getTermRepo().getById(termId);
-    if (!term) return { success: false, error: "Term not found" };
-    validFrom = term.startDate;
-    validUntil = term.endDate;
-
+    chosenTerm = await getTermRepo().getById(termId);
+    if (!chosenTerm) return { success: false, error: "Term not found" };
     const spanTerms = product.spanTerms ?? 1;
     if (spanTerms >= 2) {
       const allTerms = await getTermRepo().getAll();
-      const nextTerm = getNextConsecutiveTerm(allTerms, termId);
-      if (!nextTerm) {
+      const next = getNextConsecutiveTerm(allTerms, termId);
+      if (!next) {
         return {
           success: false,
-          error: `Cannot assign — no next consecutive term exists after "${term.name}". Please create the next term first.`,
+          error: `Cannot assign — no next consecutive term exists after "${chosenTerm.name}". Please create the next term first.`,
         };
       }
-      validUntil = nextTerm.endDate;
+      nextConsecutive = next;
     }
-  } else if (product.durationDays) {
-    const today = new Date().toISOString().slice(0, 10);
-    validFrom = today;
-    const end = new Date();
-    end.setDate(end.getDate() + product.durationDays);
-    validUntil = end.toISOString().slice(0, 10);
-  } else {
-    validFrom = new Date().toISOString().slice(0, 10);
-    validUntil = null;
   }
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const computed = computeSubscriptionValidity({
+    product: {
+      id: product.id,
+      productType: product.productType,
+      termBound: product.termBound,
+      spanTerms: product.spanTerms ?? null,
+      durationDays: product.durationDays ?? null,
+    },
+    purchaseDate: todayStr,
+    chosenTerm,
+    nextConsecutiveTerm: nextConsecutive,
+  });
+  if (!computed.ok) return { success: false, error: computed.error.message };
+  const validFrom: string = computed.validity.validFrom;
+  const validUntil: string | null = computed.validity.validUntil;
 
   const totalCredits = product.totalCredits;
   const remainingCredits = product.totalCredits;
@@ -710,4 +722,116 @@ export async function applyPaymentChangeAction(params: {
     revalidatePath("/finance");
   }
   return result;
+}
+
+// ── Extend subscription expiry (admin-only) ─────────────────
+//
+// Phase 14. Business rule: term-based passes/memberships expire at
+// the selected term's end date (see `computeSubscriptionValidity`).
+// In exceptional circumstances (illness, injury, mis-sale) an admin
+// with `payments:manual_adjustment` may push a single subscription's
+// `validUntil` forward. Every extension is logged via the existing
+// finance-audit trail so Finance/Zaria have a clean record of why
+// the entitlement ran into the next term.
+//
+// Rules enforced server-side (never trust the client):
+//   * Permission gate: `payments:manual_adjustment`.
+//   * `newValidUntil` must be strictly AFTER the current `validUntil`.
+//     Shortening/no-op is rejected — a shortening flow can be added
+//     later if needed but is out of scope here.
+//   * `reason` must be non-empty (matches the manual-discount UX).
+//   * The subscription must currently HAVE a `validUntil` — open-ended
+//     drop-in credit packs are not extendable.
+//   * The row itself must still be active or paused; expired/cancelled
+//     rows are read-only (an admin should renew instead).
+//
+// Audit shape: `logFinanceEvent({ entityType: "subscription",
+//   action: "manual_edit", detail: <reason>, previousValue: old,
+//   newValue: new, metadata: { extension: { previousValidUntil,
+//   newValidUntil, reason, adminId, adminEmail, adminName,
+//   performedAt } } })`.
+
+export interface ExtendSubscriptionInput {
+  subscriptionId: string;
+  newValidUntil: string;
+  reason: string;
+}
+
+export async function extendSubscriptionAction(
+  input: ExtendSubscriptionInput,
+): Promise<{
+  success: boolean;
+  error?: string;
+  previousValidUntil?: string | null;
+  newValidUntil?: string;
+}> {
+  const access = await requirePermission("payments:manual_adjustment");
+  const adminUser = access.user;
+
+  const id = (input.subscriptionId ?? "").trim();
+  if (!id) return { success: false, error: "Missing subscription ID" };
+
+  const sub = await getSubscriptionRepo().getById(id);
+  if (!sub) return { success: false, error: "Subscription not found" };
+
+  if (sub.status !== "active" && sub.status !== "paused") {
+    return {
+      success: false,
+      error: `Cannot extend a ${sub.status} subscription. Use renew instead.`,
+    };
+  }
+
+  const validation = validateSubscriptionExtension({
+    currentValidUntil: sub.validUntil,
+    newValidUntil: input.newValidUntil,
+    reason: input.reason,
+  });
+  if (!validation.ok) {
+    return { success: false, error: validation.message };
+  }
+
+  const previousValidUntil = sub.validUntil;
+  const newValidUntil = input.newValidUntil.trim();
+  const reason = input.reason.trim();
+
+  const result = await updateSubscription(id, { validUntil: newValidUntil });
+  if (!result.success) {
+    return { success: false, error: result.error ?? "Failed to update subscription." };
+  }
+
+  const performedAt = new Date().toISOString();
+  logFinanceEvent({
+    entityType: "subscription",
+    entityId: id,
+    action: "manual_edit",
+    performer: {
+      userId: adminUser.id,
+      email: adminUser.email,
+      name: adminUser.fullName,
+    },
+    detail: `Expiry extended by admin — reason: ${reason}`,
+    previousValue: previousValidUntil ?? null,
+    newValue: newValidUntil,
+    metadata: {
+      extension: {
+        previousValidUntil: previousValidUntil ?? null,
+        newValidUntil,
+        reason,
+        adminId: adminUser.id,
+        adminEmail: adminUser.email,
+        adminName: adminUser.fullName,
+        performedAt,
+      },
+    },
+  });
+
+  revalidatePath("/students");
+  revalidatePath("/dashboard");
+  revalidatePath("/finance");
+
+  return {
+    success: true,
+    previousValidUntil: previousValidUntil ?? null,
+    newValidUntil,
+  };
 }

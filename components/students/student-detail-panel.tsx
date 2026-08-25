@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw, ChevronDown, ChevronRight, UserCheck, UserX, ShieldCheck, ShieldX, Hourglass, ExternalLink } from "lucide-react";
+import { Pencil, Plus, Star, Trash2, AlertTriangle, RotateCw, ChevronDown, ChevronRight, UserCheck, UserX, ShieldCheck, ShieldX, Hourglass, ExternalLink, CalendarClock } from "lucide-react";
 import {
   updateAffiliationStatusAction,
   deleteAffiliationAction,
@@ -60,6 +60,9 @@ interface StudentDetailPanelProps {
   /** Click handler for "Edit subscription" — pass null when the user
    * lacks the required permission so edit affordances are hidden. */
   onEditSub: ((sub: MockSubscription) => void) | null;
+  /** Click handler for "Extend expiry" — pass null when the user
+   * lacks `payments:manual_adjustment` so the affordance is hidden. */
+  onExtendSub?: ((sub: MockSubscription) => void) | null;
   /** True when the current user can see finance-sensitive blocks
    * (wallet, penalties, payment status). */
   canViewFinance?: boolean;
@@ -100,6 +103,7 @@ export function StudentDetailPanel({
   benefits,
   onAddSub,
   onEditSub,
+  onExtendSub = null,
   canViewFinance = false,
   canSendMagicLink = false,
   colSpan,
@@ -274,7 +278,7 @@ export function StudentDetailPanel({
                   </p>
                 )}
                 {activeSubs.map((sub) => (
-                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} renewEligible={renewEligibleIds.has(sub.id)} onRenew={handleRenew} renewPending={renewTransPending && renewPendingId === sub.id} />
+                  <SubCard key={sub.id} sub={sub} allStudentSubs={subs} termsById={termsById} products={products} onEdit={onEditSub} onExtend={onExtendSub} onRemove={setRemoveTarget} onDelete={setDeleteTarget} renewEligible={renewEligibleIds.has(sub.id)} onRenew={handleRenew} renewPending={renewTransPending && renewPendingId === sub.id} />
                 ))}
                 {inactiveSubs.length > 0 && (
                   <InactiveSubsHistory
@@ -941,6 +945,7 @@ function SubCard({
   termsById,
   products,
   onEdit,
+  onExtend,
   onRemove,
   onDelete,
   renewEligible,
@@ -952,6 +957,7 @@ function SubCard({
   termsById: Map<string, MockTerm>;
   products: MockProduct[];
   onEdit: ((sub: MockSubscription) => void) | null;
+  onExtend?: ((sub: MockSubscription) => void) | null;
   onRemove: (sub: MockSubscription) => void;
   onDelete: (sub: MockSubscription) => void;
   renewEligible?: boolean;
@@ -1110,6 +1116,15 @@ function SubCard({
             title="Edit subscription"
           >
             <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onExtend && isActive && sub.validUntil && (
+          <button
+            onClick={() => onExtend(sub)}
+            className="rounded-lg p-1 text-gray-400 hover:bg-amber-50 hover:text-amber-700"
+            title="Extend expiry (exceptional cases only)"
+          >
+            <CalendarClock className="h-3.5 w-3.5" />
           </button>
         )}
         {onEdit && (isActive ? (

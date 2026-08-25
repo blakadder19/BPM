@@ -5,6 +5,7 @@ import { requireRole, type AuthUser } from "@/lib/auth";
 import { getProductRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { createSubscription, updateSubscription } from "@/lib/services/subscription-service";
 import { getCurrentTerm, getNextTerm, getNextConsecutiveTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
+import { computeSubscriptionValidity } from "@/lib/domain/subscription-validity";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -135,10 +136,14 @@ export async function validateAndPreparePurchase(
   let validUntil: string | null;
   let assignedTermName: string | null = null;
 
+  // Resolve which term (if any) applies to this purchase. For
+  // term-bound products this is either the student's explicit pick
+  // or a fallback derived from the current/next term windows.
+  let assignedTerm: typeof currentTerm = null;
+
   if (product.termBound) {
     const settings = getSettings();
     const purchaseWindowDays = settings.termPurchaseWindowDays;
-    let assignedTerm: typeof currentTerm = null;
 
     if (settings.studentTermSelectionEnabled && input.selectedTermId) {
       assignedTerm = allTerms.find((t) => t.id === input.selectedTermId) ?? null;
@@ -163,29 +168,37 @@ export async function validateAndPreparePurchase(
     if (!assignedTerm?.id) {
       return { error: "No active or upcoming term available. Please check back later." };
     }
+  }
 
-    termId = assignedTerm.id;
-    validFrom = assignedTerm.startDate;
-    validUntil = assignedTerm.endDate;
-    assignedTermName = assignedTerm.name;
+  // Delegate the (validFrom, validUntil, termId, mode) math to the
+  // canonical helper so student/admin/Stripe/dev-tools purchase paths
+  // all agree on how term-bound vs fixed-duration vs open-ended
+  // subscriptions expire. See lib/domain/subscription-validity.ts.
+  const nextConsecutive = assignedTerm
+    ? getNextConsecutiveTerm(allTerms, assignedTerm.id)
+    : null;
+  const computed = computeSubscriptionValidity({
+    product: {
+      id: product.id,
+      productType: product.productType,
+      termBound: product.termBound,
+      spanTerms: product.spanTerms ?? null,
+      durationDays: product.durationDays ?? null,
+    },
+    purchaseDate: todayStr,
+    chosenTerm: assignedTerm,
+    nextConsecutiveTerm: nextConsecutive,
+  });
+  if (!computed.ok) return { error: computed.error.message };
+  termId = computed.validity.termId;
+  validFrom = computed.validity.validFrom;
+  validUntil = computed.validity.validUntil;
+  assignedTermName = computed.validity.assignedTermName;
 
+  // Stackability: only checked for term-based purchases (drop-ins
+  // and rolling passes are always stackable). Rules unchanged.
+  if (assignedTerm) {
     const spanTerms = product.spanTerms ?? 1;
-    if (spanTerms >= 2) {
-      const next = getNextConsecutiveTerm(allTerms, assignedTerm.id);
-      if (!next) {
-        return { error: "This product spans multiple terms, but the next term is not yet available." };
-      }
-      validUntil = next.endDate;
-      assignedTermName = `${assignedTerm.name} + ${next.name}`;
-    }
-
-    // Stackability:
-    //   * Drop-ins are always stackable.
-    //   * Passes/memberships are stackable by default
-    //     (`allowMultipleActivePurchases=true`) — a Bronze Pass for Salsa
-    //     does NOT block a Bronze Pass for Bachata.
-    //   * Only block duplicates when the product is explicitly marked
-    //     non-stackable (`allowMultipleActivePurchases=false`).
     const isStackable =
       product.productType === "drop_in" ||
       product.allowMultipleActivePurchases !== false;
@@ -205,14 +218,6 @@ export async function validateAndPreparePurchase(
         };
       }
     }
-  } else if (product.durationDays) {
-    validFrom = todayStr;
-    const end = new Date();
-    end.setDate(end.getDate() + product.durationDays);
-    validUntil = end.toISOString().slice(0, 10);
-  } else {
-    validFrom = todayStr;
-    validUntil = null;
   }
 
   const autoRenew = input.autoRenew != null ? input.autoRenew : product.autoRenew;

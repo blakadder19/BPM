@@ -24,6 +24,7 @@ import {
   updateSubscriptionAction,
   checkPaymentChangeImpactAction,
   applyPaymentChangeAction,
+  extendSubscriptionAction,
   type PaymentChangeImpact,
 } from "@/lib/actions/subscriptions";
 import { buildDynamicAccessRulesMap, type StyleAccess } from "@/config/product-access";
@@ -1526,3 +1527,160 @@ function StyleSelectionField({
 
   return null;
 }
+
+// ── ExtendSubscriptionDialog (Phase 14) ─────────────────────
+//
+// Admin-only modal used when an entitlement needs to run past the
+// end of its term for exceptional reasons (illness, injury,
+// mis-sale). Server-side, `extendSubscriptionAction` re-checks the
+// permission gate, requires a non-empty reason, refuses backwards
+// or same-day extensions, and writes to the finance audit log so
+// Zaria has a paper trail.
+//
+// The "Preset: next term end" button below computes the next
+// consecutive term relative to the subscription's current term to
+// save admins from picking the wrong date by hand.
+
+export function ExtendSubscriptionDialog({
+  subscription: sub,
+  terms,
+  onClose,
+}: {
+  subscription: MockSubscription;
+  terms: MockTerm[];
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const currentValidUntil = sub.validUntil;
+  const currentTerm = sub.termId ? terms.find((t) => t.id === sub.termId) : null;
+  const nextTerm = sub.termId ? getNextConsecutiveTerm(terms, sub.termId) : null;
+
+  // Default to "next term end" when available; otherwise +7 days.
+  const defaultNewDate = useMemo(() => {
+    if (nextTerm?.endDate) return nextTerm.endDate;
+    if (currentValidUntil) {
+      const [y, m, d] = currentValidUntil.split("-").map((n) => parseInt(n, 10));
+      const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+      dt.setUTCDate(dt.getUTCDate() + 7);
+      return dt.toISOString().slice(0, 10);
+    }
+    return "";
+  }, [nextTerm, currentValidUntil]);
+
+  const [newDate, setNewDate] = useState(defaultNewDate);
+  const [reason, setReason] = useState("");
+
+  const minDate = useMemo(() => {
+    if (!currentValidUntil) return "";
+    const [y, m, d] = currentValidUntil.split("-").map((n) => parseInt(n, 10));
+    const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    return dt.toISOString().slice(0, 10);
+  }, [currentValidUntil]);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    startTransition(async () => {
+      const res = await extendSubscriptionAction({
+        subscriptionId: sub.id,
+        newValidUntil: newDate,
+        reason,
+      });
+      if (res.success) {
+        router.refresh();
+        onClose();
+      } else {
+        setError(res.error ?? "Failed to extend expiry.");
+      }
+    });
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Extend expiry</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
+          <DialogBody className="space-y-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm">
+              <p className="font-medium text-gray-900">{sub.productName}</p>
+              <p className="mt-1 text-xs text-gray-600">
+                Current expiry:{" "}
+                <span className="font-medium text-gray-800">
+                  {currentValidUntil ?? "—"}
+                </span>
+                {currentTerm && (
+                  <>
+                    {" "}
+                    · Term: <span className="font-medium">{currentTerm.name}</span>
+                  </>
+                )}
+              </p>
+            </div>
+
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+              Use only for exceptional circumstances. Term-based passes normally expire at the end of the selected term.
+            </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="extend-new-date">New expiry date *</Label>
+              <Input
+                id="extend-new-date"
+                type="date"
+                value={newDate}
+                min={minDate || undefined}
+                onChange={(e) => setNewDate(e.target.value)}
+                required
+              />
+              {nextTerm?.endDate && (
+                <button
+                  type="button"
+                  onClick={() => setNewDate(nextTerm.endDate)}
+                  className="text-xs text-bpm-600 hover:text-bpm-700 hover:underline"
+                >
+                  Preset: end of {nextTerm.name} ({nextTerm.endDate})
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="extend-reason">Reason *</Label>
+              <textarea
+                id="extend-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                required
+                placeholder="e.g. Student was hospitalised, missed 2 weeks."
+                className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:border-bpm-300 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+              />
+              <p className="text-xs text-gray-500">
+                Logged to the finance audit trail alongside your name and the previous expiry date.
+              </p>
+            </div>
+
+            {error && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Extending..." : "Extend expiry"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

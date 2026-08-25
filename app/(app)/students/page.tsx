@@ -64,6 +64,10 @@ export default async function StudentsPage({
     canManageAffiliations: hasPermission(access, "students:manage_affiliations"),
     canRunLifecycle: hasPermission(access, "students:edit"),
     canApplyManualDiscount: hasPermission(access, "payments:manual_adjustment"),
+    // Phase 14 — "Extend expiry" pencil on the subscription card. Reuses
+    // the manual-adjustment gate because extending a paid entitlement
+    // materially changes what the student got for their money.
+    canExtendSubscription: hasPermission(access, "payments:manual_adjustment"),
     canSendMagicLink: hasPermission(access, "students:send_magic_link"),
   };
   const _tDb = performance.now();
