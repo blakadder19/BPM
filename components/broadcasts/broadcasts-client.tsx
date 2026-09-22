@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   Megaphone,
@@ -40,10 +40,21 @@ import {
   sendBroadcastAction,
   deleteBroadcastAction,
   previewAudienceAction,
+  previewTicketHoldersAction,
   type BroadcastRow,
   type BroadcastChannel,
+  type TicketHolderPreview,
 } from "@/lib/actions/broadcasts";
-import { type AudienceType, AUDIENCE_LABELS } from "@/lib/domain/broadcast-types";
+import {
+  type AudienceType,
+  AUDIENCE_LABELS,
+  EVENT_TICKET_HOLDERS_HELPER,
+} from "@/lib/domain/broadcast-types";
+import {
+  type TicketHolderStatusFilter,
+  TICKET_HOLDER_FILTER_LABELS,
+  describeTicketHolderCount,
+} from "@/lib/domain/event-ticket-holders";
 import {
   type CtaDestinationType,
   CTA_DESTINATION_LABELS,
@@ -76,6 +87,13 @@ const AUDIENCE_OPTIONS: { value: AudienceType; label: string }[] = [
   { value: "with_pass", label: AUDIENCE_LABELS.with_pass },
   { value: "without_subscription", label: AUDIENCE_LABELS.without_subscription },
   { value: "specific_students", label: AUDIENCE_LABELS.specific_students },
+  { value: "event_ticket_holders", label: AUDIENCE_LABELS.event_ticket_holders },
+];
+
+const TICKET_STATUS_OPTIONS: { value: TicketHolderStatusFilter; label: string }[] = [
+  { value: "all", label: TICKET_HOLDER_FILTER_LABELS.all },
+  { value: "paid_only", label: TICKET_HOLDER_FILTER_LABELS.paid_only },
+  { value: "refunded_only", label: TICKET_HOLDER_FILTER_LABELS.refunded_only },
 ];
 
 const CTA_DEST_OPTIONS: { value: CtaDestinationType | ""; label: string; hint: string }[] = [
@@ -95,11 +113,24 @@ interface EntityOption {
 
 // ── Main component ───────────────────────────────────────────
 
+/**
+ * Phase 17 — event list for the "Event ticket holders" audience.
+ * Broader than `eventOptions` (which is the CTA target list) because
+ * cancelled and hidden events still have ticket holders to email.
+ */
+export interface TicketHolderEventOption {
+  id: string;
+  name: string;
+  date: string | null;
+  status: string;
+}
+
 interface Props {
   broadcasts: BroadcastRow[];
   studentOptions: EntityOption[];
   productOptions: EntityOption[];
   eventOptions: EntityOption[];
+  ticketHolderEventOptions: TicketHolderEventOption[];
   classOptions: EntityOption[];
 }
 
@@ -108,6 +139,7 @@ export function BroadcastsClient({
   studentOptions,
   productOptions,
   eventOptions,
+  ticketHolderEventOptions,
   classOptions,
 }: Props) {
   const router = useRouter();
@@ -161,6 +193,7 @@ export function BroadcastsClient({
           studentOptions={studentOptions}
           productOptions={productOptions}
           eventOptions={eventOptions}
+          ticketHolderEventOptions={ticketHolderEventOptions}
           classOptions={classOptions}
           onClose={() => setShowComposer(false)}
           onCreated={() => {
@@ -395,6 +428,7 @@ function ComposerDialog({
   studentOptions,
   productOptions,
   eventOptions,
+  ticketHolderEventOptions,
   classOptions,
   onClose,
   onCreated,
@@ -402,6 +436,7 @@ function ComposerDialog({
   studentOptions: EntityOption[];
   productOptions: EntityOption[];
   eventOptions: EntityOption[];
+  ticketHolderEventOptions: TicketHolderEventOption[];
   classOptions: EntityOption[];
   onClose: () => void;
   onCreated: () => void;
@@ -412,7 +447,19 @@ function ComposerDialog({
   const [audienceType, setAudienceType] = useState<AudienceType>("all_students");
   const [selectedStudents, setSelectedStudents] = useState<Set<string>>(new Set());
   const [studentSearch, setStudentSearch] = useState("");
-  const [preview, setPreview] = useState<{ count: number; names: string[] } | null>(null);
+  // Phase 17 — event ticket holders
+  const [ticketEventId, setTicketEventId] = useState("");
+  const [ticketEventSearch, setTicketEventSearch] = useState("");
+  const [ticketStatus, setTicketStatus] = useState<TicketHolderStatusFilter>("all");
+  const [ticketPreview, setTicketPreview] = useState<TicketHolderPreview | null>(null);
+  const [showRecipients, setShowRecipients] = useState(false);
+  const [ticketPreviewLoading, setTicketPreviewLoading] = useState(false);
+  const [preview, setPreview] = useState<{
+    count: number;
+    names: string[];
+    linkedStudentCount?: number;
+    guestCount?: number;
+  } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [saving, startSave] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -445,18 +492,62 @@ function ComposerDialog({
   async function loadPreview() {
     setPreviewLoading(true);
     try {
-      const params =
-        audienceType === "specific_students"
-          ? { studentIds: [...selectedStudents] }
-          : {};
-      const res = await previewAudienceAction(audienceType, params);
-      setPreview({ count: res.count, names: res.sampleNames });
+      const res = await previewAudienceAction(audienceType, buildAudienceParams());
+      setPreview({
+        count: res.count,
+        names: res.sampleNames,
+        linkedStudentCount: res.linkedStudentCount,
+        guestCount: res.guestCount,
+      });
     } catch {
       setPreview(null);
     } finally {
       setPreviewLoading(false);
     }
   }
+
+  /**
+   * Single source of truth for audience params, used by both the
+   * preview and the create call so they can never drift.
+   */
+  function buildAudienceParams() {
+    if (audienceType === "specific_students") {
+      return { studentIds: [...selectedStudents] };
+    }
+    if (audienceType === "event_ticket_holders") {
+      return { eventId: ticketEventId, ticketHolderStatus: ticketStatus };
+    }
+    return {};
+  }
+
+  /** Resolve the full recipient list for the preview table. */
+  async function loadTicketHolderPreview() {
+    if (!ticketEventId) return;
+    setTicketPreviewLoading(true);
+    try {
+      const res = await previewTicketHoldersAction(ticketEventId, ticketStatus);
+      setTicketPreview(res.success && res.preview ? res.preview : null);
+    } catch {
+      setTicketPreview(null);
+    } finally {
+      setTicketPreviewLoading(false);
+    }
+  }
+
+  // Re-resolve whenever the event or status filter changes so the
+  // "X unique ticket holders" summary is never stale.
+  useEffect(() => {
+    if (audienceType !== "event_ticket_holders" || !ticketEventId) {
+      setTicketPreview(null);
+      return;
+    }
+    void loadTicketHolderPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [audienceType, ticketEventId, ticketStatus]);
+
+  const filteredTicketEvents = ticketHolderEventOptions.filter((e) =>
+    e.name.toLowerCase().includes(ticketEventSearch.trim().toLowerCase()),
+  );
 
   const needsTarget =
     ctaDestType === "product" || ctaDestType === "event" || ctaDestType === "class";
@@ -497,16 +588,27 @@ function ComposerDialog({
       setError("Select at least one student.");
       return;
     }
+    if (audienceType === "event_ticket_holders") {
+      if (!ticketEventId) {
+        setError("Select an event for this audience.");
+        return;
+      }
+      // Guests have no account, so an in-app-only broadcast would
+      // reach none of them. Catch it here rather than at send time.
+      if (!channels.has("email") && (ticketPreview?.guestCount ?? 0) > 0) {
+        setError(
+          "This audience includes guest ticket holders, who can only be reached by email. Add the Email channel.",
+        );
+        return;
+      }
+    }
     loadPreview();
     setStep("confirm");
   }
 
   function handleCreate() {
     startSave(async () => {
-      const params =
-        audienceType === "specific_students"
-          ? { studentIds: [...selectedStudents] }
-          : {};
+      const params = buildAudienceParams();
 
       const ctaUrl = ctaDestType === "external_url" ? ctaExternalUrl.trim() : undefined;
 
@@ -771,6 +873,9 @@ function ComposerDialog({
                   onChange={(e) => {
                     setAudienceType(e.target.value as AudienceType);
                     setSelectedStudents(new Set());
+                    setTicketEventId("");
+                    setTicketStatus("all");
+                    setTicketPreview(null);
                   }}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
                 >
@@ -781,6 +886,121 @@ function ComposerDialog({
                   ))}
                 </select>
               </div>
+
+              {/* Phase 17 — Event ticket holders */}
+              {audienceType === "event_ticket_holders" && (
+                <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <p className="text-xs text-gray-500">{EVENT_TICKET_HOLDERS_HELPER}</p>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Select event
+                    </label>
+                    <input
+                      value={ticketEventSearch}
+                      onChange={(e) => setTicketEventSearch(e.target.value)}
+                      placeholder="Search events by title..."
+                      className="mb-2 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                    />
+                    <select
+                      value={ticketEventId}
+                      onChange={(e) => setTicketEventId(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                    >
+                      <option value="">Select event</option>
+                      {filteredTicketEvents.map((e) => (
+                        <option key={e.id} value={e.id}>
+                          {e.name}
+                          {e.date ? ` — ${formatDate(e.date)}` : ""}
+                          {e.status !== "published" ? ` (${e.status})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    {filteredTicketEvents.length === 0 && (
+                      <p className="mt-1 text-xs text-gray-400">No events match that search.</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Ticket holders to include
+                    </label>
+                    <select
+                      value={ticketStatus}
+                      onChange={(e) =>
+                        setTicketStatus(e.target.value as TicketHolderStatusFilter)
+                      }
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+                    >
+                      {TICKET_STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-gray-400">
+                      All ticket holders includes refunded purchasers, which is
+                      usually what you want for cancellations and venue changes.
+                    </p>
+                  </div>
+
+                  {/* Recipient summary */}
+                  {ticketEventId && (
+                    <div className="rounded-lg border border-gray-200 bg-white px-3 py-2">
+                      {ticketPreviewLoading ? (
+                        <span className="flex items-center gap-2 text-sm text-gray-400">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Resolving ticket holders...
+                        </span>
+                      ) : ticketPreview ? (
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium text-gray-900">
+                            Recipients: {describeTicketHolderCount(ticketPreview.totalRecipients)}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {ticketPreview.linkedStudentCount} linked student
+                            {ticketPreview.linkedStudentCount === 1 ? "" : "s"} ·{" "}
+                            {ticketPreview.guestCount} guest
+                            {ticketPreview.guestCount === 1 ? "" : "s"}
+                          </p>
+                          {(ticketPreview.excludedUnpaidCount > 0 ||
+                            ticketPreview.excludedNoEmailCount > 0 ||
+                            ticketPreview.duplicatesCollapsed > 0) && (
+                            <p className="text-xs text-gray-400">
+                              {[
+                                ticketPreview.duplicatesCollapsed > 0
+                                  ? `${ticketPreview.duplicatesCollapsed} duplicate email${ticketPreview.duplicatesCollapsed === 1 ? "" : "s"} merged`
+                                  : null,
+                                ticketPreview.excludedUnpaidCount > 0
+                                  ? `${ticketPreview.excludedUnpaidCount} unpaid purchase${ticketPreview.excludedUnpaidCount === 1 ? "" : "s"} excluded`
+                                  : null,
+                                ticketPreview.excludedNoEmailCount > 0
+                                  ? `${ticketPreview.excludedNoEmailCount} with no email address excluded`
+                                  : null,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </p>
+                          )}
+                          {ticketPreview.totalRecipients > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowRecipients(true)}
+                              className="text-xs font-medium text-bpm-600 hover:text-bpm-700 hover:underline"
+                            >
+                              Preview recipient list
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-400">
+                          Could not resolve ticket holders for this event.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Student multi-select */}
               {audienceType === "specific_students" && (
@@ -883,9 +1103,22 @@ function ComposerDialog({
                 <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
                   <div className="flex items-center gap-2 text-sm font-medium text-blue-800">
                     <Users className="h-4 w-4" />
-                    {preview.count} student{preview.count !== 1 ? "s" : ""} will receive
-                    this broadcast
+                    {audienceType === "event_ticket_holders"
+                      ? `${describeTicketHolderCount(preview.count)} will receive this broadcast`
+                      : `${preview.count} student${preview.count !== 1 ? "s" : ""} will receive this broadcast`}
                   </div>
+                  {audienceType === "event_ticket_holders" &&
+                    preview.guestCount !== undefined && (
+                      <p className="mt-1 text-xs text-blue-700">
+                        {preview.linkedStudentCount} linked student
+                        {preview.linkedStudentCount === 1 ? "" : "s"}
+                        {channels.has("in_app") && channels.has("email")
+                          ? " (email + in-app)"
+                          : ""}{" "}
+                        · {preview.guestCount} guest
+                        {preview.guestCount === 1 ? "" : "s"} (email only)
+                      </p>
+                    )}
                   {preview.names.length > 0 && (
                     <p className="mt-1 text-xs text-blue-600">
                       {preview.names.join(", ")}
@@ -895,6 +1128,16 @@ function ComposerDialog({
                   )}
                 </div>
               ) : null}
+              {audienceType === "event_ticket_holders" &&
+                (ticketPreview?.guestCount ?? 0) > 0 &&
+                !channels.has("email") && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {ticketPreview!.guestCount} guest ticket holder
+                    {ticketPreview!.guestCount === 1 ? "" : "s"} cannot be reached
+                    without the Email channel — they have no BPM account for an
+                    in-app notification.
+                  </div>
+                )}
               {error && (
                 <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
                   {error}
@@ -931,6 +1174,140 @@ function ComposerDialog({
               </Button>
             </>
           )}
+        </DialogFooter>
+      </DialogContent>
+
+      {/* Phase 17 — resolved recipient list, so no copy/paste is needed */}
+      {showRecipients && ticketPreview && (
+        <RecipientPreviewDialog
+          preview={ticketPreview}
+          onClose={() => setShowRecipients(false)}
+        />
+      )}
+    </Dialog>
+  );
+}
+
+// ── Recipient preview (event ticket holders) ─────────────────
+
+/**
+ * Read-only table of exactly who this broadcast will reach.
+ *
+ * Shown so an admin can sanity-check a cancellation email before
+ * sending — especially the guest/student split and whether refunded
+ * purchasers are included. Purely informational: the send action
+ * re-resolves the audience server-side, so nothing shown here is
+ * trusted as the delivery list.
+ */
+function RecipientPreviewDialog({
+  preview,
+  onClose,
+}: {
+  preview: TicketHolderPreview;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const rows = q
+    ? preview.recipients.filter(
+        (r) => r.name.toLowerCase().includes(q) || r.email.includes(q),
+      )
+    : preview.recipients;
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Recipients — {preview.eventName}</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="space-y-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-sm font-medium text-gray-900">
+              {describeTicketHolderCount(preview.totalRecipients)}
+            </p>
+            <p className="text-xs text-gray-500">
+              {preview.linkedStudentCount} linked student
+              {preview.linkedStudentCount === 1 ? "" : "s"} · {preview.guestCount} guest
+              {preview.guestCount === 1 ? "" : "s"}
+            </p>
+          </div>
+
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter by name or email..."
+            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-bpm-500 focus:outline-none focus:ring-2 focus:ring-bpm-100"
+          />
+
+          <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-200">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Name</th>
+                  <th className="px-3 py-2 font-medium">Email</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-4 text-center text-xs text-gray-400">
+                      No recipients match that filter.
+                    </td>
+                  </tr>
+                ) : (
+                  rows.map((r) => (
+                    <tr key={r.email} className="hover:bg-gray-50">
+                      <td className="px-3 py-1.5 text-gray-900">
+                        {r.name}
+                        {r.purchaseCount > 1 && (
+                          <span className="ml-1 text-xs text-gray-400">
+                            ({r.purchaseCount} tickets)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-xs text-gray-600">
+                        {r.email}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <Badge variant={r.paymentStatus === "paid" ? "success" : "warning"}>
+                          {r.paymentStatus === "paid" ? "Paid" : "Refunded"}
+                        </Badge>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <Badge variant={r.isGuest ? "default" : "muted"}>
+                          {r.isGuest ? "Guest" : "Student"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {(preview.excludedUnpaidCount > 0 || preview.excludedNoEmailCount > 0) && (
+            <p className="text-xs text-gray-500">
+              Not included:{" "}
+              {[
+                preview.excludedUnpaidCount > 0
+                  ? `${preview.excludedUnpaidCount} unpaid or abandoned purchase${preview.excludedUnpaidCount === 1 ? "" : "s"}`
+                  : null,
+                preview.excludedNoEmailCount > 0
+                  ? `${preview.excludedNoEmailCount} purchase${preview.excludedNoEmailCount === 1 ? "" : "s"} with no email address`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              .
+            </p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Close
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

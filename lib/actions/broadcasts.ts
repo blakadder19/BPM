@@ -4,7 +4,14 @@ import { revalidatePath } from "next/cache";
 import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getAcademyId } from "@/lib/supabase/academy";
-import { resolveAudience, type AudienceType, type AudienceParams } from "@/lib/services/broadcast-audience";
+import {
+  resolveAudience,
+  audienceTotal,
+  type AudienceType,
+  type AudienceParams,
+} from "@/lib/services/broadcast-audience";
+import { audienceSupportsGuests } from "@/lib/domain/broadcast-types";
+import type { TicketHolderStatusFilter } from "@/lib/domain/event-ticket-holders";
 import { adminBroadcastEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 import { getAppUrl } from "@/lib/utils/app-url";
@@ -39,6 +46,11 @@ export interface BroadcastRow {
   ctaDestinationType: CtaDestinationType | null;
   ctaDestinationId: string | null;
   category: string | null;
+  /**
+   * Phase 17 — immutable record of what this broadcast resolved to
+   * and delivered. Null on broadcasts sent before it shipped.
+   */
+  sendSummary: Record<string, unknown> | null;
 }
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -63,6 +75,7 @@ function mapRow(r: Record<string, unknown>): BroadcastRow {
     ctaDestinationType: (r.cta_destination_type as CtaDestinationType) ?? null,
     ctaDestinationId: (r.cta_destination_id as string) ?? null,
     category: (r.category as string) ?? null,
+    sendSummary: (r.send_summary as Record<string, unknown>) ?? null,
   };
 }
 
@@ -95,15 +108,108 @@ function resolveCtaUrls(broadcast: {
 
 // ── Preview audience count ───────────────────────────────────
 
+export interface AudiencePreview {
+  count: number;
+  sampleNames: string[];
+  /** Phase 17 — populated only for guest-capable audiences. */
+  linkedStudentCount?: number;
+  guestCount?: number;
+}
+
 export async function previewAudienceAction(
   audienceType: AudienceType,
   audienceParams: AudienceParams = {}
-): Promise<{ count: number; sampleNames: string[] }> {
+): Promise<AudiencePreview> {
   await requireSuperAdmin();
   const result = await resolveAudience(audienceType, audienceParams);
+  const total = audienceTotal(result);
+  const allNames = [
+    ...result.students.map((s) => s.name),
+    ...result.guests.map((g) => g.name),
+  ];
   return {
-    count: result.students.length,
-    sampleNames: result.students.slice(0, 5).map((s) => s.name),
+    count: total,
+    sampleNames: allNames.slice(0, 5),
+    ...(audienceSupportsGuests(audienceType)
+      ? {
+          linkedStudentCount: result.students.length,
+          guestCount: result.guests.length,
+        }
+      : {}),
+  };
+}
+
+// ── Recipient preview (event ticket holders) ─────────────────
+
+export interface TicketHolderPreviewRow {
+  name: string;
+  email: string;
+  paymentStatus: "paid" | "refunded" | "pending";
+  isGuest: boolean;
+  purchaseCount: number;
+}
+
+export interface TicketHolderPreview {
+  eventId: string;
+  eventName: string;
+  eventDate: string | null;
+  recipients: TicketHolderPreviewRow[];
+  totalRecipients: number;
+  linkedStudentCount: number;
+  guestCount: number;
+  excludedUnpaidCount: number;
+  excludedNoEmailCount: number;
+  duplicatesCollapsed: number;
+}
+
+/**
+ * Resolve the full ticket-holder list for the preview modal.
+ *
+ * Read-only and permission-gated exactly like every other broadcast
+ * action. Returning the resolved list here is what removes the need
+ * for an admin to export purchases and copy/paste addresses — but it
+ * is NEVER used as the send list: `sendBroadcastAction` re-resolves
+ * server-side so a stale or tampered preview cannot change who gets
+ * emailed.
+ */
+export async function previewTicketHoldersAction(
+  eventId: string,
+  ticketHolderStatus: TicketHolderStatusFilter = "all",
+): Promise<{ success: boolean; error?: string; preview?: TicketHolderPreview }> {
+  await requireSuperAdmin();
+
+  if (!eventId) return { success: false, error: "Select an event first." };
+
+  const result = await resolveAudience("event_ticket_holders", {
+    eventId,
+    ticketHolderStatus,
+  });
+
+  if (!result.ticketHolders) {
+    return { success: false, error: "Event not found." };
+  }
+
+  const th = result.ticketHolders;
+  return {
+    success: true,
+    preview: {
+      eventId: th.eventId,
+      eventName: th.eventName,
+      eventDate: th.eventDate,
+      recipients: th.recipients.map((r) => ({
+        name: r.name,
+        email: r.email,
+        paymentStatus: r.paymentStatus,
+        isGuest: r.isGuest,
+        purchaseCount: r.purchaseCount,
+      })),
+      totalRecipients: th.stats.totalRecipients,
+      linkedStudentCount: th.stats.linkedStudentCount,
+      guestCount: th.stats.guestCount,
+      excludedUnpaidCount: th.stats.excludedUnpaidCount,
+      excludedNoEmailCount: th.stats.excludedNoEmailCount,
+      duplicatesCollapsed: th.stats.duplicatesCollapsed,
+    },
   };
 }
 
@@ -132,6 +238,11 @@ export async function createBroadcastAction(input: {
   }
   if (input.channels.length === 0) {
     return { success: false, error: "At least one delivery channel is required." };
+  }
+  // Phase 17 — an event audience without an event would resolve to
+  // nobody, so catch it at draft time rather than at send time.
+  if (input.audienceType === "event_ticket_holders" && !input.audienceParams?.eventId) {
+    return { success: false, error: "Select an event for this audience." };
   }
   const hasCtaDest = !!input.ctaDestinationType;
   const hasCtaLabel = !!input.ctaLabel?.trim();
@@ -216,13 +327,27 @@ export async function sendBroadcastAction(
     ctaUrl: (broadcast.cta_url as string) ?? null,
   });
 
+  // Phase 17 — recipients are ALWAYS resolved server-side, here, at
+  // send time. The client never supplies an email list.
   const audience = await resolveAudience(audienceType, audienceParams);
-  if (audience.students.length === 0) {
-    return { success: false, error: "No matching students found for this audience." };
+  const totalRecipients = audienceTotal(audience);
+  if (totalRecipients === 0) {
+    return { success: false, error: "No matching recipients found for this audience." };
   }
 
   const sendEmail = channels.includes("email");
   const sendInApp = channels.includes("in_app");
+
+  // Guests have no account, so they can only ever receive email.
+  // Refusing an in-app-only broadcast to a guest-only audience is
+  // clearer than silently delivering to nobody.
+  if (audience.guests.length > 0 && !sendEmail && audience.students.length === 0) {
+    return {
+      success: false,
+      error:
+        "This audience is made up of guest ticket holders, who can only be reached by email. Add the Email channel to send this broadcast.",
+    };
+  }
 
   const events: CommEvent[] = audience.students.map((s) =>
     adminBroadcastEvent({
@@ -241,6 +366,68 @@ export async function sendBroadcastAction(
 
   let inAppSent = 0;
   let emailSent = 0;
+  let guestEmailSent = 0;
+  let guestEmailFailed = 0;
+
+  /**
+   * Email the guest recipients directly.
+   *
+   * Every pre-Phase-17 audience resolved to student ids and let the
+   * pipeline look the address up from the account. Guests have no
+   * account, so their address travels with them and we call the
+   * provider directly — reusing the same template builder, so the
+   * email is byte-identical to the one a student receives.
+   */
+  async function sendGuestEmails(): Promise<void> {
+    if (audience.guests.length === 0) return;
+
+    const { isEmailEnabled, sendEmail: sendEmailFn } = await import(
+      "@/lib/communications/email-provider"
+    );
+    const { buildEmailContent } = await import(
+      "@/lib/communications/email-templates"
+    );
+    if (!isEmailEnabled()) {
+      console.info(
+        `[broadcasts] Email provider not configured — skipped ${audience.guests.length} guest recipient(s) for broadcast ${broadcastId}.`,
+      );
+      return;
+    }
+
+    for (const guest of audience.guests) {
+      try {
+        const payload = adminBroadcastEvent({
+          // Synthetic id: guests have no account. Only the payload is
+          // used for rendering, never persisted as a notification.
+          studentId: `guest:${guest.email}`,
+          studentName: guest.name,
+          broadcastId,
+          title,
+          body,
+          imageUrl,
+          ctaLabel,
+          ctaUrl: ctaUrls.inAppUrl,
+          ctaEmailUrl: ctaUrls.emailUrl,
+          category,
+        }).payload;
+
+        const { subject, html } = buildEmailContent(
+          "admin_broadcast",
+          guest.name,
+          payload as never,
+        );
+        const ok = await sendEmailFn({ to: guest.email, subject, html });
+        if (ok) guestEmailSent++;
+        else guestEmailFailed++;
+      } catch (e) {
+        guestEmailFailed++;
+        console.warn(
+          `[broadcasts] Guest email failed for broadcast ${broadcastId}:`,
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
+  }
 
   if (sendInApp && !sendEmail) {
     // In-app only — dispatch through the standard pipeline but without email.
@@ -300,21 +487,61 @@ export async function sendBroadcastAction(
       }
     }
   } else {
-    // Both channels — use the standard dispatcher
+    // Both channels — use the standard dispatcher for linked students.
     const result = await dispatchCommEvents(events);
     inAppSent = result.sent;
     emailSent = result.sent;
   }
 
-  const recipientCount = Math.max(inAppSent, emailSent, audience.students.length);
+  // Guests get email on any channel selection that includes email.
+  // With "Both", linked students receive email + in-app while guests
+  // receive email only — there is no account to notify in-app.
+  if (sendEmail) {
+    await sendGuestEmails();
+    emailSent += guestEmailSent;
+  }
+
+  const recipientCount = Math.max(
+    inAppSent + guestEmailSent,
+    emailSent,
+    totalRecipients,
+  );
+  const sentAt = new Date().toISOString();
+
+  // Phase 17 — immutable record of what was actually resolved and
+  // delivered. `audience_params` holds the configuration; this holds
+  // the outcome, which cannot be reconstructed later because the
+  // audience is re-resolved live on every send.
+  const sendSummary: Record<string, unknown> = {
+    audienceType,
+    resolvedRecipientCount: totalRecipients,
+    linkedStudentCount: audience.students.length,
+    guestCount: audience.guests.length,
+    inAppSentCount: inAppSent,
+    emailSentCount: emailSent,
+    emailFailedCount: guestEmailFailed,
+    channels,
+    sentAt,
+  };
+  if (audience.ticketHolders) {
+    const th = audience.ticketHolders;
+    sendSummary.eventId = th.eventId;
+    sendSummary.eventName = th.eventName;
+    sendSummary.eventDate = th.eventDate;
+    sendSummary.ticketHolderStatus = audienceParams.ticketHolderStatus ?? "all";
+    sendSummary.excludedUnpaidCount = th.stats.excludedUnpaidCount;
+    sendSummary.excludedNoEmailCount = th.stats.excludedNoEmailCount;
+    sendSummary.duplicatesCollapsed = th.stats.duplicatesCollapsed;
+  }
 
   await supabase
     .from("admin_broadcasts")
     .update({
       status: "sent",
-      sent_at: new Date().toISOString(),
+      sent_at: sentAt,
       recipient_count: recipientCount,
       email_sent_count: emailSent,
+      send_summary: sendSummary,
     } as never)
     .eq("id", broadcastId);
 

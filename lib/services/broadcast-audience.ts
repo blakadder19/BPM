@@ -8,14 +8,59 @@ import "server-only";
  * (student, subscription) so it works identically in dev and production.
  */
 
-import { getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
+import {
+  getStudentRepo,
+  getSubscriptionRepo,
+  getSpecialEventRepo,
+} from "@/lib/repositories";
 import type { AudienceType, AudienceParams } from "@/lib/domain/broadcast-types";
+import {
+  resolveTicketHolders,
+  type TicketHolderRecipient,
+  type TicketHolderResolution,
+} from "@/lib/domain/event-ticket-holders";
 
 export type { AudienceType, AudienceParams };
 
+/**
+ * Phase 17 — a recipient with an email but NO BPM account.
+ *
+ * Every audience before this one resolved to student ids, and the
+ * send pipeline looked the address up from the account. Guest event
+ * ticket holders have no account, so their address has to travel
+ * with them and they can only receive email.
+ */
+export interface GuestRecipient {
+  email: string;
+  name: string;
+}
+
 export interface AudienceResult {
   students: { id: string; name: string }[];
+  /**
+   * Email-only recipients. Empty for every audience except
+   * `event_ticket_holders`, so existing audiences are unaffected.
+   */
+  guests: GuestRecipient[];
+  /**
+   * Populated only for `event_ticket_holders`. Drives the recipient
+   * preview table and the audit metadata written at send time.
+   */
+  ticketHolders?: {
+    eventId: string;
+    eventName: string;
+    eventDate: string | null;
+    recipients: TicketHolderRecipient[];
+    stats: Omit<TicketHolderResolution, "recipients">;
+  };
 }
+
+/** Total people this audience will reach across both channels. */
+export function audienceTotal(result: AudienceResult): number {
+  return result.students.length + result.guests.length;
+}
+
+const EMPTY: AudienceResult = { students: [], guests: [] };
 
 export async function resolveAudience(
   audienceType: AudienceType,
@@ -26,8 +71,9 @@ export async function resolveAudience(
 
   if (audienceType === "specific_students") {
     const idSet = new Set(params.studentIds ?? []);
-    if (idSet.size === 0) return { students: [] };
+    if (idSet.size === 0) return EMPTY;
     return {
+      guests: [],
       students: activeStudents
         .filter((s) => idSet.has(s.id))
         .map((s) => ({ id: s.id, name: s.fullName })),
@@ -36,7 +82,64 @@ export async function resolveAudience(
 
   if (audienceType === "all_students") {
     return {
+      guests: [],
       students: activeStudents.map((s) => ({ id: s.id, name: s.fullName })),
+    };
+  }
+
+  // ── Phase 17: event ticket holders ────────────────────────
+  //
+  // The only audience resolved from PURCHASES rather than
+  // subscriptions, and the only one that can produce recipients with
+  // no BPM account.
+  //
+  // Note it deliberately does NOT filter on `isActive` the way the
+  // student audiences do: someone who bought a ticket and later
+  // deactivated their account still needs to hear that the event was
+  // cancelled.
+  if (audienceType === "event_ticket_holders") {
+    const eventId = params.eventId;
+    if (!eventId) return EMPTY;
+
+    const repo = getSpecialEventRepo();
+    const [event, purchases] = await Promise.all([
+      repo.getEventById(eventId),
+      repo.getPurchasesByEvent(eventId),
+    ]);
+    if (!event) return EMPTY;
+
+    // Prefer the linked account's email over the address captured on
+    // the purchase row — that is the one the student maintains.
+    const studentContacts = new Map(
+      allStudents.map((s) => [
+        s.id,
+        { email: s.email ?? null, name: s.fullName ?? null },
+      ]),
+    );
+
+    const resolution = resolveTicketHolders({
+      purchases,
+      studentContacts,
+      statusFilter: params.ticketHolderStatus ?? "all",
+    });
+    const { recipients, ...stats } = resolution;
+
+    return {
+      // Linked students can receive both channels.
+      students: recipients
+        .filter((r) => !r.isGuest && r.studentId)
+        .map((r) => ({ id: r.studentId as string, name: r.name })),
+      // Guests are email-only.
+      guests: recipients
+        .filter((r) => r.isGuest)
+        .map((r) => ({ email: r.email, name: r.name })),
+      ticketHolders: {
+        eventId,
+        eventName: event.title,
+        eventDate: event.startDate ?? null,
+        recipients,
+        stats,
+      },
     };
   }
 
@@ -47,6 +150,7 @@ export async function resolveAudience(
       allSubs.filter((s) => s.status === "active").map((s) => s.studentId)
     );
     return {
+      guests: [],
       students: activeStudents
         .filter((s) => idsWithActive.has(s.id))
         .map((s) => ({ id: s.id, name: s.fullName })),
@@ -60,6 +164,7 @@ export async function resolveAudience(
         .map((s) => s.studentId)
     );
     return {
+      guests: [],
       students: activeStudents
         .filter((s) => idsWithPending.has(s.id))
         .map((s) => ({ id: s.id, name: s.fullName })),
@@ -77,6 +182,7 @@ export async function resolveAudience(
         .map((s) => s.studentId)
     );
     return {
+      guests: [],
       students: activeStudents
         .filter((s) => idsWithMembership.has(s.id))
         .map((s) => ({ id: s.id, name: s.fullName })),
@@ -95,6 +201,7 @@ export async function resolveAudience(
         .map((s) => s.studentId)
     );
     return {
+      guests: [],
       students: activeStudents
         .filter((s) => idsWithPass.has(s.id))
         .map((s) => ({ id: s.id, name: s.fullName })),
@@ -106,13 +213,14 @@ export async function resolveAudience(
       allSubs.filter((s) => s.status === "active").map((s) => s.studentId)
     );
     return {
+      guests: [],
       students: activeStudents
         .filter((s) => !idsWithAnySub.has(s.id))
         .map((s) => ({ id: s.id, name: s.fullName })),
     };
   }
 
-  return { students: [] };
+  return EMPTY;
 }
 
 export { AUDIENCE_LABELS } from "@/lib/domain/broadcast-types";
