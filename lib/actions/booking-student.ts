@@ -139,12 +139,29 @@ export async function studentCancelBookingAction(
 
   const isLate = ctx.isLate;
 
+  // Phase 16.1 — resolve entitlement eligibility for everyone on this
+  // class's waitlist BEFORE cancelling, so promotion can skip anyone
+  // whose pass has lapsed. Checking after the fact is too late: the
+  // confirmed booking would already exist.
+  const { buildPromotionEligibility } = await import(
+    "@/lib/services/entitlement-consumption"
+  );
+  const isPromotable = await buildPromotionEligibility(
+    svc.getWaitlistForClass(booking.bookableClassId),
+  );
+
   const cancelResult = isLate
-    ? svc.cancelBookingAsAdmin(bookingId, true)
-    : svc.cancelBooking(bookingId);
+    ? svc.cancelBookingAsAdmin(bookingId, true, isPromotable)
+    : svc.cancelBooking(bookingId, undefined, isPromotable);
 
   if (cancelResult.type === "error") {
     return { success: false, error: cancelResult.reason };
+  }
+
+  for (const skipped of cancelResult.skippedIneligible ?? []) {
+    console.warn(
+      `[waitlist-promotion] Skipped ${skipped.studentName} (student=${skipped.studentId}, waitlist=${skipped.waitlistId}) for class ${booking.bookableClassId} — entitlement no longer usable. They remain on the waitlist.`,
+    );
   }
 
   // Return credits — but NOT for birthday bookings (no credits were consumed)
@@ -193,16 +210,17 @@ export async function studentCancelBookingAction(
     }
   }
 
-  // Deduct credits for the promoted waitlist student
+  // Deduct credits for the promoted waitlist student.
+  // Phase 16 — expiry-aware: promotion must not spend a credit from
+  // a pass whose term has already ended.
   if (cancelResult.promoted?.subscriptionId) {
-    const promoSub = await getSubscriptionRepo().getById(cancelResult.promoted.subscriptionId);
-    if (promoSub) {
-      if (promoSub.productType === "membership" && promoSub.classesPerTerm !== null) {
-        await updateSubscription(promoSub.id, { classesUsed: promoSub.classesUsed + 1 });
-      } else if (promoSub.remainingCredits !== null) {
-        await updateSubscription(promoSub.id, { remainingCredits: promoSub.remainingCredits - 1 });
-      }
-    }
+    const { consumeEntitlementCredit } = await import(
+      "@/lib/services/entitlement-consumption"
+    );
+    await consumeEntitlementCredit(
+      cancelResult.promoted.subscriptionId,
+      "student_cancel_waitlist_promotion",
+    );
   }
 
   // Write-through to Supabase for real users

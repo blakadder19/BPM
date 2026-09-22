@@ -74,6 +74,11 @@ export function createSubscription(data: {
   manualDiscountCents?: number;
   manualDiscountReason?: string | null;
   manualDiscountBy?: string | null;
+  subtotalExVatCents?: number | null;
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  vatPriceMode?: "exclusive" | "inclusive" | null;
+  totalIncVatCents?: number | null;
 }): MockSubscription {
   const list = init();
   const sub: MockSubscription = {
@@ -120,6 +125,11 @@ export function createSubscription(data: {
     manualDiscountCents: data.manualDiscountCents ?? 0,
     manualDiscountReason: data.manualDiscountReason ?? null,
     manualDiscountBy: data.manualDiscountBy ?? null,
+    subtotalExVatCents: data.subtotalExVatCents ?? null,
+    vatAmountCents: data.vatAmountCents ?? null,
+    vatRatePercent: data.vatRatePercent ?? null,
+    vatPriceMode: data.vatPriceMode ?? null,
+    totalIncVatCents: data.totalIncVatCents ?? null,
   };
   list.push(sub);
   return sub;

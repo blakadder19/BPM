@@ -63,6 +63,11 @@ export async function createSubscription(data: {
   manualDiscountCents?: number;
   manualDiscountReason?: string | null;
   manualDiscountBy?: string | null;
+  subtotalExVatCents?: number | null;
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  vatPriceMode?: "exclusive" | "inclusive" | null;
+  totalIncVatCents?: number | null;
 }): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
   try {
     const sub = await getSubscriptionRepo().create(data);

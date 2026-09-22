@@ -362,6 +362,13 @@ export interface Database {
           stripe_refund_id: string | null;
           refunded_amount_cents: number;
           refund_status: string | null;
+          // VAT snapshot (migration 00076). Nullable on every row —
+          // null means the purchase predates VAT tracking.
+          subtotal_ex_vat_cents: number | null;
+          vat_amount_cents: number | null;
+          vat_rate_percent: number | null;
+          vat_price_mode: string | null;
+          total_inc_vat_cents: number | null;
           created_at: string;
           updated_at: string;
         };

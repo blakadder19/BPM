@@ -36,6 +36,8 @@ import {
   priceEventTicketForStudent,
   serializePricingForStripe,
   deserializePricingFromStripe,
+  buildVatStripeMetadata,
+  readVatFromStripeMetadata,
   releaseDiscountClaim,
   attachClaimRelations,
 } from "@/lib/services/pricing-service";
@@ -64,12 +66,19 @@ async function dispatchStripePaymentConfirmed(args: {
   originalPriceCents: number | null;
   discountAmountCents: number | null;
   appliedDiscountSummary: string | null;
+  /** Phase 15 — frozen VAT, so the receipt can itemise it. */
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  totalIncVatCents?: number | null;
 }): Promise<void> {
   try {
     const student = await getStudentRepo().getById(args.studentId);
     const studentName = student?.fullName ?? "BPM student";
+    // Headline amount is what the customer was charged — VAT
+    // inclusive when VAT applied.
+    const chargedCents = args.totalIncVatCents ?? args.amountCents;
     const amountLabel =
-      args.amountCents != null ? `€${(args.amountCents / 100).toFixed(2)}` : null;
+      chargedCents != null ? `€${(chargedCents / 100).toFixed(2)}` : null;
 
     if (!isEmailEnabled()) {
       console.info(
@@ -88,6 +97,9 @@ async function dispatchStripePaymentConfirmed(args: {
         originalPriceCents: args.originalPriceCents,
         discountAmountCents: args.discountAmountCents,
         finalPriceCents: args.amountCents,
+        vatAmountCents: args.vatAmountCents ?? null,
+        vatRatePercent: args.vatRatePercent ?? null,
+        totalIncVatCents: args.totalIncVatCents ?? null,
         appliedDiscountSummary: args.appliedDiscountSummary,
       }),
     ]);
@@ -183,12 +195,16 @@ export async function createStripeCheckoutAction(
               name: product.name,
               description: lineDescription,
             },
-            unit_amount: pricing.finalPriceCents,
+            // Phase 15: charge the VAT-INCLUSIVE total. When VAT is
+            // disabled or not applicable, `totalIncVatCents` equals
+            // `finalPriceCents`, so this is a no-op change.
+            unit_amount: pricing.vat.totalIncVatCents,
           },
           quantity: 1,
         },
       ],
       metadata: {
+        ...buildVatStripeMetadata(pricing.vat),
         bpm_student_id: user.id,
         bpm_product_id: product.id,
         // Persist product type + name in Stripe metadata so the
@@ -474,7 +490,11 @@ export async function fulfillStripeCheckout(
   let frozenPricing = undefined;
   const transit = metadata.bpm_pricing_snapshot;
   if (transit) {
-    const restored = await deserializePricingFromStripe(transit);
+    // Pass `metadata` so the VAT breakdown is rehydrated from the flat
+    // bpm_vat_* keys. VAT is NEVER recomputed here — if the rate
+    // changed between session creation and payment, the purchase keeps
+    // what the customer was actually charged.
+    const restored = await deserializePricingFromStripe(transit, metadata);
     if (restored) {
       frozenPricing = restored;
     } else {
@@ -499,6 +519,28 @@ export async function fulfillStripeCheckout(
         finalPriceCents: finalCents,
         appliedDiscounts: [],
         snapshot: null,
+        // A legacy session may still carry VAT keys if it was created
+        // after VAT shipped but before the snapshot was written; read
+        // them if present, otherwise this resolves to zero VAT.
+        vat: readVatFromStripeMetadata(metadata, finalCents),
+      };
+    }
+  }
+
+  // Full-price purchase with VAT: there is no discount snapshot to
+  // rehydrate, but there IS a VAT breakdown that must be persisted.
+  // Without this branch a full-price VAT purchase would fulfil with
+  // no VAT recorded at all.
+  if (!frozenPricing) {
+    const vatOnly = readVatFromStripeMetadata(metadata, product.priceCents);
+    if (vatOnly.vatApplied) {
+      frozenPricing = {
+        basePriceCents: vatOnly.subtotalExVatCents,
+        totalDiscountCents: 0,
+        finalPriceCents: vatOnly.subtotalExVatCents,
+        appliedDiscounts: [],
+        snapshot: null,
+        vat: vatOnly,
       };
     }
   }
@@ -542,6 +584,13 @@ export async function fulfillStripeCheckout(
         amountCents: result.pricing?.finalPriceCents ?? product.priceCents ?? null,
         originalPriceCents: result.pricing?.basePriceCents ?? null,
         discountAmountCents: result.pricing?.totalDiscountCents ?? null,
+        vatAmountCents: result.pricing?.vat?.vatApplied
+          ? result.pricing.vat.vatAmountCents
+          : null,
+        vatRatePercent: result.pricing?.vat?.vatApplied
+          ? result.pricing.vat.vatRatePercent
+          : null,
+        totalIncVatCents: result.pricing?.vat?.totalIncVatCents ?? null,
         appliedDiscountSummary: summary || null,
       });
     }
@@ -626,12 +675,14 @@ export async function createEventStripeCheckoutAction(input: {
               name: product.name,
               description: product.description ?? product.name,
             },
-            unit_amount: pricing.finalPriceCents,
+            // Phase 15 — VAT-inclusive total (no-op when VAT is off).
+            unit_amount: pricing.vat.totalIncVatCents,
           },
           quantity: 1,
         },
       ],
       metadata: {
+        ...buildVatStripeMetadata(pricing.vat),
         bpm_purchase_type: "event",
         bpm_student_id: user.id,
         bpm_event_product_id: input.eventProductId,
@@ -744,12 +795,14 @@ export async function createGuestEventStripeCheckoutAction(input: {
               name: product.name,
               description: product.description ?? product.name,
             },
-            unit_amount: pricing.finalPriceCents,
+            // Phase 15 — VAT-inclusive total (no-op when VAT is off).
+            unit_amount: pricing.vat.totalIncVatCents,
           },
           quantity: 1,
         },
       ],
       metadata: {
+        ...buildVatStripeMetadata(pricing.vat),
         bpm_purchase_type: "event_guest",
         bpm_event_product_id: input.eventProductId,
         bpm_event_id: input.eventId,
@@ -819,9 +872,12 @@ export async function fulfillExistingSubscriptionPayment(
       studentId: sub.studentId,
       subscriptionId,
       productName: sub.productName,
-      amountCents: sub.priceCentsAtPurchase ?? null,
+      amountCents: sub.subtotalExVatCents ?? sub.priceCentsAtPurchase ?? null,
       originalPriceCents: sub.originalPriceCents ?? null,
       discountAmountCents: sub.discountAmountCents ?? null,
+      vatAmountCents: sub.vatAmountCents ?? null,
+      vatRatePercent: sub.vatRatePercent ?? null,
+      totalIncVatCents: sub.totalIncVatCents ?? sub.priceCentsAtPurchase ?? null,
       appliedDiscountSummary: summary,
     });
 

@@ -49,10 +49,15 @@ function formatCents(cents: number): string {
 /**
  * Build the rows for an "Amount" section in payment emails.
  *
- * If frozen pricing fields indicate a discount was applied, render a
- * Subtotal / Discount / Total breakdown. Otherwise fall back to the
- * single Amount row (using `amountLabel` so legacy callers that only
- * supply that field keep working unchanged).
+ * Renders a Subtotal / Discount / VAT / Total breakdown when the
+ * frozen pricing indicates a discount, VAT, or both. Otherwise falls
+ * back to the single Amount row (using `amountLabel` so legacy
+ * callers that only supply that field keep working unchanged).
+ *
+ * Phase 15: the VAT row appears ONLY when VAT was actually charged on
+ * this payment. An academy with VAT switched off, or a payment taken
+ * through a channel VAT does not apply to, gets exactly the email it
+ * got before — no €0.00 VAT line.
  */
 function pricingRows(p: {
   amountLabel: string | null;
@@ -60,23 +65,61 @@ function pricingRows(p: {
   discountAmountCents?: number | null;
   finalPriceCents?: number | null;
   appliedDiscountSummary?: string | null;
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  totalIncVatCents?: number | null;
 }): Array<{ label: string; valueHtml: string }> {
   const discount = p.discountAmountCents ?? 0;
   const original = p.originalPriceCents ?? null;
   const final = p.finalPriceCents ?? null;
-  if (discount > 0 && original != null && final != null) {
-    const reasonHtml = p.appliedDiscountSummary
-      ? `<span style="color:${B.ZINC_500};font-size:11px;"> · ${p.appliedDiscountSummary}</span>`
-      : "";
-    return [
-      { label: "Subtotal", valueHtml: formatCents(original) },
-      {
+  const vat = p.vatAmountCents ?? 0;
+  const hasDiscount = discount > 0 && original != null && final != null;
+  const hasVat = vat > 0 && final != null;
+
+  if (hasDiscount || hasVat) {
+    const rows: Array<{ label: string; valueHtml: string }> = [];
+
+    // Subtotal is the pre-discount list price when a discount
+    // applied, otherwise the net amount VAT was calculated on.
+    rows.push({
+      label: "Subtotal",
+      valueHtml: formatCents(original ?? final ?? 0),
+    });
+
+    if (hasDiscount) {
+      const reasonHtml = p.appliedDiscountSummary
+        ? `<span style="color:${B.ZINC_500};font-size:11px;"> · ${p.appliedDiscountSummary}</span>`
+        : "";
+      rows.push({
         label: "Discount",
         valueHtml: `<span style="color:${B.BPM_500};font-weight:600;">−${formatCents(discount)}</span>${reasonHtml}`,
-      },
-      { label: "Total", valueHtml: `<strong>${formatCents(final)}</strong>` },
-    ];
+      });
+    }
+
+    if (hasVat) {
+      const rate = p.vatRatePercent ?? 0;
+      const rateLabel = Number.isInteger(rate) ? String(rate) : String(rate);
+      // With a discount present, show what VAT was actually charged
+      // on — otherwise this duplicates the Subtotal row above.
+      if (hasDiscount) {
+        rows.push({
+          label: "Subtotal excluding VAT",
+          valueHtml: formatCents(final ?? 0),
+        });
+      }
+      rows.push({
+        label: `VAT (${rateLabel}%)`,
+        valueHtml: formatCents(vat),
+      });
+    }
+
+    // The payable total: VAT-inclusive when VAT applied, otherwise
+    // the post-discount amount.
+    const total = hasVat ? (p.totalIncVatCents ?? (final ?? 0) + vat) : (final ?? 0);
+    rows.push({ label: "Total", valueHtml: `<strong>${formatCents(total)}</strong>` });
+    return rows;
   }
+
   if (p.amountLabel) {
     return [{ label: "Amount", valueHtml: `<strong>${p.amountLabel}</strong>` }];
   }

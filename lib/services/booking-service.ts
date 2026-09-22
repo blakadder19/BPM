@@ -13,6 +13,7 @@ import {
 } from "@/lib/domain/booking-rules";
 import {
   findPromotionCandidate,
+  findIneligibleCandidates,
   reindexPositions,
 } from "@/lib/domain/waitlist-rules";
 import { generateId } from "@/lib/utils";
@@ -81,6 +82,18 @@ export type BookingOutcome =
   | { type: "waitlisted"; waitlistId: string; position: number; className: string; date: string; reason: string }
   | { type: "rejected"; reason: string };
 
+/**
+ * Phase 16.1 — students passed over during waitlist promotion because
+ * their entitlement was no longer usable. Reported so the caller can
+ * log them for admin follow-up; they stay on the waitlist in
+ * `waiting` status rather than being silently dropped or promoted.
+ */
+export interface SkippedPromotionCandidate {
+  waitlistId: string;
+  studentId: string;
+  studentName: string;
+}
+
 export type CancelOutcome =
   | {
       type: "cancelled";
@@ -88,8 +101,17 @@ export type CancelOutcome =
       classInfo: { id: string; title: string; date: string; startTime: string; classType: ClassType };
       cancelledAt: string;
       promoted: { studentName: string; waitlistId: string; subscriptionId: string | null } | null;
+      /** Empty unless an eligibility check was supplied and rejected someone. */
+      skippedIneligible?: SkippedPromotionCandidate[];
     }
   | { type: "error"; reason: string };
+
+/**
+ * Decides whether a waitlisted student may be promoted into a
+ * confirmed booking. Supplied by the caller (which has repository
+ * access) and evaluated BEFORE the state transition.
+ */
+export type WaitlistPromotionEligibility = (entry: StoredWaitlistEntry) => boolean;
 
 // ── Service ─────────────────────────────────────────────────
 
@@ -264,7 +286,16 @@ export class BookingService {
     return { type: "reverted" };
   }
 
-  cancelBooking(bookingId: string, cancelledAt?: Date): CancelOutcome {
+  /**
+   * @param isEligible Phase 16.1 — gate applied to waitlist
+   *        promotion BEFORE the confirmed booking is created. Omit
+   *        only where no entitlement is involved.
+   */
+  cancelBooking(
+    bookingId: string,
+    cancelledAt?: Date,
+    isEligible?: WaitlistPromotionEligibility,
+  ): CancelOutcome {
     const booking = this.bookings.find((b) => b.id === bookingId);
     if (!booking) return { type: "error", reason: "Booking not found." };
     if (!this.isActiveBooking(booking)) {
@@ -292,14 +323,51 @@ export class BookingService {
       classType: cls.classType,
     };
 
-    const capacity = this.getCapacity(booking.bookableClassId);
-    if (!capacity) {
-      return { type: "cancelled", booking: bookingInfo, classInfo, cancelledAt: now.toISOString(), promoted: null };
-    }
+    const { promoted, skippedIneligible } = this.promoteNextEligible(
+      booking.bookableClassId,
+      booking.danceRole,
+      isEligible,
+    );
+
+    return {
+      type: "cancelled",
+      booking: bookingInfo,
+      classInfo,
+      cancelledAt: now.toISOString(),
+      promoted,
+      skippedIneligible,
+    };
+  }
+
+  /**
+   * Phase 16.1 — shared waitlist-promotion step.
+   *
+   * Previously this logic was duplicated verbatim in `cancelBooking`
+   * and `cancelBookingAsAdmin`, and neither consulted the promoted
+   * student's entitlement. The caller only discovered the problem
+   * afterwards, when `consumeEntitlementCredit` refused — by which
+   * point a CONFIRMED booking already existed, handing out a free
+   * class.
+   *
+   * The eligibility check now runs before any state transition: an
+   * ineligible candidate is skipped, the search moves to the next
+   * student in the queue, and skipped students stay `waiting`.
+   */
+  private promoteNextEligible(
+    bookableClassId: string,
+    freedRole: DanceRole | null,
+    isEligible?: WaitlistPromotionEligibility,
+  ): {
+    promoted: { studentName: string; waitlistId: string; subscriptionId: string | null } | null;
+    skippedIneligible: SkippedPromotionCandidate[];
+  } {
+    const capacity = this.getCapacity(bookableClassId);
+    if (!capacity) return { promoted: null, skippedIneligible: [] };
 
     const classWaitlist = this.waitlist.filter(
-      (w) => w.bookableClassId === booking.bookableClassId
+      (w) => w.bookableClassId === bookableClassId,
     );
+    const byId = new Map(classWaitlist.map((w) => [w.id, w]));
 
     const result = findPromotionCandidate(
       classWaitlist.map((w) => ({
@@ -309,49 +377,75 @@ export class BookingService {
         position: w.position,
         status: w.status,
       })),
-      booking.danceRole,
-      capacity
+      freedRole,
+      capacity,
+      isEligible ? (e) => { const full = byId.get(e.id); return full ? isEligible(full) : false; } : undefined,
     );
 
-    let promoted: { studentName: string; waitlistId: string; subscriptionId: string | null } | null = null;
+    const toSkipped = (entries: { id: string; studentId: string }[]): SkippedPromotionCandidate[] =>
+      entries.map((e) => ({
+        waitlistId: e.id,
+        studentId: e.studentId,
+        studentName: byId.get(e.id)?.studentName ?? "Unknown student",
+      }));
 
-    if (result) {
-      const entry = this.waitlist.find((w) => w.id === result.promoted.id);
-      if (entry) {
-        entry.status = "promoted";
-        entry.promotedAt = new Date().toISOString();
-
-        const newBooking: StoredBooking = {
-          id: generateId("b"),
-          bookableClassId: booking.bookableClassId,
-          studentId: entry.studentId,
-          studentName: entry.studentName,
-          danceRole: entry.danceRole,
-          status: "confirmed",
-          source: "waitlist_promotion",
-          subscriptionId: entry.subscriptionId,
-          subscriptionName: entry.subscriptionName,
-          adminNote: null,
-          bookedAt: new Date().toISOString(),
-          cancelledAt: null,
-          checkInToken: generateCheckInToken(),
-        };
-        this.bookings.push(newBooking);
-
-        promoted = { studentName: entry.studentName, waitlistId: entry.id, subscriptionId: entry.subscriptionId };
-
-        const remaining = this.waitlist.filter(
-          (w) => w.bookableClassId === booking.bookableClassId && w.status === "waiting"
-        );
-        const reindexed = reindexPositions(remaining);
-        for (const r of reindexed) {
-          const original = this.waitlist.find((w) => w.id === r.id);
-          if (original) original.position = r.position;
-        }
-      }
+    if (!result) {
+      // Nobody was promoted. Report anyone who WOULD have been but
+      // for their entitlement, so the admin can follow up rather
+      // than wondering why a free spot went unfilled.
+      const skipped = isEligible
+        ? findIneligibleCandidates(
+            classWaitlist.map((w) => ({
+              id: w.id,
+              studentId: w.studentId,
+              danceRole: w.danceRole,
+              position: w.position,
+              status: w.status,
+            })),
+            (e) => { const full = byId.get(e.id); return full ? isEligible(full) : false; },
+          )
+        : [];
+      return { promoted: null, skippedIneligible: toSkipped(skipped) };
     }
 
-    return { type: "cancelled", booking: bookingInfo, classInfo, cancelledAt: now.toISOString(), promoted };
+    const entry = byId.get(result.promoted.id);
+    if (!entry) return { promoted: null, skippedIneligible: toSkipped(result.skippedIneligible) };
+
+    entry.status = "promoted";
+    entry.promotedAt = new Date().toISOString();
+
+    this.bookings.push({
+      id: generateId("b"),
+      bookableClassId,
+      studentId: entry.studentId,
+      studentName: entry.studentName,
+      danceRole: entry.danceRole,
+      status: "confirmed",
+      source: "waitlist_promotion",
+      subscriptionId: entry.subscriptionId,
+      subscriptionName: entry.subscriptionName,
+      adminNote: null,
+      bookedAt: new Date().toISOString(),
+      cancelledAt: null,
+      checkInToken: generateCheckInToken(),
+    });
+
+    const remaining = this.waitlist.filter(
+      (w) => w.bookableClassId === bookableClassId && w.status === "waiting",
+    );
+    for (const r of reindexPositions(remaining)) {
+      const original = this.waitlist.find((w) => w.id === r.id);
+      if (original) original.position = r.position;
+    }
+
+    return {
+      promoted: {
+        studentName: entry.studentName,
+        waitlistId: entry.id,
+        subscriptionId: entry.subscriptionId,
+      },
+      skippedIneligible: toSkipped(result.skippedIneligible),
+    };
   }
 
   getWaitlistForClass(classId: string): StoredWaitlistEntry[] {
@@ -475,7 +569,12 @@ export class BookingService {
     };
   }
 
-  cancelBookingAsAdmin(bookingId: string, isLate: boolean): CancelOutcome {
+  /** @param isEligible See {@link BookingService.cancelBooking}. */
+  cancelBookingAsAdmin(
+    bookingId: string,
+    isLate: boolean,
+    isEligible?: WaitlistPromotionEligibility,
+  ): CancelOutcome {
     const booking = this.bookings.find((b) => b.id === bookingId);
     if (!booking) return { type: "error", reason: "Booking not found." };
     if (!this.isActiveBooking(booking)) {
@@ -503,69 +602,44 @@ export class BookingService {
       classType: cls.classType,
     };
 
-    const capacity = this.getCapacity(booking.bookableClassId);
-    if (!capacity) {
-      return { type: "cancelled", booking: bookingInfo, classInfo, cancelledAt: now.toISOString(), promoted: null };
-    }
-
-    const classWaitlist = this.waitlist.filter(
-      (w) => w.bookableClassId === booking.bookableClassId
-    );
-    const result = findPromotionCandidate(
-      classWaitlist.map((w) => ({
-        id: w.id,
-        studentId: w.studentId,
-        danceRole: w.danceRole,
-        position: w.position,
-        status: w.status,
-      })),
+    const { promoted, skippedIneligible } = this.promoteNextEligible(
+      booking.bookableClassId,
       booking.danceRole,
-      capacity
+      isEligible,
     );
 
-    let promoted: { studentName: string; waitlistId: string; subscriptionId: string | null } | null = null;
-
-    if (result) {
-      const entry = this.waitlist.find((w) => w.id === result.promoted.id);
-      if (entry) {
-        entry.status = "promoted";
-        entry.promotedAt = new Date().toISOString();
-
-        const newBooking: StoredBooking = {
-          id: generateId("b"),
-          bookableClassId: booking.bookableClassId,
-          studentId: entry.studentId,
-          studentName: entry.studentName,
-          danceRole: entry.danceRole,
-          status: "confirmed",
-          source: "waitlist_promotion",
-          subscriptionId: entry.subscriptionId,
-          subscriptionName: entry.subscriptionName,
-          adminNote: null,
-          bookedAt: new Date().toISOString(),
-          cancelledAt: null,
-          checkInToken: generateCheckInToken(),
-        };
-        this.bookings.push(newBooking);
-        promoted = { studentName: entry.studentName, waitlistId: entry.id, subscriptionId: entry.subscriptionId };
-
-        const remaining = this.waitlist.filter(
-          (w) => w.bookableClassId === booking.bookableClassId && w.status === "waiting"
-        );
-        const reindexed = reindexPositions(remaining);
-        for (const r of reindexed) {
-          const original = this.waitlist.find((w) => w.id === r.id);
-          if (original) original.position = r.position;
-        }
-      }
-    }
-
-    return { type: "cancelled", booking: bookingInfo, classInfo, cancelledAt: now.toISOString(), promoted };
+    return {
+      type: "cancelled",
+      booking: bookingInfo,
+      classInfo,
+      cancelledAt: now.toISOString(),
+      promoted,
+      skippedIneligible,
+    };
   }
 
-  promoteFromWaitlist(waitlistId: string): { type: "promoted"; bookingId: string; subscriptionId: string | null } | { type: "error"; reason: string } {
+  /**
+   * Promote one specific waitlist entry (admin picks the student).
+   *
+   * @param isEligible Phase 16.1 — refuses the promotion outright
+   *        when the student's entitlement is no longer usable.
+   *        Unlike the cancel paths there is no "next candidate" to
+   *        fall through to: the admin chose this person, so the
+   *        correct outcome is a clear error they can act on.
+   */
+  promoteFromWaitlist(
+    waitlistId: string,
+    isEligible?: WaitlistPromotionEligibility,
+  ): { type: "promoted"; bookingId: string; subscriptionId: string | null } | { type: "error"; reason: string } {
     const entry = this.waitlist.find((w) => w.id === waitlistId && w.status === "waiting");
     if (!entry) return { type: "error", reason: "Waitlist entry not found or already promoted." };
+
+    if (isEligible && !isEligible(entry)) {
+      return {
+        type: "error",
+        reason: `${entry.studentName} no longer has a usable entitlement for this class, so they cannot be promoted. Assign a new pass or renew their existing one first.`,
+      };
+    }
 
     entry.status = "promoted";
     entry.promotedAt = new Date().toISOString();

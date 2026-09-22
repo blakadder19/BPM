@@ -47,6 +47,27 @@ export const BIRTHDAY_WEEK_DURATION_DAYS = 7;
  */
 export const TERM_PURCHASE_WINDOW_DAYS = 14;
 
+// ── VAT (Phase 15) ───────────────────────────────────────────
+//
+// These are DEFAULTS ONLY — the live values come from Settings →
+// Finance & VAT and are stored in the app-settings blob. The rate is
+// intentionally 0 and VAT intentionally off so that deploying this
+// feature changes nothing until an admin turns it on.
+
+/** VAT off by default — enabling it is an explicit admin decision. */
+export const VAT_ENABLED_DEFAULT = false;
+/** No assumed rate. Zaria sets the real rate in Settings. */
+export const VAT_RATE_PERCENT_DEFAULT = 0;
+/** Product prices are treated as NET by default; VAT is added on top. */
+export const VAT_PRICE_MODE_DEFAULT: "exclusive" | "inclusive" = "exclusive";
+/** When VAT is switched on, online/Stripe payments are the target case. */
+export const VAT_APPLY_TO_ONLINE_DEFAULT = true;
+/**
+ * Reception/manual payments are excluded by default so turning VAT on
+ * for online checkout never silently changes desk prices.
+ */
+export const VAT_APPLY_TO_MANUAL_DEFAULT = false;
+
 /**
  * Standard membership benefits — all membership tiers include these.
  * Used for display and eligibility checks.

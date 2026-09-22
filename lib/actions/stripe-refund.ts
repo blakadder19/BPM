@@ -8,6 +8,7 @@ import { getSpecialEventRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { updateSubscription } from "@/lib/services/subscription-service";
 import { refundPurchase } from "@/lib/services/special-event-service";
 import { logFinanceEvent, type AuditPerformer } from "@/lib/services/finance-audit-log";
+import { allocateRefundedVat } from "@/lib/domain/vat";
 import {
   validateStripeRefundRequest,
   type RefundableRecord,
@@ -117,6 +118,11 @@ export async function issueStripeRefundAction(
   let record: RefundableRecord;
   let label: string;
   let currency: string;
+  // Phase 15 — the frozen VAT on the row being refunded, so the audit
+  // entry can record how much VAT this refund reverses. Null when the
+  // purchase predates VAT tracking or VAT never applied.
+  let rowVatAmountCents: number | null = null;
+  let rowVatRatePercent: number | null = null;
 
   if (input.kind === "subscription") {
     const sub = await getSubscriptionRepo().getById(input.id);
@@ -131,6 +137,8 @@ export async function issueStripeRefundAction(
     };
     label = sub.productName || "Subscription";
     currency = (sub.currencyAtPurchase ?? "EUR").toLowerCase();
+    rowVatAmountCents = sub.vatAmountCents ?? null;
+    rowVatRatePercent = sub.vatRatePercent ?? null;
   } else {
     // event_purchase
     const all = await getSpecialEventRepo().getAllPurchases();
@@ -146,6 +154,8 @@ export async function issueStripeRefundAction(
     };
     label = purchase.productNameSnapshot || "Event purchase";
     currency = (purchase.currency ?? "eur").toLowerCase();
+    rowVatAmountCents = purchase.vatAmountCents ?? null;
+    rowVatRatePercent = purchase.vatRatePercent ?? null;
   }
 
   // ── 4) Pure validation (amount, reason, Stripe-only, etc.) ──
@@ -241,6 +251,33 @@ export async function issueStripeRefundAction(
       label,
       fullRefund: v.fullRefund,
       bpmPersistenceError: persistError,
+      // Phase 15 — VAT being handed back. `vatReversedCents` is the
+      // slice attributable to THIS refund; `cumulativeVatReversedCents`
+      // is the running total after it, which is what Finance nets out
+      // of "VAT collected". A full refund always reverses the whole
+      // VAT amount exactly, never a rounded approximation of it.
+      ...(rowVatAmountCents != null
+        ? {
+            vatAmountOnPurchaseCents: rowVatAmountCents,
+            vatRatePercent: rowVatRatePercent,
+            vatReversedCents:
+              allocateRefundedVat({
+                vatAmountCents: rowVatAmountCents,
+                totalIncVatCents: record.paidAmountCents ?? 0,
+                refundedAmountCents: v.newRefundedAmountCents,
+              }) -
+              allocateRefundedVat({
+                vatAmountCents: rowVatAmountCents,
+                totalIncVatCents: record.paidAmountCents ?? 0,
+                refundedAmountCents: record.refundedAmountCents ?? 0,
+              }),
+            cumulativeVatReversedCents: allocateRefundedVat({
+              vatAmountCents: rowVatAmountCents,
+              totalIncVatCents: record.paidAmountCents ?? 0,
+              refundedAmountCents: v.newRefundedAmountCents,
+            }),
+          }
+        : {}),
     },
   });
 

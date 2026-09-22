@@ -13,7 +13,13 @@ import {
   buildAuditDiscountMetadata,
   releaseDiscountClaim,
   attachClaimRelations,
+  resolveVatFor,
 } from "@/lib/services/pricing-service";
+import {
+  paymentChannelFor,
+  toVatSnapshotFields,
+  EMPTY_VAT_SNAPSHOT,
+} from "@/lib/domain/vat";
 import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
 import {
   computeSubscriptionValidity,
@@ -195,6 +201,10 @@ export async function createSubscriptionAction(
   const pricing = await priceProductForStudent({
     studentId,
     product: { id: product.id, productType: product.productType, priceCents: product.priceCents },
+    // Phase 15 — admin manual assignment follows the selected payment
+    // method. Everything except Stripe counts as a manual payment,
+    // which is excluded from VAT unless an admin opts in.
+    vatChannel: paymentChannelFor(paymentMethodRaw),
     commit: { source: "admin_manual" },
   });
 
@@ -231,6 +241,15 @@ export async function createSubscriptionAction(
   }
   const finalPriceAfterManualCents = engineFinalCents - manualDiscountCents;
   const combinedDiscountCents = pricing.totalDiscountCents + manualDiscountCents;
+
+  // Phase 15 — the manual discount is applied AFTER the engine, so the
+  // VAT the engine computed is based on the wrong amount whenever a
+  // manual discount is present. Recompute on the true final amount so
+  // the "VAT comes after every discount" rule holds here too.
+  const vat =
+    manualDiscountCents > 0
+      ? resolveVatFor(finalPriceAfterManualCents, paymentChannelFor(paymentMethodRaw))
+      : pricing.vat;
   const notesWithManualReason =
     manualDiscountCents > 0 && manualDiscountReason
       ? notes
@@ -266,12 +285,17 @@ export async function createSubscriptionAction(
     selectedStyleName,
     selectedStyleIds,
     selectedStyleNames,
-    priceCentsAtPurchase: finalPriceAfterManualCents,
+    // Amount actually payable, VAT included. Identical to
+    // `finalPriceAfterManualCents` when VAT does not apply.
+    priceCentsAtPurchase: vat.vatApplied
+      ? vat.totalIncVatCents
+      : finalPriceAfterManualCents,
     currencyAtPurchase: "EUR",
     productSnapshot,
     originalPriceCents: pricing.basePriceCents,
     discountAmountCents: combinedDiscountCents,
     appliedDiscount: pricing.snapshot,
+    ...(vat.vatApplied ? toVatSnapshotFields(vat) : EMPTY_VAT_SNAPSHOT),
     manualDiscountCents,
     manualDiscountReason,
     manualDiscountBy: manualDiscountCents > 0 ? adminUser.id : null,
@@ -474,7 +498,13 @@ export async function updateSubscriptionAction(
                 paymentMethod: sub.paymentMethod,
                 originalPriceCents: sub.originalPriceCents ?? null,
                 discountAmountCents: sub.discountAmountCents ?? 0,
-                finalPriceCents: sub.priceCentsAtPurchase ?? null,
+                // `priceCentsAtPurchase` is VAT-inclusive, so the
+                // receipt needs the ex-VAT subtotal for the
+                // "Subtotal excluding VAT" line.
+                finalPriceCents: sub.subtotalExVatCents ?? sub.priceCentsAtPurchase ?? null,
+                vatAmountCents: sub.vatAmountCents ?? null,
+                vatRatePercent: sub.vatRatePercent ?? null,
+                totalIncVatCents: sub.totalIncVatCents ?? sub.priceCentsAtPurchase ?? null,
                 appliedDiscountSummary: summary || null,
               }),
             ]).catch(() => {});
@@ -639,6 +669,11 @@ export async function applyPaymentChangeAction(params: {
         basePriceCents: sub.originalPriceCents ?? sub.priceCentsAtPurchase ?? null,
         discountAmountCents: sub.discountAmountCents ?? 0,
         finalPaidCents: sub.priceCentsAtPurchase ?? null,
+        // Phase 15 — this path is full-refund only, so the entire VAT
+        // amount is reversed. Null when the row predates VAT tracking.
+        vatAmountOnPurchaseCents: sub.vatAmountCents ?? null,
+        vatRatePercent: sub.vatRatePercent ?? null,
+        vatReversedCents: sub.vatAmountCents ?? null,
         currency: sub.currencyAtPurchase ?? "EUR",
         appliedDiscount: sub.appliedDiscount ?? null,
       };
@@ -689,7 +724,12 @@ export async function applyPaymentChangeAction(params: {
               paymentMethod: updatedSub.paymentMethod,
               originalPriceCents,
               discountAmountCents,
-              finalPriceCents: updatedSub.priceCentsAtPurchase ?? null,
+              finalPriceCents:
+                updatedSub.subtotalExVatCents ?? updatedSub.priceCentsAtPurchase ?? null,
+              vatAmountCents: updatedSub.vatAmountCents ?? null,
+              vatRatePercent: updatedSub.vatRatePercent ?? null,
+              totalIncVatCents:
+                updatedSub.totalIncVatCents ?? updatedSub.priceCentsAtPurchase ?? null,
               appliedDiscountSummary: summary || null,
             }),
           ]).catch(() => {});

@@ -18,6 +18,11 @@ import type { MockProduct, MockEventPurchase } from "@/lib/mock-data";
 import { normalizeFinanceStatusLabel, FINANCE_STATUS_COLORS } from "@/lib/domain/finance";
 import { deriveDisplayStatus } from "@/lib/domain/subscription-display-status";
 import { isRenewalEligible } from "@/lib/domain/term-lifecycle";
+import { getTodayStr } from "@/lib/domain/datetime";
+import {
+  getCreditSnapshot,
+  isSubscriptionUsable,
+} from "@/lib/domain/credit-availability";
 import { renewSubscriptionAction } from "@/lib/actions/term-lifecycle";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
@@ -301,23 +306,22 @@ export function StudentDetailPanel({
 
           {/* ── Credits & Wallet section ── */}
           <Section title="Credits & Wallet">
+            {/* Phase 16 — only entitlements that can actually be spent
+                are listed here. An ended pass with leftover credits
+                belongs in the Subscriptions history above, not in a
+                balance summary that reads as spendable. */}
             {subs.length > 0 && (
               <div className="mb-2 space-y-1">
                 {subs
-                  .filter((s) => s.status === "active")
+                  .filter((s) => isSubscriptionUsable(s, getTodayStr()))
                   .map((s) => (
                     <div key={s.id} className="flex items-center justify-between text-sm">
                       <span className="text-gray-600 truncate">{s.productName}</span>
                       <span className="font-medium text-gray-900">
-                        {s.productType === "membership"
-                          ? s.classesPerTerm !== null
-                            ? `Used ${s.classesUsed} / ${s.classesPerTerm} · ${s.classesPerTerm - s.classesUsed} left`
-                            : `${s.classesUsed} classes used`
-                          : s.totalCredits !== null && s.remainingCredits !== null
-                            ? `Used ${s.totalCredits - s.remainingCredits} / ${s.totalCredits} · ${s.remainingCredits} left`
-                            : s.remainingCredits !== null
-                              ? `${s.remainingCredits} credit${s.remainingCredits !== 1 ? "s" : ""} left`
-                              : "—"}
+                        <CreditBalanceLabel
+                          snapshot={getCreditSnapshot(s, getTodayStr())}
+                          termName={s.termId ? termsById.get(s.termId)?.name ?? null : null}
+                        />
                       </span>
                     </div>
                   ))}
@@ -968,6 +972,10 @@ function SubCard({
   const term = sub.termId ? termsById.get(sub.termId) : null;
   const isActive = sub.status === "active";
   const displayStatus = deriveDisplayStatus(sub, allStudentSubs);
+  // Phase 16 — one snapshot drives both the balance label and the
+  // "Extend expiry" affordance, so they can never disagree about
+  // whether this entitlement is still live.
+  const creditSnapshot = getCreditSnapshot(sub, getTodayStr());
   const expiryDays = isActive && sub.validUntil
     ? Math.round((new Date(sub.validUntil + "T00:00:00Z").getTime() - new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z").getTime()) / 86400000)
     : null;
@@ -984,22 +992,10 @@ function SubCard({
         {sub.productName}
       </span>
       <StatusBadge status={displayStatus} />
-      {sub.productType === "membership" ? (
-        <span className="text-gray-500">
-          {sub.classesPerTerm !== null
-            ? `Used ${sub.classesUsed} / ${sub.classesPerTerm} · ${sub.classesPerTerm - sub.classesUsed} left`
-            : `${sub.classesUsed} classes used`}
-        </span>
-      ) : sub.productType === "drop_in" ? (
+      {sub.productType === "drop_in" && creditSnapshot.totalCredits === null ? (
         <span className="text-gray-500">1 class</span>
       ) : (
-        <span className="text-gray-500">
-          {sub.totalCredits !== null && sub.remainingCredits !== null
-            ? `Used ${sub.totalCredits - sub.remainingCredits} / ${sub.totalCredits} · ${sub.remainingCredits} left`
-            : sub.remainingCredits !== null
-              ? `${sub.remainingCredits} credit${sub.remainingCredits !== 1 ? "s" : ""} left`
-              : "—"}
-        </span>
+        <CreditBalanceLabel snapshot={creditSnapshot} termName={term?.name ?? null} />
       )}
       {term ? (
         <span className="text-gray-500">{term.name}</span>
@@ -1118,14 +1114,28 @@ function SubCard({
             <Pencil className="h-3.5 w-3.5" />
           </button>
         )}
-        {onExtend && isActive && sub.validUntil && (
-          <button
-            onClick={() => onExtend(sub)}
-            className="rounded-lg p-1 text-gray-400 hover:bg-amber-50 hover:text-amber-700"
-            title="Extend expiry (exceptional cases only)"
-          >
-            <CalendarClock className="h-3.5 w-3.5" />
-          </button>
+        {/* Phase 14 allows extension only for active/paused rows.
+            Phase 16 keeps that rule but stops the control from simply
+            vanishing on an expired pass — an admin looking at unused
+            credits needs to know WHY they cannot extend. */}
+        {onExtend && sub.validUntil && (
+          isActive || sub.status === "paused" ? (
+            <button
+              onClick={() => onExtend(sub)}
+              className="rounded-lg p-1 text-gray-400 hover:bg-amber-50 hover:text-amber-700"
+              title="Extend expiry (exceptional cases only)"
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+            </button>
+          ) : (
+            <span
+              className="cursor-help rounded-lg p-1 text-gray-300"
+              title="Expired subscriptions must be renewed rather than extended."
+              aria-label="Expired subscriptions must be renewed rather than extended."
+            >
+              <CalendarClock className="h-3.5 w-3.5" />
+            </span>
+          )
         )}
         {onEdit && (isActive ? (
           <button
@@ -1146,6 +1156,71 @@ function SubCard({
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * Phase 16 — admin-facing credit balance.
+ *
+ * A live entitlement shows what is left to spend. An ended one shows
+ * what was used and, separately, what went unused at expiry — the
+ * figures Zaria needs when a student asks "what happened to my
+ * credits?". Neither number is ever destroyed; this is purely how
+ * the same stored counters are presented.
+ */
+function CreditBalanceLabel({
+  snapshot,
+  termName,
+}: {
+  snapshot: ReturnType<typeof getCreditSnapshot>;
+  termName: string | null;
+}) {
+  if (snapshot.model === "unlimited") {
+    return (
+      <span className="text-gray-500">
+        {snapshot.consumedCredits} classes used
+        {snapshot.isPastValidity ? " · ended" : ""}
+      </span>
+    );
+  }
+
+  const noun = snapshot.model === "class_count" ? "classes" : "credits";
+  const used = `Used ${snapshot.consumedCredits} / ${snapshot.totalCredits ?? "—"}`;
+  const leftover = snapshot.historicalRemaining ?? 0;
+
+  if (snapshot.isPastValidity) {
+    return (
+      <span className="text-gray-500">
+        {used}
+        {leftover > 0 && (
+          <>
+            {" · "}
+            <span
+              className="text-amber-700"
+              title={`${leftover} unused ${noun} expired ${
+                termName ? `at the end of ${termName}` : `on ${snapshot.expiredOn}`
+              } and can no longer be booked.`}
+            >
+              {leftover} unused at expiry
+            </span>
+          </>
+        )}
+      </span>
+    );
+  }
+
+  if (!snapshot.isUsable && snapshot.unusableReason === "status") {
+    return (
+      <span className="text-gray-500">
+        {used} · {leftover} unused
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-gray-500">
+      {used} · {snapshot.usableRemaining ?? 0} left
+    </span>
   );
 }
 

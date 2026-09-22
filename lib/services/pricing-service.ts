@@ -50,6 +50,14 @@ import {
   type StudentAffiliation,
 } from "@/lib/domain/pricing-engine";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
+import { getSettings } from "@/lib/services/settings-store";
+import {
+  computeVatForPayment,
+  noVat,
+  type VatBreakdown,
+  type VatPaymentChannel,
+  type VatPriceMode,
+} from "@/lib/domain/vat";
 import type { MockDiscountRule, MockStudentAffiliation } from "@/lib/mock-data";
 import type {
   ClaimSource,
@@ -85,6 +93,13 @@ export interface PriceForStudentInput {
     relatedSessionId?: string | null;
     relatedSubscriptionId?: string | null;
   };
+  /**
+   * Phase 15 — which payment channel this price is for, used to decide
+   * whether VAT applies. Defaults to "online" because the majority of
+   * callers are Stripe paths; reception/admin paths pass "manual"
+   * explicitly so they don't inherit online VAT.
+   */
+  vatChannel?: VatPaymentChannel;
 }
 
 export interface PriceForStudentResult extends PricingResult {
@@ -94,6 +109,43 @@ export interface PriceForStudentResult extends PricingResult {
   claim: DiscountClaim | null;
   /** True when first-time was eligible but lost the atomic race. */
   firstTimeDenied: boolean;
+  /**
+   * Phase 15 — VAT computed on `finalPriceCents` (i.e. AFTER every
+   * discount). When VAT is disabled or not applicable to the channel,
+   * `vat.vatApplied` is false and `vat.totalIncVatCents` equals
+   * `finalPriceCents`, so callers can use `vat.totalIncVatCents`
+   * unconditionally as the payable amount.
+   */
+  vat: VatBreakdown;
+}
+
+/**
+ * Resolve VAT for an already-discounted amount.
+ *
+ * This is the ONLY place the pricing layer touches VAT, which keeps
+ * the "discounts first, VAT second" ordering impossible to get wrong:
+ * it is called with `result.finalPriceCents`, never `basePriceCents`.
+ *
+ * Reads live settings rather than taking them as a parameter so every
+ * purchase path automatically picks up the admin's configuration
+ * without threading settings through a dozen call sites.
+ */
+export function resolveVatFor(
+  finalPriceCents: number,
+  channel: VatPaymentChannel,
+): VatBreakdown {
+  const s = getSettings();
+  return computeVatForPayment({
+    settings: {
+      vatEnabled: s.vatEnabled,
+      vatRatePercent: s.vatRatePercent,
+      vatPriceMode: s.vatPriceMode,
+      applyVatToOnlinePayments: s.applyVatToOnlinePayments,
+      applyVatToManualPayments: s.applyVatToManualPayments,
+    },
+    channel,
+    amountCents: finalPriceCents,
+  });
 }
 
 export async function priceProductForStudent(
@@ -205,7 +257,11 @@ export async function priceProductForStudent(
         }
       : null;
 
-  return { ...result, snapshot, claim, firstTimeDenied };
+  // VAT is computed LAST, on the post-discount total. Never on
+  // `basePriceCents`.
+  const vat = resolveVatFor(result.finalPriceCents, input.vatChannel ?? "online");
+
+  return { ...result, snapshot, claim, firstTimeDenied, vat };
 }
 
 /**
@@ -319,6 +375,11 @@ export interface PriceEventTicketInput {
    */
   guestEmail?: string | null;
   now?: string;
+  /**
+   * Phase 15 — payment channel for VAT applicability. Defaults to
+   * "online"; the event pay-at-reception path passes "manual".
+   */
+  vatChannel?: VatPaymentChannel;
 }
 
 export interface PriceEventTicketResult extends PricingResult {
@@ -331,6 +392,11 @@ export interface PriceEventTicketResult extends PricingResult {
    * was supplied".
    */
   promoCodeError: PromoCodeError | null;
+  /**
+   * Phase 15 — VAT on the post-discount ticket price. See
+   * {@link PriceForStudentResult.vat}.
+   */
+  vat: VatBreakdown;
 }
 
 export type PromoCodeError =
@@ -462,7 +528,10 @@ export async function priceEventTicketForStudent(
         }
       : null;
 
-  return { ...finalResult, snapshot, promoCodeError };
+  // VAT last, on the post-discount (and post-promo-strip) total.
+  const vat = resolveVatFor(finalResult.finalPriceCents, input.vatChannel ?? "online");
+
+  return { ...finalResult, snapshot, promoCodeError, vat };
 }
 
 function stripPromoFromResult(result: PricingResult): PricingResult {
@@ -774,6 +843,107 @@ export interface FrozenPricing {
   finalPriceCents: number;
   appliedDiscounts: AppliedDiscount[];
   snapshot: AppliedDiscountSnapshot | null;
+  /**
+   * Phase 15 — VAT the customer was actually charged. Rehydrated from
+   * FLAT Stripe metadata keys rather than from the compact transit
+   * blob above, because that blob is only written when a discount was
+   * applied — full-price purchases would otherwise lose their VAT.
+   */
+  vat: VatBreakdown;
+}
+
+// ── VAT ⇄ Stripe metadata (Phase 15) ────────────────────────
+//
+// Deliberately FLAT string keys rather than an extension of
+// `CompactPricingTransit`:
+//
+//   1. `bpm_pricing_snapshot` is only written when a discount applied
+//      (`serializePricingForStripe` returns null otherwise), so most
+//      sessions would carry no VAT at all if it lived in there.
+//   2. Flat keys are human-readable in the Stripe dashboard, which is
+//      what an accountant reconciling a payout actually needs.
+//   3. No transit version bump, so sessions created before this
+//      deploy still fulfil correctly — they simply have no VAT keys
+//      and fall back to a zero-VAT breakdown.
+
+export const VAT_METADATA_KEYS = {
+  subtotal: "bpm_subtotal_ex_vat_cents",
+  vatAmount: "bpm_vat_amount_cents",
+  rate: "bpm_vat_rate_percent",
+  mode: "bpm_vat_price_mode",
+  total: "bpm_total_inc_vat_cents",
+} as const;
+
+/**
+ * Serialize a VAT breakdown into Stripe session metadata.
+ *
+ * Returns an EMPTY object when VAT did not apply, so a VAT-disabled
+ * BPM writes exactly the same metadata it always did — no behavioural
+ * change whatsoever when the feature is off.
+ */
+export function buildVatStripeMetadata(vat: VatBreakdown): Record<string, string> {
+  if (!vat.vatApplied) return {};
+  return {
+    [VAT_METADATA_KEYS.subtotal]: String(vat.subtotalExVatCents),
+    [VAT_METADATA_KEYS.vatAmount]: String(vat.vatAmountCents),
+    [VAT_METADATA_KEYS.rate]: String(vat.vatRatePercent),
+    [VAT_METADATA_KEYS.mode]: vat.vatPriceMode,
+    [VAT_METADATA_KEYS.total]: String(vat.totalIncVatCents),
+  };
+}
+
+/**
+ * Rehydrate the VAT breakdown a customer was charged from Stripe
+ * session metadata.
+ *
+ * This is the ONLY source of VAT at fulfilment time — VAT is never
+ * recalculated from live settings in the webhook. If Zaria changes
+ * the rate between session creation and payment, the purchase keeps
+ * the figures the customer actually saw and paid.
+ *
+ * Falls back to a zero-VAT breakdown for sessions with no VAT keys
+ * (VAT disabled, or a session created before this feature shipped).
+ */
+export function readVatFromStripeMetadata(
+  metadata: Record<string, string>,
+  fallbackAmountCents: number,
+): VatBreakdown {
+  const rawVat = metadata[VAT_METADATA_KEYS.vatAmount];
+  const rawTotal = metadata[VAT_METADATA_KEYS.total];
+  const rawSubtotal = metadata[VAT_METADATA_KEYS.subtotal];
+  if (!rawVat || !rawTotal || !rawSubtotal) {
+    return noVat(fallbackAmountCents);
+  }
+
+  const vatAmountCents = Number(rawVat);
+  const totalIncVatCents = Number(rawTotal);
+  const subtotalExVatCents = Number(rawSubtotal);
+  const vatRatePercent = Number(metadata[VAT_METADATA_KEYS.rate] ?? "0");
+  const modeRaw = metadata[VAT_METADATA_KEYS.mode];
+  const vatPriceMode: VatPriceMode = modeRaw === "inclusive" ? "inclusive" : "exclusive";
+
+  // Reject a corrupt/truncated payload rather than persisting figures
+  // that don't add up — the CHECK constraint would reject them anyway.
+  const valid =
+    Number.isFinite(vatAmountCents) &&
+    Number.isFinite(totalIncVatCents) &&
+    Number.isFinite(subtotalExVatCents) &&
+    subtotalExVatCents + vatAmountCents === totalIncVatCents;
+  if (!valid) {
+    console.warn(
+      "[pricing-service] VAT metadata present but inconsistent — falling back to zero VAT.",
+    );
+    return noVat(fallbackAmountCents);
+  }
+
+  return {
+    subtotalExVatCents,
+    vatAmountCents,
+    totalIncVatCents,
+    vatRatePercent: Number.isFinite(vatRatePercent) ? vatRatePercent : 0,
+    vatPriceMode,
+    vatApplied: vatAmountCents > 0,
+  };
 }
 
 /**
@@ -782,9 +952,15 @@ export interface FrozenPricing {
  * if the rule has been deleted in the interim, falls back to `code` /
  * empty reason — the structural decision (id, type, amount) is what
  * matters for the immutable record.
+ *
+ * `metadata` is optional and only used to rehydrate the VAT
+ * breakdown, which lives in flat keys outside this transit blob (see
+ * {@link readVatFromStripeMetadata}). Callers that omit it get a
+ * zero-VAT breakdown.
  */
 export async function deserializePricingFromStripe(
   raw: string,
+  metadata?: Record<string, string>,
 ): Promise<FrozenPricing | null> {
   let parsed: CompactPricingTransit;
   try {
@@ -831,6 +1007,7 @@ export async function deserializePricingFromStripe(
     finalPriceCents: parsed.f,
     appliedDiscounts: applied,
     snapshot,
+    vat: metadata ? readVatFromStripeMetadata(metadata, parsed.f) : noVat(parsed.f),
   };
 }
 
@@ -921,13 +1098,25 @@ function toEngineAffiliation(a: MockStudentAffiliation): StudentAffiliation {
  * both live PricingResult and FrozenPricing (Stripe webhook path) since
  * the audit-relevant fields are a subset shared by both.
  *
- * Returns null when no discounts were applied so the audit log stays clean.
+ * Phase 15: when VAT was charged, the frozen VAT snapshot is included
+ * so Finance can reconstruct the full breakdown from the audit trail
+ * alone. A VAT-charging purchase produces an audit entry even when no
+ * discount applied — previously such purchases logged `null` metadata,
+ * which would have hidden the VAT.
+ *
+ * Returns null only when there is genuinely nothing to record (no
+ * discounts AND no VAT), keeping the audit log as clean as before.
  */
 export function buildAuditDiscountMetadata(
-  result: Pick<PricingResult, "basePriceCents" | "totalDiscountCents" | "finalPriceCents" | "appliedDiscounts">,
+  result: Pick<PricingResult, "basePriceCents" | "totalDiscountCents" | "finalPriceCents" | "appliedDiscounts"> & {
+    vat?: VatBreakdown;
+  },
 ): Record<string, unknown> | null {
-  if (result.appliedDiscounts.length === 0) return null;
-  return {
+  const hasDiscounts = result.appliedDiscounts.length > 0;
+  const hasVat = !!result.vat?.vatApplied;
+  if (!hasDiscounts && !hasVat) return null;
+
+  const out: Record<string, unknown> = {
     basePriceCents: result.basePriceCents,
     totalDiscountCents: result.totalDiscountCents,
     finalPriceCents: result.finalPriceCents,
@@ -935,4 +1124,16 @@ export function buildAuditDiscountMetadata(
       (a: AppliedDiscount) => ({ ...a }),
     ),
   };
+
+  if (hasVat && result.vat) {
+    out.vat = {
+      subtotalExVatCents: result.vat.subtotalExVatCents,
+      vatAmountCents: result.vat.vatAmountCents,
+      vatRatePercent: result.vat.vatRatePercent,
+      priceMode: result.vat.vatPriceMode,
+      totalIncVatCents: result.vat.totalIncVatCents,
+    };
+  }
+
+  return out;
 }

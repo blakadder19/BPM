@@ -580,6 +580,104 @@ export function SettingsForm({ initialSettings, allStyles, supabaseStatus, isDev
             </CardContent>
           </Card>
 
+          {/* ── 6c. Finance & VAT ───────────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Finance &amp; VAT</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <p className="text-xs text-gray-500">
+                Controls how VAT is calculated and displayed on new purchases.
+                Existing purchases keep the VAT figures they were charged and
+                are never recalculated.
+              </p>
+
+              {/* Sentinel so a partial form post can't reset VAT config. */}
+              <input type="hidden" name="__vatFormPresent" value="1" />
+
+              <CheckboxField
+                name="vatEnabled"
+                label="Enable VAT"
+                checked={s.vatEnabled}
+                onChange={(v) => setBool("vatEnabled", v)}
+              />
+              <p className="-mt-3 ml-6 text-xs text-gray-400">
+                When off, checkout, receipts and Finance behave exactly as they
+                do today — no VAT line is shown or stored.
+              </p>
+
+              <div>
+                <Label htmlFor="vatRatePercent" className="text-sm">
+                  VAT rate (%)
+                </Label>
+                <Input
+                  id="vatRatePercent"
+                  name="vatRatePercent"
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="0.01"
+                  value={s.vatRatePercent}
+                  onChange={(e) => setNum("vatRatePercent", e.target.value)}
+                  className="mt-1 w-32"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Between 0 and 100. Decimals are supported for reduced rates
+                  (for example 13.5). Must be above 0 to enable VAT.
+                </p>
+              </div>
+
+              {/* The checkbox is a friendlier surface than a two-option
+                  select, but the action needs the literal mode string —
+                  so the checkbox itself is unnamed and a hidden field
+                  carries the real value. */}
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={s.vatPriceMode === "inclusive"}
+                  onChange={(e) =>
+                    setS((prev) => ({
+                      ...prev,
+                      vatPriceMode: e.target.checked ? "inclusive" : "exclusive",
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
+                />
+                <span>Prices include VAT</span>
+              </label>
+              <input type="hidden" name="vatPriceMode" value={s.vatPriceMode} />
+              <p className="-mt-3 ml-6 text-xs text-gray-400">
+                Off (default): product prices are net and VAT is added on top,
+                so customers pay more than the listed price. On: listed prices
+                already contain VAT and the VAT portion is shown separately
+                without changing the total.
+              </p>
+
+              <div className="space-y-3 border-t border-gray-200 pt-4">
+                <p className="text-sm font-medium text-gray-700">
+                  Where VAT applies
+                </p>
+                <CheckboxField
+                  name="applyVatToOnlinePayments"
+                  label="Apply VAT to online (Stripe) payments"
+                  checked={s.applyVatToOnlinePayments}
+                  onChange={(v) => setBool("applyVatToOnlinePayments", v)}
+                />
+                <CheckboxField
+                  name="applyVatToManualPayments"
+                  label="Apply VAT to reception and manual payments"
+                  checked={s.applyVatToManualPayments}
+                  onChange={(v) => setBool("applyVatToManualPayments", v)}
+                />
+                <p className="text-xs text-gray-400">
+                  Reception and manual payments are excluded by default, so
+                  turning VAT on for online checkout does not change what is
+                  charged at the desk.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* ── 7. Admin Alerts ─────────────────────────────── */}
           <Card>
             <CardHeader>

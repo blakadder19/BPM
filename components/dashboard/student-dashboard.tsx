@@ -56,6 +56,12 @@ import { updateOwnPreferredRoleAction } from "@/lib/actions/students";
 import { toggleAutoRenewAction } from "@/lib/actions/catalog-purchase";
 import { payPendingSubscriptionAction } from "@/lib/actions/stripe-checkout";
 import { formatCents, formatDate, formatEventDateRange } from "@/lib/utils";
+import { getTodayStr } from "@/lib/domain/datetime";
+import {
+  getCreditSnapshot,
+  isPastValidity,
+  statusPermitsBooking,
+} from "@/lib/domain/credit-availability";
 import { TermBanner } from "@/components/ui/term-banner";
 import type { MemberBenefitsSummary } from "@/lib/domain/member-benefits";
 import type { ValidEntitlement } from "@/lib/domain/entitlement-rules";
@@ -765,8 +771,19 @@ function EntitlementsSection({
   entitlements: StudentEntitlementSummary[];
   stripeEnabled: boolean;
 }) {
-  const activeEntitlements = entitlements.filter((e) => e.status === "active");
-  const historyEntitlements = entitlements.filter((e) => e.status !== "active");
+  // Phase 16 — split on USABILITY, not just the stored status. A row
+  // whose term ended yesterday still reads `active` until the nightly
+  // lifecycle job runs; listing it under "Active Entitlements" with a
+  // credit balance would tell the student they can book when the
+  // server would refuse them. Future-dated entitlements stay in the
+  // active list — they are upcoming, not history.
+  const today = getTodayStr();
+  const activeEntitlements = entitlements.filter(
+    (e) => statusPermitsBooking(e.status) && !isPastValidity(e, today),
+  );
+  const historyEntitlements = entitlements.filter(
+    (e) => !statusPermitsBooking(e.status) || isPastValidity(e, today),
+  );
   const [sectionOpen, setSectionOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(HISTORY_PREVIEW_COUNT);
 
@@ -948,31 +965,67 @@ function EntitlementRow({
   );
 }
 
+/**
+ * Phase 16 — renders the credit balance WITHOUT ever implying that
+ * expired leftovers are still spendable.
+ *
+ * A usable entitlement reads "3 of 8 credits used · 5 remaining".
+ * An expired one reads "3 of 8 credits used · 5 unused credits
+ * expired at the end of Term 5" — the history is still visible, but
+ * the word "remaining" is gone, because the student cannot book with
+ * them.
+ */
 function EntitlementBalance({ e }: { e: StudentEntitlementSummary }) {
-  if (e.classesPerTerm !== null) {
-    const left = Math.max(0, e.classesPerTerm - e.classesUsed);
+  const snap = getCreditSnapshot(e, getTodayStr());
+
+  if (snap.model === "unlimited") {
     return (
-      <span className="font-medium text-gray-700">
-        {e.classesUsed} / {e.classesPerTerm} classes used · {left} remaining
+      <span className="text-gray-400">
+        {snap.isUsable ? "Unlimited" : "Unlimited (ended)"}
       </span>
     );
   }
-  if (e.remainingCredits !== null && e.totalCredits !== null) {
-    const used = e.totalCredits - e.remainingCredits;
+
+  const noun = snap.model === "class_count" ? "classes" : "credits";
+  const usedLabel = `${snap.consumedCredits} of ${snap.totalCredits ?? "—"} ${noun} used`;
+  const leftover = snap.historicalRemaining ?? 0;
+
+  if (snap.isPastValidity && leftover > 0) {
+    const when = e.termName
+      ? `at the end of ${e.termName}`
+      : snap.expiredOn
+        ? `on ${formatDate(snap.expiredOn)}`
+        : "when it ended";
     return (
-      <span className="font-medium text-gray-700">
-        {used} / {e.totalCredits} credits used · {e.remainingCredits} remaining
+      <span className="font-medium text-gray-500">
+        {usedLabel} ·{" "}
+        <span className="text-gray-400">
+          {leftover} unused {noun} expired {when}
+        </span>
       </span>
     );
   }
-  if (e.remainingCredits !== null) {
+
+  if (snap.isPastValidity) {
+    return <span className="font-medium text-gray-500">{usedLabel}</span>;
+  }
+
+  if (!snap.isUsable && snap.unusableReason === "status") {
     return (
-      <span className="font-medium text-gray-700">
-        {e.remainingCredits} credit{e.remainingCredits !== 1 ? "s" : ""} remaining
+      <span className="font-medium text-gray-500">
+        {usedLabel} ·{" "}
+        <span className="text-gray-400">
+          {leftover} unused ({e.status})
+        </span>
       </span>
     );
   }
-  return <span className="text-gray-400">Unlimited</span>;
+
+  return (
+    <span className="font-medium text-gray-700">
+      {usedLabel} · {snap.usableRemaining ?? 0} remaining
+    </span>
+  );
 }
 
 function CocBanner() {

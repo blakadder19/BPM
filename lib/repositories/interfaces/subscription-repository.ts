@@ -52,6 +52,16 @@ export interface CreateSubscriptionData {
   manualDiscountReason?: string | null;
   /** Auth user id of the admin who authorised the manual discount. */
   manualDiscountBy?: string | null;
+  /**
+   * Phase 15 — frozen VAT breakdown. Omit entirely (or pass nulls) on
+   * paths where VAT was never evaluated; the row then reads as
+   * "predates VAT tracking" rather than "zero VAT".
+   */
+  subtotalExVatCents?: number | null;
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  vatPriceMode?: "exclusive" | "inclusive" | null;
+  totalIncVatCents?: number | null;
 }
 
 export interface SubscriptionPatch {

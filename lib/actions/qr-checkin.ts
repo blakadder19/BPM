@@ -10,6 +10,7 @@ import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getInstances } from "@/lib/services/schedule-store";
 import { isValidStudentQrToken } from "@/lib/domain/checkin-token";
 import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
+import { toVatSnapshotFields, EMPTY_VAT_SNAPSHOT } from "@/lib/domain/vat";
 import { ensureOperationalDataHydrated, invalidateHydration } from "@/lib/supabase/hydrate-operational";
 import { saveBookingToDB, saveAttendanceToDB } from "@/lib/supabase/operational-persistence";
 import { isRealUser } from "@/lib/utils/is-real-user";
@@ -755,6 +756,9 @@ export async function qrSellDropInAndCheckInAction(
   const pricing = await priceProductForStudent({
     studentId,
     product: { id: dropInProduct.id, productType: "drop_in", priceCents: dropInProduct.priceCents },
+    // Phase 15 — QR drop-in is always collected in cash at the desk,
+    // so it follows the manual-payment VAT rule (off by default).
+    vatChannel: "manual",
     commit: { source: "qr_dropin" },
   });
   const subResult = await createSubscription({
@@ -779,7 +783,7 @@ export async function qrSellDropInAndCheckInAction(
     autoRenew: false,
     classesUsed: 0,
     classesPerTerm: null,
-    priceCentsAtPurchase: pricing.finalPriceCents,
+    priceCentsAtPurchase: pricing.vat.totalIncVatCents,
     currencyAtPurchase: "EUR",
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
@@ -788,6 +792,9 @@ export async function qrSellDropInAndCheckInAction(
     originalPriceCents: pricing.basePriceCents,
     discountAmountCents: pricing.totalDiscountCents,
     appliedDiscount: pricing.snapshot,
+    ...(pricing.vat.vatApplied
+      ? toVatSnapshotFields(pricing.vat)
+      : EMPTY_VAT_SNAPSHOT),
   });
 
   if (!subResult.success || !subResult.subscriptionId) {

@@ -6,6 +6,11 @@ import { getProductRepo, getTermRepo, getSubscriptionRepo } from "@/lib/reposito
 import { createSubscription, updateSubscription } from "@/lib/services/subscription-service";
 import { getCurrentTerm, getNextTerm, getNextConsecutiveTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
 import { computeSubscriptionValidity } from "@/lib/domain/subscription-validity";
+import {
+  paymentChannelFor,
+  toVatSnapshotFields,
+  EMPTY_VAT_SNAPSHOT,
+} from "@/lib/domain/vat";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getSettings } from "@/lib/services/settings-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -284,6 +289,11 @@ export async function createPurchaseSubscription(
           // so the engine can apply the 10% beginner discount BEFORE
           // the reception amount due is persisted.
           referralCode: prepared.referralCode ?? null,
+          // Phase 15 — VAT applicability follows the payment method.
+          // Reception/cash/manual payments are excluded by default so
+          // enabling VAT for online checkout never silently changes
+          // what is charged at the desk.
+          vatChannel: paymentChannelFor(payment.method),
           commit: { source: "catalog_purchase" },
         });
         pricingClaimId = live.claim?.id ?? null;
@@ -293,6 +303,7 @@ export async function createPurchaseSubscription(
           finalPriceCents: live.finalPriceCents,
           appliedDiscounts: live.appliedDiscounts,
           snapshot: live.snapshot,
+          vat: live.vat,
         };
       })();
 
@@ -324,12 +335,22 @@ export async function createPurchaseSubscription(
     selectedStyleNames: prepared.selectedStyleNames,
     paidAt: payment.paidAt ?? null,
     paymentReference: payment.reference ?? null,
-    priceCentsAtPurchase: pricing.finalPriceCents,
+    // `priceCentsAtPurchase` stays the amount ACTUALLY PAID, which is
+    // the VAT-inclusive total when VAT applied. When VAT is off,
+    // `totalIncVatCents` equals `finalPriceCents`, so this is
+    // byte-identical to the pre-VAT behaviour.
+    priceCentsAtPurchase: pricing.vat.totalIncVatCents,
     currencyAtPurchase: "EUR",
     productSnapshot,
     originalPriceCents: pricing.basePriceCents,
     discountAmountCents: pricing.totalDiscountCents,
     appliedDiscount: pricing.snapshot,
+    // Phase 15 — freeze the VAT breakdown. Written as all-null when
+    // VAT did not apply, so the row is indistinguishable from a
+    // pre-VAT row for reporting purposes.
+    ...(pricing.vat.vatApplied
+      ? toVatSnapshotFields(pricing.vat)
+      : EMPTY_VAT_SNAPSHOT),
   });
 
   if (result.success && result.subscriptionId) {

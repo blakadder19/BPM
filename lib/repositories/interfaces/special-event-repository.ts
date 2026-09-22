@@ -159,6 +159,16 @@ export interface CreatePurchaseData {
   appliedDiscount?:
     | import("@/lib/domain/pricing-engine").AppliedDiscountSnapshot
     | null;
+  /**
+   * Phase 15 — frozen VAT breakdown. Omit (or pass nulls) on paths
+   * where VAT was never evaluated so the row reads as "predates VAT
+   * tracking" rather than "zero VAT charged".
+   */
+  subtotalExVatCents?: number | null;
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  vatPriceMode?: "exclusive" | "inclusive" | null;
+  totalIncVatCents?: number | null;
 }
 
 // ── Repository Interface ─────────────────────────────────────

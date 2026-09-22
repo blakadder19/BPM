@@ -53,6 +53,14 @@ function toMockSubscription(row: SubRow): MockSubscription {
     stripeRefundId: row.stripe_refund_id ?? null,
     refundedAmountCents: row.refunded_amount_cents ?? 0,
     refundStatus: (row.refund_status as MockSubscription["refundStatus"]) ?? null,
+    // Phase 15 VAT — `?? null` (never `?? 0`) so a legacy row without
+    // VAT columns stays distinguishable from a row where VAT was
+    // evaluated and came out at zero.
+    subtotalExVatCents: row.subtotal_ex_vat_cents ?? null,
+    vatAmountCents: row.vat_amount_cents ?? null,
+    vatRatePercent: row.vat_rate_percent != null ? Number(row.vat_rate_percent) : null,
+    vatPriceMode: (row.vat_price_mode as MockSubscription["vatPriceMode"]) ?? null,
+    totalIncVatCents: row.total_inc_vat_cents ?? null,
   };
 }
 
@@ -143,6 +151,11 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
         manual_discount_cents: input.manualDiscountCents ?? 0,
         manual_discount_reason: input.manualDiscountReason ?? null,
         manual_discount_by: input.manualDiscountBy ?? null,
+        subtotal_ex_vat_cents: input.subtotalExVatCents ?? null,
+        vat_amount_cents: input.vatAmountCents ?? null,
+        vat_rate_percent: input.vatRatePercent ?? null,
+        vat_price_mode: input.vatPriceMode ?? null,
+        total_inc_vat_cents: input.totalIncVatCents ?? null,
       } as never)
       .select("*, products(name, product_type)")
       .single();

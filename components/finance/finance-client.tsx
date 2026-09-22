@@ -32,11 +32,13 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { formatDate, cn } from "@/lib/utils";
 import {
   normalizeFinanceStatusLabel,
+  computeMetrics,
   FINANCE_STATUS_COLORS,
   type FinanceTransaction,
   type FinanceMetrics,
   type FinanceSource,
 } from "@/lib/domain/finance";
+import { formatVatRate } from "@/lib/domain/vat";
 import type { FinanceAuditEntry } from "@/lib/services/finance-audit-log";
 import {
   type FinanceSuperAdminStatus,
@@ -154,6 +156,10 @@ function exportToCsv(rows: FinanceTransaction[]) {
   const headers = [
     "Date", "Buyer", "Email", "Product", "Product Type",
     "Source", "Transaction Type", "Status", "Amount (EUR)",
+    // Phase 15 — the VAT columns an accountant needs to file a
+    // return. Blank (not 0.00) on rows with no VAT information, so
+    // a pre-VAT purchase is never mistaken for a zero-rated one.
+    "Subtotal ex VAT (EUR)", "VAT Rate (%)", "VAT Amount (EUR)",
     "Payment Method", "Reference", "Performed By",
     "Refunded At", "Refunded By", "Refund Reason",
   ];
@@ -176,6 +182,9 @@ function exportToCsv(rows: FinanceTransaction[]) {
     tx.transactionType,
     normalizeFinanceStatusLabel(tx.status),
     (tx.amountCents / 100).toFixed(2),
+    tx.vatSubtotalExVatCents != null ? (tx.vatSubtotalExVatCents / 100).toFixed(2) : "",
+    tx.vatRatePercent != null ? String(tx.vatRatePercent) : "",
+    tx.vatAmountCents != null ? (tx.vatAmountCents / 100).toFixed(2) : "",
     METHOD_LABELS[tx.paymentMethod ?? ""] ?? tx.paymentMethod ?? "",
     tx.reference ?? "",
     tx.performedBy ?? "",
@@ -264,6 +273,18 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
     [metrics.byMethod],
   );
 
+  /**
+   * Phase 15 — VAT is recomputed over the FILTERED rows, not the
+   * server-side `metrics`, because the date range is applied
+   * client-side. "VAT collected" has to answer "in the period I'm
+   * looking at", which is the only question an accountant asks of it.
+   *
+   * Reuses `computeMetrics` so the retained-VAT arithmetic (including
+   * partial-refund reversal) lives in exactly one place.
+   */
+  const periodMetrics = useMemo(() => computeMetrics(filtered), [filtered]);
+  const showVatSummary = periodMetrics.vatChargedCents > 0;
+
   function applyDatePreset(preset: DatePreset) {
     setDateFrom(preset.from);
     setDateTo(preset.to);
@@ -315,6 +336,52 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
           bg="bg-bpm-50"
         />
       </div>
+
+      {/* VAT summary — only rendered once VAT has actually been
+          charged on something, so a VAT-disabled BPM sees the exact
+          same Finance page it always did. Figures are for the
+          currently filtered date range. */}
+      {showVatSummary && (
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="text-sm font-medium text-gray-700">
+              VAT{activePresetLabel ? ` · ${activePresetLabel}` : ""}
+            </h2>
+            <span className="text-xs text-gray-400">
+              Based on the {filtered.length} transaction
+              {filtered.length === 1 ? "" : "s"} currently shown
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <MiniCard
+              label="Net (ex VAT)"
+              value={formatCents(periodMetrics.netExVatCents)}
+            />
+            <MiniCard
+              label="VAT charged"
+              value={formatCents(periodMetrics.vatChargedCents)}
+            />
+            <MiniCard
+              label="VAT refunded"
+              value={formatCents(periodMetrics.vatRefundedCents)}
+            />
+            <MiniCard
+              label="VAT collected"
+              value={formatCents(periodMetrics.vatCollectedCents)}
+            />
+          </div>
+          {periodMetrics.transactionsWithoutVatInfo > 0 && (
+            <p className="mt-3 text-xs text-gray-500">
+              {periodMetrics.transactionsWithoutVatInfo} paid transaction
+              {periodMetrics.transactionsWithoutVatInfo === 1 ? "" : "s"} in this
+              range {periodMetrics.transactionsWithoutVatInfo === 1 ? "has" : "have"}{" "}
+              no VAT information, because {periodMetrics.transactionsWithoutVatInfo === 1 ? "it was" : "they were"} taken before VAT was
+              enabled or through a payment method VAT does not apply to. They are
+              excluded from the figures above rather than counted as zero.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Counts + method breakdown */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -678,10 +745,19 @@ function TxRow({
   // Discount indicator (Bug 3): show only when the frozen subscription
   // snapshot recorded a non-zero discount.
   const hasDiscount = (tx.discountAmountCents ?? 0) > 0;
-  const discountTooltip = hasDiscount
+  // Phase 15 — a row can carry VAT with or without a discount, so the
+  // breakdown tooltip is built whenever EITHER is present.
+  const hasVat = (tx.vatAmountCents ?? 0) > 0;
+  const discountTooltip = hasDiscount || hasVat
     ? [
-        tx.originalPriceCents != null ? `Subtotal: ${formatCents(tx.originalPriceCents)}` : null,
+        tx.originalPriceCents != null ? `Original: ${formatCents(tx.originalPriceCents)}` : null,
         tx.discountAmountCents ? `Discount: −${formatCents(tx.discountAmountCents)}` : null,
+        hasVat && tx.vatSubtotalExVatCents != null
+          ? `Subtotal ex VAT: ${formatCents(tx.vatSubtotalExVatCents)}`
+          : null,
+        hasVat
+          ? `VAT (${formatVatRate(tx.vatRatePercent ?? 0)}): ${formatCents(tx.vatAmountCents ?? 0)}`
+          : null,
         `Total: ${formatCents(tx.amountCents)}`,
         tx.appliedDiscountSummary,
       ].filter(Boolean).join("\n")
@@ -769,7 +845,7 @@ function TxRow({
       </Td>
       <Td className="font-medium tabular-nums">
         <div className="flex items-center gap-1.5">
-          <span>{formatCents(tx.amountCents)}</span>
+          <span title={discountTooltip ?? undefined}>{formatCents(tx.amountCents)}</span>
           {hasDiscount && (
             <span
               className="inline-flex items-center gap-0.5 rounded bg-bpm-50 px-1 py-0.5 text-[10px] font-medium text-bpm-700 cursor-help"
@@ -777,6 +853,14 @@ function TxRow({
             >
               <Tag className="h-2.5 w-2.5" />
               −{formatCents(tx.discountAmountCents ?? 0)}
+            </span>
+          )}
+          {hasVat && (
+            <span
+              className="inline-flex items-center rounded bg-gray-100 px-1 py-0.5 text-[10px] font-medium text-gray-600 cursor-help"
+              title={discountTooltip ?? undefined}
+            >
+              incl. VAT {formatCents(tx.vatAmountCents ?? 0)}
             </span>
           )}
         </div>

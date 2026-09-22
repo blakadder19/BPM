@@ -54,6 +54,9 @@ export function paymentPendingEvent(input: {
   amountLabel?: string | null;
   originalPriceCents?: number | null;
   discountAmountCents?: number | null;
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  totalIncVatCents?: number | null;
   finalPriceCents?: number | null;
   appliedDiscountSummary?: string | null;
 }): CommEvent<"payment_pending"> {
@@ -71,6 +74,9 @@ export function paymentPendingEvent(input: {
       discountAmountCents: input.discountAmountCents ?? null,
       finalPriceCents: input.finalPriceCents ?? null,
       appliedDiscountSummary: input.appliedDiscountSummary ?? null,
+      vatAmountCents: input.vatAmountCents ?? null,
+      vatRatePercent: input.vatRatePercent ?? null,
+      totalIncVatCents: input.totalIncVatCents ?? null,
     },
     createdAt: new Date().toISOString(),
     idempotencyKey: `payment_pending:${input.studentId}:${input.subscriptionId}`,
@@ -88,6 +94,9 @@ export function paymentConfirmedEvent(input: {
   paymentMethod?: string | null;
   originalPriceCents?: number | null;
   discountAmountCents?: number | null;
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  totalIncVatCents?: number | null;
   finalPriceCents?: number | null;
   appliedDiscountSummary?: string | null;
 }): CommEvent<"payment_confirmed"> {
@@ -105,6 +114,9 @@ export function paymentConfirmedEvent(input: {
       discountAmountCents: input.discountAmountCents ?? null,
       finalPriceCents: input.finalPriceCents ?? null,
       appliedDiscountSummary: input.appliedDiscountSummary ?? null,
+      vatAmountCents: input.vatAmountCents ?? null,
+      vatRatePercent: input.vatRatePercent ?? null,
+      totalIncVatCents: input.totalIncVatCents ?? null,
     },
     createdAt: new Date().toISOString(),
     idempotencyKey: `payment_confirmed:${input.studentId}:${input.subscriptionId}`,

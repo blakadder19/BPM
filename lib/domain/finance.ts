@@ -5,6 +5,7 @@
  * flat transaction list for the admin Finance dashboard.
  */
 
+import { allocateRefundedVat } from "@/lib/domain/vat";
 import type { MockSubscription, MockEventPurchase } from "@/lib/mock-data";
 import type { StoredPenalty } from "@/lib/services/penalty-service";
 
@@ -72,6 +73,22 @@ export interface FinanceTransaction {
   refundedAmountCents?: number;
   stripeRefundId?: string | null;
   refundStatus?: "succeeded" | "pending" | "failed" | null;
+  /**
+   * Phase 15 — frozen VAT breakdown from the underlying purchase row.
+   *
+   * `null` means the purchase predates VAT tracking (or VAT did not
+   * apply), NOT that zero VAT was charged. Reporting must not treat
+   * a null as a zero: `vatCollectedCents` only accumulates rows where
+   * `vatAmountCents` is a real number.
+   *
+   * `amountCents` on this transaction is the VAT-INCLUSIVE total the
+   * customer paid, so `vatSubtotalExVatCents` is what BPM actually
+   * earned and `vatAmountCents` is what is owed to Revenue.
+   */
+  vatSubtotalExVatCents?: number | null;
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  vatPriceMode?: "exclusive" | "inclusive" | null;
 }
 
 const TEST_MARKER_PATTERNS = ["[test]", "#test", "test:"];
@@ -98,6 +115,27 @@ export interface FinanceMetrics {
   byMethod: Record<string, number>;
   bySource: Record<FinanceSource, number>;
   pendingBySource: Record<FinanceSource, number>;
+  /**
+   * Phase 15 — VAT actually retained, i.e. charged on paid
+   * transactions MINUS VAT handed back on refunds.
+   *
+   * Only counts rows that carry a real `vatAmountCents`. Rows
+   * predating VAT tracking contribute nothing, which is correct:
+   * their VAT is genuinely unknown, not zero.
+   */
+  vatCollectedCents: number;
+  /** Gross VAT charged before refunds, for reconciliation. */
+  vatChargedCents: number;
+  /** VAT reversed by refunds, full and partial. */
+  vatRefundedCents: number;
+  /** Net amount excluding VAT — what BPM actually earned. */
+  netExVatCents: number;
+  /**
+   * How many paid transactions in scope carry no VAT information at
+   * all. Surfaced so an admin reading "VAT collected" knows whether
+   * the figure covers the whole period or only post-VAT purchases.
+   */
+  transactionsWithoutVatInfo: number;
 }
 
 // ── Status mapping ───────────────────────────────────────────
@@ -212,6 +250,10 @@ export function buildSubscriptionTransactions(
       refundedAmountCents: sub.refundedAmountCents ?? 0,
       stripeRefundId: sub.stripeRefundId ?? null,
       refundStatus: sub.refundStatus ?? null,
+      vatSubtotalExVatCents: sub.subtotalExVatCents ?? null,
+      vatAmountCents: sub.vatAmountCents ?? null,
+      vatRatePercent: sub.vatRatePercent ?? null,
+      vatPriceMode: sub.vatPriceMode ?? null,
     };
   });
 }
@@ -276,6 +318,10 @@ export function buildEventPurchaseTransactions(
       refundedAmountCents: p.refundedAmountCents ?? 0,
       stripeRefundId: p.stripeRefundId ?? null,
       refundStatus: p.refundStatus ?? null,
+      vatSubtotalExVatCents: p.subtotalExVatCents ?? null,
+      vatAmountCents: p.vatAmountCents ?? null,
+      vatRatePercent: p.vatRatePercent ?? null,
+      vatPriceMode: p.vatPriceMode ?? null,
     };
   });
 }
@@ -352,6 +398,11 @@ export function computeMetrics(transactions: FinanceTransaction[]): FinanceMetri
     byMethod: {},
     bySource: { subscription: 0, event_purchase: 0, penalty: 0 },
     pendingBySource: { subscription: 0, event_purchase: 0, penalty: 0 },
+    vatCollectedCents: 0,
+    vatChargedCents: 0,
+    vatRefundedCents: 0,
+    netExVatCents: 0,
+    transactionsWithoutVatInfo: 0,
   };
 
   for (const tx of transactions) {
@@ -361,6 +412,22 @@ export function computeMetrics(transactions: FinanceTransaction[]): FinanceMetri
       const method = tx.paymentMethod ?? "other";
       metrics.byMethod[method] = (metrics.byMethod[method] ?? 0) + tx.amountCents;
       metrics.bySource[tx.source] += tx.amountCents;
+
+      // Phase 15 — VAT on a row that is still `paid`. Note a row can
+      // be PARTIALLY refunded and keep `paid` status, so the
+      // refunded slice of its VAT is backed out here; otherwise a
+      // partial refund would leave VAT booked as retained that has
+      // already been handed back to the customer.
+      if (tx.vatAmountCents != null) {
+        metrics.vatChargedCents += tx.vatAmountCents;
+        metrics.vatRefundedCents += allocateRefundedVat({
+          vatAmountCents: tx.vatAmountCents,
+          totalIncVatCents: tx.amountCents,
+          refundedAmountCents: tx.refundedAmountCents ?? 0,
+        });
+      } else {
+        metrics.transactionsWithoutVatInfo++;
+      }
     } else if (tx.status === "pending") {
       metrics.totalPendingCents += tx.amountCents;
       metrics.pendingCount++;
@@ -368,9 +435,18 @@ export function computeMetrics(transactions: FinanceTransaction[]): FinanceMetri
     } else if (tx.status === "refunded") {
       metrics.totalRefundedCents += tx.amountCents;
       metrics.refundCount++;
+
+      // Fully refunded: the whole VAT amount is reversed, so it nets
+      // to zero and is never reported as retained VAT.
+      if (tx.vatAmountCents != null) {
+        metrics.vatChargedCents += tx.vatAmountCents;
+        metrics.vatRefundedCents += tx.vatAmountCents;
+      }
     }
   }
 
   metrics.netRevenueCents = metrics.totalPaidCents - metrics.totalRefundedCents;
+  metrics.vatCollectedCents = metrics.vatChargedCents - metrics.vatRefundedCents;
+  metrics.netExVatCents = metrics.netRevenueCents - metrics.vatCollectedCents;
   return metrics;
 }

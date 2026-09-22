@@ -25,6 +25,11 @@ import {
   ExtendSubscriptionDialog,
 } from "./student-dialogs";
 import { runTermLifecycleAction, getLifecycleRunInfo } from "@/lib/actions/term-lifecycle";
+import { getTodayStr } from "@/lib/domain/datetime";
+import {
+  isSubscriptionUsable,
+  usableRemainingCredits,
+} from "@/lib/domain/credit-availability";
 import { qrWalkInCheckInAction } from "@/lib/actions/qr-checkin";
 import type { StudentImpact } from "./student-dialogs";
 import type { StudentListItem } from "@/types/domain";
@@ -217,13 +222,19 @@ export function AdminStudents({
     .sort((a, b) => (b.joinedAt ?? "").localeCompare(a.joinedAt ?? ""));
 
   function deriveSubInfo(studentId: string) {
+    // Phase 16 — the credits column must show what the student can
+    // actually spend. Filtering on `status === "active"` alone would
+    // include a pass whose term ended but whose row lifecycle has not
+    // yet flipped, overstating the balance.
+    const today = getTodayStr();
     const studentSubs = subscriptions.filter(
-      (s) => s.studentId === studentId && s.status === "active"
+      (s) => s.studentId === studentId && isSubscriptionUsable(s, today)
     );
     if (studentSubs.length === 0) return { name: null, credits: "—" };
     const totalCredits = studentSubs.reduce((sum, s) => {
-      if (s.remainingCredits === null) return Infinity;
-      return sum === Infinity ? Infinity : sum + (s.remainingCredits ?? 0);
+      const usable = usableRemainingCredits(s, today);
+      if (usable === null) return Infinity;
+      return sum === Infinity ? Infinity : sum + usable;
     }, 0 as number);
     const firstName = studentSubs[0].productName;
     const label = studentSubs.length > 1 ? `${firstName} +${studentSubs.length - 1}` : firstName;

@@ -56,6 +56,11 @@ function sub(over: Partial<MockSubscription> = {}): MockSubscription {
     manualDiscountCents: 0,
     manualDiscountReason: null,
     manualDiscountBy: null,
+    subtotalExVatCents: null,
+    vatAmountCents: null,
+    vatRatePercent: null,
+    vatPriceMode: null,
+    totalIncVatCents: null,
     ...over,
   };
 }

@@ -52,6 +52,14 @@ export interface PaymentPendingPayload {
   discountAmountCents?: number | null;
   finalPriceCents?: number | null;
   appliedDiscountSummary?: string | null;
+  /**
+   * Phase 15 — frozen VAT so the receipt can show Subtotal / VAT /
+   * Total. All null/0 when VAT did not apply to this payment, in
+   * which case the email renders exactly as it did before.
+   */
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  totalIncVatCents?: number | null;
 }
 
 export interface RenewalPreparedPayload {
@@ -144,6 +152,14 @@ export interface PaymentConfirmedPayload {
   discountAmountCents?: number | null;
   finalPriceCents?: number | null;
   appliedDiscountSummary?: string | null;
+  /**
+   * Phase 15 — frozen VAT so the receipt can show Subtotal / VAT /
+   * Total. All null/0 when VAT did not apply to this payment, in
+   * which case the email renders exactly as it did before.
+   */
+  vatAmountCents?: number | null;
+  vatRatePercent?: number | null;
+  totalIncVatCents?: number | null;
 }
 
 export interface SubscriptionRefundedPayload {

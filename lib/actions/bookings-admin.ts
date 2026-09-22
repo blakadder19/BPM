@@ -13,7 +13,16 @@ import {
   penaltiesApplyTo,
   penaltyFeeCents,
 } from "@/lib/domain/cancellation-rules";
-import { isAfterClosureWindow, isClassEnded } from "@/lib/domain/datetime";
+import { isAfterClosureWindow, isClassEnded, getTodayStr } from "@/lib/domain/datetime";
+import {
+  statusPermitsBooking,
+  isPastValidity,
+  getCreditSnapshot,
+} from "@/lib/domain/credit-availability";
+import {
+  consumeEntitlementCredit,
+  buildPromotionEligibility,
+} from "@/lib/services/entitlement-consumption";
 import type { BookingSource, DanceRole } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveWaitlistToDB, deleteWaitlistFromDB, savePenaltyToDB, saveAttendanceToDB, deleteBookingFromDB, deleteAttendanceFromDB, deletePenaltyFromDB } from "@/lib/supabase/operational-persistence";
@@ -144,6 +153,30 @@ export async function adminCreateBookingAction(
           };
         }
       }
+    }
+
+    // Phase 16 — the admin path previously validated the class date
+    // against the entitlement window but never checked the
+    // subscription's own status or whether it is still live TODAY.
+    // Both gaps let an admin spend credits on an ended pass.
+    const todayStr = getTodayStr();
+    if (!statusPermitsBooking(sub.status)) {
+      return {
+        success: false,
+        error: `Cannot use ${sub.productName} — it is ${sub.status}. Renew or assign a new product instead.`,
+      };
+    }
+    if (isPastValidity(sub, todayStr)) {
+      const snap = getCreditSnapshot(sub, todayStr);
+      const leftover = snap.historicalRemaining ?? 0;
+      const noun = snap.model === "class_count" ? "classes" : "credits";
+      return {
+        success: false,
+        error:
+          leftover > 0
+            ? `${sub.productName} ended on ${sub.validUntil}. Its ${leftover} unused ${noun} expired and cannot be used. Renew it or use "Extend expiry" if this is an exceptional case.`
+            : `${sub.productName} ended on ${sub.validUntil} and can no longer be used.`,
+      };
     }
 
     if (cls) {
@@ -314,9 +347,22 @@ export async function adminCancelBookingAction(
 
   const isLate = ctx.isLate || ctx.hasStarted;
 
-  const result = svc.cancelBookingAsAdmin(bookingId, isLate);
+  // Phase 16.1 — entitlement eligibility is resolved BEFORE the
+  // cancel, so waitlist promotion can skip lapsed passes instead of
+  // confirming a booking and then failing to charge it.
+  const isPromotable = await buildPromotionEligibility(
+    svc.getWaitlistForClass(booking.bookableClassId),
+  );
+
+  const result = svc.cancelBookingAsAdmin(bookingId, isLate, isPromotable);
   if (result.type === "error") {
     return { success: false, error: result.reason };
+  }
+
+  for (const skipped of result.skippedIneligible ?? []) {
+    console.warn(
+      `[waitlist-promotion] Skipped ${skipped.studentName} (student=${skipped.studentId}, waitlist=${skipped.waitlistId}) for class ${booking.bookableClassId} — entitlement no longer usable. They remain on the waitlist.`,
+    );
   }
 
   if (booking.subscriptionId && booking.source !== "birthday") {
@@ -372,14 +418,13 @@ export async function adminCancelBookingAction(
   }
   if (result.promoted) {
     if (result.promoted.subscriptionId) {
-      const promoSub = await getSubscriptionRepo().getById(result.promoted.subscriptionId);
-      if (promoSub) {
-        if (promoSub.productType === "membership" && promoSub.classesPerTerm !== null) {
-          await repoUpdateSub(promoSub.id, { classesUsed: promoSub.classesUsed + 1 });
-        } else if (promoSub.remainingCredits !== null) {
-          await repoUpdateSub(promoSub.id, { remainingCredits: promoSub.remainingCredits - 1 });
-        }
-      }
+      // Phase 16 — expiry-aware. A student promoted off a waitlist
+      // after their pass's term ended must not have a credit taken
+      // from it.
+      await consumeEntitlementCredit(
+        result.promoted.subscriptionId,
+        "admin_cancel_waitlist_promotion",
+      );
     }
     const promotedEntry = svc.waitlist.find((w) => w.id === result.promoted?.waitlistId);
     if (promotedEntry && isRealUser(promotedEntry.studentId)) {
@@ -483,7 +528,15 @@ export async function adminPromoteWaitlistAction(
   if (!waitlistId) return { success: false, error: "Missing waitlist ID" };
 
   const svc = getBookingService();
-  const result = svc.promoteFromWaitlist(waitlistId);
+
+  // Phase 16.1 — validate the chosen student's entitlement BEFORE
+  // promoting. Unlike the cancel paths there is no next candidate to
+  // fall through to; the admin picked this person, so an unusable
+  // entitlement is a hard error they can act on.
+  const entry = svc.waitlist.find((w) => w.id === waitlistId);
+  const isPromotable = await buildPromotionEligibility(entry ? [entry] : []);
+
+  const result = svc.promoteFromWaitlist(waitlistId, isPromotable);
 
   if (result.type === "error") {
     return { success: false, error: result.reason };
@@ -491,14 +544,12 @@ export async function adminPromoteWaitlistAction(
 
   if (result.type === "promoted") {
     if (result.subscriptionId) {
-      const promoSub = await getSubscriptionRepo().getById(result.subscriptionId);
-      if (promoSub) {
-        if (promoSub.productType === "membership" && promoSub.classesPerTerm !== null) {
-          await repoUpdateSub(promoSub.id, { classesUsed: promoSub.classesUsed + 1 });
-        } else if (promoSub.remainingCredits !== null) {
-          await repoUpdateSub(promoSub.id, { remainingCredits: promoSub.remainingCredits - 1 });
-        }
-      }
+      // Eligibility was already confirmed above, so this should
+      // always succeed. Kept as defence in depth.
+      await consumeEntitlementCredit(
+        result.subscriptionId,
+        "admin_waitlist_promotion",
+      );
     }
     const newBooking = svc.bookings.find((b) => b.id === result.bookingId);
     if (newBooking && isRealUser(newBooking.studentId)) await saveBookingToDB(newBooking);

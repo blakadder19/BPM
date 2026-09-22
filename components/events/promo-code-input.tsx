@@ -17,12 +17,22 @@
 import { useState, useTransition } from "react";
 import { Tag, X, Check, Loader2 } from "lucide-react";
 import { previewEventPromoCodeAction } from "@/lib/actions/event-promo-code";
+import { OrderSummary } from "@/components/checkout/order-summary";
 
 interface AppliedPromo {
   code: string;
   basePriceCents: number;
   discountAmountCents: number;
+  /** Post-discount, PRE-VAT amount. */
   finalPriceCents: number;
+  /**
+   * Phase 15 — VAT on the discounted amount. `totalIncVatCents` is
+   * what the customer actually pays and equals `finalPriceCents`
+   * when VAT is disabled.
+   */
+  vatAmountCents: number;
+  vatRatePercent: number;
+  totalIncVatCents: number;
 }
 
 interface Props {
@@ -77,11 +87,17 @@ export function PromoCodeInput({
         setError(r.error ?? "This promo code is not valid for this ticket.");
         return;
       }
+      const finalPriceCents = r.finalPriceCents ?? basePriceCents;
       const next: AppliedPromo = {
         code: r.code ?? trimmed.toUpperCase(),
         basePriceCents: r.basePriceCents ?? basePriceCents,
         discountAmountCents: r.discountAmountCents ?? 0,
-        finalPriceCents: r.finalPriceCents ?? basePriceCents,
+        finalPriceCents,
+        vatAmountCents: r.vatAmountCents ?? 0,
+        vatRatePercent: r.vatRatePercent ?? 0,
+        // Falls back to the pre-VAT amount so a VAT-disabled BPM
+        // behaves exactly as before.
+        totalIncVatCents: r.totalIncVatCents ?? finalPriceCents,
       };
       setApplied(next);
       onApplied(next);
@@ -115,26 +131,15 @@ export function PromoCodeInput({
             Remove
           </button>
         </div>
-        <div className="mt-1 space-y-0.5 text-xs text-green-800/90">
-          <div className="flex items-center justify-between">
-            <span>Original</span>
-            <span className="tabular-nums">
-              {centsToEuros(applied.basePriceCents)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span>Discount</span>
-            <span className="tabular-nums">
-              −{centsToEuros(applied.discountAmountCents)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between font-semibold">
-            <span>Total</span>
-            <span className="tabular-nums">
-              {centsToEuros(applied.finalPriceCents)}
-            </span>
-          </div>
-        </div>
+        <OrderSummary
+          className="mt-1 text-xs text-green-800/90"
+          basePriceCents={applied.basePriceCents}
+          discountAmountCents={applied.discountAmountCents}
+          subtotalExVatCents={applied.finalPriceCents}
+          vatAmountCents={applied.vatAmountCents}
+          vatRatePercent={applied.vatRatePercent}
+          totalCents={applied.totalIncVatCents}
+        />
       </div>
     );
   }

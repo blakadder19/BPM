@@ -16,6 +16,12 @@ import {
   type FrozenPricing,
 } from "@/lib/services/pricing-service";
 import type { AppliedDiscountSnapshot } from "@/lib/domain/pricing-engine";
+import {
+  paymentChannelFor,
+  toVatSnapshotFields,
+  EMPTY_VAT_SNAPSHOT,
+  type VatBreakdown,
+} from "@/lib/domain/vat";
 
 const MEMBERS_ONLY_BLOCKED_MESSAGE = "This ticket is only available to active members.";
 const MEMBERS_ONLY_GUEST_MESSAGE = "This ticket is only available to active members. Please log in with your member account to purchase.";
@@ -57,6 +63,9 @@ function buildFinancialSnapshot(product: { priceCents: number; name: string; pro
     productNameSnapshot: product.name,
     productTypeSnapshot: product.productType,
     appliedDiscount: null as AppliedDiscountSnapshot | null,
+    // No pricing result available on this path, so no VAT was
+    // evaluated — record nulls rather than inventing a zero split.
+    ...EMPTY_VAT_SNAPSHOT,
   };
 }
 
@@ -79,18 +88,25 @@ function buildPricedFinancialSnapshot(
     totalDiscountCents: number;
     finalPriceCents: number;
     snapshot: AppliedDiscountSnapshot | null;
+    vat?: VatBreakdown;
   },
   isPaid: boolean,
 ) {
+  const vat = pricing.vat;
+  // The amount actually paid is the VAT-inclusive total. When VAT
+  // does not apply `totalIncVatCents === finalPriceCents`, so this
+  // matches the pre-VAT behaviour exactly.
+  const payable = vat?.vatApplied ? vat.totalIncVatCents : pricing.finalPriceCents;
   return {
     unitPriceCentsAtPurchase: pricing.basePriceCents,
     originalAmountCents: pricing.basePriceCents,
     discountAmountCents: pricing.totalDiscountCents,
-    paidAmountCents: isPaid ? pricing.finalPriceCents : 0,
+    paidAmountCents: isPaid ? payable : 0,
     currency: "eur",
     productNameSnapshot: product.name,
     productTypeSnapshot: product.productType,
     appliedDiscount: pricing.snapshot,
+    ...(vat?.vatApplied ? toVatSnapshotFields(vat) : EMPTY_VAT_SNAPSHOT),
   };
 }
 
@@ -106,16 +122,66 @@ function buildFinancialSnapshotFromFrozen(
   isPaid: boolean,
 ) {
   if (!frozen) return buildFinancialSnapshot(product, isPaid);
+  const vat = frozen.vat;
+  const payable = vat?.vatApplied ? vat.totalIncVatCents : frozen.finalPriceCents;
   return {
     unitPriceCentsAtPurchase: frozen.basePriceCents,
     originalAmountCents: frozen.basePriceCents,
     discountAmountCents: frozen.totalDiscountCents,
-    paidAmountCents: isPaid ? frozen.finalPriceCents : 0,
+    paidAmountCents: isPaid ? payable : 0,
     currency: "eur",
     productNameSnapshot: product.name,
     productTypeSnapshot: product.productType,
     appliedDiscount: frozen.snapshot,
+    ...(vat?.vatApplied ? toVatSnapshotFields(vat) : EMPTY_VAT_SNAPSHOT),
   };
+}
+
+/**
+ * Rebuild the frozen pricing a Stripe session was created with.
+ *
+ * Handles three cases that the raw `deserializePricingFromStripe` call
+ * does not cover on its own:
+ *
+ *   1. Discount applied  → the compact transit blob is present; VAT is
+ *      merged in from the flat `bpm_vat_*` keys.
+ *   2. Full price + VAT  → no transit blob (it is only written when a
+ *      discount applied), but VAT keys ARE present. Without this
+ *      branch a full-price VAT ticket would fulfil with no VAT
+ *      recorded, which is the majority case once VAT is enabled.
+ *   3. Neither           → null, and the caller falls back to the live
+ *      product price, exactly as before VAT existed.
+ *
+ * VAT is never recomputed here: a rate change between session creation
+ * and payment must not alter what the customer was charged.
+ */
+async function rehydrateFrozenPricing(
+  metadata: Record<string, string>,
+  fallbackPriceCents: number,
+): Promise<FrozenPricing | null> {
+  const { deserializePricingFromStripe, readVatFromStripeMetadata } = await import(
+    "@/lib/services/pricing-service"
+  );
+
+  const rawPricing = metadata.bpm_pricing_snapshot;
+  if (rawPricing) {
+    const restored = await deserializePricingFromStripe(rawPricing, metadata);
+    if (restored) return restored;
+  }
+
+  const vatOnly = readVatFromStripeMetadata(metadata, fallbackPriceCents);
+  if (vatOnly.vatApplied) {
+    return {
+      basePriceCents: vatOnly.subtotalExVatCents,
+      totalDiscountCents: 0,
+      finalPriceCents: vatOnly.subtotalExVatCents,
+      appliedDiscounts: [],
+      snapshot: null,
+      vat: vatOnly,
+    };
+  }
+
+  return null;
 }
 
 /**
@@ -177,6 +243,10 @@ export async function createEventPurchaseAction(input: {
       priceCents: product.priceCents,
     },
     promoCode: input.promoCode ?? null,
+    // Pay-at-reception: VAT only applies if an admin has explicitly
+    // enabled it for manual payments. Default is off, so desk prices
+    // are unchanged by enabling VAT for online checkout.
+    vatChannel: "manual",
   });
 
   // Reject the purchase outright if a promo code was typed but turned
@@ -302,6 +372,8 @@ export async function createGuestEventPurchaseAction(input: {
     },
     promoCode: input.promoCode ?? null,
     guestEmail: email,
+    // Guest pay-at-reception — same manual-channel rule as above.
+    vatChannel: "manual",
   });
 
   if (pricing.promoCodeError) {
@@ -440,6 +512,9 @@ export async function createFreeGuestEventPurchaseAction(input: {
     },
     promoCode: promoCode.trim(),
     guestEmail: email,
+    // €0 comped registration — no money changes hands, so no VAT
+    // regardless of configuration. Marked manual for consistency.
+    vatChannel: "manual",
   });
 
   if (pricing.promoCodeError) {
@@ -580,9 +655,8 @@ export async function fulfillGuestEventPurchase(
   // checkout action stuffed into Stripe metadata. Mirrors the
   // student-side path so promo codes used by guests persist a frozen
   // `applied_discount` snapshot on the purchase row.
-  const { deserializePricingFromStripe } = await import("@/lib/services/pricing-service");
-  const rawPricing = metadata.bpm_pricing_snapshot;
-  const frozen = rawPricing ? await deserializePricingFromStripe(rawPricing) : null;
+  // Phase 15 — also rehydrates the frozen VAT breakdown.
+  const frozen = await rehydrateFrozenPricing(metadata, product?.priceCents ?? 0);
 
   const result = await createPurchase({
     studentId: null,
@@ -666,15 +740,16 @@ export async function fulfillEventPurchase(
   // webhook NEVER re-runs the engine — it persists exactly what was
   // calculated when the session was opened, even if the rule was
   // edited or deleted in the interim.
-  const { deserializePricingFromStripe } = await import("@/lib/services/pricing-service");
-  const rawPricing = metadata.bpm_pricing_snapshot;
-  const frozen = rawPricing ? await deserializePricingFromStripe(rawPricing) : null;
-
   const [event, product, student] = await Promise.all([
     repo.getEventById(eventId).catch(() => null),
     repo.getProductsByEvent(eventId).then((ps) => ps.find((p) => p.id === eventProductId)).catch(() => null),
     import("@/lib/repositories").then((m) => m.getStudentRepo().getById(studentId)).catch(() => null),
   ]);
+
+  // Phase 15 — rehydrates the VAT breakdown alongside the discount
+  // snapshot, and covers full-price-with-VAT sessions that carry no
+  // discount blob at all.
+  const frozen = await rehydrateFrozenPricing(metadata, product?.priceCents ?? 0);
 
   const snapshot = product
     ? buildFinancialSnapshotFromFrozen(product, frozen, true)

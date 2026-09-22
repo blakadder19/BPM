@@ -626,9 +626,41 @@ export interface MockSubscription {
   manualDiscountReason: string | null;
   /** Auth user id of the admin who authorised the manual discount. */
   manualDiscountBy: string | null;
+  /**
+   * Phase 15 — frozen VAT breakdown, written at purchase time and
+   * never recomputed. All null on rows created before VAT tracking
+   * existed; null means "unknown", NOT "zero VAT charged".
+   * `priceCentsAtPurchase` remains the amount actually paid and
+   * equals `totalIncVatCents` whenever VAT applied.
+   */
+  subtotalExVatCents: number | null;
+  vatAmountCents: number | null;
+  vatRatePercent: number | null;
+  vatPriceMode: "exclusive" | "inclusive" | null;
+  totalIncVatCents: number | null;
 }
 
-export const SUBSCRIPTIONS: MockSubscription[] = [
+/**
+ * Phase 15 — seeded purchases predate VAT tracking, so they carry an
+ * all-null VAT snapshot, exactly like a real row written before the
+ * feature shipped. Deliberately NOT zeros: null means "no VAT
+ * information recorded", zero would mean "VAT was evaluated and came
+ * out at nothing", and reporting treats those differently.
+ */
+const NO_VAT_SNAPSHOT = {
+  subtotalExVatCents: null,
+  vatAmountCents: null,
+  vatRatePercent: null,
+  vatPriceMode: null,
+  totalIncVatCents: null,
+} satisfies Pick<
+  MockSubscription,
+  "subtotalExVatCents" | "vatAmountCents" | "vatRatePercent" | "vatPriceMode" | "totalIncVatCents"
+>;
+
+type SubscriptionSeed = Omit<MockSubscription, keyof typeof NO_VAT_SNAPSHOT>;
+
+const SUBSCRIPTION_SEEDS: SubscriptionSeed[] = [
   { id: "sub-01", studentId: "s-01", productId: "p-mem-gold-std", productName: "Gold Standard Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-30", validUntil: "2026-04-26", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "card", paymentStatus: "paid", assignedBy: null, assignedAt: "2026-03-25T10:00:00", autoRenew: true, classesUsed: 0, classesPerTerm: 12, renewedFromId: null, paidAt: "2026-03-25T10:00:00", paymentReference: null, paymentNotes: null, collectedBy: null, priceCentsAtPurchase: 17000, currencyAtPurchase: "EUR", refundedAt: null, refundedBy: null, refundReason: null, stripeRefundId: null, refundedAmountCents: 0, refundStatus: null, productSnapshot: null, originalPriceCents: null, discountAmountCents: 0, appliedDiscount: null, manualDiscountCents: 0, manualDiscountReason: null, manualDiscountBy: null },
   { id: "sub-02", studentId: "s-02", productId: "p-mem-silver-bach", productName: "Silver Bachata Membership", productType: "membership", status: "active", totalCredits: null, remainingCredits: null, validFrom: "2026-03-30", validUntil: "2026-04-26", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: "term-1", paymentMethod: "cash", paymentStatus: "paid", assignedBy: null, assignedAt: "2026-03-25T11:30:00", autoRenew: true, classesUsed: 0, classesPerTerm: 8, renewedFromId: null, paidAt: "2026-03-25T11:30:00", paymentReference: null, paymentNotes: null, collectedBy: null, priceCentsAtPurchase: 12000, currencyAtPurchase: "EUR", refundedAt: null, refundedBy: null, refundReason: null, stripeRefundId: null, refundedAmountCents: 0, refundStatus: null, productSnapshot: null, originalPriceCents: null, discountAmountCents: 0, appliedDiscount: null, manualDiscountCents: 0, manualDiscountReason: null, manualDiscountBy: null },
   { id: "sub-03", studentId: "s-03", productId: "p-beg12", productName: "Beginners 1 & 2 Promo Pass", productType: "pass", status: "active", totalCredits: 8, remainingCredits: 6, validFrom: "2026-03-30", validUntil: "2026-05-24", selectedStyleId: "ds-1", selectedStyleName: "Bachata", selectedStyleIds: null, selectedStyleNames: null, notes: "Selected Bachata as promo style.", termId: "term-1", paymentMethod: "card", paymentStatus: "paid", assignedBy: null, assignedAt: "2026-03-25T14:00:00", autoRenew: false, classesUsed: 0, classesPerTerm: null, renewedFromId: null, paidAt: "2026-03-25T14:00:00", paymentReference: null, paymentNotes: null, collectedBy: null, priceCentsAtPurchase: 10000, currencyAtPurchase: "EUR", refundedAt: null, refundedBy: null, refundReason: null, stripeRefundId: null, refundedAmountCents: 0, refundStatus: null, productSnapshot: null, originalPriceCents: null, discountAmountCents: 0, appliedDiscount: null, manualDiscountCents: 0, manualDiscountReason: null, manualDiscountBy: null },
@@ -645,6 +677,11 @@ export const SUBSCRIPTIONS: MockSubscription[] = [
   { id: "sub-h05", studentId: "s-03", productId: "p-dropin", productName: "Drop In", productType: "drop_in", status: "exhausted", totalCredits: 1, remainingCredits: 0, validFrom: "2026-02-10", validUntil: null, selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: "Trial class before buying pass.", termId: null, paymentMethod: "cash", paymentStatus: "paid", assignedBy: null, assignedAt: "2026-02-10T09:00:00", autoRenew: false, classesUsed: 1, classesPerTerm: null, renewedFromId: null, paidAt: "2026-02-10T09:00:00", paymentReference: null, paymentNotes: null, collectedBy: null, priceCentsAtPurchase: 1500, currencyAtPurchase: "EUR", refundedAt: null, refundedBy: null, refundReason: null, stripeRefundId: null, refundedAmountCents: 0, refundStatus: null, productSnapshot: null, originalPriceCents: null, discountAmountCents: 0, appliedDiscount: null, manualDiscountCents: 0, manualDiscountReason: null, manualDiscountBy: null },
   { id: "sub-h06", studentId: "s-04", productId: "p-mem-bronze-std", productName: "Bronze Standard Membership", productType: "membership", status: "expired", totalCredits: null, remainingCredits: null, validFrom: "2026-02-03", validUntil: "2026-03-29", selectedStyleId: null, selectedStyleName: null, selectedStyleIds: null, selectedStyleNames: null, notes: null, termId: null, paymentMethod: "bank_transfer", paymentStatus: "paid", assignedBy: null, assignedAt: "2026-01-31T16:00:00", autoRenew: false, classesUsed: 4, classesPerTerm: 4, renewedFromId: null, paidAt: "2026-01-31T16:00:00", paymentReference: null, paymentNotes: null, collectedBy: null, priceCentsAtPurchase: 6500, currencyAtPurchase: "EUR", refundedAt: null, refundedBy: null, refundReason: null, stripeRefundId: null, refundedAmountCents: 0, refundStatus: null, productSnapshot: null, originalPriceCents: null, discountAmountCents: 0, appliedDiscount: null, manualDiscountCents: 0, manualDiscountReason: null, manualDiscountBy: null },
 ];
+
+export const SUBSCRIPTIONS: MockSubscription[] = SUBSCRIPTION_SEEDS.map((s) => ({
+  ...s,
+  ...NO_VAT_SNAPSHOT,
+}));
 
 // ── Wallet Transactions ─────────────────────────────────────
 
@@ -794,6 +831,17 @@ export interface MockEventPurchase {
   lastEmailType: string | null;
   lastEmailSentAt: string | null;
   lastEmailSuccess: boolean | null;
+  /**
+   * Phase 15 — frozen VAT breakdown. All null on rows created before
+   * VAT tracking existed; null means "unknown", NOT "zero VAT".
+   * `paidAmountCents` remains the amount actually paid and equals
+   * `totalIncVatCents` whenever VAT applied.
+   */
+  subtotalExVatCents: number | null;
+  vatAmountCents: number | null;
+  vatRatePercent: number | null;
+  vatPriceMode: "exclusive" | "inclusive" | null;
+  totalIncVatCents: number | null;
 }
 
 export const SPECIAL_EVENTS: MockSpecialEvent[] = [
@@ -1070,10 +1118,17 @@ export const DISCOUNT_RULES: MockDiscountRule[] = [
   },
 ];
 
-export const EVENT_PURCHASES: MockEventPurchase[] = [
+type EventPurchaseSeed = Omit<MockEventPurchase, keyof typeof NO_VAT_SNAPSHOT>;
+
+const EVENT_PURCHASE_SEEDS: EventPurchaseSeed[] = [
   { id: "epur-1", studentId: "s-01", eventProductId: "ep-1", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "stripe", paymentStatus: "paid", paymentReference: "stripe:cs_evt_001", receptionMethod: null, purchasedAt: "2026-04-05T14:00:00", paidAt: "2026-04-05T14:00:00", notes: null, unitPriceCentsAtPurchase: 12000, originalAmountCents: 12000, discountAmountCents: 0, paidAmountCents: 12000, currency: "eur", productNameSnapshot: "Full Weekend Pass", productTypeSnapshot: "full_pass", appliedDiscount: null, checkedInAt: null, checkedInBy: null, refundedAt: null, refundedBy: null, refundReason: null, stripeRefundId: null, refundedAmountCents: 0, refundStatus: null, lastEmailType: null, lastEmailSentAt: null, lastEmailSuccess: null },
   { id: "epur-2", studentId: "s-03", eventProductId: "ep-2", eventId: "evt-1", guestName: null, guestEmail: null, guestPhone: null, qrToken: null, paymentMethod: "manual", paymentStatus: "pending", paymentReference: null, receptionMethod: null, purchasedAt: "2026-04-06T10:00:00", paidAt: null, notes: "Will pay at reception", unitPriceCentsAtPurchase: 7500, originalAmountCents: 7500, discountAmountCents: 0, paidAmountCents: 0, currency: "eur", productNameSnapshot: "Saturday Pass", productTypeSnapshot: "combo_pass", appliedDiscount: null, checkedInAt: null, checkedInBy: null, refundedAt: null, refundedBy: null, refundReason: null, stripeRefundId: null, refundedAmountCents: 0, refundStatus: null, lastEmailType: null, lastEmailSentAt: null, lastEmailSuccess: null },
 ];
+
+export const EVENT_PURCHASES: MockEventPurchase[] = EVENT_PURCHASE_SEEDS.map((p) => ({
+  ...p,
+  ...NO_VAT_SNAPSHOT,
+}));
 
 // ── Referrals (Phase 3) ─────────────────────────────────────
 

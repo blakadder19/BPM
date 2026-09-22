@@ -8,6 +8,7 @@ import {
   type AppSettings,
 } from "@/lib/services/settings-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { validateVatRatePercent } from "@/lib/domain/vat";
 import { CLASS_LEVEL_NAMES } from "@/config/class-levels";
 import type { ProductType } from "@/types/domain";
 
@@ -124,6 +125,49 @@ export async function saveSettings(
     beginnerIntakeBookingWeeks = raw;
   }
 
+  // --- Finance & VAT (Phase 15) ---
+  // Uses the same hidden-sentinel pattern as the beginner intake block
+  // so a partial form post can never silently reset VAT config. When
+  // the card was not rendered we preserve every persisted VAT value.
+  const vatFormPresent = formData.get("__vatFormPresent") === "1";
+  let vatPatch: Partial<AppSettings> = {};
+  if (vatFormPresent) {
+    const vatEnabled = formData.get("vatEnabled") === "on";
+
+    const rateRaw = Number(formData.get("vatRatePercent"));
+    const rateCheck = validateVatRatePercent(rateRaw);
+    if (!rateCheck.ok) {
+      return { success: false, settings: getSettings(), error: rateCheck.message };
+    }
+
+    const modeRaw = (formData.get("vatPriceMode") as string) ?? "exclusive";
+    if (modeRaw !== "exclusive" && modeRaw !== "inclusive") {
+      return {
+        success: false,
+        settings: getSettings(),
+        error: "VAT price mode must be either exclusive or inclusive.",
+      };
+    }
+
+    // Guard against the confusing state of "VAT enabled, rate 0" which
+    // would render a €0.00 VAT line on every receipt for no reason.
+    if (vatEnabled && rateCheck.ratePercent === 0) {
+      return {
+        success: false,
+        settings: getSettings(),
+        error: "Set a VAT rate above 0% before enabling VAT.",
+      };
+    }
+
+    vatPatch = {
+      vatEnabled,
+      vatRatePercent: rateCheck.ratePercent,
+      vatPriceMode: modeRaw,
+      applyVatToOnlinePayments: formData.get("applyVatToOnlinePayments") === "on",
+      applyVatToManualPayments: formData.get("applyVatToManualPayments") === "on",
+    };
+  }
+
   // --- Booleans (checkbox: present = "on" = true, absent = false) ---
   const booleanFields = {
     lateCancelPenaltiesEnabled: formData.get("lateCancelPenaltiesEnabled") === "on",
@@ -175,6 +219,7 @@ export async function saveSettings(
     ...(beginnerIntakeBookingWeeks !== null
       ? { beginnerIntakeBookingWeeks }
       : {}),
+    ...vatPatch,
   };
 
   const updated = await updateSettings(patch);
@@ -182,5 +227,6 @@ export async function saveSettings(
   revalidatePath("/penalties");
   revalidatePath("/catalog");
   revalidatePath("/classes");
+  revalidatePath("/finance");
   return { success: true, settings: updated };
 }

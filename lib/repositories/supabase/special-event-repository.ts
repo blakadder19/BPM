@@ -128,6 +128,13 @@ function toPurchase(r: any): MockEventPurchase {
     productNameSnapshot: r.product_name_snapshot ?? null,
     productTypeSnapshot: r.product_type_snapshot ?? null,
     appliedDiscount: r.applied_discount ?? null,
+    // Phase 15 VAT — `?? null` (never `?? 0`) so a legacy row stays
+    // distinguishable from one where VAT came out at zero.
+    subtotalExVatCents: r.subtotal_ex_vat_cents ?? null,
+    vatAmountCents: r.vat_amount_cents ?? null,
+    vatRatePercent: r.vat_rate_percent != null ? Number(r.vat_rate_percent) : null,
+    vatPriceMode: r.vat_price_mode ?? null,
+    totalIncVatCents: r.total_inc_vat_cents ?? null,
     checkedInAt: r.checked_in_at ?? null,
     checkedInBy: r.checked_in_by ?? null,
     refundedAt: r.refunded_at ?? null,
@@ -402,6 +409,11 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
         product_name_snapshot: input.productNameSnapshot ?? null,
         product_type_snapshot: input.productTypeSnapshot ?? null,
         applied_discount: input.appliedDiscount ?? null,
+        subtotal_ex_vat_cents: input.subtotalExVatCents ?? null,
+        vat_amount_cents: input.vatAmountCents ?? null,
+        vat_rate_percent: input.vatRatePercent ?? null,
+        vat_price_mode: input.vatPriceMode ?? null,
+        total_inc_vat_cents: input.totalIncVatCents ?? null,
       } as never)
       .select()
       .single();

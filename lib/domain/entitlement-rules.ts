@@ -8,6 +8,12 @@ import type { ProductAccessRule, StyleAccess } from "@/config/product-access";
 import type { MockSubscription } from "@/lib/mock-data";
 import type { TermLike } from "./term-rules";
 import { resolveAccessRuleForSubscription } from "./subscription-snapshot";
+import { getTodayStr } from "./datetime";
+import {
+  isSubscriptionUsable,
+  usableRemainingCredits,
+  getCreditSnapshot,
+} from "./credit-availability";
 
 export interface ClassContext {
   classType: ClassType;
@@ -93,9 +99,23 @@ export function isEntitlementValidForClass(
   sub: MockSubscription,
   cls: ClassContext,
   terms: TermLike[],
-  accessRule: ProductAccessRule | undefined
+  accessRule: ProductAccessRule | undefined,
+  /**
+   * Phase 16 — "now" for the expiry check. Defaults to the real
+   * today; tests and deterministic replays pass it explicitly.
+   */
+  today: string = getTodayStr(),
 ): boolean {
   if (sub.status !== "active") return false;
+
+  // Phase 16 — the entitlement must be usable RIGHT NOW, not merely
+  // cover the class date. Without this, a pass whose term ended
+  // yesterday could still be spent on a class that fell inside its
+  // old window, and — more importantly — a row that lifecycle has
+  // not yet flipped to `expired` would still read as bookable.
+  // Booking enforcement must not depend on a nightly job having run.
+  if (!isSubscriptionUsable(sub, today)) return false;
+
   if (cls.date < sub.validFrom) return false;
   if (sub.validUntil && cls.date > sub.validUntil) return false;
   if (!hasRemainingUsage(sub)) return false;
@@ -111,7 +131,8 @@ export function getValidEntitlements(
   subscriptions: MockSubscription[],
   cls: ClassContext,
   terms: TermLike[],
-  accessRulesMap: Map<string, ProductAccessRule>
+  accessRulesMap: Map<string, ProductAccessRule>,
+  today: string = getTodayStr(),
 ): ValidEntitlement[] {
   return subscriptions
     .filter((sub) =>
@@ -121,10 +142,11 @@ export function getValidEntitlements(
         terms,
         // Phase 1: prefer the frozen-at-purchase snapshot when present;
         // fall back to the live access rule for legacy subscriptions.
-        resolveAccessRuleForSubscription(sub, accessRulesMap)
+        resolveAccessRuleForSubscription(sub, accessRulesMap),
+        today,
       )
     )
-    .map((sub) => toValidEntitlement(sub));
+    .map((sub) => toValidEntitlement(sub, today));
 }
 
 /**
@@ -134,10 +156,24 @@ export function getValidEntitlements(
 export function diagnoseNoEntitlement(
   subscriptions: MockSubscription[],
   cls: ClassContext,
-  accessRulesMap: Map<string, ProductAccessRule>
+  accessRulesMap: Map<string, ProductAccessRule>,
+  today: string = getTodayStr(),
 ): string {
   if (subscriptions.length === 0) {
     return "You need a membership, pass, or drop-in to book classes.";
+  }
+
+  // Phase 16 — when the block is specifically "your pass ended and you
+  // still had credits on it", say so plainly. Otherwise a student
+  // whose dashboard showed leftover credits yesterday gets a vague
+  // message today and assumes it is a bug.
+  const lapsedWithCredits = subscriptions
+    .map((s) => ({ sub: s, snap: getCreditSnapshot(s, today) }))
+    .find(({ snap }) => snap.isPastValidity && (snap.historicalRemaining ?? 0) > 0);
+  if (lapsedWithCredits) {
+    const { sub, snap } = lapsedWithCredits;
+    const noun = snap.model === "class_count" ? "classes" : "credits";
+    return `${sub.productName} ended on ${snap.expiredOn}. The ${snap.historicalRemaining} unused ${noun} expired with it and cannot be used for this class. Buy a new pass or drop-in to book.`;
   }
 
   // Separate subscriptions into "currently in date window" vs "not yet active / expired"
@@ -219,31 +255,41 @@ export function diagnoseNoEntitlement(
   return "No matching plan for this class. Browse available products to get started.";
 }
 
-export function toValidEntitlement(sub: MockSubscription): ValidEntitlement {
+export function toValidEntitlement(
+  sub: MockSubscription,
+  today: string = getTodayStr(),
+): ValidEntitlement {
+  // A ValidEntitlement only ever describes something the student CAN
+  // book, so the credit figures here are the USABLE ones. Historical
+  // leftovers belong on the history surfaces, not on a booking picker.
+  const usable = usableRemainingCredits(sub, today);
   return {
     subscriptionId: sub.id,
     productName: sub.productName,
     productType: sub.productType,
-    description: describeEntitlement(sub),
+    description: describeEntitlement(sub, today),
     classesUsed: sub.classesUsed,
     classesPerTerm: sub.classesPerTerm,
-    remainingCredits: sub.remainingCredits,
+    remainingCredits: sub.remainingCredits === null ? null : usable,
     totalCredits: sub.totalCredits,
     validUntil: sub.validUntil ?? null,
     isBirthdayBenefit: false,
   };
 }
 
-export function describeEntitlement(sub: MockSubscription): string {
+export function describeEntitlement(
+  sub: MockSubscription,
+  today: string = getTodayStr(),
+): string {
+  const usable = usableRemainingCredits(sub, today) ?? 0;
   if (sub.productType === "membership" && sub.classesPerTerm !== null) {
-    const remaining = sub.classesPerTerm - sub.classesUsed;
-    return `${sub.productName} — ${remaining} of ${sub.classesPerTerm} classes left`;
+    return `${sub.productName} — ${usable} of ${sub.classesPerTerm} classes left`;
   }
   if (sub.productType === "drop_in") {
-    return `${sub.productName} — ${sub.remainingCredits ?? 0} use`;
+    return `${sub.productName} — ${usable} use`;
   }
   if (sub.remainingCredits !== null) {
-    return `${sub.productName} — ${sub.remainingCredits} credits left`;
+    return `${sub.productName} — ${usable} credits left`;
   }
   return sub.productName;
 }

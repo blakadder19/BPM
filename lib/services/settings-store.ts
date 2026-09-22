@@ -26,6 +26,11 @@ import {
   WAITLIST_OFFER_EXPIRY_HOURS,
   TERM_PURCHASE_WINDOW_DAYS,
   CREDIT_DEDUCTION_PRIORITY,
+  VAT_ENABLED_DEFAULT,
+  VAT_RATE_PERCENT_DEFAULT,
+  VAT_PRICE_MODE_DEFAULT,
+  VAT_APPLY_TO_ONLINE_DEFAULT,
+  VAT_APPLY_TO_MANUAL_DEFAULT,
 } from "@/config/business-rules";
 import { DEFAULT_BEGINNER_LEVEL_NAMES } from "@/config/class-levels";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
@@ -97,6 +102,37 @@ export interface AppSettings {
    */
   beginnerIntakeBookingWeeks: number;
 
+  // Finance & VAT (Phase 15)
+  /**
+   * Master switch. When false, every purchase path behaves exactly as
+   * it did before VAT existed: no VAT is calculated, no VAT line is
+   * rendered, and no VAT columns are written. Default false.
+   */
+  vatEnabled: boolean;
+  /**
+   * VAT rate as a percentage. Supports 2 decimal places so reduced
+   * rates (Ireland's 13.5%, 9%) work. Validated 0–100 server-side.
+   * Never hardcoded anywhere in the codebase.
+   */
+  vatRatePercent: number;
+  /**
+   * How to interpret the price stored on a product:
+   *   "exclusive" — stored price is NET; VAT is added on top, so the
+   *                 customer pays more than the list price.
+   *   "inclusive" — stored price is GROSS; the VAT portion is backed
+   *                 out of it, so the customer pays the list price.
+   */
+  vatPriceMode: "exclusive" | "inclusive";
+  /** Apply VAT to Stripe/card payments. Default true (once VAT is on). */
+  applyVatToOnlinePayments: boolean;
+  /**
+   * Apply VAT to reception/manual payments (cash, card machine, bank
+   * transfer, Revolut, admin assignment). Default FALSE so enabling
+   * VAT for online checkout can never silently change what reception
+   * charges at the desk.
+   */
+  applyVatToManualPayments: boolean;
+
   // Admin alert preferences
   disabledAlertIds: string[];
 
@@ -141,6 +177,12 @@ function defaults(): AppSettings {
     beginnerLevelNames: [...DEFAULT_BEGINNER_LEVEL_NAMES],
     allowBeginnerNextTermAdvanceBooking: true,
     beginnerIntakeBookingWeeks: 2,
+
+    vatEnabled: VAT_ENABLED_DEFAULT,
+    vatRatePercent: VAT_RATE_PERCENT_DEFAULT,
+    vatPriceMode: VAT_PRICE_MODE_DEFAULT,
+    applyVatToOnlinePayments: VAT_APPLY_TO_ONLINE_DEFAULT,
+    applyVatToManualPayments: VAT_APPLY_TO_MANUAL_DEFAULT,
 
     disabledAlertIds: [],
 

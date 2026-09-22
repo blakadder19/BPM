@@ -7,6 +7,8 @@
 
 import { resolveSubscription } from "@/lib/domain/credit-rules";
 import type { ActiveSubscription } from "@/lib/domain/credit-rules";
+import { isSubscriptionUsable } from "@/lib/domain/credit-availability";
+import { getTodayStr } from "@/lib/domain/datetime";
 import type { ProductAccessRule } from "@/config/product-access";
 import { generateId } from "@/lib/utils";
 import type { ClassType, ProductType, SubscriptionStatus, TxType } from "@/types/domain";
@@ -93,9 +95,16 @@ export class CreditService {
     accessRules?: Map<string, ProductAccessRule>;
     /** Phase 2B: runtime priority override (settings.creditDeductionPriority). */
     deductionPriority?: CreditPriorityOverride;
+    /** Phase 16: "now" for the expiry check. Defaults to the real today. */
+    today?: string;
   }): CreditDeductionResult {
+    // Phase 16 — `status === "active"` alone is not enough: a row
+    // whose term ended yesterday still reads active until the nightly
+    // lifecycle job flips it. Filter on the validity window too so an
+    // expired pass can never fund a booking or a penalty deduction.
+    const today = params.today ?? getTodayStr();
     const studentSubs = this.subscriptions.filter(
-      (s) => s.studentId === params.studentId && s.status === "active"
+      (s) => s.studentId === params.studentId && isSubscriptionUsable(s, today),
     );
 
     if (studentSubs.length === 0) {
@@ -213,9 +222,20 @@ export class CreditService {
 
   // ── Queries ─────────────────────────────────────────────────
 
-  getActiveSubscriptionsForStudent(studentId: string): StoredSubscription[] {
+  /**
+   * Subscriptions that can currently fund something — used by the
+   * penalty path to decide whether a late-cancel/no-show can be paid
+   * with a credit instead of a fee.
+   *
+   * Phase 16: filters on the validity window as well as status, so an
+   * expired pass's leftover credits are never taken as a penalty.
+   */
+  getActiveSubscriptionsForStudent(
+    studentId: string,
+    today: string = getTodayStr(),
+  ): StoredSubscription[] {
     return this.subscriptions.filter(
-      (s) => s.studentId === studentId && s.status === "active"
+      (s) => s.studentId === studentId && isSubscriptionUsable(s, today),
     );
   }
 

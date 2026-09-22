@@ -2,6 +2,14 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { CreditService, type StoredSubscription } from "../credit-service";
 import { getAccessRulesMap } from "@/config/product-access";
 
+/**
+ * Phase 16 -- deductForBooking now enforces the validity window, so
+ * these tests pin "today" inside the fixture window (2026-03-01 to
+ * 2026-03-31). Previously they relied on the real clock, which made
+ * them silently start failing once that month passed.
+ */
+const TODAY = "2026-03-15";
+
 function makeSub(overrides: Partial<StoredSubscription> & { id: string }): StoredSubscription {
   return {
     studentId: "s-1",
@@ -33,6 +41,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-1",
         level: "Beginner 1",
         className: "Bachata Beginner 1",
+        today: TODAY,
       });
 
       expect(result.deducted).toBe(true);
@@ -61,6 +70,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-6",
         level: "Open",
         className: "Reggaeton Open",
+        today: TODAY,
       });
 
       expect(result.deducted).toBe(true);
@@ -92,6 +102,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-1",
         level: "Beginner 1",
         className: "Bachata Beginner 1",
+        today: TODAY,
       });
 
       expect(result.deducted).toBe(true);
@@ -120,6 +131,7 @@ describe("CreditService", () => {
         level: "Beginner 1",
         className: "Cuban Beginner 1",
         accessRules: getAccessRulesMap(),
+        today: TODAY,
       });
 
       expect(result.deducted).toBe(true);
@@ -149,6 +161,7 @@ describe("CreditService", () => {
         level: "Beginner 1",
         className: "Bachata Beginner 1",
         accessRules: rules,
+        today: TODAY,
       });
       expect(bachata.deducted).toBe(true);
 
@@ -160,6 +173,7 @@ describe("CreditService", () => {
         level: "Beginner 1",
         className: "Cuban Beginner 1",
         accessRules: rules,
+        today: TODAY,
       });
       expect(cuban.deducted).toBe(false);
       expect(cuban.reason).toContain("No subscription covers");
@@ -175,6 +189,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-1",
         level: "Beginner 1",
         className: "Bachata Beginner 1",
+        today: TODAY,
       });
 
       expect(result.deducted).toBe(false);
@@ -200,6 +215,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-1",
         level: "Beginner 1",
         className: "Bachata Beginner 1",
+        today: TODAY,
       });
 
       expect(result.deducted).toBe(false);
@@ -217,6 +233,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-1",
         level: "Beginner 1",
         className: "Bachata Beginner 1",
+        today: TODAY,
       });
 
       expect(result.deducted).toBe(false);
@@ -242,6 +259,7 @@ describe("CreditService", () => {
         danceStyleId: "ds-1",
         level: "Beginner 1",
         className: "Bachata Beginner 1",
+        today: TODAY,
       });
 
       const tx = service.walletTxs[0];
@@ -320,6 +338,64 @@ describe("CreditService", () => {
     });
   });
 
+  // ── Phase 16: end-of-term credit expiry ───────────────────
+  describe("expired entitlements cannot fund a booking", () => {
+    it("refuses to deduct from a pass whose term has ended, leaving credits intact", () => {
+      const service = new CreditService([
+        makeSub({
+          id: "sub-1",
+          productId: "p-dropin",
+          productName: "Silver Class Pass",
+          productType: "drop_in",
+          totalCredits: 8,
+          remainingCredits: 5,
+        }),
+      ]);
+
+      const result = service.deductForBooking({
+        studentId: "s-1",
+        bookingId: "b-1",
+        classType: "class",
+        danceStyleId: "ds-6",
+        level: "Open",
+        className: "Reggaeton Open",
+        // Fixture window ends 2026-03-31; this is the next term.
+        today: "2026-04-15",
+      });
+
+      expect(result.deducted).toBe(false);
+      // History preserved — the 5 unused credits are still recorded.
+      expect(service.subscriptions[0].remainingCredits).toBe(5);
+      expect(service.subscriptions[0].totalCredits).toBe(8);
+      expect(service.walletTxs).toHaveLength(0);
+    });
+
+    it("still allows a deduction on the final day of the window", () => {
+      const service = new CreditService([
+        makeSub({
+          id: "sub-1",
+          productId: "p-dropin",
+          productType: "drop_in",
+          totalCredits: 8,
+          remainingCredits: 5,
+        }),
+      ]);
+
+      const result = service.deductForBooking({
+        studentId: "s-1",
+        bookingId: "b-1",
+        classType: "class",
+        danceStyleId: "ds-6",
+        level: "Open",
+        className: "Reggaeton Open",
+        today: "2026-03-31",
+      });
+
+      expect(result.deducted).toBe(true);
+      expect(service.subscriptions[0].remainingCredits).toBe(4);
+    });
+  });
+
   describe("queries", () => {
     let service: CreditService;
 
@@ -332,7 +408,7 @@ describe("CreditService", () => {
     });
 
     it("getActiveSubscriptionsForStudent returns only active subs", () => {
-      const subs = service.getActiveSubscriptionsForStudent("s-1");
+      const subs = service.getActiveSubscriptionsForStudent("s-1", TODAY);
       expect(subs).toHaveLength(1);
       expect(subs[0].id).toBe("sub-1");
     });
@@ -340,6 +416,13 @@ describe("CreditService", () => {
     it("getAllSubscriptionsForStudent returns all subs", () => {
       const subs = service.getAllSubscriptionsForStudent("s-1");
       expect(subs).toHaveLength(2);
+    });
+
+    // Phase 16 — expiry must be enforced here even when the nightly
+    // lifecycle job has not yet flipped the row's status.
+    it("excludes a still-'active' subscription whose validity window has passed", () => {
+      const subs = service.getActiveSubscriptionsForStudent("s-1", "2026-04-15");
+      expect(subs).toHaveLength(0);
     });
 
     it("getSubscriptionById finds the right subscription", () => {

@@ -53,6 +53,16 @@ export interface PreviewEventPromoCodeResult {
   basePriceCents?: number;
   discountAmountCents?: number;
   finalPriceCents?: number;
+  /**
+   * Phase 15 — VAT on the discounted amount, so the UI can render
+   * Subtotal / Discount / VAT / Total. Display-only: the authoritative
+   * figures are recomputed server-side at checkout creation.
+   * `vatAmountCents` is 0 and `vatApplied` false when VAT is off.
+   */
+  vatAmountCents?: number;
+  vatRatePercent?: number;
+  totalIncVatCents?: number;
+  vatApplied?: boolean;
 }
 
 export async function previewEventPromoCodeAction(
@@ -128,6 +138,10 @@ export async function previewEventPromoCodeAction(
     basePriceCents: pricing.basePriceCents,
     discountAmountCents: pricing.totalDiscountCents,
     finalPriceCents: pricing.finalPriceCents,
+    vatAmountCents: pricing.vat.vatAmountCents,
+    vatRatePercent: pricing.vat.vatRatePercent,
+    totalIncVatCents: pricing.vat.totalIncVatCents,
+    vatApplied: pricing.vat.vatApplied,
   };
 }
 

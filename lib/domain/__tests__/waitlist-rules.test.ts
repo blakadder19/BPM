@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { findPromotionCandidate, reindexPositions, type WaitingEntry } from "../waitlist-rules";
+import {
+  findPromotionCandidate,
+  findIneligibleCandidates,
+  reindexPositions,
+  type WaitingEntry,
+} from "../waitlist-rules";
 import type { BookableClassCapacity } from "../booking-rules";
 
 function makeCapacity(overrides: Partial<BookableClassCapacity> = {}): BookableClassCapacity {
@@ -103,6 +108,100 @@ describe("findPromotionCandidate", () => {
     ];
     const result = findPromotionCandidate(entries, "leader", makeCapacity());
     expect(result!.reason).toContain("#3");
+  });
+
+  // ── Phase 16.1: entitlement eligibility ──────────────────
+
+  describe("entitlement eligibility gate", () => {
+    const eligibleOnly = (ids: string[]) => (e: WaitingEntry) => ids.includes(e.id);
+
+    it("promotes the first candidate when everyone is eligible", () => {
+      const entries: WaitingEntry[] = [
+        makeEntry({ id: "wl-1", danceRole: "leader", position: 1 }),
+        makeEntry({ id: "wl-2", danceRole: "leader", position: 2 }),
+      ];
+      const result = findPromotionCandidate(
+        entries,
+        "leader",
+        makeCapacity(),
+        eligibleOnly(["wl-1", "wl-2"]),
+      );
+      expect(result!.promoted.id).toBe("wl-1");
+      expect(result!.skippedIneligible).toEqual([]);
+    });
+
+    it("skips an ineligible candidate and promotes the next one", () => {
+      const entries: WaitingEntry[] = [
+        makeEntry({ id: "wl-1", danceRole: "leader", position: 1 }),
+        makeEntry({ id: "wl-2", danceRole: "leader", position: 2 }),
+      ];
+      const result = findPromotionCandidate(
+        entries,
+        "leader",
+        makeCapacity(),
+        eligibleOnly(["wl-2"]),
+      );
+      expect(result!.promoted.id).toBe("wl-2");
+      expect(result!.skippedIneligible.map((e) => e.id)).toEqual(["wl-1"]);
+    });
+
+    it("returns null when every candidate is ineligible", () => {
+      const entries: WaitingEntry[] = [
+        makeEntry({ id: "wl-1", danceRole: "leader", position: 1 }),
+        makeEntry({ id: "wl-2", danceRole: "leader", position: 2 }),
+      ];
+      const result = findPromotionCandidate(
+        entries,
+        "leader",
+        makeCapacity(),
+        eligibleOnly([]),
+      );
+      expect(result).toBeNull();
+    });
+
+    it("skips past several ineligible candidates in position order", () => {
+      const entries: WaitingEntry[] = [
+        makeEntry({ id: "wl-1", danceRole: "leader", position: 1 }),
+        makeEntry({ id: "wl-2", danceRole: "leader", position: 2 }),
+        makeEntry({ id: "wl-3", danceRole: "leader", position: 3 }),
+      ];
+      const result = findPromotionCandidate(
+        entries,
+        "leader",
+        makeCapacity(),
+        eligibleOnly(["wl-3"]),
+      );
+      expect(result!.promoted.id).toBe("wl-3");
+      expect(result!.skippedIneligible.map((e) => e.id)).toEqual(["wl-1", "wl-2"]);
+    });
+
+    it("omitting the predicate leaves the original behaviour intact", () => {
+      const entries: WaitingEntry[] = [makeEntry({ id: "wl-1", danceRole: "leader", position: 1 })];
+      const result = findPromotionCandidate(entries, "leader", makeCapacity());
+      expect(result!.promoted.id).toBe("wl-1");
+      expect(result!.skippedIneligible).toEqual([]);
+    });
+  });
+});
+
+describe("findIneligibleCandidates", () => {
+  it("lists waiting entries the predicate rejects, in position order", () => {
+    const entries: WaitingEntry[] = [
+      makeEntry({ id: "wl-2", position: 2 }),
+      makeEntry({ id: "wl-1", position: 1 }),
+      makeEntry({ id: "wl-3", position: 3 }),
+    ];
+    const result = findIneligibleCandidates(entries, (e) => e.id === "wl-3");
+    expect(result.map((e) => e.id)).toEqual(["wl-1", "wl-2"]);
+  });
+
+  it("ignores entries that are not waiting", () => {
+    const entries: WaitingEntry[] = [
+      makeEntry({ id: "wl-1", position: 1, status: "promoted" }),
+      makeEntry({ id: "wl-2", position: 2, status: "waiting" }),
+    ];
+    const result = findIneligibleCandidates(entries, () => false);
+    expect(result.map((e) => e.id)).toEqual(["wl-2"]);
   });
 });
 
