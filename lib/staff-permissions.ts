@@ -4,17 +4,38 @@ import { requireAuth, type AuthUser } from "@/lib/auth";
 import { getStaffRepo } from "@/lib/repositories";
 import {
   expandPermissions,
+  STAFF_ROLE_LABELS,
   type Permission,
   type StaffRoleKey,
   type StaffStatus,
 } from "@/lib/domain/permissions";
 
 /**
- * Resolved staff access for the current user.
+ * Resolved access for the current user.
  *
- * `permissions` is the EFFECTIVE permission set after expanding the
- * role preset against the per-user override. For super_admin it always
- * contains every permission key.
+ * ── Dual-role model (Phase 18) ─────────────────────────────
+ *
+ * BPM separates two orthogonal identities:
+ *
+ *   `users.role`        — the BASE account role. Owns student-facing
+ *                         functionality: Catalog, bookings as a
+ *                         customer, passes, credits, entitlements.
+ *   `staff_role_key` +  — the STAFF ACCESS layer. Owns admin/teacher
+ *   `staff_status`        tooling and is the sole source of
+ *   `staff_permissions`   permissions.
+ *
+ * A person can hold both at once. A dance teacher who also takes
+ * classes is the normal case at BPM, not an edge case: they book and
+ * pay as a student AND run check-in as a teacher.
+ *
+ * Before Phase 18 this resolver early-returned an empty permission
+ * set whenever `users.role === 'student'`, so `staff_role_key` was
+ * never even read for such a user. The workaround had been to flip
+ * `users.role` to 'teacher', which granted staff access but silently
+ * removed their student functionality. That trade-off is now gone.
+ *
+ * `permissions` is the EFFECTIVE set after expanding the role preset
+ * against the per-user override. For super_admin it contains every key.
  */
 export interface StaffAccess {
   user: AuthUser;
@@ -29,46 +50,57 @@ export interface StaffAccess {
    * to nudge admins to formally assign role keys.
    */
   isLegacyAdminFallback: boolean;
+  /**
+   * Phase 18 — the user holds the student base role, so student-only
+   * surfaces (Catalog, student entitlements) stay available to them
+   * even when they also carry staff permissions.
+   */
+  isStudent: boolean;
+  /**
+   * Phase 18 — the user has an ACTIVE staff grant and therefore a
+   * non-empty permission set. False for plain students and for staff
+   * whose grant has been disabled.
+   *
+   * Never infer staff access from `roleKey` alone: a disabled grant
+   * keeps its roleKey (so the Staff page can show "Teacher · Disabled")
+   * but must convey no permissions.
+   */
+  isStaff: boolean;
 }
 
-const STUDENT_ACCESS = (user: AuthUser): StaffAccess => ({
-  user,
-  roleKey: null,
-  status: "active",
-  permissions: new Set(),
-  isSuperAdmin: false,
-  isLegacyAdminFallback: false,
-});
-
 /**
- * Resolve staff access for the current request, deduplicated via
- * React.cache so multiple page/action calls share one DB read.
+ * Resolve access for the current request, deduplicated via React.cache
+ * so multiple page/action calls share one DB read.
  *
- * Priority:
- *   1. Students always get an empty permission set.
- *   2. If a staff row exists, its roleKey + override is the source of
- *      truth. `super_admin` short-circuits to ALL permissions.
- *   3. Legacy fallback: if no staff row but `users.role==='admin'`,
- *      treat the user as `super_admin`. This keeps the existing single
- *      admin working transparently after the migration.
- *   4. Otherwise (no staff row, role==='teacher') → no permissions.
+ * Resolution order:
+ *   1. Load the user's row. An ACTIVE `staff_role_key` is the
+ *      authoritative staff grant, evaluated regardless of base role —
+ *      this is what makes student + teacher work.
+ *   2. A DISABLED grant yields no permissions, but the roleKey is
+ *      still reported so admin UI can label it.
+ *   3. No staff grant → legacy fallback for `users.role` of
+ *      'admin' (→ super_admin) or 'teacher' (→ teacher preset), which
+ *      protects environments where migration 00059 hasn't run.
+ *   4. Otherwise → no staff permissions.
  *
- * Disabled status overrides everything: a disabled staff member has an
- * empty permission set even if their role would normally grant access.
+ * In every branch `isStudent` is derived independently from
+ * `users.role`, so student functionality is never a casualty of the
+ * staff resolution.
  */
 export const getStaffAccess = cache(async (): Promise<StaffAccess> => {
   const user = await requireAuth();
-  if (user.role === "student") return STUDENT_ACCESS(user);
+  const isStudent = user.role === "student";
 
   let row = null;
   try {
     row = await getStaffRepo().getStaff(user.id);
   } catch {
     // Repo may not be reachable in some unit-test contexts — fall
-    // through to the legacy admin fallback below.
+    // through to the legacy fallbacks below.
   }
 
-  if (row) {
+  if (row && row.roleKey !== null) {
+    // Disabled grant: keep the roleKey for labelling, grant nothing.
     if (row.status === "disabled") {
       return {
         user,
@@ -77,29 +109,46 @@ export const getStaffAccess = cache(async (): Promise<StaffAccess> => {
         permissions: new Set(),
         isSuperAdmin: false,
         isLegacyAdminFallback: false,
+        isStudent,
+        isStaff: false,
       };
     }
 
-    // CRITICAL: a row in `public.users` exists for every authenticated
-    // user, but only those with a non-null `staff_role_key` are formal
-    // staff. When the row has roleKey=null we must NOT skip the legacy
-    // fallback below — otherwise a pre-staff `users.role='admin'` user
-    // (whose row exists with roleKey=null because they signed up before
-    // migration 00059) would get permissions=[] and be locked out.
-    if (row.roleKey === null) {
-      // Fall through to the legacy fallback for users.role==='admin'/'teacher'.
-    } else {
-      const isSuper = row.roleKey === "super_admin";
+    // `pending` is also not an active grant. It exists so an admin can
+    // stage a role before the person accepts; treating it as live
+    // would hand out permissions nobody confirmed.
+    if (row.status !== "active") {
       return {
         user,
         roleKey: row.roleKey,
         status: row.status,
-        permissions: expandPermissions(row.roleKey, row.permissions),
-        isSuperAdmin: isSuper,
+        permissions: new Set(),
+        isSuperAdmin: false,
         isLegacyAdminFallback: false,
+        isStudent,
+        isStaff: false,
       };
     }
+
+    const isSuper = row.roleKey === "super_admin";
+    return {
+      user,
+      roleKey: row.roleKey,
+      status: row.status,
+      permissions: expandPermissions(row.roleKey, row.permissions),
+      isSuperAdmin: isSuper,
+      isLegacyAdminFallback: false,
+      isStudent,
+      isStaff: true,
+    };
   }
+
+  // No staff grant on the row (roleKey === null, or no row at all).
+  //
+  // A row in `public.users` exists for every authenticated user, so
+  // roleKey===null must fall through to the legacy fallbacks — a
+  // pre-migration `users.role='admin'` user would otherwise be locked
+  // out with permissions=[].
 
   // Legacy fallback: pre-existing role=admin without a staff_role_key.
   if (user.role === "admin") {
@@ -110,6 +159,8 @@ export const getStaffAccess = cache(async (): Promise<StaffAccess> => {
       permissions: expandPermissions("super_admin", null),
       isSuperAdmin: true,
       isLegacyAdminFallback: true,
+      isStudent: false,
+      isStaff: true,
     };
   }
 
@@ -126,9 +177,12 @@ export const getStaffAccess = cache(async (): Promise<StaffAccess> => {
       permissions: expandPermissions("teacher", null),
       isSuperAdmin: false,
       isLegacyAdminFallback: true,
+      isStudent: false,
+      isStaff: true,
     };
   }
 
+  // Plain student, or a base role with no staff grant at all.
   return {
     user,
     roleKey: null,
@@ -136,8 +190,46 @@ export const getStaffAccess = cache(async (): Promise<StaffAccess> => {
     permissions: new Set(),
     isSuperAdmin: false,
     isLegacyAdminFallback: false,
+    isStudent,
+    isStaff: false,
   };
 });
+
+// ── Display label ────────────────────────────────────────────
+
+/**
+ * Human label for the resolved identity, shown in the topbar badge
+ * and sidebar user card.
+ *
+ * Reads the RESOLVED access rather than `users.role`, which is what
+ * made a dual-role teacher previously read as a plain "Student".
+ *
+ *   plain student            → "Student"
+ *   student + teacher grant  → "Student · Teacher"
+ *   pure teacher / admin     → "Teacher" / "Admin"
+ *   super admin              → "Super Admin"
+ *   disabled grant           → base label only (no permissions to advertise)
+ */
+export function resolveRoleLabel(access: {
+  isStudent: boolean;
+  isStaff: boolean;
+  roleKey: StaffRoleKey | null;
+  user: { role: string };
+}): string {
+  const BASE: Record<string, string> = {
+    admin: "Admin",
+    teacher: "Teacher",
+    student: "Student",
+  };
+  const staffLabel =
+    access.isStaff && access.roleKey ? STAFF_ROLE_LABELS[access.roleKey] : null;
+
+  if (!staffLabel) return BASE[access.user.role] ?? access.user.role;
+  // Dual role: surface both, student first since it is the base
+  // account identity and explains why Catalog is present.
+  if (access.isStudent) return `Student · ${staffLabel}`;
+  return staffLabel;
+}
 
 export function hasPermission(access: StaffAccess, key: Permission): boolean {
   if (access.isSuperAdmin) return true;

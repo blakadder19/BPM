@@ -165,6 +165,16 @@ export function getPendingInviteByEmail(email: string): StaffInvite | null {
   return row ? { ...row, permissions: [...row.permissions] } : null;
 }
 
+/**
+ * Phase 18 — token lookup in ANY status, so the acceptance page can
+ * report the specific problem rather than a generic "not found".
+ */
+export function getInviteByToken(token: string): StaffInvite | null {
+  init();
+  const row = invites.find((i) => i.token === token);
+  return row ? { ...row, permissions: [...row.permissions] } : null;
+}
+
 export function createInvite(input: CreateStaffInviteInput): StaffInvite {
   init();
   // Drop any prior pending invite for the same email — keep things simple

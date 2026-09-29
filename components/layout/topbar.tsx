@@ -56,9 +56,14 @@ interface TopbarProps {
    * permission, so this is purely a UX hint).
    */
   canScan?: boolean;
+  /**
+   * Phase 18 — label derived from RESOLVED access, so a dual-role
+   * user reads "Student · Teacher" instead of the bare `users.role`.
+   */
+  roleLabel?: string;
 }
 
-export function Topbar({ user, alerts, devStudents, devStudentId, canScan }: TopbarProps) {
+export function Topbar({ user, alerts, devStudents, devStudentId, canScan, roleLabel }: TopbarProps) {
   const { unlocked: showControls } = useDevUnlock();
   const { open: openSidebar } = useSidebar();
 
@@ -86,7 +91,7 @@ export function Topbar({ user, alerts, devStudents, devStudentId, canScan }: Top
           <Menu className="h-5 w-5" />
         </button>
         <Badge variant={ROLE_BADGE[user.role] ?? "default"}>
-          {ROLE_LABELS[user.role] ?? user.role}
+          {roleLabel ?? ROLE_LABELS[user.role] ?? user.role}
         </Badge>
         {showControls && (
           <div className="hidden sm:flex items-center gap-2">

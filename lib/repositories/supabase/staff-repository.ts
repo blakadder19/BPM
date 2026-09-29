@@ -107,18 +107,35 @@ const STAFF_SELECT =
 export const supabaseStaffRepo: IStaffRepository = {
   async listStaff() {
     const supabase = createAdminClient();
-    // Filter out demo-cleanup rows produced by migration 00061: those
-    // have `staff_role_key = NULL` AND `staff_status = 'disabled'` and
-    // should disappear from /staff. Real disabled staff keep their
-    // `staff_role_key` set, so they still appear with a Disabled badge.
+    // Phase 18 — staff membership is determined by the STAFF GRANT,
+    // not by the base account role.
+    //
+    // This previously filtered `role IN ('admin','teacher')`, which
+    // meant a dual-role Student + Teacher never appeared on /staff at
+    // all: their base role is 'student'. The filter is now:
+    //
+    //   staff_role_key IS NOT NULL          ← any explicit grant,
+    //                                         whatever the base role
+    //   OR role IN ('admin','teacher')      ← legacy pre-00059 rows
+    //                                         that predate staff_role_key
+    //
+    // Plain students are excluded because they satisfy neither arm.
+    // Demo-cleanup rows from migration 00061 (staff_role_key NULL AND
+    // staff_status 'disabled' AND a legacy role) are filtered below;
+    // real disabled staff keep their staff_role_key and still appear
+    // with a Disabled badge.
     const { data, error } = await supabase
       .from("users")
       .select(STAFF_SELECT)
-      .in("role", ["admin", "teacher"] as never)
-      .or("staff_role_key.not.is.null,staff_status.neq.disabled")
+      .or("staff_role_key.not.is.null,role.in.(admin,teacher)")
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
-    return ((data ?? []) as unknown as UsersRow[]).map(rowToStaff);
+    const rows = ((data ?? []) as unknown as UsersRow[]).filter((r) => {
+      // Demo-cleanup guard: no grant AND explicitly disabled.
+      if (r.staff_role_key == null && r.staff_status === "disabled") return false;
+      return true;
+    });
+    return rows.map(rowToStaff);
   },
 
   async getStaff(id) {
@@ -193,6 +210,18 @@ export const supabaseStaffRepo: IStaffRepository = {
       .select("*")
       .ilike("email", email)
       .eq("status", "pending")
+      .maybeSingle();
+    return data ? rowToInvite(data as unknown as InviteRow) : null;
+  },
+
+  // Phase 18 — token lookup in ANY status, so /invite/[token] can
+  // distinguish "already accepted" from "revoked" from "never existed".
+  async getInviteByToken(token: string) {
+    const supabase = createAdminClient();
+    const { data } = await supabase
+      .from("staff_invites")
+      .select("*")
+      .eq("token", token)
       .maybeSingle();
     return data ? rowToInvite(data as unknown as InviteRow) : null;
   },

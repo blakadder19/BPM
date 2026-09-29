@@ -33,6 +33,18 @@ export interface Teacher {
   notes: string | null;
   category: TeacherCategory;
   isActive: boolean;
+  /**
+   * Phase 18 — optional link to the BPM account for this teacher.
+   *
+   * NULL for roster entries with no login (guest/visiting
+   * instructors) and for all pre-Phase-18 rows, which were never
+   * backfilled because matching by display name is unsafe.
+   *
+   * Staff PERMISSIONS are never derived from this field — see
+   * `users.staff_role_key`. This link exists so teacher-assignment
+   * screens can resolve a roster entry to an account reliably.
+   */
+  userId?: string | null;
 }
 
 const SEED_TEACHERS: Teacher[] = [
@@ -80,6 +92,7 @@ export function createTeacher(data: {
   notes: string | null;
   category?: TeacherCategory;
   isActive: boolean;
+  userId?: string | null;
 }): Teacher {
   const list = init();
   const t: Teacher = {
@@ -90,12 +103,88 @@ export function createTeacher(data: {
     notes: data.notes,
     category: data.category ?? null,
     isActive: data.isActive,
+    userId: data.userId ?? null,
   };
   list.push(t);
   return t;
 }
 
-type TeacherPatch = Partial<Pick<Teacher, "fullName" | "email" | "phone" | "notes" | "category" | "isActive">>;
+/**
+ * Phase 18 — link a BPM account to a teaching-roster entry.
+ *
+ * Called only when an admin explicitly ticks "Add to teaching roster"
+ * while granting Teacher staff access. Deliberately conservative:
+ *
+ *   1. Already linked to this user → no-op, returns true (idempotent,
+ *      so re-granting a role does not create duplicates).
+ *   2. An UNLINKED roster row with a matching email → adopt it. Email
+ *      is a real identifier; display name is not.
+ *   3. Otherwise → create a fresh roster entry linked to the account.
+ *
+ * It never matches on `fullName`. The seeded roster contains a bare
+ * "Guillermo" with `email: null`, and silently adopting that row on a
+ * name collision is precisely the kind of guess that produces wrong
+ * teacher assignments.
+ *
+ * Returns true when a row was created or linked.
+ */
+export async function linkTeacherRosterToUser(input: {
+  userId: string;
+  fullName: string;
+  email: string;
+}): Promise<boolean> {
+  const email = input.email.trim().toLowerCase();
+  const list = init();
+
+  // 1. Idempotency.
+  if (list.some((t) => t.userId === input.userId)) return true;
+
+  // 2. Adopt an unlinked entry with the same email.
+  const byEmail = list.find(
+    (t) => !t.userId && (t.email ?? "").trim().toLowerCase() === email && email.length > 0,
+  );
+  if (byEmail) {
+    byEmail.userId = input.userId;
+    if (isSupabaseMode()) {
+      const { supabaseTeacherRosterRepo } = await import(
+        "@/lib/repositories/supabase/teacher-roster-repository"
+      );
+      await supabaseTeacherRosterRepo.update(byEmail.id, { userId: input.userId });
+    }
+    return true;
+  }
+
+  // 3. Create a new linked entry.
+  if (isSupabaseMode()) {
+    const { supabaseTeacherRosterRepo } = await import(
+      "@/lib/repositories/supabase/teacher-roster-repository"
+    );
+    const created = await supabaseTeacherRosterRepo.create({
+      fullName: input.fullName,
+      email: input.email,
+      phone: null,
+      notes: "Added automatically when Teacher staff access was granted.",
+      category: null,
+      isActive: true,
+      userId: input.userId,
+    });
+    list.push(created);
+    return true;
+  }
+
+  createTeacher({
+    fullName: input.fullName,
+    email: input.email,
+    phone: null,
+    notes: "Added automatically when Teacher staff access was granted.",
+    category: null,
+    isActive: true,
+    userId: input.userId,
+  });
+  return true;
+}
+
+type TeacherPatch = Partial<Pick<Teacher, "fullName" | "email" | "phone" | "notes" | "category" | "isActive" | "userId">>;
 
 export function updateTeacher(id: string, patch: TeacherPatch): Teacher | null {
   const list = init();

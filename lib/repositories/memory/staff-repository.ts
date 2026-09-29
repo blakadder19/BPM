@@ -13,6 +13,7 @@ export const memoryStaffRepo: IStaffRepository = {
   listInvites: async () => store.listInvites(),
   getInvite: async (id) => store.getInvite(id),
   getPendingInviteByEmail: async (email) => store.getPendingInviteByEmail(email),
+  getInviteByToken: async (token) => store.getInviteByToken(token),
   createInvite: async (input: CreateStaffInviteInput) => store.createInvite(input),
   revokeInvite: async (id) => store.revokeInvite(id),
   markInviteAccepted: async (id) => store.markInviteAccepted(id),

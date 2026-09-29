@@ -4,8 +4,8 @@ import { getDevStudentId } from "@/lib/actions/auth";
 import { cachedGetTerms, cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
-import { getStaffAccess, hasPermission } from "@/lib/staff-permissions";
-import { getNavigationForAccess, getNavigationForRole } from "@/lib/role-config";
+import { getStaffAccess, hasPermission, resolveRoleLabel } from "@/lib/staff-permissions";
+import { getNavigationForAccess } from "@/lib/role-config";
 import { UserProvider } from "@/components/providers/user-provider";
 import { SidebarProvider } from "@/components/providers/sidebar-provider";
 import { ScanReceiverStatusProvider } from "@/components/providers/scan-receiver-status-provider";
@@ -59,7 +59,13 @@ export default async function AppLayout({
   // Resolve staff access once per request — used for both navigation
   // filtering and the alert/scan-receiver gates below. Students never
   // carry staff perms; we still resolve to keep the call sites uniform.
-  const staffAccess = user.role === "student" ? null : await getStaffAccess();
+  // Phase 18 — ALWAYS resolve access. This used to skip the lookup
+  // entirely for `users.role === 'student'`, which meant a dual-role
+  // Student + Teacher could never surface their staff navigation no
+  // matter what their staff grant said. `getStaffAccess` is
+  // React.cache-deduplicated, so resolving it here costs one query
+  // shared with every page and action in the request.
+  const staffAccess = await getStaffAccess();
 
   // Student alerts are fetched client-side in the Topbar to avoid blocking
   // the layout render (~200ms of Supabase queries per navigation).
@@ -92,16 +98,17 @@ export default async function AppLayout({
 
   const [devStudents, alerts] = await Promise.all([devStudentsPromise, alertsPromise]);
 
-  let navItems;
-  if (user.role === "student" || !staffAccess) {
-    navItems = getNavigationForRole("student");
-  } else {
-    navItems = getNavigationForAccess({
-      legacyRole: user.role,
-      permissions: staffAccess.permissions,
-      isSuperAdmin: staffAccess.isSuperAdmin,
-    });
-  }
+  // Phase 18 — one code path for everyone. The resolver returns the
+  // union of student-only items and permission-gated staff items, so
+  // a plain student, a pure teacher, and a dual-role Student+Teacher
+  // all fall out of the same call.
+  const navItems = getNavigationForAccess({
+    isStudent: staffAccess.isStudent,
+    permissions: staffAccess.permissions,
+    isSuperAdmin: staffAccess.isSuperAdmin,
+  });
+
+  const roleLabel = resolveRoleLabel(staffAccess);
 
   const canScanReceive =
     !!staffAccess && hasPermission(staffAccess, "checkin:scan");
@@ -124,7 +131,7 @@ export default async function AppLayout({
     <ScanReceiverStatusProvider>
       <div className="flex h-[100dvh] bg-gray-50">
         <SessionGuard />
-        <Sidebar user={user} navItems={navItems} />
+        <Sidebar user={user} navItems={navItems} roleLabel={roleLabel} />
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
           <Topbar
             user={user}
@@ -132,6 +139,7 @@ export default async function AppLayout({
             devStudents={devStudents}
             devStudentId={devStudentId}
             canScan={canScanReceive}
+            roleLabel={roleLabel}
           />
           <main data-main-scroll className="flex-1 overflow-y-auto overscroll-y-contain [&]:[-webkit-overflow-scrolling:touch] px-4 py-4 md:p-6">
             <UserProvider

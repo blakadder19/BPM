@@ -32,6 +32,7 @@ import { getTodayStr } from "@/lib/domain/datetime";
 import {
   getCreditSnapshot,
   isSubscriptionUsable,
+  isWithinValidityWindow,
 } from "@/lib/domain/credit-availability";
 
 /**
@@ -103,13 +104,35 @@ export async function consumeEntitlementCredit(
   subscriptionId: string,
   context: string,
   today: string = getTodayStr(),
+  options: {
+    /**
+     * Phase 19 — accept a subscription whose STATUS has since become
+     * `expired`/`exhausted`, provided its date window still covers
+     * `today` (which for a backdated correction is the CLASS DATE).
+     *
+     * Only the backdated-attendance path sets this. It exists because
+     * the nightly lifecycle job flips a lapsed row to `expired`, and
+     * refusing on that basis would block a correction for a class the
+     * pass genuinely covered. The date window and the balance check
+     * are still enforced, so nothing is over-drawn.
+     *
+     * Deliberate withdrawals (`paused`, `cancelled`) are still
+     * refused — see the status list below.
+     */
+    allowLapsedStatus?: boolean;
+  } = {},
 ): Promise<ConsumeResult> {
   const sub = await getSubscriptionRepo().getById(subscriptionId);
   if (!sub) {
     return { consumed: false, reason: "not_found", message: "Subscription not found." };
   }
 
-  if (!isSubscriptionUsable(sub, today)) {
+  const LAPSED_OK = new Set(["active", "expired", "exhausted"]);
+  const usable = options.allowLapsedStatus
+    ? LAPSED_OK.has(sub.status) && isWithinValidityWindow(sub, today)
+    : isSubscriptionUsable(sub, today);
+
+  if (!usable) {
     const snap = getCreditSnapshot(sub, today);
     const reason: ConsumeSkipReason = snap.isPastValidity
       ? "expired"

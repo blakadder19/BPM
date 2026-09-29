@@ -7,7 +7,7 @@ const NONE = new Set<Permission>();
 describe("getNavigationForAccess (sidebar visibility)", () => {
   it("super_admin sees every admin nav item, including permission-free ones", () => {
     const items = getNavigationForAccess({
-      legacyRole: "admin",
+      isStudent: false,
       permissions: NONE,
       isSuperAdmin: true,
     });
@@ -27,7 +27,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
 
   it("non-super-admin Custom user with only events:view sees Events and nothing else admin-y", () => {
     const items = getNavigationForAccess({
-      legacyRole: "admin", // legacyRoleForStaffRole maps custom → 'admin'
+      isStudent: false, // legacyRoleForStaffRole maps custom → 'admin'
       permissions: new Set<Permission>(["events:view"]),
       isSuperAdmin: false,
     });
@@ -49,7 +49,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
 
   it("non-super-admin without events:view does NOT see Events", () => {
     const items = getNavigationForAccess({
-      legacyRole: "admin",
+      isStudent: false,
       permissions: NONE,
       isSuperAdmin: false,
     });
@@ -59,7 +59,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
 
   it("teacher legacy role with no permissions still sees no admin items", () => {
     const items = getNavigationForAccess({
-      legacyRole: "teacher",
+      isStudent: false,
       permissions: NONE,
       isSuperAdmin: false,
     });
@@ -75,7 +75,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
 
   it("student sees the catalog (permission-free, student-only)", () => {
     const items = getNavigationForAccess({
-      legacyRole: "student",
+      isStudent: true,
       permissions: NONE,
       isSuperAdmin: false,
     });
@@ -89,7 +89,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
 
   it("array-form permission (e.g. Finance) matches if ANY key is held", () => {
     const items = getNavigationForAccess({
-      legacyRole: "admin",
+      isStudent: false,
       permissions: new Set<Permission>(["payments:view_limited"]),
       isSuperAdmin: false,
     });
@@ -98,7 +98,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
 
   describe("Catalog is student-only — never visible to staff/admin", () => {
     function hrefsFor(input: {
-      legacyRole: "admin" | "teacher" | "student";
+      isStudent: boolean;
       permissions: ReadonlySet<Permission>;
       isSuperAdmin: boolean;
     }): string[] {
@@ -124,7 +124,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
       ]);
       expect(
         hrefsFor({
-          legacyRole: "admin",
+          isStudent: false,
           permissions: everyPermission,
           isSuperAdmin: false,
         }),
@@ -134,7 +134,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
     it("super_admin never sees /catalog", () => {
       expect(
         hrefsFor({
-          legacyRole: "admin",
+          isStudent: false,
           permissions: NONE,
           isSuperAdmin: true,
         }),
@@ -144,7 +144,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
     it("teacher never sees /catalog", () => {
       expect(
         hrefsFor({
-          legacyRole: "teacher",
+          isStudent: false,
           permissions: NONE,
           isSuperAdmin: false,
         }),
@@ -157,7 +157,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
       // staff personas.
       expect(
         hrefsFor({
-          legacyRole: "admin",
+          isStudent: false,
           permissions: new Set<Permission>(["events:view"]),
           isSuperAdmin: false,
         }),
@@ -167,7 +167,7 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
     it("student sees /catalog (positive case)", () => {
       expect(
         hrefsFor({
-          legacyRole: "student",
+          isStudent: true,
           permissions: NONE,
           isSuperAdmin: false,
         }),

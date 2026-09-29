@@ -1,7 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/reset-password", "/update-password", "/checkout", "/embed-entry", "/explore", "/event"];
+// `/invite` is public so a signed-out recipient reaches the acceptance
+// page (which then offers a sign-in link that returns them here). The
+// page itself enforces authentication and email matching before it
+// grants anything — the token is not a bearer credential.
+const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/reset-password", "/update-password", "/checkout", "/embed-entry", "/explore", "/event", "/invite"];
 const API_ROUTES_SELF_AUTH = ["/api/lifecycle", "/api/webhooks"];
 
 const EMBED_ALLOWED_ORIGINS = [

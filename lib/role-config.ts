@@ -82,38 +82,53 @@ export function getNavigationForRole(role: UserRole): NavItem[] {
 }
 
 /**
- * New permission-aware nav resolution.
+ * Permission-aware nav resolution.
  *
- * Precedence:
- *   - Student-only items (those whose `roles` set is exactly
- *     `["student"]`, e.g. Catalog) are reserved for student users.
- *     They are NEVER shown to staff, admin, or super_admin sidebars,
- *     regardless of permissions. Page-level guards (`requireRole
- *     (["student"])`) enforce the same boundary server-side.
- *   - If the item declares a `permission`, it appears iff the access
- *     bag contains that permission (super_admin always passes, but
- *     only after the student-only filter above has had its say).
- *   - If the item has NO `permission`:
- *       • Super_admin sees it (legacy permission-free admin tools).
- *       • All others are denied. This closes the legacy bypass where a
- *         Custom/Front-Desk user with `users.role='admin'` (set by
- *         `legacyRoleForStaffRole`) would otherwise see /terms,
- *         /broadcasts, /studio-hire, /penalties in their sidebar
- *         despite having no granted permission for them. The matching
- *         server-side guards now use `requireSuperAdmin()`.
+ * ── Dual-role behaviour (Phase 18) ─────────────────────────
+ *
+ * The result is the UNION of two independent entitlements:
+ *
+ *   `isStudent` → student-only items (Catalog, and anything else
+ *                 whose `roles` set is exactly `["student"]`).
+ *   permissions → every permission-gated staff item.
+ *
+ * So a Student + Teacher sees Catalog AND Attendance, because both
+ * conditions hold. Nothing is subtracted for holding both. Previously
+ * the student check was exclusive (`return legacyRole === 'student'`
+ * short-circuited the whole item list), which is why a dual-role user
+ * could only ever get one of the two sidebars.
+ *
+ * Precedence within a single item:
+ *   - Student-only item → shown iff `isStudent`. Never leaks to pure
+ *     staff. Page guards (`requireRole(["student"])`) enforce the
+ *     same boundary server-side.
+ *   - Item with a `permission` → shown iff the access bag holds any
+ *     of the required permissions (super_admin always passes).
+ *   - Item with NO `permission` → super_admin only. This closes the
+ *     legacy bypass where a Custom/Front-Desk user with
+ *     `users.role='admin'` would otherwise see /terms, /broadcasts,
+ *     /studio-hire and /penalties despite holding no permission for
+ *     them. The matching server guards use `requireSuperAdmin()`.
+ *
+ * Note it does NOT grant staff items off the back of a base role:
+ * a dual-role user's staff navigation comes entirely from their
+ * permission set, so a Teacher grant never exposes full admin nav.
  */
 export function getNavigationForAccess(input: {
-  legacyRole: UserRole;
+  /**
+   * True when the user holds the student base role. Supersedes the
+   * old `legacyRole` parameter, which conflated "is a student" with
+   * "is not staff".
+   */
+  isStudent: boolean;
   permissions: ReadonlySet<Permission>;
   isSuperAdmin: boolean;
 }): NavItem[] {
   return NAVIGATION.filter((item) => {
-    // Student-only short-circuit. Catalog and any future student-only
-    // item must never leak into staff/admin/super_admin sidebars.
     const isStudentOnly =
       item.roles.length === 1 && item.roles[0] === "student";
     if (isStudentOnly) {
-      return input.legacyRole === "student";
+      return input.isStudent;
     }
 
     if (item.permission) {
@@ -121,7 +136,11 @@ export function getNavigationForAccess(input: {
       const required = Array.isArray(item.permission)
         ? item.permission
         : [item.permission];
-      return required.some((p) => input.permissions.has(p));
+      if (required.some((p) => input.permissions.has(p))) return true;
+      // Fall through: a student with no staff permission still needs
+      // the shared student items (Dashboard, Classes, Bookings,
+      // Events) which are permission-gated but also student routes.
+      return input.isStudent && item.roles.includes("student");
     }
     // No permission key, not student-only: super_admin only.
     return input.isSuperAdmin;

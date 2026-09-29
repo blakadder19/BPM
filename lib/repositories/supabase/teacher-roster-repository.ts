@@ -11,6 +11,8 @@ interface TeacherRow {
   notes: string | null;
   category: string | null;
   is_active: boolean;
+  /** Phase 18 — optional link to the BPM account (migration 00078). */
+  user_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -24,6 +26,7 @@ function toTeacher(row: TeacherRow): Teacher {
     notes: row.notes,
     category: (row.category as TeacherCategory) ?? null,
     isActive: row.is_active,
+    userId: row.user_id ?? null,
   };
 }
 
@@ -45,6 +48,7 @@ export const supabaseTeacherRosterRepo = {
     notes: string | null;
     category?: TeacherCategory;
     isActive: boolean;
+    userId?: string | null;
   }): Promise<Teacher> {
     const supabase = createAdminClient();
     const academyId = await getAcademyId();
@@ -58,6 +62,7 @@ export const supabaseTeacherRosterRepo = {
         notes: data.notes,
         category: data.category ?? null,
         is_active: data.isActive,
+        user_id: data.userId ?? null,
       } as never)
       .select()
       .single();
@@ -72,6 +77,7 @@ export const supabaseTeacherRosterRepo = {
     notes: string | null;
     category: TeacherCategory;
     isActive: boolean;
+    userId: string | null;
   }>): Promise<Teacher | null> {
     const supabase = createAdminClient();
     const fields: Record<string, unknown> = {};
@@ -81,6 +87,7 @@ export const supabaseTeacherRosterRepo = {
     if (patch.notes !== undefined) fields.notes = patch.notes;
     if (patch.category !== undefined) fields.category = patch.category;
     if (patch.isActive !== undefined) fields.is_active = patch.isActive;
+    if (patch.userId !== undefined) fields.user_id = patch.userId;
     if (Object.keys(fields).length === 0) return null;
     const { data: row, error } = await supabase
       .from("teacher_roster")

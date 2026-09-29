@@ -118,6 +118,22 @@ export interface InviteStaffInput {
   displayName?: string | null;
   roleKey: StaffRoleKey;
   permissions: Permission[];
+  /**
+   * Phase 18 — explicitly add this person to the teaching roster.
+   * Only applied for `roleKey: "teacher"`. Staff access and roster
+   * membership are separate concepts, so this is opt-in.
+   */
+  addToTeacherRoster?: boolean;
+}
+
+export interface InviteStaffInputExtras {
+  /**
+   * Phase 18 — explicitly add this person to the teaching roster.
+   * Only meaningful for `roleKey: "teacher"`. Staff access and roster
+   * membership are separate concepts (see the roster note in the
+   * report), so this is opt-in rather than implied.
+   */
+  addToTeacherRoster?: boolean;
 }
 
 export interface InviteStaffResult {
@@ -129,10 +145,25 @@ export interface InviteStaffResult {
    *   - "sent"    — Brevo accepted the message.
    *   - "skipped" — BREVO_API_KEY not configured; copy-link only.
    *   - "failed"  — Brevo rejected; copy-link still valid.
-   *   - undefined — existing-staff-update path (no email attempt).
+   *   - undefined — immediate-grant path (no email attempt).
    */
   emailStatus?: "sent" | "skipped" | "failed";
   emailReason?: string;
+  /**
+   * Phase 18 — which of the two semantics actually happened, so the
+   * UI can say the right thing instead of always reporting "invited".
+   *
+   *   "granted" — the email already had a BPM account, so staff
+   *               access was applied immediately. No invite row, no
+   *               email; there is nothing for them to accept.
+   *   "invited" — no account yet. A pending invite was created and
+   *               emailed; access begins when they accept.
+   */
+  outcome: "granted" | "invited";
+  /** Set on the "granted" path when the person keeps a student base role. */
+  keepsStudentAccess?: boolean;
+  /** Phase 18 — whether a teacher-roster entry was created/linked. */
+  rosterLinked?: boolean;
 }
 
 export async function inviteStaffAction(
@@ -167,8 +198,27 @@ export async function inviteStaffAction(
   );
 
   const repo = getStaffRepo();
-  // If the email already belongs to a staff member, prefer in-place
-  // update over creating a redundant invite.
+
+  // ── Decision: existing account → IMMEDIATE GRANT ──────────
+  //
+  // `getStaffByEmail` matches ANY `public.users` row, including a
+  // plain student. That is intentional here: if the person already
+  // has a BPM account there is nothing to "invite" them to — they can
+  // already sign in — so we activate the grant in place.
+  //
+  // Requiring an email round-trip for someone who already has an
+  // account would add a failure mode (they click the link while
+  // logged in, nothing happens) for no security benefit: the admin
+  // performing this action already holds `staff:invite`.
+  //
+  // What changed in Phase 18:
+  //   * `users.role` is explicitly PRESERVED, so an existing student
+  //     keeps Catalog, bookings and entitlements while gaining staff
+  //     permissions. Previously this path left a half-state where the
+  //     staff columns were set but `getStaffAccess` ignored them.
+  //   * The result reports `outcome: "granted"` so the UI can say
+  //     "access granted" rather than claiming an invite was sent when
+  //     no email was ever dispatched.
   const existing = await repo.getStaffByEmail(email);
   if (existing) {
     await repo.updateStaff(existing.id, {
@@ -176,10 +226,34 @@ export async function inviteStaffAction(
       permissions: storedPermissions,
       status: "active",
     });
+
+    // Base role is untouched on purpose — see the note above.
+    const keepsStudentAccess = existing.legacyRole === "student";
+
+    const rosterLinked = await maybeLinkTeacherRoster({
+      userId: existing.id,
+      roleKey: input.roleKey,
+      requested: !!input.addToTeacherRoster,
+      fullName: existing.fullName ?? input.displayName ?? email,
+      email,
+    });
+
+    console.info(
+      `[staff] grant: email=${email} role=${input.roleKey} immediate=true keepsStudent=${keepsStudentAccess} roster=${rosterLinked}`,
+    );
+
     revalidatePath("/staff");
+    revalidatePath("/classes");
     return {
       success: true,
-      data: { inviteId: "", inviteUrl: "", email },
+      data: {
+        inviteId: "",
+        inviteUrl: "",
+        email,
+        outcome: "granted",
+        keepsStudentAccess,
+        rosterLinked,
+      },
     };
   }
 
@@ -204,7 +278,11 @@ export async function inviteStaffAction(
   // The point is to never return a relative link here, because the
   // invite link is meant to be shared cross-device and copied.
   const base = await resolveBaseUrl();
-  const inviteUrl = `${base}/login?invite=${encodeURIComponent(invite.token)}`;
+  // Phase 18 — points at the real acceptance route. This used to be
+  // `/login?invite=<token>`, where the token was never read: an
+  // already-signed-in recipient was bounced to /dashboard and their
+  // invite silently stayed pending.
+  const inviteUrl = `${base}/invite/${encodeURIComponent(invite.token)}`;
 
   // Send the invite email through Brevo. Never fails the action — if
   // Brevo is not configured or rejects, the copy-link remains valid
@@ -231,8 +309,64 @@ export async function inviteStaffAction(
       email,
       emailStatus: emailResult.status,
       emailReason: emailResult.reason,
+      outcome: "invited",
     },
   };
+}
+
+// ── Teacher roster linkage (Phase 18) ───────────────────────
+
+/**
+ * Optionally create/link a `teacher_roster` entry for a new staff
+ * member.
+ *
+ * Staff access and roster membership are DELIBERATELY separate
+ * concepts in BPM:
+ *
+ *   staff grant   → what the person can DO in the app (permissions).
+ *   teacher_roster → who can be ASSIGNED to teach a class slot.
+ *
+ * They are not interchangeable. The roster legitimately contains
+ * people with no BPM login at all (guest instructors, visiting
+ * teachers), and a Teacher-role staff member is not automatically
+ * someone you want appearing in every scheduling dropdown.
+ *
+ * So this is opt-in via an explicit admin checkbox rather than
+ * implied. When requested, the link is written on `user_id` — never
+ * matched by display name, which would be ambiguous (the seed roster
+ * already contains a bare "Guillermo" with no email).
+ *
+ * Returns true when a roster row was created or linked.
+ */
+async function maybeLinkTeacherRoster(input: {
+  userId: string;
+  roleKey: StaffRoleKey;
+  requested: boolean;
+  fullName: string;
+  email: string;
+}): Promise<boolean> {
+  if (!input.requested) return false;
+  // Only meaningful for teaching roles.
+  if (input.roleKey !== "teacher") return false;
+
+  try {
+    const { linkTeacherRosterToUser } = await import(
+      "@/lib/services/teacher-roster-store"
+    );
+    return await linkTeacherRosterToUser({
+      userId: input.userId,
+      fullName: input.fullName,
+      email: input.email,
+    });
+  } catch (e) {
+    // Non-fatal: the staff grant itself already succeeded, and the
+    // admin can add the roster entry manually from the Classes page.
+    console.warn(
+      `[staff] teacher-roster link failed for ${input.email}:`,
+      e instanceof Error ? e.message : e,
+    );
+    return false;
+  }
 }
 
 // ── Update permissions / role ──────────────────────────────────

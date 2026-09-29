@@ -40,6 +40,8 @@ const access = (
   status: "active",
   permissions: new Set(permissions),
   isLegacyAdminFallback: false,
+  isStudent: false,
+  isStaff: true,
 });
 
 /**

@@ -15,6 +15,9 @@ import {
   Plus,
   Trash2,
   QrCode,
+  Download,
+  CalendarPlus,
+  Loader2,
 } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { AdminHelpButton } from "@/components/admin/admin-help-panel";
@@ -35,6 +38,12 @@ import { AdminTable, Td } from "@/components/ui/admin-table";
 import { EmptyState } from "@/components/ui/empty-state";
 import { formatDate, cn } from "@/lib/utils";
 import { markStudentAttendance } from "@/lib/actions/attendance";
+import { exportAttendanceCsvAction } from "@/lib/actions/attendance-export";
+import {
+  previewBackdatedAttendanceAction,
+  backdateAttendanceAction,
+  type BackdatePreview,
+} from "@/lib/actions/attendance-backdate";
 import { validateTokenCheckInAction } from "@/lib/actions/checkin";
 import type { AttendanceMark, ClassType } from "@/types/domain";
 import type { StoredAttendance } from "@/lib/services/attendance-service";
@@ -122,6 +131,8 @@ export interface AttendanceClientPermissions {
   canMarkPresent: boolean;
   canMarkAbsent: boolean;
   canEditHistory: boolean;
+  /** Phase 19 — `attendance:backdate`. Gates the historical correction flow. */
+  canBackdate: boolean;
 }
 
 interface AttendanceClientProps {
@@ -228,6 +239,7 @@ export function AttendanceClient({
           initialClassFilter={initialStudentSearch ? initialClassFilter : ""}
           initialDateFilter={initialStudentSearch ? initialDateFilter : ""}
           currentUserName={currentUserName}
+          studentOptions={studentOptions}
           permissions={permissions}
         />
       )}
@@ -804,12 +816,14 @@ function HistoryView({
   initialClassFilter,
   initialDateFilter,
   currentUserName,
+  studentOptions,
   permissions,
 }: {
   attendanceRecords: StoredAttendance[];
   allClasses: BookableClassProp[];
   initialSearch?: string;
   initialClassFilter?: string;
+  studentOptions?: StudentOption[];
   currentUserName?: string;
   initialDateFilter?: string;
   permissions: AttendanceClientPermissions;
@@ -852,6 +866,41 @@ function HistoryView({
   );
 
   const q = search.toLowerCase();
+
+  // Phase 19 — CSV export. The server re-resolves the rows from the
+  // same filters, so the client never supplies data, only criteria.
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [showBackdate, setShowBackdate] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await exportAttendanceCsvAction({
+        search: search.trim() || undefined,
+        status: statusFilter || undefined,
+        date: dateFilter || undefined,
+        classTitle: classFilter || undefined,
+        markedBy: markedByFilter || undefined,
+      });
+      if (!res.success || !res.csv || !res.filename) {
+        setExportError(res.error ?? "Could not build the export.");
+        return;
+      }
+      const blob = new Blob([res.csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Export failed.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     const result = attendanceRecords.filter((a) => {
@@ -912,7 +961,34 @@ function HistoryView({
           options={markedByOptions}
           placeholder="All markers"
         />
+        {/* Phase 19 — exports exactly what is on screen. */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExport}
+          disabled={exporting}
+          className="sm:ml-auto"
+        >
+          {exporting ? (
+            <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="mr-1.5 h-4 w-4" />
+          )}
+          Export CSV
+        </Button>
+        {permissions.canBackdate && (
+          <Button variant="outline" size="sm" onClick={() => setShowBackdate(true)}>
+            <CalendarPlus className="mr-1.5 h-4 w-4" />
+            Add past attendee
+          </Button>
+        )}
       </div>
+
+      {exportError && (
+        <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+          {exportError}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -936,6 +1012,18 @@ function HistoryView({
             />
           ))}
         </AdminTable>
+      )}
+
+      {showBackdate && permissions.canBackdate && (
+        <BackdateAttendanceDialog
+          classes={allClasses}
+          students={studentOptions ?? []}
+          onClose={() => setShowBackdate(false)}
+          onDone={() => {
+            setShowBackdate(false);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );
@@ -1531,6 +1619,298 @@ function AddAttendanceDialog({
               disabled={isPending || (practiceCheck?.requiresPayment && !paymentConfirmed)}
             >
               {isPending ? "Saving…" : "Create Record"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Backdated attendance correction (Phase 19) ──────────────
+
+/**
+ * Super-Admin-only historical correction.
+ *
+ * Three steps rather than one form, because the middle step is the
+ * whole point: the admin must SEE which entitlements were valid on
+ * the class date, and pick one, before anything is written. A
+ * single-shot form would hide the decision that actually matters.
+ *
+ * Everything shown here is resolved server-side by
+ * `previewBackdatedAttendanceAction`; the submit re-resolves and
+ * re-validates, so nothing on screen is trusted as input.
+ */
+function BackdateAttendanceDialog({
+  classes,
+  students,
+  onClose,
+  onDone,
+}: {
+  classes: BookableClassProp[];
+  students: StudentOption[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [classId, setClassId] = useState("");
+  const [studentId, setStudentId] = useState("");
+  const [studentSearch, setStudentSearch] = useState("");
+  const [subscriptionId, setSubscriptionId] = useState("");
+  const [reason, setReason] = useState("");
+  const [preview, setPreview] = useState<BackdatePreview | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Only classes that have already happened and were not cancelled —
+  // a future class belongs in the normal booking flow.
+  const pastClasses = useMemo(
+    () =>
+      classes
+        .filter((c) => c.date <= today && c.status !== "cancelled")
+        .sort((a, b) => b.date.localeCompare(a.date) || b.startTime.localeCompare(a.startTime))
+        .slice(0, 300),
+    [classes, today],
+  );
+
+  const filteredStudents = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase();
+    const list = q
+      ? students.filter((s) => s.fullName.toLowerCase().includes(q))
+      : students;
+    return list.slice(0, 50);
+  }, [students, studentSearch]);
+
+  // Re-resolve whenever the pair changes, so the entitlement list can
+  // never belong to a different student or class than the one shown.
+  useEffect(() => {
+    if (!classId || !studentId) {
+      setPreview(null);
+      setSubscriptionId("");
+      return;
+    }
+    let cancelled = false;
+    setLoadingPreview(true);
+    setError(null);
+    previewBackdatedAttendanceAction({ bookableClassId: classId, studentId })
+      .then((r) => {
+        if (cancelled) return;
+        if (!r.success || !r.preview) {
+          setPreview(null);
+          setError(r.error ?? "Could not load this class.");
+          return;
+        }
+        setPreview(r.preview);
+        // Preselect when there is only one option — no decision to make.
+        setSubscriptionId(
+          r.preview.candidates.length === 1 ? r.preview.candidates[0].subscriptionId : "",
+        );
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPreview(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [classId, studentId]);
+
+  const needsEntitlementChoice =
+    !!preview && !preview.attendanceOnly && preview.candidates.length > 1;
+  const canSubmit =
+    !!classId &&
+    !!studentId &&
+    !!preview &&
+    !preview.blockedReason &&
+    reason.trim().length > 0 &&
+    (!needsEntitlementChoice || !!subscriptionId) &&
+    !submitting;
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const r = await backdateAttendanceAction({
+        bookableClassId: classId,
+        studentId,
+        subscriptionId: subscriptionId || null,
+        reason: reason.trim(),
+      });
+      if (!r.success) {
+        setError(r.error ?? "Could not apply the correction.");
+        return;
+      }
+      onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not apply the correction.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open onClose={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Add past attendee</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit}>
+          <DialogBody className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Records that a student attended a class that has already finished.
+              Creates the booking they never made, consumes one credit from a
+              membership or pass that was valid on the class date, and marks
+              them present.
+            </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="bd-class">Class</Label>
+              <select
+                id="bd-class"
+                value={classId}
+                onChange={(e) => setClassId(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Select a past class</option>
+                {pastClasses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {formatDate(c.date)} · {c.startTime} · {c.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="bd-student">Student</Label>
+              <input
+                value={studentSearch}
+                onChange={(e) => setStudentSearch(e.target.value)}
+                placeholder="Search students…"
+                className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              />
+              <select
+                id="bd-student"
+                value={studentId}
+                onChange={(e) => setStudentId(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Select a student</option>
+                {filteredStudents.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {loadingPreview && (
+              <p className="flex items-center gap-2 text-sm text-gray-400">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Checking entitlements for the class date…
+              </p>
+            )}
+
+            {preview && !loadingPreview && (
+              <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
+                {preview.existingAttendance && (
+                  <p className="text-sm text-gray-700">
+                    Current attendance:{" "}
+                    <strong>{preview.existingAttendance.status}</strong>
+                    {preview.existingAttendance.status === "present"
+                      ? " — already recorded, submitting will make no changes."
+                      : " — this will be changed to present."}
+                  </p>
+                )}
+
+                {/* Phase 19.1 — an existing booking does NOT prove the
+                    credit is still spent. Cancelled / late-cancelled /
+                    missed bookings had theirs restored, so the note
+                    comes from the server-side classification. */}
+                {preview.existingBooking && (
+                  <p className="text-sm text-gray-700">
+                    Existing booking:{" "}
+                    <strong>{preview.existingBooking.status}</strong>
+                    {preview.existingBooking.subscriptionName
+                      ? ` · ${preview.existingBooking.subscriptionName}`
+                      : ""}
+                    <span className="mt-0.5 block text-xs text-gray-500">
+                      {preview.existingBooking.note}
+                    </span>
+                  </p>
+                )}
+
+                {preview.attendanceOnly ? (
+                  <p className="text-sm text-gray-700">
+                    This correction will only record attendance — no second
+                    credit will be taken.
+                  </p>
+                ) : preview.blockedReason ? (
+                  <p className="text-sm text-red-700">{preview.blockedReason}</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="bd-sub">Membership or pass to use</Label>
+                    <select
+                      id="bd-sub"
+                      value={subscriptionId}
+                      onChange={(e) => setSubscriptionId(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                    >
+                      {preview.candidates.length > 1 && (
+                        <option value="">Select which to use</option>
+                      )}
+                      {preview.candidates.map((c) => (
+                        <option key={c.subscriptionId} value={c.subscriptionId}>
+                          {c.productName}
+                          {c.isUnlimited
+                            ? " · unlimited"
+                            : ` · ${c.remainingAsOf} left`}
+                          {c.hasSinceExpired ? " · expired since" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500">
+                      Valid on {formatDate(preview.classDate)}. One credit will
+                      be consumed.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="bd-reason">Reason *</Label>
+              <textarea
+                id="bd-reason"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={2}
+                required
+                placeholder="e.g. Student attended without booking — corrected next day."
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <p className="text-xs text-gray-500">
+                Recorded in the audit trail with your name and the credit
+                balance before and after.
+              </p>
+            </div>
+
+            {error && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!canSubmit}>
+              {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+              Record attendance
             </Button>
           </DialogFooter>
         </form>

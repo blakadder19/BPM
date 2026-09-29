@@ -145,7 +145,9 @@ function toAbsoluteInviteUrl(maybeUrl: string, baseUrl: string): string {
  * shareable absolute link.
  */
 function inviteUrl(baseUrl: string, token: string): string {
-  const path = `/login?invite=${encodeURIComponent(token)}`;
+  // Phase 18 — must match the URL the invite email sends, which is
+  // now the real acceptance route rather than `/login?invite=`.
+  const path = `/invite/${encodeURIComponent(token)}`;
   if (baseUrl) return `${baseUrl}${path}`;
   if (typeof window !== "undefined" && window.location?.origin) {
     return `${window.location.origin}${path}`;
@@ -179,6 +181,16 @@ export function StaffClient({
         email: string;
         roleKey: StaffRoleKey;
         emailStatus: "sent" | "skipped" | "failed" | undefined;
+        /**
+         * Phase 18 — "granted" means the person already had a BPM
+         * account and access is live now (no invite, no email).
+         * "invited" means a pending invite was created and emailed.
+         * The banner must not claim an invite was sent when nothing
+         * was dispatched.
+         */
+        outcome: "granted" | "invited";
+        keepsStudentAccess?: boolean;
+        rosterLinked?: boolean;
       }
     | null
   >(null);
@@ -262,7 +274,11 @@ export function StaffClient({
         >
           <div className="mb-2 flex items-center justify-between">
             <div>
-              <div className="font-semibold text-bpm-900">Invite created</div>
+              <div className="font-semibold text-bpm-900">
+                {lastInvite.outcome === "granted"
+                  ? "Staff access granted"
+                  : "Invite created"}
+              </div>
               <div className="text-xs text-bpm-700">
                 <span className="font-medium">{lastInvite.email}</span> ·{" "}
                 {STAFF_ROLE_LABELS[lastInvite.roleKey]}
@@ -277,26 +293,55 @@ export function StaffClient({
               <X className="size-3.5" />
             </Button>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <input
-              readOnly
-              value={lastInvite.url}
-              className="w-full rounded border border-bpm-200 bg-white px-2 py-1 font-mono text-xs"
-              onClick={(e) => (e.target as HTMLInputElement).select()}
-            />
-            <Button
-              size="sm"
-              onClick={() => {
-                copyToClipboard(lastInvite.url, () =>
-                  setActionInfo("Invite link copied to clipboard."),
-                );
-              }}
-            >
-              <Copy className="size-3.5" />
-              <span>Copy invite link</span>
-            </Button>
-          </div>
-          {lastInvite.emailStatus === "sent" && (
+          {/* Phase 18 — the copy-link only exists on the invite path.
+              An immediate grant has no token to share, and showing an
+              empty input was the original source of "she sent a link
+              that did nothing". */}
+          {lastInvite.outcome === "invited" && (
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                readOnly
+                value={lastInvite.url}
+                className="w-full rounded border border-bpm-200 bg-white px-2 py-1 font-mono text-xs"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <Button
+                size="sm"
+                onClick={() => {
+                  copyToClipboard(lastInvite.url, () =>
+                    setActionInfo("Invite link copied to clipboard."),
+                  );
+                }}
+              >
+                <Copy className="size-3.5" />
+                <span>Copy invite link</span>
+              </Button>
+            </div>
+          )}
+          {lastInvite.outcome === "granted" && (
+            <div className="space-y-1 text-xs text-bpm-700">
+              <p>
+                <strong>This person already had a BPM account, so their
+                staff access is active now.</strong> There is nothing for them
+                to accept and no email was sent.
+              </p>
+              {lastInvite.keepsStudentAccess && (
+                <p>
+                  They keep their student account as well — Catalog, bookings
+                  and passes are unaffected. They will appear as
+                  &ldquo;Student · {STAFF_ROLE_LABELS[lastInvite.roleKey]}&rdquo;.
+                </p>
+              )}
+              <p>
+                If they are currently signed in, they need to sign out and back
+                in for the new navigation to appear.
+              </p>
+              {lastInvite.rosterLinked && (
+                <p>Added to the teaching roster.</p>
+              )}
+            </div>
+          )}
+          {lastInvite.outcome === "invited" && lastInvite.emailStatus === "sent" && (
             <p className="mt-2 text-xs text-emerald-700">
               <strong>Invite email sent.</strong> The link above is also valid for
               manual sharing if needed.
@@ -316,10 +361,10 @@ export function StaffClient({
               Brevo error — usually a sender domain that needs verifying.)
             </p>
           )}
-          {lastInvite.emailStatus === undefined && (
+          {lastInvite.outcome === "invited" && lastInvite.emailStatus === undefined && (
             <p className="mt-2 text-xs text-bpm-700">
-              The recipient signs in with the invited email and their staff
-              role / permissions are activated automatically.
+              The recipient opens the link, signs in with the invited email,
+              and their staff role / permissions are activated.
             </p>
           )}
         </div>
@@ -499,9 +544,17 @@ export function StaffClient({
           currentIsSuperAdmin={currentIsSuperAdmin}
           onClose={() => setShowInvite(false)}
           onError={setActionError}
-          onCreated={({ url, email, roleKey, emailStatus }) => {
+          onCreated={({ url, email, roleKey, emailStatus, outcome, keepsStudentAccess, rosterLinked }) => {
             setShowInvite(false);
-            setLastInvite({ url, email, roleKey, emailStatus });
+            setLastInvite({
+              url,
+              email,
+              roleKey,
+              emailStatus,
+              outcome,
+              keepsStudentAccess,
+              rosterLinked,
+            });
             setActionError(null);
             setActionInfo(null);
             // Force the pending-invites list and any nav permissions
@@ -559,6 +612,9 @@ function InviteModal({
     email: string;
     roleKey: StaffRoleKey;
     emailStatus: "sent" | "skipped" | "failed" | undefined;
+    outcome: "granted" | "invited";
+    keepsStudentAccess?: boolean;
+    rosterLinked?: boolean;
   }) => void;
   onUpdatedExisting: (email: string) => void;
 }) {
@@ -566,6 +622,7 @@ function InviteModal({
   const [displayName, setDisplayName] = useState("");
   const [roleKey, setRoleKey] = useState<StaffRoleKey>("teacher");
   const [overrides, setOverrides] = useState<Set<Permission>>(new Set());
+  const [addToRoster, setAddToRoster] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -597,6 +654,7 @@ function InviteModal({
           displayName: displayName.trim() || null,
           roleKey,
           permissions: normalizePermissionsForStorage(roleKey, [...overrides]),
+          addToTeacherRoster: roleKey === "teacher" && addToRoster,
         });
       } catch (err) {
         // Surface unexpected server errors instead of silently closing.
@@ -616,19 +674,19 @@ function InviteModal({
 
       const url = r.data?.inviteUrl;
       const resolvedEmail = r.data?.email ?? email;
-      if (url) {
-        // Ensure the displayed link is absolute even if the server
-        // returned a relative one for any reason.
-        onCreated({
-          url: toAbsoluteInviteUrl(url, baseUrl),
-          email: resolvedEmail,
-          roleKey,
-          emailStatus: r.data?.emailStatus,
-        });
-      } else {
-        // Existing user — promoted/updated in place by the action.
-        onUpdatedExisting(resolvedEmail);
-      }
+      // Phase 18 — branch on the explicit outcome rather than
+      // inferring it from an empty URL. Both paths now show a banner:
+      // the previous code routed the existing-user case to a plain
+      // toast, which is why an immediate grant looked like a no-op.
+      onCreated({
+        url: url ? toAbsoluteInviteUrl(url, baseUrl) : "",
+        email: resolvedEmail,
+        roleKey,
+        emailStatus: r.data?.emailStatus,
+        outcome: r.data?.outcome ?? (url ? "invited" : "granted"),
+        keepsStudentAccess: r.data?.keepsStudentAccess,
+        rosterLinked: r.data?.rosterLinked,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -675,13 +733,45 @@ function InviteModal({
             onChange={setOverrides}
           />
 
+          {/* Phase 18 — teaching roster is a separate concept from
+              staff access, so linking is explicit rather than implied.
+              See the roster note in lib/services/teacher-roster-store. */}
+          {roleKey === "teacher" && (
+            <label className="flex items-start gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={addToRoster}
+                onChange={(e) => setAddToRoster(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-bpm-600 focus:ring-bpm-500"
+              />
+              <span>
+                <span className="font-medium text-gray-800">
+                  Add this teacher to the teaching roster
+                </span>
+                <span className="mt-0.5 block text-xs text-gray-500">
+                  Makes them selectable for class teaching assignments. Staff
+                  permissions work either way — leave this off for
+                  office/admin staff who never teach.
+                </span>
+              </span>
+            </label>
+          )}
+
           <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-2 text-xs text-bpm-800">
-            <p className="font-medium">How invites work</p>
+            <p className="font-medium">How this works</p>
             <p className="mt-0.5">
-              We send the invite email automatically (when Brevo is configured)
-              and also show you a copyable link as a fallback. The recipient
-              signs in with this email — their staff role and permissions
-              activate on first sign-in.
+              <strong>If this email already has a BPM account</strong> (for
+              example an existing student), staff access is granted
+              immediately — no email is sent and there is nothing to accept.
+              They keep their student access and appear as
+              &ldquo;Student · {STAFF_ROLE_LABELS[roleKey]}&rdquo;. They will
+              need to sign out and back in to see the new navigation.
+            </p>
+            <p className="mt-1">
+              <strong>If the email is new to BPM</strong>, we create an invite
+              and email it (when Brevo is configured), plus show a copyable
+              link as a fallback. Their access activates when they open the
+              link and sign in.
             </p>
           </div>
         </div>

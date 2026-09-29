@@ -130,7 +130,15 @@ export interface BookableClass {
 // ── Bookings ────────────────────────────────────────────────
 
 export type BookingStatus = "confirmed" | "checked_in" | "cancelled" | "late_cancelled" | "missed";
-export type BookingSource = "subscription" | "drop_in" | "admin" | "waitlist_promotion" | "birthday";
+/**
+ * How a booking came to exist.
+ *
+ * `admin_backdated` (Phase 19) marks a booking created AFTER the class
+ * finished, to record that a student attended without having booked.
+ * It is kept distinct from `admin` so reporting can tell a
+ * retrospective correction apart from a normal admin booking.
+ */
+export type BookingSource = "subscription" | "drop_in" | "admin" | "waitlist_promotion" | "birthday" | "admin_backdated";
 export type WaitlistStatus = "waiting" | "offered" | "promoted" | "expired";
 export type AttendanceMark = "present" | "absent" | "late" | "excused";
 

@@ -6,11 +6,12 @@
  *
  *   1. Writes role_key + permissions + staff_status='active' on the
  *      user's `public.users` row (via the staff repository).
- *   2. Updates `users.role` to match the invite's legacy role bucket
- *      (teacher → 'teacher', everything else → 'admin') so the
- *      admin/teacher routing layer treats them as staff and the
- *      /staff list includes them.
- *   3. Marks the invite as `accepted`.
+ *   2. Marks the invite as `accepted`.
+ *
+ * Phase 18: it deliberately does NOT touch `users.role`. Staff access
+ * resolves from the staff grant alone, so an existing student who
+ * accepts a Teacher invite keeps their student functionality. See the
+ * inline note at the write site for the full rationale.
  *
  * Idempotent: a second call with no pending invite is a no-op.
  *
@@ -34,7 +35,7 @@
 import "server-only";
 
 import { getStaffRepo } from "@/lib/repositories";
-import { isMemoryMode, isSupabaseMode } from "@/lib/config/data-provider";
+import { isMemoryMode } from "@/lib/config/data-provider";
 import type { StaffRoleKey } from "@/lib/domain/permissions";
 
 function legacyRoleForStaffRole(roleKey: StaffRoleKey): "admin" | "teacher" {
@@ -150,24 +151,27 @@ export async function acceptPendingStaffInviteForUser(input: {
       });
     }
 
-    // Flip `users.role` so the legacy admin/teacher routing layer
-    // (which gates the protected app shell, navigation filtering for
-    // students, and the staff list query) treats this user as staff.
-    if (isSupabaseMode()) {
-      try {
-        const { createAdminClient } = await import("@/lib/supabase/admin");
-        const admin = createAdminClient();
-        const desiredRole = legacyRoleForStaffRole(invite.roleKey);
-        await admin
-          .from("users")
-          .update({ role: desiredRole } as never)
-          .eq("id", input.userId);
-      } catch {
-        // Non-fatal — staff_role_key drives permission enforcement.
-        // The /staff list filter is the only thing that depends on
-        // users.role for this code path.
-      }
-    }
+    // Phase 18 — `users.role` is deliberately NOT modified.
+    //
+    // This used to flip it to 'teacher'/'admin' so the legacy routing
+    // layer would treat the user as staff. That granted staff access
+    // but silently destroyed student functionality: `users.role` owns
+    // Catalog, student page guards and student-only navigation, so an
+    // existing student who accepted a Teacher invite lost the ability
+    // to browse and buy passes.
+    //
+    // Staff access now resolves from `staff_role_key` + `staff_status`
+    // independently of the base role (see `getStaffAccess`), and
+    // `listStaff` discovers staff via the grant rather than the role.
+    // Nothing downstream needs the base role changed any more, so a
+    // student who becomes a teacher keeps both identities.
+    //
+    // Consequence worth knowing: a brand-new person invited as staff
+    // is provisioned with `users.role='student'` by
+    // `ensureSupabaseProfile`, so they will also carry the student
+    // base role. That is harmless — they simply also see Catalog —
+    // and is preferable to the previous behaviour of mutating roles
+    // behind the admin's back.
 
     await repo.markInviteAccepted(invite.id);
     return { applied: true, reason: "applied", roleKey: invite.roleKey };

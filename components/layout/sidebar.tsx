@@ -85,9 +85,15 @@ interface SidebarProps {
    * staff access through (and from non-staff routes like /catalog).
    */
   navItems?: NavItem[];
+  /**
+   * Phase 18 — label derived from RESOLVED access, so a dual-role
+   * user reads "Student · Teacher" instead of the bare `users.role`.
+   * Falls back to the base-role label when omitted.
+   */
+  roleLabel?: string;
 }
 
-export function Sidebar({ user, navItems: navItemsProp }: SidebarProps) {
+export function Sidebar({ user, navItems: navItemsProp, roleLabel }: SidebarProps) {
   const pathname = usePathname();
   const { mobileOpen, close } = useSidebar();
   const navItems = navItemsProp ?? getNavigationForRole(user.role);
@@ -167,7 +173,7 @@ export function Sidebar({ user, navItems: navItemsProp }: SidebarProps) {
               {user.fullName}
             </p>
             <p className="text-xs text-gray-500">
-              {ROLE_LABELS[user.role] ?? user.role}
+              {roleLabel ?? ROLE_LABELS[user.role] ?? user.role}
             </p>
           </div>
           <form action={signOut}>

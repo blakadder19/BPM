@@ -128,13 +128,32 @@ describe("getStaffAccess (RBAC resolver — legacy bypass elimination)", () => {
     expect(access.permissions.size).toBeGreaterThan(20);
   });
 
-  it("students get an empty permission set regardless of staff row", async () => {
+  // Phase 18 — this previously asserted that students get an empty
+  // permission set REGARDLESS of their staff row. That was the bug:
+  // an existing student granted staff access silently received
+  // nothing. The staff grant is now authoritative and independent of
+  // the base role, so the expectation is inverted.
+  it("a student WITH an active staff grant receives it (dual role)", async () => {
     CURRENT_USER = baseUser({ role: "student" });
     CURRENT_ROW = baseRow({ roleKey: "super_admin", permissions: [], status: "active" });
     const getStaffAccess = await importResolver();
 
     const access = await getStaffAccess();
+    expect(access.isSuperAdmin).toBe(true);
+    expect(access.roleKey).toBe("super_admin");
+    expect(access.permissions.size).toBeGreaterThan(20);
+    // ...while still being a student.
+    expect(access.isStudent).toBe(true);
+  });
+
+  it("a student with NO staff grant still gets an empty permission set", async () => {
+    CURRENT_USER = baseUser({ role: "student" });
+    CURRENT_ROW = baseRow({ roleKey: null, permissions: [], status: "active" });
+    const getStaffAccess = await importResolver();
+
+    const access = await getStaffAccess();
     expect(access.isSuperAdmin).toBe(false);
+    expect(access.isStaff).toBe(false);
     expect(access.permissions.size).toBe(0);
     expect(access.roleKey).toBe(null);
   });

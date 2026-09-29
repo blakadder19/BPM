@@ -71,6 +71,14 @@ export interface IStaffRepository {
   getInvite(id: string): Promise<StaffInvite | null>;
   /** Look up a pending invite by email (case-insensitive). */
   getPendingInviteByEmail(email: string): Promise<StaffInvite | null>;
+  /**
+   * Phase 18 — look up an invite by its token, in ANY status.
+   *
+   * Returns revoked/accepted/expired invites too, so the acceptance
+   * page can tell the visitor precisely what is wrong ("this invite
+   * was already used") instead of a generic "not found".
+   */
+  getInviteByToken(token: string): Promise<StaffInvite | null>;
   createInvite(input: CreateStaffInviteInput): Promise<StaffInvite>;
   revokeInvite(id: string): Promise<boolean>;
   /**

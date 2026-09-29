@@ -83,6 +83,9 @@ export default async function AttendancePage({
     canMarkPresent: hasPermission(access, "attendance:mark_present"),
     canMarkAbsent: hasPermission(access, "attendance:mark_absent"),
     canEditHistory: hasPermission(access, "attendance:edit_history"),
+    // Phase 19 — sensitive: creates a historical booking and consumes
+    // a real credit. Super Admin only by default.
+    canBackdate: hasPermission(access, "attendance:backdate"),
   };
 
   return (

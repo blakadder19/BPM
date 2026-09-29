@@ -45,6 +45,7 @@ export const PERMISSION_KEYS = [
   "attendance:mark_present",
   "attendance:mark_absent",
   "attendance:edit_history",
+  "attendance:backdate",
 
   // Check-in / QR
   "checkin:view",
@@ -154,6 +155,9 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "discounts:delete",
   "referrals:reward",
   "students:send_magic_link",
+  // Phase 19 -- backdating rewrites factual history AND consumes a
+  // real entitlement credit. Super Admin only by default.
+  "attendance:backdate",
 ];
 
 const SENSITIVE_SET: ReadonlySet<string> = new Set(SENSITIVE_PERMISSIONS);
@@ -415,6 +419,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "attendance:mark_present", label: "Mark attendance: present" },
       { key: "attendance:mark_absent", label: "Mark attendance: absent" },
       { key: "attendance:edit_history", label: "Edit historical attendance" },
+      { key: "attendance:backdate", label: "Backdate attendance for a past class", description: "Sensitive — lets an admin add an attendee to a class that has already finished, creating a historical booking and consuming one membership/pass credit. Requires a written reason and is fully audited." },
     ],
   },
   {
