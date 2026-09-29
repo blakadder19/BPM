@@ -26,6 +26,7 @@ import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
 import { AdminStudents } from "@/components/students/admin-students";
 import { getAllRedemptionsForYear, type BirthdayRedemption } from "@/lib/services/birthday-benefit-store";
 import type { MockEventPurchase } from "@/lib/mock-data";
+import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
 
 export default async function StudentsPage({
   searchParams,
@@ -152,10 +153,11 @@ export default async function StudentsPage({
   let eventPurchases: MockEventPurchase[] = [];
   try {
     const eventRepo = getSpecialEventRepo();
-    const events = await eventRepo.getAllEvents();
-    eventPurchases = (
-      await Promise.all(events.map((e) => eventRepo.getPurchasesByEvent(e.id)))
-    ).flat();
+    const [events, everyPurchase] = await Promise.all([
+      eventRepo.getAllEvents(),
+      eventRepo.getAllPurchases(),
+    ]);
+    eventPurchases = purchasesForEvents(events, everyPurchase);
   } catch {
     // Event module may not be active
   }

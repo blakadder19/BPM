@@ -5,9 +5,16 @@ import type { MockStudent } from "@/lib/mock-data";
 import type { Database } from "@/types/database";
 import type { DanceRole } from "@/types/domain";
 import type { IStudentRepository, CreateStudentData, StudentPatch } from "../interfaces/student-repository";
+import { createLastSignInLookup } from "./auth-last-sign-in";
 
 type UserRow = Database["public"]["Tables"]["users"]["Row"];
 type ProfileRow = Database["public"]["Tables"]["student_profiles"]["Row"];
+
+const getAuthLastSignIns = createLastSignInLookup(async () => {
+  const { data, error } = await createAdminClient().auth.admin.listUsers({ perPage: 1000 });
+  if (error) throw error;
+  return data.users;
+});
 
 function toMockStudent(
   user: UserRow,
@@ -66,27 +73,22 @@ export const supabaseStudentRepo: IStudentRepository = {
     let signInMap = new Map<string, string | null>();
     if (unclaimedIds.length > 0) {
       try {
-        const { data: authData } = await supabase.auth.admin.listUsers({
-          perPage: 1000,
-        });
-        if (authData?.users) {
-          for (const au of authData.users) {
-            if (au.last_sign_in_at && unclaimedIds.includes(au.id)) {
-              signInMap.set(au.id, au.last_sign_in_at);
-            }
-          }
-          // Fire-and-forget backfill for any unclaimed students that
-          // actually have a last_sign_in_at in auth.users.
-          for (const [id, ts] of signInMap) {
-            supabase
-              .from("student_profiles")
-              .update({ auth_linked_at: ts } as never)
-              .eq("id", id)
-              .is("auth_linked_at" as never, null)
-              .then(({ error: bfErr }) => {
-                if (bfErr) console.warn(`[student-repo] auth_linked_at backfill ${id}:`, bfErr.message);
-              });
-          }
+        const lastSignIn = await getAuthLastSignIns();
+        for (const id of unclaimedIds) {
+          const ts = lastSignIn.get(id);
+          if (ts) signInMap.set(id, ts);
+        }
+        // Fire-and-forget backfill for any unclaimed students that
+        // actually have a last_sign_in_at in auth.users.
+        for (const [id, ts] of signInMap) {
+          supabase
+            .from("student_profiles")
+            .update({ auth_linked_at: ts } as never)
+            .eq("id", id)
+            .is("auth_linked_at" as never, null)
+            .then(({ error: bfErr }) => {
+              if (bfErr) console.warn(`[student-repo] auth_linked_at backfill ${id}:`, bfErr.message);
+            });
         }
       } catch (e) {
         console.warn("[student-repo] auth fallback failed:", e instanceof Error ? e.message : e);

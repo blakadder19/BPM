@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { updateSession } from "@/lib/supabase/middleware";
+import { updateSession, authUnavailableResponse } from "@/lib/supabase/middleware";
 
 // `/invite` is public so a signed-out recipient reaches the acceptance
 // page (which then offers a sign-in link that returns them here). The
@@ -67,12 +67,21 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const { supabaseResponse, user } = await updateSession(request);
+  const { supabaseResponse, user, authUnavailable } = await updateSession(request);
 
   // API routes with their own auth (e.g. CRON_SECRET): skip session check
   if (isSelfAuthApiRoute(pathname)) {
     applyFrameHeaders(supabaseResponse, pathname);
     return supabaseResponse;
+  }
+
+  // Auth is down, not the session. Redirecting to /login would tell the
+  // user their session expired (it did not) and the login page could not
+  // sign them in anyway.
+  if (authUnavailable) {
+    const response = authUnavailableResponse(request.nextUrl.pathname + request.nextUrl.search);
+    applyFrameHeaders(response, pathname);
+    return response;
   }
 
   // No session on a protected route → redirect to /login

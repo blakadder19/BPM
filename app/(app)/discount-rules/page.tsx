@@ -12,6 +12,7 @@ import {
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { DiscountRulesPanel } from "@/components/discount-rules/discount-rules-panel";
+import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
 
 /**
  * Phase A — full admin CRUD for discount rules.
@@ -29,7 +30,7 @@ export default async function DiscountRulesPage() {
   await ensureOperationalDataHydrated();
 
   const specialEventRepo = getSpecialEventRepo();
-  const [rules, products, students, affiliations, access, allEvents] =
+  const [rules, products, students, affiliations, access, allEvents, everyPurchase] =
     await Promise.all([
       getDiscountRuleRepo().getAll(),
       getProductRepo().getAll(),
@@ -37,6 +38,7 @@ export default async function DiscountRulesPage() {
       getAffiliationRepo().getAll(),
       getStaffAccess(),
       specialEventRepo.getAllEvents(),
+      specialEventRepo.getAllPurchases(),
     ]);
 
   // Flatten event_products → admin pickable rows. Each row carries the
@@ -71,13 +73,12 @@ export default async function DiscountRulesPage() {
         priceCents: p.priceCents,
       });
     }
-    const purchases = await specialEventRepo.getPurchasesByEvent(e.id);
-    for (const pur of purchases) {
-      allPurchases.push({
-        paymentStatus: pur.paymentStatus,
-        appliedDiscount: pur.appliedDiscount,
-      });
-    }
+  }
+  for (const pur of purchasesForEvents(allEvents, everyPurchase)) {
+    allPurchases.push({
+      paymentStatus: pur.paymentStatus,
+      appliedDiscount: pur.appliedDiscount,
+    });
   }
 
   function countRuleUsage(ruleId: string): number {

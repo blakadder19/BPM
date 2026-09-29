@@ -69,8 +69,9 @@ vi.mock("@/lib/repositories", () => ({
     async getAllEvents() {
       return [{ id: "evt-1", title: "Event" }];
     },
-    async getPurchasesByEvent() {
-      return PURCHASES;
+    // Every fixture purchase belongs to the single event above.
+    async getAllPurchases() {
+      return PURCHASES.map((p) => ({ ...p, eventId: "evt-1" }));
     },
   }),
 }));

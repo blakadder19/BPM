@@ -64,20 +64,15 @@ export async function markFinanceTransactionPaidAction(
 
   if (transactionId.startsWith("evt-")) {
     const purchaseId = transactionId.slice("evt-".length);
-    // We need the eventId to call markEventPurchasePaidAction — look it
-    // up by scanning all events. The set is small (admin-managed) and
-    // we already round-trip it elsewhere; if this becomes hot we can
-    // add a direct repo lookup.
     const repo = getSpecialEventRepo();
-    const events = await repo.getAllEvents();
-    let eventId: string | null = null;
-    for (const e of events) {
-      const purchases = await repo.getPurchasesByEvent(e.id);
-      if (purchases.some((p) => p.id === purchaseId)) {
-        eventId = e.id;
-        break;
-      }
-    }
+    const [purchase, events] = await Promise.all([
+      repo.getPurchaseById(purchaseId),
+      repo.getAllEvents(),
+    ]);
+    // Only accept a purchase whose event still exists — the same set the
+    // previous per-event scan could find it in.
+    const eventId =
+      purchase && events.some((e) => e.id === purchase.eventId) ? purchase.eventId : null;
     if (!eventId) return { success: false, error: "Event purchase not found." };
     return markEventPurchasePaidAction({
       purchaseId,

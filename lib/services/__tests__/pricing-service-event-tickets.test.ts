@@ -70,7 +70,7 @@ vi.mock("@/lib/repositories", () => ({
     async getAllEvents() {
       return [];
     },
-    async getPurchasesByEvent() {
+    async getAllPurchases() {
       return [];
     },
   }),

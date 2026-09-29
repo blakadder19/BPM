@@ -64,7 +64,7 @@ vi.mock("@/lib/repositories", () => ({
   }),
   getSpecialEventRepo: () => ({
     async getAllEvents() { return [{ id: "evt-1", title: "Event" }]; },
-    async getPurchasesByEvent() { return []; },
+    async getAllPurchases() { return []; },
   }),
 }));
 

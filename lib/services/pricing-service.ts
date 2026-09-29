@@ -51,6 +51,7 @@ import {
 } from "@/lib/domain/pricing-engine";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import { getSettings } from "@/lib/services/settings-store";
+import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
 import {
   computeVatForPayment,
   noVat,
@@ -631,15 +632,11 @@ async function checkPromoCodeUsage(
   // Single broad fetch keeps this O(n) on event purchases. Good enough
   // for MVP — collaborator codes are low volume. If this becomes hot,
   // add a Supabase view filtered by `applied_discount @> ...`.
-  const allPurchases = await (async () => {
-    const events = await repo.getAllEvents();
-    const out: Awaited<ReturnType<typeof repo.getPurchasesByEvent>> = [];
-    for (const e of events) {
-      const ps = await repo.getPurchasesByEvent(e.id);
-      out.push(...ps);
-    }
-    return out;
-  })();
+  const [events, everyPurchase] = await Promise.all([
+    repo.getAllEvents(),
+    repo.getAllPurchases(),
+  ]);
+  const allPurchases = purchasesForEvents(events, everyPurchase);
 
   const matchesRule = (
     p: { paymentStatus: string | null; appliedDiscount: unknown },

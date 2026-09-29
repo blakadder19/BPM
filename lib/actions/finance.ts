@@ -13,6 +13,7 @@ import {
   type FinanceMetrics,
 } from "@/lib/domain/finance";
 import { getAuditLog, type FinanceAuditEntry } from "@/lib/services/finance-audit-log";
+import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
 
 export interface FinanceData {
   transactions: FinanceTransaction[];
@@ -59,11 +60,12 @@ export async function getFinanceData(): Promise<FinanceData> {
   let eventTx: FinanceTransaction[] = [];
   try {
     const eventRepo = getSpecialEventRepo();
-    const events = await eventRepo.getAllEvents();
+    const [events, everyPurchase] = await Promise.all([
+      eventRepo.getAllEvents(),
+      eventRepo.getAllPurchases(),
+    ]);
     const eventNameMap = new Map(events.map((e) => [e.id, e.title]));
-    const allPurchases = (
-      await Promise.all(events.map((e) => eventRepo.getPurchasesByEvent(e.id)))
-    ).flat();
+    const allPurchases = purchasesForEvents(events, everyPurchase);
     eventTx = buildEventPurchaseTransactions(allPurchases, eventNameMap, studentNameMap);
   } catch {
     // Event module may not be active
