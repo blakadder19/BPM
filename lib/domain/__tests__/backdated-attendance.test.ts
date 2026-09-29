@@ -13,6 +13,8 @@ import {
   resolveBackdateEligibility,
   checkBackdateClassEligibility,
   describeBackdateRejections,
+  classifyExistingBooking,
+  shouldVoidPenaltyOnCorrection,
   BACKDATE_NO_ENTITLEMENT_MESSAGE,
 } from "@/lib/domain/backdated-attendance";
 
@@ -409,5 +411,117 @@ describe("checkBackdateClassEligibility", () => {
         today: TODAY,
       }).ok,
     ).toBe(true);
+  });
+});
+
+// ── classifyExistingBooking ─────────────────────────────────
+//
+// The rule under test: a credit must be consumed again only when
+// something actually gave it back. Booking status alone cannot say —
+// `missed` is reachable both from the closure job (nothing refunded)
+// and from an admin marking the student absent (refund depends on
+// `refundCreditOnAbsent`).
+
+describe("classifyExistingBooking — missed", () => {
+  it("treats the closure-job path as still consumed, so no second credit is taken", () => {
+    // No attendance row was ever written: the nightly closure simply
+    // flipped the booking to `missed`. The credit spent at booking
+    // time was never returned.
+    const c = classifyExistingBooking("missed", {
+      previousAttendanceStatus: null,
+      refundCreditOnAbsent: false,
+    });
+    expect(c.state).toBe("consumed");
+    expect(c.note).toContain("never given back");
+  });
+
+  it("still reinstates the booking and voids the fee even when no credit is due", () => {
+    const c = classifyExistingBooking("missed", { previousAttendanceStatus: null });
+    expect(c.state).toBe("consumed");
+    expect(c.needsReinstatement).toBe(true);
+    expect(c.targetStatus).toBe("checked_in");
+    expect(shouldVoidPenaltyOnCorrection("missed", null)).toBe(true);
+  });
+
+  it("defaults to forfeiting the credit when the refund rule is unspecified", () => {
+    // BPM's default is `refundCreditOnAbsent = false`; the safe
+    // default is the one that does not double-charge.
+    expect(classifyExistingBooking("missed").state).toBe("consumed");
+    expect(
+      classifyExistingBooking("missed", { previousAttendanceStatus: "absent" }).state,
+    ).toBe("consumed");
+  });
+
+  it("keeps the credit consumed for an absence when absences are not refunded", () => {
+    const c = classifyExistingBooking("missed", {
+      previousAttendanceStatus: "absent",
+      refundCreditOnAbsent: false,
+    });
+    expect(c.state).toBe("consumed");
+  });
+
+  it("treats the credit as restored for an absence when the academy refunds absences", () => {
+    const c = classifyExistingBooking("missed", {
+      previousAttendanceStatus: "absent",
+      refundCreditOnAbsent: true,
+    });
+    expect(c.state).toBe("restored");
+    expect(c.needsReinstatement).toBe(true);
+  });
+
+  it("treats an excused absence as restored regardless of the refund rule", () => {
+    // Excused always refunds — that is a business rule, not a setting.
+    for (const refundCreditOnAbsent of [true, false]) {
+      expect(
+        classifyExistingBooking("missed", {
+          previousAttendanceStatus: "excused",
+          refundCreditOnAbsent,
+        }).state,
+      ).toBe("restored");
+    }
+  });
+});
+
+describe("classifyExistingBooking — other statuses", () => {
+  it("treats a plain confirmed booking as consumed", () => {
+    const c = classifyExistingBooking("confirmed");
+    expect(c.state).toBe("consumed");
+    expect(c.needsReinstatement).toBe(false);
+    expect(c.targetStatus).toBe("checked_in");
+  });
+
+  it("treats a confirmed booking with an excused record as restored", () => {
+    // Excused deliberately leaves the booking status alone, so the
+    // only evidence the credit went back is the attendance row.
+    // Reading this as "consumed" would hand out a free class.
+    const c = classifyExistingBooking("confirmed", {
+      previousAttendanceStatus: "excused",
+    });
+    expect(c.state).toBe("restored");
+  });
+
+  it("leaves checked_in consumed with nothing to change", () => {
+    const c = classifyExistingBooking("checked_in");
+    expect(c.state).toBe("consumed");
+    expect(c.targetStatus).toBeNull();
+  });
+
+  it.each(["cancelled", "late_cancelled"] as const)(
+    "treats %s as restored, because cancelling genuinely refunds",
+    (status) => {
+      const c = classifyExistingBooking(status, { refundCreditOnAbsent: false });
+      expect(c.state).toBe("restored");
+      expect(c.needsReinstatement).toBe(true);
+      expect(c.targetStatus).toBe("checked_in");
+    },
+  );
+
+  it("does not let a present record flip a consumed booking to restored", () => {
+    expect(
+      classifyExistingBooking("confirmed", { previousAttendanceStatus: "present" }).state,
+    ).toBe("consumed");
+    expect(
+      classifyExistingBooking("confirmed", { previousAttendanceStatus: "late" }).state,
+    ).toBe("consumed");
   });
 });

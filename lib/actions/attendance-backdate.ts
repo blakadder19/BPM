@@ -31,6 +31,7 @@ import { getStudentRepo, getSubscriptionRepo, getProductRepo } from "@/lib/repos
 import { getInstances } from "@/lib/services/schedule-store";
 import { getTerms } from "@/lib/services/term-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { getSettings } from "@/lib/services/settings-store";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getCreditSnapshot } from "@/lib/domain/credit-availability";
@@ -126,11 +127,19 @@ export async function previewBackdatedAttendanceAction(input: {
     input.bookableClassId,
     input.studentId,
   );
-  const classification = existing ? classifyExistingBooking(existing.status) : null;
   const attendance = attendanceSvc.records.find(
     (r) =>
       r.bookableClassId === input.bookableClassId && r.studentId === input.studentId,
   );
+  // Resolved BEFORE classifying: whether a credit is owed depends on
+  // the attendance history and the refund rule, not on the booking
+  // status alone.
+  const classification = existing
+    ? classifyExistingBooking(existing.status, {
+        previousAttendanceStatus: attendance?.status ?? null,
+        refundCreditOnAbsent: getSettings().refundCreditOnAbsent,
+      })
+    : null;
 
   const allSubs = await getSubscriptionRepo().getByStudent(input.studentId);
   const allProducts = await getProductRepo().getAll();
@@ -150,9 +159,9 @@ export async function previewBackdatedAttendanceAction(input: {
   });
 
   // Attendance-only ONLY when the credit is genuinely still spent.
-  // A cancelled / late-cancelled / missed booking had its credit
-  // given back, so it needs one consumed again — see
-  // `classifyExistingBooking`.
+  // A cancelled or late-cancelled booking had its credit given back
+  // and needs one consumed again; a `missed` one usually did NOT —
+  // see `classifyExistingBooking`.
   const attendanceOnly = classification?.state === "consumed";
 
   let blockedReason: string | null = null;
@@ -254,15 +263,21 @@ export async function backdateAttendanceAction(input: {
     input.bookableClassId,
     input.studentId,
   );
-  const classification = existingBooking
-    ? classifyExistingBooking(existingBooking.status)
-    : null;
   const previousBookingStatus = existingBooking?.status ?? null;
 
   const existingAttendance = attendanceSvc.records.find(
     (r) =>
       r.bookableClassId === input.bookableClassId && r.studentId === input.studentId,
   );
+
+  // Resolved BEFORE classifying — see the preview path for why the
+  // attendance row and the refund rule are both required inputs.
+  const classification = existingBooking
+    ? classifyExistingBooking(existingBooking.status, {
+        previousAttendanceStatus: existingAttendance?.status ?? null,
+        refundCreditOnAbsent: getSettings().refundCreditOnAbsent,
+      })
+    : null;
 
   // ── Idempotency ──
   //
@@ -303,9 +318,9 @@ export async function backdateAttendanceAction(input: {
   // ── Consume a credit when one is genuinely owed ──
   //
   // Needed when there is no booking at all, OR when the existing
-  // booking is in a state whose credit was given back (cancelled /
-  // late_cancelled / missed). Skipped only when the credit is
-  // provably still spent.
+  // booking is in a state whose credit was demonstrably given back.
+  // Skipped whenever the credit is still spent — including the common
+  // `missed` case, where nothing ever refunded it.
   const needsConsumption = !existingBooking || classification?.state === "restored";
 
   if (needsConsumption) {

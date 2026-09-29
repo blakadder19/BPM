@@ -301,7 +301,23 @@ export function describeBackdateRejections(rejected: BackdateRejection[]): strin
  *   - booking creation consumes           (bookings-admin.ts, booking.ts)
  *   - cancelBooking / cancelBookingAsAdmin restore, late or not
  *     (booking-student.ts, bookings-admin.ts)
- *   - attendance absent/excused restores  (attendance.ts::adjustEntitlement)
+ *   - attendance excused always restores  (attendance.ts::adjustEntitlement)
+ *   - attendance absent restores ONLY when `refundCreditOnAbsent`
+ *     (attendance.ts: `prevConsumed = !settings.refundCreditOnAbsent`)
+ *   - the closure job moves a booking to `missed` and touches NO
+ *     counters at all (attendance-closure.ts calls only `markMissed`)
+ *
+ * That last pair is why `missed` cannot be classified from the
+ * booking status alone. Two different histories produce it:
+ *
+ *   closure (no attendance row) → credit still spent
+ *   admin marked `absent`       → credit returned only if the
+ *                                 academy refunds absences
+ *
+ * With `refundCreditOnAbsent = false` — the BPM default — neither
+ * path returns the credit, so treating `missed` as "restored" would
+ * charge the student a SECOND credit for a class they already paid
+ * for. The attendance record is the signal that tells them apart.
  */
 export type BookingConsumptionState =
   /** The credit is currently spent on this booking. Do not consume again. */
@@ -321,6 +337,36 @@ export interface BookingClassification {
   note: string;
 }
 
+export interface BookingClassificationContext {
+  /**
+   * Status of any attendance row already recorded for this student
+   * and class. `null`/absent means none was ever written, which for a
+   * `missed` booking identifies the closure-job path.
+   */
+  previousAttendanceStatus?: string | null;
+  /**
+   * The `refundCreditOnAbsent` business rule. Defaults to `false`,
+   * matching the BPM default: an absence forfeits the credit.
+   */
+  refundCreditOnAbsent?: boolean;
+}
+
+/**
+ * Whether an existing attendance row already handed the credit back.
+ *
+ * Mirrors `adjustEntitlement`: excused always refunds, absent refunds
+ * only when the academy has opted into it, and present/late leave the
+ * credit spent.
+ */
+function attendanceReturnedTheCredit(
+  previousAttendanceStatus: string | null | undefined,
+  refundCreditOnAbsent: boolean,
+): boolean {
+  if (previousAttendanceStatus === "excused") return true;
+  if (previousAttendanceStatus === "absent") return refundCreditOnAbsent;
+  return false;
+}
+
 /**
  * Classify every `BookingStatus`. Exhaustive by construction — the
  * switch has no default, so adding a status to the union is a
@@ -328,15 +374,32 @@ export interface BookingClassification {
  */
 export function classifyExistingBooking(
   status: "confirmed" | "checked_in" | "cancelled" | "late_cancelled" | "missed",
+  context: BookingClassificationContext = {},
 ): BookingClassification {
+  const refunded = attendanceReturnedTheCredit(
+    context.previousAttendanceStatus,
+    context.refundCreditOnAbsent ?? false,
+  );
+
   switch (status) {
     case "confirmed":
-      return {
-        state: "consumed",
-        needsReinstatement: false,
-        targetStatus: "checked_in",
-        note: "A credit was already consumed when this booking was made.",
-      };
+      // An `excused` (or refunded `absent`) row against a still-
+      // confirmed booking means the credit went back even though the
+      // booking never changed status — excused deliberately leaves it
+      // alone. Treating this as "consumed" would grant a free class.
+      return refunded
+        ? {
+            state: "restored",
+            needsReinstatement: false,
+            targetStatus: "checked_in",
+            note: "The credit for this booking was given back when the student was marked absent or excused. Correcting it will consume one credit again.",
+          }
+        : {
+            state: "consumed",
+            needsReinstatement: false,
+            targetStatus: "checked_in",
+            note: "A credit was already consumed when this booking was made.",
+          };
     case "checked_in":
       return {
         state: "consumed",
@@ -359,12 +422,21 @@ export function classifyExistingBooking(
         note: "This booking was late-cancelled and the credit was given back. Correcting it will reinstate the booking, consume one credit, and void the late-cancel penalty.",
       };
     case "missed":
-      return {
-        state: "restored",
-        needsReinstatement: true,
-        targetStatus: "checked_in",
-        note: "This booking was marked as missed and the credit was given back. Correcting it will reinstate the booking, consume one credit, and void the no-show penalty.",
-      };
+      // The credit was spent at booking time. Only an attendance row
+      // can have returned it; the closure job never does.
+      return refunded
+        ? {
+            state: "restored",
+            needsReinstatement: true,
+            targetStatus: "checked_in",
+            note: "This booking was marked as missed and the credit was given back. Correcting it will reinstate the booking, consume one credit, and void the no-show penalty.",
+          }
+        : {
+            state: "consumed",
+            needsReinstatement: true,
+            targetStatus: "checked_in",
+            note: "This booking was marked as missed but the credit was never given back, so no further credit is due. Correcting it will reinstate the booking and void the no-show penalty.",
+          };
   }
 }
 
