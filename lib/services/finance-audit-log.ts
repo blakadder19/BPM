@@ -10,6 +10,7 @@
 
 import { generateId } from "@/lib/utils";
 import { saveAuditEntryToDB } from "@/lib/supabase/operational-persistence";
+import { isMemoryMode } from "@/lib/config/data-provider";
 
 export type AuditAction =
   | "created"
@@ -82,7 +83,7 @@ export function hydrateAuditLog(entries: FinanceAuditEntry[]): void {
   s.push(...entries);
 }
 
-export function logFinanceEvent(params: {
+export interface LogFinanceEventParams {
   entityType: FinanceAuditEntry["entityType"];
   entityId: string;
   action: AuditAction;
@@ -93,17 +94,23 @@ export function logFinanceEvent(params: {
   previousValue?: string | null;
   newValue?: string | null;
   metadata?: Record<string, unknown> | null;
-}): FinanceAuditEntry {
+  /**
+   * Stable id for entries that may be re-written by a recovery.
+   * Omit for ordinary events, which get a fresh id.
+   */
+  entryId?: string;
+}
+
+function buildEntry(params: LogFinanceEventParams): FinanceAuditEntry {
   const now = new Date().toISOString();
   const performer = params.performer ?? null;
-  const derivedLegacy = params.performedBy ?? displayPerformer(performer);
 
-  const entry: FinanceAuditEntry = {
-    id: generateId("fal"),
+  return {
+    id: params.entryId ?? generateId("fal"),
     entityType: params.entityType,
     entityId: params.entityId,
     action: params.action,
-    performedBy: derivedLegacy,
+    performedBy: params.performedBy ?? displayPerformer(performer),
     performedByUserId: performer?.userId ?? null,
     performedByEmail: performer?.email ?? null,
     performedByName: performer?.name ?? null,
@@ -114,7 +121,19 @@ export function logFinanceEvent(params: {
     metadata: params.metadata ?? null,
     createdAt: now,
   };
-  store().push(entry);
+}
+
+/** Replace an entry with the same id, so a retry does not duplicate it. */
+function upsertInMemory(entry: FinanceAuditEntry): void {
+  const s = store();
+  const i = s.findIndex((e) => e.id === entry.id);
+  if (i >= 0) s[i] = entry;
+  else s.push(entry);
+}
+
+export function logFinanceEvent(params: LogFinanceEventParams): FinanceAuditEntry {
+  const entry = buildEntry(params);
+  upsertInMemory(entry);
 
   // Fire-and-forget persistence — non-blocking, logs on error
   saveAuditEntryToDB(entry).catch((e) =>
@@ -122,6 +141,88 @@ export function logFinanceEvent(params: {
   );
 
   return entry;
+}
+
+export interface PersistedAuditResult {
+  entry: FinanceAuditEntry;
+  /** False when the row did not reach the database. */
+  persisted: boolean;
+  /** Stored, but without the structured performer fields. */
+  degraded: boolean;
+  error?: string;
+}
+
+/**
+ * Same as `logFinanceEvent`, but AWAITS persistence and reports the
+ * outcome.
+ *
+ * For operations sensitive enough that "it happened" and "we have a
+ * durable record that it happened" must not be conflated — a
+ * backdated correction moves a real credit, so the caller needs to
+ * know whether the trail actually exists before telling an admin the
+ * change was audited.
+ */
+export async function logFinanceEventAwaited(
+  params: LogFinanceEventParams,
+): Promise<PersistedAuditResult> {
+  return persistAwaited(buildEntry(params));
+}
+
+/**
+ * Entries whose awaited write failed, kept so a retry re-writes the
+ * ORIGINAL entry (actor, detail, balances) instead of a reconstruction.
+ * Per server instance: a retry on another instance falls back to
+ * reconstructing what it can.
+ */
+function pendingStore(): Map<string, FinanceAuditEntry> {
+  const g = globalThis as unknown as { __bpmPendingAudit?: Map<string, FinanceAuditEntry> };
+  if (!g.__bpmPendingAudit) g.__bpmPendingAudit = new Map();
+  return g.__bpmPendingAudit;
+}
+
+export function getPendingAuditEntry(id: string): FinanceAuditEntry | undefined {
+  return pendingStore().get(id);
+}
+
+/**
+ * The in-memory log only receives an entry once it is durable, so
+ * "is it in the log?" can be trusted to mean "is it in the database?".
+ * In memory mode the in-memory store IS the store of record.
+ */
+async function persistAwaited(entry: FinanceAuditEntry): Promise<PersistedAuditResult> {
+  if (isMemoryMode()) {
+    upsertInMemory(entry);
+    return { entry, persisted: true, degraded: false };
+  }
+
+  let result: { persisted: boolean; degraded?: boolean; error?: string };
+  try {
+    result = await saveAuditEntryToDB(entry);
+  } catch (e) {
+    result = { persisted: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  if (result.persisted) {
+    upsertInMemory(entry);
+    pendingStore().delete(entry.id);
+  } else {
+    console.warn("[finance-audit] persist failed:", result.error);
+    pendingStore().set(entry.id, entry);
+  }
+  return {
+    entry,
+    persisted: result.persisted,
+    degraded: !!result.degraded,
+    error: result.error,
+  };
+}
+
+/** Re-attempt a previously failed entry exactly as it was built. */
+export async function retryPendingAuditEntry(
+  id: string,
+): Promise<PersistedAuditResult | null> {
+  const pending = pendingStore().get(id);
+  return pending ? persistAwaited(pending) : null;
 }
 
 export function getAuditLog(): FinanceAuditEntry[] {

@@ -42,6 +42,7 @@ import { exportAttendanceCsvAction } from "@/lib/actions/attendance-export";
 import {
   previewBackdatedAttendanceAction,
   backdateAttendanceAction,
+  retryBackdateAuditAction,
   type BackdatePreview,
 } from "@/lib/actions/attendance-backdate";
 import { validateTokenCheckInAction } from "@/lib/actions/checkin";
@@ -1666,6 +1667,12 @@ function BackdateAttendanceDialog({
   const [preview, setPreview] = useState<BackdatePreview | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [auditWarning, setAuditWarning] = useState<string | null>(null);
+  const [auditRetry, setAuditRetry] = useState<{
+    bookingId: string;
+    attendanceId: string;
+    auditEntryId: string;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Only classes that have already happened and were not cancelled —
@@ -1746,9 +1753,40 @@ function BackdateAttendanceDialog({
         setError(r.error ?? "Could not apply the correction.");
         return;
       }
+      // The correction is committed at this point. An unsaved audit
+      // entry must not be reported as a clean success, and re-running
+      // the correction is the wrong remedy — keep the dialog open
+      // showing what happened instead of closing on a green path.
+      if (r.auditWarning) {
+        setAuditWarning(r.auditWarning);
+        setAuditRetry(
+          r.auditPersisted === false && r.bookingId && r.attendanceId && r.auditEntryId
+            ? { bookingId: r.bookingId, attendanceId: r.attendanceId, auditEntryId: r.auditEntryId }
+            : null,
+        );
+        return;
+      }
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not apply the correction.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  // Re-writes only the audit entry; the correction itself is never re-run.
+  async function handleRetryAudit() {
+    if (!auditRetry) return;
+    setSubmitting(true);
+    try {
+      const r = await retryBackdateAuditAction(auditRetry);
+      if (r.success) {
+        onDone();
+        return;
+      }
+      setAuditWarning(r.error ?? "The audit entry could not be saved.");
+    } catch (err) {
+      setAuditWarning(err instanceof Error ? err.message : "The audit entry could not be saved.");
     } finally {
       setSubmitting(false);
     }
@@ -1907,15 +1945,35 @@ function BackdateAttendanceDialog({
                 {error}
               </p>
             )}
+
+            {auditWarning && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <p className="font-medium">Applied, but not fully audited</p>
+                <p className="mt-1">{auditWarning}</p>
+              </div>
+            )}
           </DialogBody>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
-              Cancel
+            <Button
+              type="button"
+              variant="outline"
+              onClick={auditWarning ? onDone : onClose}
+              disabled={submitting}
+            >
+              {auditWarning ? "Close" : "Cancel"}
             </Button>
-            <Button type="submit" disabled={!canSubmit}>
-              {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
-              Record attendance
-            </Button>
+            {!auditWarning && (
+              <Button type="submit" disabled={!canSubmit}>
+                {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                Record attendance
+              </Button>
+            )}
+            {auditWarning && auditRetry && (
+              <Button type="button" onClick={handleRetryAudit} disabled={submitting}>
+                {submitting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : null}
+                Retry audit
+              </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>

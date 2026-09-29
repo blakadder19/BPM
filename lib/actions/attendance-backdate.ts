@@ -41,11 +41,18 @@ import {
   describeBackdateRejections,
   classifyExistingBooking,
   shouldVoidPenaltyOnCorrection,
+  isBackdatedCorrectionRecord,
+  BACKDATE_ATTENDANCE_NOTE_PREFIX,
   type BackdateCandidate,
 } from "@/lib/domain/backdated-attendance";
 import type { StoredBooking } from "@/lib/services/booking-service";
 import { consumeEntitlementCredit } from "@/lib/services/entitlement-consumption";
-import { logFinanceEvent } from "@/lib/services/finance-audit-log";
+import {
+  logFinanceEventAwaited,
+  getAuditLog,
+  retryPendingAuditEntry,
+} from "@/lib/services/finance-audit-log";
+import { backdateAuditEntryId } from "@/lib/domain/audit-entry-id";
 import {
   saveBookingToDB,
   saveAttendanceToDB,
@@ -219,6 +226,17 @@ export interface BackdateResult {
   /** How many pending penalties were voided by this correction. */
   penaltiesVoided?: number;
   waitlistResolved?: boolean;
+  /**
+   * Whether the audit entry reached the database. The booking,
+   * attendance and credit are committed before this is known, so a
+   * `false` here means the change stands but is NOT fully audited —
+   * it must never be reported as a clean success.
+   */
+  auditPersisted?: boolean;
+  /** Admin-facing explanation when the trail is missing or partial. */
+  auditWarning?: string;
+  /** Stable id of the audit entry, for a targeted retry. */
+  auditEntryId?: string;
 }
 
 export async function backdateAttendanceAction(input: {
@@ -294,6 +312,19 @@ export async function backdateAttendanceAction(input: {
     classification?.state === "consumed" &&
     existingAttendance?.status === "present"
   ) {
+    // No new work, so no new audit entry — but if the ORIGINAL
+    // correction's audit never landed, saying nothing here would hide
+    // the gap behind a success. Only asked of rows a correction wrote:
+    // a present mark from an ordinary check-in has no correction to
+    // audit, and offering a retry there would fabricate one.
+    const correctionRow = isBackdatedCorrectionRecord(existingAttendance);
+    const priorAuditId = correctionRow
+      ? backdateAuditEntryId(existingBooking.id, existingAttendance.id, existingAttendance.markedAt)
+      : undefined;
+    const auditExists = priorAuditId
+      ? getAuditLog().some((e) => e.id === priorAuditId)
+      : undefined;
+
     return {
       success: true,
       idempotentNoOp: true,
@@ -304,6 +335,12 @@ export async function backdateAttendanceAction(input: {
       previousBookingStatus,
       newBookingStatus: existingBooking.status,
       entitlementWasAlreadyConsumed: true,
+      auditEntryId: priorAuditId,
+      auditPersisted: auditExists,
+      auditWarning:
+        auditExists === false
+          ? "This correction was already applied but has no audit entry. Retry the audit rather than repeating the correction."
+          : undefined,
     };
   }
 
@@ -519,7 +556,7 @@ export async function backdateAttendanceAction(input: {
     status: "present",
     markedBy: admin.fullName ?? admin.email ?? admin.id,
     checkInMethod: "manual",
-    notes: `Backdated correction: ${reason}`,
+    notes: `${BACKDATE_ATTENDANCE_NOTE_PREFIX}${reason}`,
     source: existingBooking ? "booking" : "admin",
     subscriptionId: usedSubscriptionId,
   });
@@ -578,7 +615,9 @@ export async function backdateAttendanceAction(input: {
   // entry sits alongside the other entitlement movements for that
   // row. Falls back to the student when the correction was
   // attendance-only.
-  logFinanceEvent({
+  const auditEntryId = backdateAuditEntryId(bookingId ?? "none", record.id, record.markedAt);
+  const audit = await logFinanceEventAwaited({
+    entryId: auditEntryId,
     entityType: "subscription",
     entityId: usedSubscriptionId ?? `student:${input.studentId}`,
     action: "manual_edit",
@@ -648,7 +687,124 @@ export async function backdateAttendanceAction(input: {
     entitlementWasAlreadyConsumed,
     penaltiesVoided: penaltyVoided,
     waitlistResolved,
+    auditPersisted: audit.persisted,
+    auditEntryId,
+    auditWarning: describeAuditOutcome(audit),
   };
+}
+
+/**
+ * Retry ONLY the audit entry for a correction that already applied.
+ *
+ * Deliberately narrow: it takes the ids of work that is already
+ * committed and rewrites the audit row under the same deterministic
+ * id. It never touches the booking, the attendance or the credit, so
+ * running it twice cannot duplicate a row or spend a second credit.
+ */
+export async function retryBackdateAuditAction(input: {
+  bookingId: string;
+  attendanceId: string;
+  auditEntryId: string;
+}): Promise<{
+  success: boolean;
+  error?: string;
+  auditEntryId?: string;
+  degraded?: boolean;
+  alreadyAudited?: boolean;
+}> {
+  const access = await requirePermission("attendance:backdate");
+  await ensureOperationalDataHydrated();
+
+  const attendanceSvc = getAttendanceService();
+  const record = attendanceSvc.records.find((r) => r.id === input.attendanceId);
+  if (!record) {
+    return { success: false, error: "Attendance record not found; nothing to re-audit." };
+  }
+
+  // Only re-audit work that demonstrably exists: an unlinked pair, or a
+  // row an ordinary check-in wrote, would mint a plausible-looking entry
+  // for a correction that never happened.
+  if (record.bookingId !== input.bookingId || !isBackdatedCorrectionRecord(record)) {
+    return {
+      success: false,
+      error: "No backdated correction matches this booking and attendance record; nothing to re-audit.",
+    };
+  }
+
+  // The id encodes the row's markedAt. A mismatch means the attendance was
+  // re-marked after the correction, so the current row no longer describes
+  // it — re-writing under a new id could duplicate an entry that did land.
+  const entryId = backdateAuditEntryId(input.bookingId, input.attendanceId, record.markedAt);
+  if (entryId !== input.auditEntryId) {
+    return {
+      success: false,
+      error: "This attendance record has changed since the correction, so its audit entry can't be re-written automatically.",
+    };
+  }
+
+  if (getAuditLog().some((e) => e.id === entryId)) {
+    return { success: true, auditEntryId: entryId, alreadyAudited: true };
+  }
+
+  // Same server instance: re-write the original entry exactly.
+  const original = await retryPendingAuditEntry(entryId);
+  const audit =
+    original ??
+    // Another instance: reconstruct what the rows still prove, marked as a
+    // recovery and attributed to the admin performing it.
+    (await logFinanceEventAwaited({
+      entryId,
+      entityType: "subscription",
+      entityId: record.subscriptionId ?? `student:${record.studentId}`,
+      action: "manual_edit",
+      performer: {
+        userId: access.user.id,
+        email: access.user.email,
+        name: access.user.fullName,
+      },
+      detail: `Backdated attendance correction — audit re-written after a failed write (${record.notes ?? ""})`,
+      previousValue: null,
+      newValue: "present",
+      metadata: {
+        backdatedAttendance: {
+          studentId: record.studentId,
+          studentName: record.studentName,
+          classInstanceId: record.bookableClassId,
+          classTitle: record.classTitle,
+          classDate: record.date,
+          bookingId: input.bookingId,
+          attendanceId: input.attendanceId,
+          subscriptionId: record.subscriptionId ?? null,
+          correctionMarkedAt: record.markedAt,
+          correctionMarkedBy: record.markedBy,
+          auditRecoveredAt: new Date().toISOString(),
+          auditRecoveredBy: access.user.id,
+        },
+      },
+    }));
+
+  return {
+    success: audit.persisted,
+    error: audit.persisted ? undefined : (audit.error ?? "Audit write failed."),
+    auditEntryId: entryId,
+    degraded: audit.degraded,
+  };
+}
+
+function describeAuditOutcome(audit: {
+  persisted: boolean;
+  degraded: boolean;
+  error?: string;
+}): string | undefined {
+  if (!audit.persisted) {
+    return `The correction was applied but the audit entry could not be saved${
+      audit.error ? ` (${audit.error})` : ""
+    }. The booking, attendance and credit are correct — retry the audit rather than repeating the correction.`;
+  }
+  if (audit.degraded) {
+    return "Audit entry saved without the performer identity fields — migration 00047 is missing on this database.";
+  }
+  return undefined;
 }
 
 // ── Helpers ──────────────────────────────────────────────────

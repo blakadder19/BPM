@@ -556,15 +556,93 @@ export async function loadAuditLogFromDB(): Promise<FinanceAuditEntry[]> {
   }
 }
 
-export async function saveAuditEntryToDB(entry: FinanceAuditEntry): Promise<void> {
+export interface AuditPersistResult {
+  persisted: boolean;
+  /** Written without the structured identity fields — see below. */
+  degraded?: boolean;
+  error?: string;
+}
+
+/** Columns added by migration 00047; absent on databases that skipped it. */
+const AUDIT_IDENTITY_COLUMNS = [
+  "performed_by_user_id",
+  "performed_by_email",
+  "performed_by_name",
+  "performed_at",
+] as const;
+
+/**
+ * Only the 00047 identity columns justify the degraded retry.
+ *
+ * Deliberately NOT "any PGRST204": a different missing column means
+ * a different schema problem, and silently dropping these four would
+ * misreport it as a partial success instead of surfacing it.
+ */
+function isMissingIdentityColumnError(error: {
+  code?: string;
+  message?: string;
+}): boolean {
+  const named = AUDIT_IDENTITY_COLUMNS.some((c) => error.message?.includes(c));
+  if (!named) return false;
+  // 42703 is Postgres' own undefined_column, PGRST204 is PostgREST's
+  // schema-cache equivalent; either can surface depending on the path.
+  return error.code === "PGRST204" || error.code === "42703" || !error.code;
+}
+
+/**
+ * Persist an audit entry, reporting whether it landed.
+ *
+ * Insert-if-absent on the id: recovery re-attempts the same entry by
+ * its deterministic id, which must neither create a second row nor
+ * overwrite one that already landed — audit entries are immutable, and
+ * a recovery may only have a reconstruction to offer (the in-memory
+ * log holds just the latest 500 rows, so "not in memory" does not mean
+ * "not in the database").
+ *
+ * The degraded path exists because this silently dropped EVERY audit
+ * write on any database missing migration 00047 — the insert named
+ * four columns that did not exist, Postgres rejected the whole row,
+ * and the error was swallowed. Losing the entry outright is worse
+ * than losing the structured performer fields, since `performed_by`
+ * still carries the human-readable actor. The caller is told so the
+ * drift stays visible instead of silently degrading forever.
+ */
+export async function saveAuditEntryToDB(
+  entry: FinanceAuditEntry,
+): Promise<AuditPersistResult> {
   const client = getClient();
-  if (!client) return;
+  if (!client) return { persisted: false, error: "No Supabase client configured." };
+
+  const row = auditEntryToRow(entry);
   try {
     const { error } = await client
       .from("op_finance_audit_log")
-      .insert(auditEntryToRow(entry));
-    if (error) console.warn("[op-persistence] saveAuditEntry:", error.message);
+      .upsert(row, { onConflict: "id", ignoreDuplicates: true });
+    if (!error) return { persisted: true };
+
+    if (!isMissingIdentityColumnError(error)) {
+      console.warn("[op-persistence] saveAuditEntry:", error.message);
+      return { persisted: false, error: error.message };
+    }
+
+    const legacyRow = { ...row };
+    for (const c of AUDIT_IDENTITY_COLUMNS) {
+      delete (legacyRow as Record<string, unknown>)[c];
+    }
+    const retry = await client
+      .from("op_finance_audit_log")
+      .upsert(legacyRow, { onConflict: "id", ignoreDuplicates: true });
+    if (retry.error) {
+      console.warn("[op-persistence] saveAuditEntry (legacy):", retry.error.message);
+      return { persisted: false, error: retry.error.message };
+    }
+    console.warn(
+      "[op-persistence] audit entry stored without identity fields — migration 00047 is not applied to this database.",
+    );
+    return { persisted: true, degraded: true };
   } catch (e) {
-    console.warn("[op-persistence] saveAuditEntry error:", e instanceof Error ? e.message : e);
+    const message = e instanceof Error ? e.message : String(e);
+    console.warn("[op-persistence] saveAuditEntry error:", message);
+    return { persisted: false, error: message };
   }
 }

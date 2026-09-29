@@ -489,3 +489,22 @@ export function checkBackdateClassEligibility(input: {
   }
   return { ok: true };
 }
+
+// ── Correction marker ────────────────────────────────────────
+
+/**
+ * Prefix the correction writes into the attendance row's notes.
+ *
+ * It is the only durable trace that a given attendance row came from a
+ * backdated correction rather than an ordinary check-in, so the audit
+ * recovery paths rely on it: without it they would report a "missing"
+ * audit entry for a normal check-in and offer to write one for a
+ * correction that never happened.
+ */
+export const BACKDATE_ATTENDANCE_NOTE_PREFIX = "Backdated correction: ";
+
+export function isBackdatedCorrectionRecord(record: {
+  notes?: string | null;
+}): boolean {
+  return !!record.notes?.startsWith(BACKDATE_ATTENDANCE_NOTE_PREFIX);
+}
