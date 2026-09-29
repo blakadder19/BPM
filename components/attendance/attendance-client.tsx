@@ -49,6 +49,7 @@ import type { AttendanceMark, ClassType } from "@/types/domain";
 import type { StoredAttendance } from "@/lib/services/attendance-service";
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
 import { checkStudentPracticePayment } from "@/lib/domain/student-practice-rules";
+import { describeAttendanceSource } from "@/lib/domain/attendance-source-label";
 
 // ── Prop types (serializable slices of mock data) ────────────
 
@@ -791,18 +792,21 @@ function SummaryPill({
   );
 }
 
-const SOURCE_BADGE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
-  subscription: { bg: "bg-violet-50", text: "text-violet-600", label: "Subscription" },
-  drop_in: { bg: "bg-teal-50", text: "text-teal-600", label: "Drop-in" },
-  walk_in: { bg: "bg-bpm-50", text: "text-bpm-600", label: "Walk-in" },
-  admin: { bg: "bg-gray-100", text: "text-gray-600", label: "Admin" },
+const SOURCE_BADGE_STYLES: Record<string, { bg: string; text: string }> = {
+  booking: { bg: "bg-indigo-50", text: "text-indigo-600" },
+  subscription: { bg: "bg-violet-50", text: "text-violet-600" },
+  drop_in: { bg: "bg-teal-50", text: "text-teal-600" },
+  walk_in: { bg: "bg-bpm-50", text: "text-bpm-600" },
+  admin: { bg: "bg-gray-100", text: "text-gray-600" },
+  unknown: { bg: "bg-gray-100", text: "text-gray-600" },
 };
 
-function SourceBadge({ source }: { source: string }) {
-  const style = SOURCE_BADGE_STYLES[source] ?? SOURCE_BADGE_STYLES.walk_in;
+function SourceBadge({ source, hasBooking }: { source?: string | null; hasBooking?: boolean }) {
+  const { key, label } = describeAttendanceSource(source, hasBooking);
+  const style = SOURCE_BADGE_STYLES[key] ?? SOURCE_BADGE_STYLES.unknown;
   return (
     <span className={cn("ml-2 inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium", style.bg, style.text)}>
-      {style.label}
+      {label}
     </span>
   );
 }
@@ -1139,7 +1143,7 @@ function HistoryRow({
           <StatusBadge status={currentStatus} />
         )}
       </Td>
-        <Td><SourceBadge source={a.source ?? "walk_in"} /></Td>
+        <Td><SourceBadge source={a.source} hasBooking={!!a.bookingId} /></Td>
       <Td className="capitalize">{a.checkInMethod}</Td>
       <Td>{a.markedBy}</Td>
       <Td>{a.markedAt.split("T")[1]?.substring(0, 5) ?? a.markedAt}</Td>
