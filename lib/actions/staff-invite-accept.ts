@@ -193,6 +193,15 @@ export async function acceptStaffInviteByTokenAction(
     };
   }
 
+  if (result.reason === "email_unverified") {
+    return {
+      outcome: "error",
+      message: `Confirm your email address (${invite.email}) before accepting this invitation, then open the link again.`,
+      roleKey: invite.roleKey,
+      roleLabel,
+    };
+  }
+
   if (result.reason === "expired") {
     return {
       outcome: "expired",

@@ -668,7 +668,7 @@ export async function adminRestoreBookingAction(
     return { success: false, error: "Cannot restore — class has ended" };
   }
 
-  const { validateRestoreEntitlement } = await import("@/lib/actions/booking-student");
+  const { validateRestoreEntitlement } = await import("@/lib/services/restore-entitlement");
   const { getStudentRepo } = await import("@/lib/repositories");
   const student = await getStudentRepo().getById(booking.studentId);
   const entitlementCheck = await validateRestoreEntitlement(booking, {

@@ -270,7 +270,8 @@ export async function updateNotificationPayloadByKey(
 // ── Dismiss ──────────────────────────────────────────────────
 
 export async function dismissNotification(
-  noticeId: string
+  noticeId: string,
+  studentId: string,
 ): Promise<void> {
   const client = getClient();
   if (!client) return;
@@ -278,7 +279,8 @@ export async function dismissNotification(
     const { error } = await client
       .from(TABLE)
       .delete()
-      .eq("id", noticeId);
+      .eq("id", noticeId)
+      .eq("student_id", studentId);
     if (error)
       console.warn("[notification-store] dismiss:", error.message);
   } catch (e) {

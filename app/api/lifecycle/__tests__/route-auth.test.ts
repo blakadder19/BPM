@@ -6,36 +6,36 @@
  *   * missing / invalid `Authorization` header → 401 Unauthorized
  *   * matching `Bearer ${CRON_SECRET}` → 200 OK with a JSON body
  *
- * We stub `runTermLifecycleAction` so the test never touches Supabase,
+ * We stub the lifecycle service so the test never touches Supabase,
  * Brevo, or `student_notifications` — the auth gate is the only thing
  * under test here.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Stub the heavy server action BEFORE importing the route module so
-// the vi.mock hoist replaces it cleanly.
-vi.mock("@/lib/actions/term-lifecycle", () => ({
-  runTermLifecycleAction: vi.fn(async () => ({
+vi.mock("@/lib/services/term-lifecycle-service", () => ({
+  LIFECYCLE_ALREADY_RUNNING: "Lifecycle is already running. Try again shortly.",
+  runTermLifecycle: vi.fn(async () => ({
     success: true,
     result: { expired: 0, renewalsPrepared: 0, details: [] },
   })),
 }));
 
-import { runTermLifecycleAction } from "@/lib/actions/term-lifecycle";
+import { runTermLifecycle } from "@/lib/services/term-lifecycle-service";
 import { GET, POST } from "../route";
 
 const FAKE_SECRET = "test-cron-secret-1234";
+const runMock = runTermLifecycle as unknown as ReturnType<typeof vi.fn>;
 
 describe("/api/lifecycle auth gate", () => {
   beforeEach(() => {
-    process.env.CRON_SECRET = FAKE_SECRET;
-    process.env.NODE_ENV = "production";
-    (runTermLifecycleAction as unknown as { mockClear?: () => void }).mockClear?.();
+    vi.stubEnv("CRON_SECRET", FAKE_SECRET);
+    vi.stubEnv("NODE_ENV", "production");
+    runMock.mockClear();
   });
 
   afterEach(() => {
-    delete process.env.CRON_SECRET;
+    vi.unstubAllEnvs();
   });
 
   it("rejects requests with no Authorization header (401)", async () => {
@@ -44,7 +44,7 @@ describe("/api/lifecycle auth gate", () => {
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/unauthor/i);
-    expect(runTermLifecycleAction).not.toHaveBeenCalled();
+    expect(runMock).not.toHaveBeenCalled();
   });
 
   it("rejects requests with the wrong bearer token (401)", async () => {
@@ -54,7 +54,17 @@ describe("/api/lifecycle auth gate", () => {
     });
     const res = await GET(req);
     expect(res.status).toBe(401);
-    expect(runTermLifecycleAction).not.toHaveBeenCalled();
+    expect(runMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a token that is a prefix of the real secret (401)", async () => {
+    const req = new Request("https://app.example.com/api/lifecycle", {
+      method: "GET",
+      headers: { authorization: `Bearer ${FAKE_SECRET.slice(0, -1)}` },
+    });
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+    expect(runMock).not.toHaveBeenCalled();
   });
 
   it("rejects requests with the right token but wrong scheme (401)", async () => {
@@ -64,6 +74,18 @@ describe("/api/lifecycle auth gate", () => {
     });
     const res = await GET(req);
     expect(res.status).toBe(401);
+    expect(runMock).not.toHaveBeenCalled();
+  });
+
+  it("fails closed in production when CRON_SECRET is not configured (401)", async () => {
+    vi.stubEnv("CRON_SECRET", "");
+    const req = new Request("https://app.example.com/api/lifecycle", {
+      method: "GET",
+      headers: { authorization: "Bearer " },
+    });
+    const res = await GET(req);
+    expect(res.status).toBe(401);
+    expect(runMock).not.toHaveBeenCalled();
   });
 
   it("succeeds with the correct bearer token (200)", async () => {
@@ -76,7 +98,7 @@ describe("/api/lifecycle auth gate", () => {
     const body = (await res.json()) as { ok: boolean; trigger: string };
     expect(body.ok).toBe(true);
     expect(body.trigger).toBe("scheduled");
-    expect(runTermLifecycleAction).toHaveBeenCalledWith("scheduled");
+    expect(runMock).toHaveBeenCalledTimes(1);
   });
 
   it("treats POST the same as GET (so Vercel + external cron both work)", async () => {
@@ -88,11 +110,8 @@ describe("/api/lifecycle auth gate", () => {
     expect(res.status).toBe(200);
   });
 
-  it("returns 500 if the lifecycle action itself fails", async () => {
-    (runTermLifecycleAction as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({
-      success: false,
-      error: "Database unreachable",
-    });
+  it("returns 500 if the lifecycle run itself fails", async () => {
+    runMock.mockResolvedValueOnce({ success: false, error: "Database unreachable" });
     const req = new Request("https://app.example.com/api/lifecycle", {
       method: "GET",
       headers: { authorization: `Bearer ${FAKE_SECRET}` },
@@ -102,7 +121,7 @@ describe("/api/lifecycle auth gate", () => {
   });
 
   it("returns 409 if a run is already in progress", async () => {
-    (runTermLifecycleAction as unknown as { mockResolvedValueOnce: (v: unknown) => void }).mockResolvedValueOnce({
+    runMock.mockResolvedValueOnce({
       success: false,
       error: "Lifecycle is already running. Try again shortly.",
     });

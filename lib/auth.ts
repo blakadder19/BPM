@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isMemoryMode } from "@/lib/config/data-provider";
+import { verifySessionClaims } from "@/lib/auth-token";
 import type { UserRole } from "@/types/domain";
 import type { Database } from "@/types/database";
 
@@ -55,13 +56,14 @@ function hasSupabaseConfig(): boolean {
 /**
  * Lightweight Supabase user resolution — NO provisioning.
  *
- * Uses getSession() instead of getUser() because middleware has ALREADY
- * called getUser() to validate/refresh the JWT for this request.
- * getSession() is a local cookie read (no HTTP call), saving ~200ms.
- *
- * 1. Read the session from cookies (JWT already validated by middleware)
+ * 1. Verify the session's access token (lib/auth-token.ts). Fails closed:
+ *    if it cannot be verified, there is no user.
  * 2. Look up public.users via admin client — only the columns we need
- * 3. If no DB row, fall back to verified user metadata from the JWT
+ * 3. If no DB row, fall back to a student identity built from the token
+ *
+ * Identity comes only from verified claims (sub, email). The role and
+ * academy only ever come from public.users: user_metadata is writable by
+ * the user themselves, so it is never trusted for authorisation or tenancy.
  *
  * Profile provisioning happens ONLY in the auth callback, not here.
  */
@@ -75,53 +77,43 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
     return null;
   }
 
-  // Safe to use getSession() here — middleware already validated the JWT
-  // via getUser() earlier in this request. This avoids a duplicate HTTP
-  // round-trip to the Supabase Auth server.  Suppress the Supabase
-  // library warning that would otherwise fire on every request.
-  let authUser;
+  // Middleware is not a verification guarantee: public routes skip it.
+  const claims = await verifySessionClaims(supabase.auth, process.env.NEXT_PUBLIC_SUPABASE_URL!);
+  if (!claims) return null;
+
+  // email_confirmed_at is not in the JWT. It is read from the cookie session
+  // only after verification and only when it belongs to the verified subject;
+  // it gates the confirm-email screen, never identity or permissions.
+  let emailConfirmed = false;
+  const _origWarn = console.warn;
   try {
-    const _origWarn = console.warn;
     console.warn = (...args: unknown[]) => {
       if (typeof args[0] === "string" && args[0].includes("supabase.auth.getSession()")) return;
       _origWarn.apply(console, args);
     };
-    const { data: { session }, error } = await supabase.auth.getSession();
-    console.warn = _origWarn;
-    if (error || !session?.user) return null;
-    authUser = session.user;
+    const { data: { session } } = await supabase.auth.getSession();
+    emailConfirmed = session?.user?.id === claims.sub && !!session.user.email_confirmed_at;
   } catch {
-    return null;
+    emailConfirmed = false;
+  } finally {
+    console.warn = _origWarn;
   }
 
-  const emailConfirmed = !!authUser.email_confirmed_at;
-
-  // Build identity from JWT metadata — used as fast path or fallback.
-  const email = authUser.email ?? "";
+  const email = claims.email ?? "";
   const isDev = process.env.NODE_ENV === "development";
   const demo = isDev ? DEMO_ACCOUNTS[email] : undefined;
-  const meta = authUser.user_metadata ?? {};
-  const jwtUser: AuthUser = {
-    id: authUser.id,
+  const meta = claims.user_metadata ?? {};
+  const tokenUser: AuthUser = {
+    id: claims.sub,
     email,
     fullName: demo?.fullName ?? meta.full_name ?? (email || "BPM User"),
-    role: (meta.role as UserRole) ?? demo?.role ?? "student",
+    role: demo?.role ?? "student",
     avatarUrl: null,
-    academyId: meta.academy_id ?? "",
+    academyId: "",
     emailConfirmed,
   };
 
-  // When the JWT was just issued (signInWithPassword), the metadata is
-  // guaranteed fresh — skip the DB lookup entirely to save ~80-120ms.
-  // The cookie is set client-side in the login form and cleared by
-  // middleware on the response so subsequent requests still hit the DB.
-  const cookieStore = await cookies();
-  const freshJwt = !!cookieStore.get("bpm_fresh_jwt")?.value;
-  if (freshJwt && jwtUser.role) {
-    return jwtUser;
-  }
-
-  // Normal path: DB lookup via admin client (bypasses RLS).
+  // DB lookup via admin client (bypasses RLS).
   // Select only the columns we actually use to reduce payload size.
   try {
     const { createAdminClient } = await import("@/lib/supabase/admin");
@@ -129,7 +121,7 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
     const { data } = await admin
       .from("users")
       .select("id,email,full_name,role,avatar_url,academy_id")
-      .eq("id", authUser.id)
+      .eq("id", claims.sub)
       .maybeSingle();
     const dbUser = data as Pick<UserRow, "id" | "email" | "full_name" | "role" | "avatar_url" | "academy_id"> | null;
     if (dbUser) {
@@ -144,10 +136,10 @@ async function resolveSupabaseUser(): Promise<AuthUser | null> {
       };
     }
   } catch {
-    // DB unreachable — use JWT metadata
+    // DB unreachable — fall back to the least-privileged identity
   }
 
-  return jwtUser;
+  return tokenUser;
 }
 
 /**

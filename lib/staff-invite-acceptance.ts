@@ -44,6 +44,7 @@ function legacyRoleForStaffRole(roleKey: StaffRoleKey): "admin" | "teacher" {
 
 export type AcceptInviteReason =
   | "no_email"
+  | "email_unverified"
   | "no_invite"
   | "expired"
   | "already_super_admin"
@@ -57,6 +58,22 @@ export interface AcceptInviteResult {
   error?: string;
 }
 
+/**
+ * The confirmed email Supabase Auth holds for this user, or null when the
+ * user is missing or has not confirmed their address.
+ */
+async function confirmedAuthEmail(userId: string): Promise<string | null> {
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const { data, error } = await createAdminClient().auth.admin.getUserById(userId);
+  if (error || !data.user?.email || !data.user.email_confirmed_at) return null;
+  return data.user.email.trim().toLowerCase();
+}
+
+/**
+ * `userId` must come from verified server-side auth. `email` is re-checked
+ * against auth.users, so a caller cannot claim an invite by passing
+ * someone else's address.
+ */
 export async function acceptPendingStaffInviteForUser(input: {
   userId: string;
   email: string | null | undefined;
@@ -64,6 +81,22 @@ export async function acceptPendingStaffInviteForUser(input: {
   const email = (input.email ?? "").trim().toLowerCase();
   if (!email || !input.userId) {
     return { applied: false, reason: "no_email" };
+  }
+
+  if (!isMemoryMode()) {
+    let authEmail: string | null;
+    try {
+      authEmail = await confirmedAuthEmail(input.userId);
+    } catch (err) {
+      return {
+        applied: false,
+        reason: "error",
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+    if (authEmail !== email) {
+      return { applied: false, reason: "email_unverified" };
+    }
   }
 
   const repo = getStaffRepo();

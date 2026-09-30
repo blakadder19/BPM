@@ -1,14 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requirePermissionForAction } from "@/lib/staff-permissions";
+import { hasAnyPermission, requirePermissionForAction } from "@/lib/staff-permissions";
 import { getSpecialEventRepo, getStudentRepo } from "@/lib/repositories";
 import { updatePurchaseCheckIn, updatePurchasePayment } from "@/lib/services/special-event-service";
 import { isValidStudentQrToken, isValidGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { classifyQrToken } from "@/lib/domain/qr-resolver";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { isWithinEventCheckInWindow } from "@/lib/domain/datetime";
-import { sendPaymentConfirmationEmail } from "@/lib/actions/event-emails";
+import { sendPaymentConfirmationEmail } from "@/lib/services/event-payment-email";
 import type { MockSpecialEvent, MockEventPurchase, MockEventProduct } from "@/lib/mock-data";
 
 // ── Types ────────────────────────────────────────────────────
@@ -100,11 +100,11 @@ function revalidateEvent(eventId: string) {
 // For paid + not-checked-in purchases, auto-check-in is performed.
 
 /**
- * Core event QR lookup — accepts a pre-authenticated userId.
- * Exported for use by `processPairedScanAction`; UI-facing callers
- * should use `eventQrLookupAction` which wraps this with auth.
+ * Core event QR lookup. Not exported: it auto-checks-in purchases as
+ * `userId`, so the id must come from `requireStaff()`. Callers use
+ * `eventQrLookupAction`.
  */
-export async function eventQrLookup(
+async function eventQrLookup(
   token: string,
   eventId: string,
   userId: string,
@@ -247,8 +247,12 @@ export async function eventCollectPaymentAndCheckInAction(input: {
   eventId: string;
   receptionMethod: "cash" | "revolut";
 }): Promise<EventCheckInResult> {
-  const user = await requireStaff();
-  if (!user) return { success: false, error: "Not authorized" };
+  const guard = await requirePermissionForAction("checkin:scan");
+  if (!guard.ok) return { success: false, error: "Not authorized" };
+  if (!hasAnyPermission(guard.access, ["events:mark_paid", "payments:mark_paid_reception"])) {
+    return { success: false, error: "You do not have permission to record payments." };
+  }
+  const user = guard.access.user;
 
   const repo = getSpecialEventRepo();
   const event = await repo.getEventById(input.eventId);

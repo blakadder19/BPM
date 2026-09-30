@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
+import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
 
 const auth = {
   getUser: vi.fn(),
@@ -12,10 +13,12 @@ vi.mock("@supabase/ssr", () => ({
 }));
 
 import { updateSession, authUnavailableResponse } from "../middleware";
+import { middleware } from "@/middleware";
 
 const TIMEOUT = 50;
 const hang = () => new Promise(() => {});
 const signedIn = { id: "user-1", email: "a@b.c" };
+const networkError = () => new AuthRetryableFetchError("fetch failed", 0);
 
 function request(path = "/dashboard", cookies: Record<string, string> = {}) {
   const req = new NextRequest(new URL(path, "https://book.example.com"));
@@ -70,30 +73,18 @@ describe("updateSession — Auth timeouts", () => {
     expect(auth.getSession).not.toHaveBeenCalled();
   });
 
-  it("bounds the fresh-login getSession() path too, since it can refresh over the network", async () => {
-    auth.getSession.mockImplementation(hang);
-
-    const result = await updateSession(
-      request("/dashboard", { ...withSession, bpm_fresh_jwt: "1" }),
-      TIMEOUT,
-    );
-
-    expect(result.authUnavailable).toBe(true);
-    expect(auth.signOut).not.toHaveBeenCalled();
-  });
-
-  it("bounds the fallback getSession() after a fast getUser() error", async () => {
-    auth.getUser.mockResolvedValue({ data: { user: null }, error: new Error("fetch failed") });
-    auth.getSession.mockImplementation(hang);
+  it("fails closed when getUser() throws", async () => {
+    auth.getUser.mockRejectedValue(new Error("boom"));
+    auth.getSession.mockResolvedValue({ data: { session: { user: signedIn } } });
 
     const result = await updateSession(request("/dashboard", withSession), TIMEOUT);
 
-    expect(result.authUnavailable).toBe(true);
-    expect(auth.signOut).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ user: null, authUnavailable: true });
+    expect(auth.getSession).not.toHaveBeenCalled();
   });
 });
 
-describe("updateSession — unchanged behaviour when Auth answers", () => {
+describe("updateSession — Auth answers", () => {
   it("returns the validated user", async () => {
     auth.getUser.mockResolvedValue({ data: { user: signedIn }, error: null });
 
@@ -102,24 +93,88 @@ describe("updateSession — unchanged behaviour when Auth answers", () => {
     expect(result).toMatchObject({ user: signedIn, authUnavailable: false });
   });
 
-  it("keeps the existing fast-error fallback to the cookie session", async () => {
-    auth.getUser.mockResolvedValue({ data: { user: null }, error: new Error("fetch failed") });
+  it.each([
+    ["network failure", networkError()],
+    ["Auth 5xx", new AuthApiError("upstream error", 500, undefined)],
+    ["rate limit", new AuthApiError("over_request_rate_limit", 429, "over_request_rate_limit")],
+  ])("fails closed on a transient error (%s): no user, never the cookie session, no sign-out", async (_label, error) => {
+    auth.getUser.mockResolvedValue({ data: { user: null }, error });
     auth.getSession.mockResolvedValue({ data: { session: { user: signedIn } } });
 
     const result = await updateSession(request("/dashboard", withSession), TIMEOUT);
 
-    expect(result).toMatchObject({ user: signedIn, authUnavailable: false });
+    expect(result).toMatchObject({ user: null, authUnavailable: true });
+    expect(auth.getSession).not.toHaveBeenCalled();
     expect(auth.signOut).not.toHaveBeenCalled();
   });
 
-  it("still clears a genuinely invalid session", async () => {
-    auth.getUser.mockResolvedValue({ data: { user: null }, error: new Error("invalid JWT") });
-    auth.getSession.mockResolvedValue({ data: { session: null } });
+  it("never trusts the cookie session when Auth rejects the token", async () => {
+    auth.getUser.mockResolvedValue({
+      data: { user: null },
+      error: new AuthApiError("invalid JWT", 403, "bad_jwt"),
+    });
+    auth.getSession.mockResolvedValue({ data: { session: { user: signedIn } } });
 
     const result = await updateSession(request("/dashboard", withSession), TIMEOUT);
 
     expect(result).toMatchObject({ user: null, authUnavailable: false });
+    expect(auth.getSession).not.toHaveBeenCalled();
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+  });
+
+  it("ignores a client-set bpm_fresh_jwt cookie and still validates with getUser()", async () => {
+    auth.getUser.mockResolvedValue({
+      data: { user: null },
+      error: new AuthApiError("invalid JWT", 403, "bad_jwt"),
+    });
+    auth.getSession.mockResolvedValue({ data: { session: { user: signedIn } } });
+
+    const result = await updateSession(
+      request("/dashboard", { ...withSession, bpm_fresh_jwt: "1" }),
+      TIMEOUT,
+    );
+
+    expect(auth.getUser).toHaveBeenCalled();
+    expect(result.user).toBeNull();
+  });
+});
+
+describe("root middleware — protected access fails closed", () => {
+  beforeEach(() => {
+    process.env.DATA_PROVIDER = "supabase";
+  });
+  afterEach(() => {
+    delete process.env.DATA_PROVIDER;
+  });
+
+  it("serves the 503 auth error, not the page, when Auth cannot verify the session", async () => {
+    auth.getUser.mockResolvedValue({ data: { user: null }, error: networkError() });
+    auth.getSession.mockResolvedValue({ data: { session: { user: signedIn } } });
+
+    const res = await middleware(request("/finance", withSession));
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get("x-middleware-next")).toBeNull();
+  });
+
+  it("redirects to /login when Auth rejects the session", async () => {
+    auth.getUser.mockResolvedValue({
+      data: { user: null },
+      error: new AuthApiError("invalid JWT", 403, "bad_jwt"),
+    });
+
+    const res = await middleware(request("/finance", withSession));
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/login");
+  });
+
+  it("lets a verified session through", async () => {
+    auth.getUser.mockResolvedValue({ data: { user: signedIn }, error: null });
+
+    const res = await middleware(request("/finance", withSession));
+
+    expect(res.headers.get("x-middleware-next")).toBe("1");
   });
 });
 

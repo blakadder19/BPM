@@ -58,8 +58,10 @@ export function getNoticesForStudent(studentId: string): ClassCancellationNotice
   return getStore().filter((n) => n.studentId === studentId);
 }
 
-export function dismissStudentNotice(noticeId: string): void {
+export function dismissStudentNotice(noticeId: string, studentId: string): void {
   const store = getStore();
-  const idx = store.findIndex((n) => n.id === noticeId);
+  const idx = store.findIndex(
+    (n) => n.id === noticeId && n.studentId === studentId,
+  );
   if (idx !== -1) store.splice(idx, 1);
 }

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { ensureSupabaseProfile } from "@/lib/auth-provisioning";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 /**
  * Server-side route handler for Supabase email-link verification.
@@ -91,14 +92,4 @@ export async function GET(request: NextRequest) {
     response.cookies.set(name, value, options as never);
   }
   return response;
-}
-
-function safeRedirectPath(raw: string | null): string | null {
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    return url.pathname + url.search;
-  } catch {
-    return raw.startsWith("/") ? raw : null;
-  }
 }

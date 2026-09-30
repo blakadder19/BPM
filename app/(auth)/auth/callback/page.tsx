@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { provisionCurrentUser } from "@/lib/actions/auth-provision";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 /**
  * Auth callback page — handles Supabase email confirmation, magic links,
@@ -24,8 +25,7 @@ export default function AuthCallbackPage() {
     const code = searchParams.get("code");
     const tokenHash = searchParams.get("token_hash");
     const type = searchParams.get("type");
-    const rawNext = searchParams.get("next") ?? "/onboarding";
-    const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/onboarding";
+    const next = safeRedirectPath(searchParams.get("next")) ?? "/onboarding";
     const supabase = createClient();
 
     function clearDevCookies() {

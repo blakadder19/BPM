@@ -1,7 +1,7 @@
 /**
  * Pure helpers for the "upcoming auto-renewal" reminder workflow.
  *
- * The cron-side server action (`runTermLifecycleAction`) imports
+ * The lifecycle service (`runTermLifecycle`) imports
  * `findRenewalReminderCandidates` to pick which subscriptions should
  * trigger an email today, then dispatches `renewalReminderEvent`s.
  *

@@ -9,21 +9,25 @@
  *   - Last-super-admin protection: cannot disable, downgrade, or
  *     remove permissions from the only remaining active super admin.
  *   - Self-protection: cannot remove your own super-admin role.
+ *   - Permission ceiling: a non-super-admin cannot grant, or reactivate,
+ *     permissions they do not hold, cannot change their own grant and
+ *     cannot touch Super Admin accounts (`checkGrantChange`).
  *
  * INVITE FLOW (MVP, copy-link only)
  *   - Super admin creates an invite for an email + role + permissions.
  *     The action returns the invite URL so the inviter can share it
  *     manually (no email sending in this PR).
- *   - When a Supabase user signs in matching that email, the invite is
- *     accepted by `acceptStaffInviteOnSignInAction` (called from the
- *     auth callback), which writes the role_key + permissions onto
- *     their public.users row.
+ *   - The invite is accepted either at `/invite/[token]`
+ *     (`acceptStaffInviteByTokenAction`) or during sign-in provisioning
+ *     (`ensureSupabaseProfile`). Both derive the user from verified auth
+ *     and write the role_key + permissions onto their public.users row.
  */
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getStaffRepo } from "@/lib/repositories";
 import {
+  expandPermissions,
   isPermissionKey,
   normalizePermissionsForStorage,
   STAFF_ROLE_KEYS,
@@ -34,6 +38,7 @@ import {
 import {
   requirePermissionForAction,
   getStaffAccess,
+  type StaffAccess,
 } from "@/lib/staff-permissions";
 
 interface ActionOk<T = void> {
@@ -109,6 +114,51 @@ async function countActiveSuperAdmins(): Promise<number> {
   return all.filter(
     (s) => s.roleKey === "super_admin" && s.status === "active",
   ).length;
+}
+
+/**
+ * Rules for every path that writes a staff grant (invite of an existing
+ * account, permission edits, invites of new emails). Returns an error
+ * message, or null when the change is allowed.
+ *
+ * A non-super-admin can never touch Super Admin access, never change their
+ * own grant, and never grant a permission they do not hold themselves.
+ */
+async function checkGrantChange(
+  actor: StaffAccess,
+  target: { id: string | null; roleKey: StaffRoleKey | null },
+  next: { roleKey: StaffRoleKey; permissions: Permission[] },
+): Promise<string | null> {
+  const targetIsSuper = target.roleKey === "super_admin";
+  const isSelf = target.id !== null && target.id === actor.user.id;
+
+  if ((next.roleKey === "super_admin" || targetIsSuper) && !actor.isSuperAdmin) {
+    return "Only a Super Admin can manage Super Admin access.";
+  }
+
+  if (!actor.isSuperAdmin) {
+    if (isSelf) {
+      return "You cannot change your own staff access. Ask a Super Admin.";
+    }
+    for (const p of expandPermissions(next.roleKey, next.permissions)) {
+      if (!actor.permissions.has(p)) {
+        return "You cannot grant permissions you do not hold yourself.";
+      }
+    }
+  }
+
+  if (isSelf && targetIsSuper && next.roleKey !== "super_admin") {
+    return "You cannot remove your own Super Admin role. Ask another Super Admin to do it.";
+  }
+
+  if (targetIsSuper && next.roleKey !== "super_admin") {
+    const remaining = await countActiveSuperAdmins();
+    if (remaining <= 1) {
+      return "This is the last active Super Admin — promote someone else first.";
+    }
+  }
+
+  return null;
 }
 
 // ── Invite ─────────────────────────────────────────────────────
@@ -220,6 +270,13 @@ export async function inviteStaffAction(
   //     "access granted" rather than claiming an invite was sent when
   //     no email was ever dispatched.
   const existing = await repo.getStaffByEmail(email);
+  const grantError = await checkGrantChange(
+    guard.access,
+    { id: existing?.id ?? null, roleKey: existing?.roleKey ?? null },
+    { roleKey: input.roleKey, permissions: storedPermissions },
+  );
+  if (grantError) return { success: false, error: grantError };
+
   if (existing) {
     await repo.updateStaff(existing.id, {
       roleKey: input.roleKey,
@@ -266,8 +323,7 @@ export async function inviteStaffAction(
   });
 
   // Build the copy-link. The recipient signs in with this email through
-  // the normal Supabase auth flow; the auth callback will see the
-  // pending invite and call `acceptStaffInviteOnSignInAction`.
+  // the normal Supabase auth flow and accepts at `/invite/[token]`.
   //
   // Resolution order for the absolute base URL:
   //   1. NEXT_PUBLIC_SITE_URL (explicit prod/preview override)
@@ -390,48 +446,18 @@ export async function updateStaffPermissionsAction(
     return { success: false, error: "Invalid role." };
   }
 
-  // Only super admins can promote to super_admin or demote a super admin.
-  const targetIsSuper = target.roleKey === "super_admin";
-  if (
-    (input.roleKey === "super_admin" || targetIsSuper) &&
-    !guard.access.isSuperAdmin
-  ) {
-    return {
-      success: false,
-      error: "Only a Super Admin can manage Super Admin access.",
-    };
-  }
-
-  // Self-protection: cannot remove your own super_admin role.
-  if (
-    target.id === guard.access.user.id &&
-    targetIsSuper &&
-    input.roleKey !== "super_admin"
-  ) {
-    return {
-      success: false,
-      error:
-        "You cannot remove your own Super Admin role. Ask another Super Admin to do it.",
-    };
-  }
-
-  // Last-super-admin protection.
-  if (targetIsSuper && input.roleKey !== "super_admin") {
-    const remaining = await countActiveSuperAdmins();
-    if (remaining <= 1) {
-      return {
-        success: false,
-        error:
-          "This is the last active Super Admin — promote someone else first.",
-      };
-    }
-  }
-
   const permissions = sanitizePermissions(input.permissions);
   const storedPermissions = normalizePermissionsForStorage(
     input.roleKey,
     permissions,
   );
+
+  const grantError = await checkGrantChange(
+    guard.access,
+    { id: target.id, roleKey: target.roleKey },
+    { roleKey: input.roleKey, permissions: storedPermissions },
+  );
+  if (grantError) return { success: false, error: grantError };
   console.info(
     `[staff] update: user=${input.userId} role=${input.roleKey} extras=${storedPermissions.length}`,
   );
@@ -475,6 +501,12 @@ export async function updateStaffProfileAction(
 
   const target = await getStaffRepo().getStaff(input.userId);
   if (!target) return { success: false, error: "Staff member not found." };
+  if (target.roleKey === "super_admin" && !guard.access.isSuperAdmin) {
+    return {
+      success: false,
+      error: "Only a Super Admin can edit a Super Admin's profile.",
+    };
+  }
 
   await getStaffRepo().updateStaff(input.userId, { fullName });
 
@@ -506,13 +538,25 @@ export async function setStaffStatusAction(input: {
     return { success: false, error: "You cannot disable your own access." };
   }
 
+  if (target.roleKey === "super_admin" && !guard.access.isSuperAdmin) {
+    return {
+      success: false,
+      error: "Only a Super Admin can change a Super Admin's access.",
+    };
+  }
+
+  // Activating makes the stored grant live, so it is subject to the same
+  // ceiling as granting it directly.
+  if (input.status === "active" && target.roleKey) {
+    const grantError = await checkGrantChange(
+      guard.access,
+      { id: target.id, roleKey: target.roleKey },
+      { roleKey: target.roleKey, permissions: target.permissions },
+    );
+    if (grantError) return { success: false, error: grantError };
+  }
+
   if (target.roleKey === "super_admin" && input.status === "disabled") {
-    if (!guard.access.isSuperAdmin) {
-      return {
-        success: false,
-        error: "Only a Super Admin can disable a Super Admin.",
-      };
-    }
     const remaining = await countActiveSuperAdmins();
     if (remaining <= 1) {
       return {
@@ -538,34 +582,6 @@ export async function revokeStaffInviteAction(input: {
   const ok = await getStaffRepo().revokeInvite(input.inviteId);
   if (!ok) return { success: false, error: "Invite not found or not pending." };
   revalidatePath("/staff");
-  return { success: true };
-}
-
-// ── Accept on sign-in ──────────────────────────────────────────
-
-/**
- * Server-action wrapper around the shared staff-invite acceptance
- * helper. The actual acceptance now happens inside
- * `ensureSupabaseProfile` (provisioning), so this action is mostly a
- * thin compatibility shim — kept exported in case any client surface
- * still calls it directly.
- *
- * Idempotent — safe to call on every sign-in.
- */
-export async function acceptStaffInviteOnSignInAction(input: {
-  userId: string;
-  email: string;
-}): Promise<ActionResult> {
-  const { acceptPendingStaffInviteForUser } = await import(
-    "@/lib/staff-invite-acceptance"
-  );
-  const result = await acceptPendingStaffInviteForUser({
-    userId: input.userId,
-    email: input.email,
-  });
-  if (result.reason === "error") {
-    return { success: false, error: result.error ?? "Failed to apply invite." };
-  }
   return { success: true };
 }
 

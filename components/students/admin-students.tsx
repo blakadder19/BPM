@@ -270,7 +270,7 @@ export function AdminStudents({
             onClick={() => {
               setLifecycleMsg(null);
               startLifecycle(async () => {
-                const res = await runTermLifecycleAction("manual");
+                const res = await runTermLifecycleAction();
                 if (res.success && res.result) {
                   const r = res.result;
                   if (r.expired === 0 && r.renewalsPrepared === 0) {

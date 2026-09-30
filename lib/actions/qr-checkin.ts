@@ -179,11 +179,10 @@ export interface QrLookupResult {
 }
 
 /**
- * Core student QR lookup — no auth check, reusable from paired-scan.
- * Exported for use by `processPairedScanAction`; UI-facing callers
- * should use `lookupStudentByQrAction` which wraps this with auth.
+ * Core student QR lookup — no auth check. Not exported (it returns student
+ * contact details and entitlements); callers use `lookupStudentByQrAction`.
  */
-export async function lookupStudentByQr(token: string): Promise<QrLookupResult> {
+async function lookupStudentByQr(token: string): Promise<QrLookupResult> {
   if (!token || !isValidStudentQrToken(token)) {
     return { success: false, error: "Invalid QR code format" };
   }

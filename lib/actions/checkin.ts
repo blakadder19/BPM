@@ -93,11 +93,17 @@ export async function studentSelfCheckInAction(
 
 /**
  * Token/QR-based check-in: validates a token string and checks in the booking.
- * Can be called by staff scanning a QR or manually entering a token.
+ * Staff only — the token is a booking lookup key, not a credential.
  */
 export async function validateTokenCheckInAction(
   token: string
 ): Promise<CheckInResult> {
+  const user = await getAuthUser();
+  const access = user ? await getStaffAccess() : null;
+  if (!access || !hasAnyPermission(access, ["checkin:scan", "checkin:manual_checkin"])) {
+    return { success: false, error: "Not authorized" };
+  }
+
   await ensureOperationalDataHydrated();
   if (!token || !isValidTokenFormat(token)) {
     return { success: false, error: "Invalid check-in token" };
@@ -119,15 +125,7 @@ export async function validateTokenCheckInAction(
   const cls = svc.getClass(booking.bookableClassId);
   if (!cls) return { success: false, error: "Class not found" };
 
-  const user = await getAuthUser();
-  // "Staff" classification here is permission-aware: only users with checkin:scan
-  // or checkin:manual_checkin behave as staff (relaxed eligibility window, "Staff"
-  // markedBy label). Legacy users.role='admin' alone no longer qualifies.
-  const access = user ? await getStaffAccess() : null;
-  const isStaff = !!access && hasAnyPermission(access, ["checkin:scan", "checkin:manual_checkin"]);
-  const method = isStaff ? "staff" : "qr";
-
-  const eligibility = getCheckInEligibility(booking.status, cls.date, cls.startTime, method);
+  const eligibility = getCheckInEligibility(booking.status, cls.date, cls.startTime, "staff");
   if (!eligibility.eligible) {
     return { success: false, error: eligibility.reason };
   }
@@ -147,7 +145,7 @@ export async function validateTokenCheckInAction(
     date: cls.date,
     status: "present",
     checkInMethod: "qr" as CheckInMethod,
-    markedBy: isStaff ? (user?.fullName ?? "Staff") : "QR Scanner",
+    markedBy: user?.fullName ?? "Staff",
   });
 
   if (isRealUser(booking.studentId)) {

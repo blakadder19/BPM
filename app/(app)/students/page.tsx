@@ -22,7 +22,7 @@ import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
-import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
+import { lazyExpireSubscriptions } from "@/lib/services/term-lifecycle-service";
 import { AdminStudents } from "@/components/students/admin-students";
 import { getAllRedemptionsForYear, type BirthdayRedemption } from "@/lib/services/birthday-benefit-store";
 import type { MockEventPurchase } from "@/lib/mock-data";

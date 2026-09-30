@@ -78,10 +78,13 @@ export interface StaffAccess {
  *      this is what makes student + teacher work.
  *   2. A DISABLED grant yields no permissions, but the roleKey is
  *      still reported so admin UI can label it.
- *   3. No staff grant → legacy fallback for `users.role` of
- *      'admin' (→ super_admin) or 'teacher' (→ teacher preset), which
- *      protects environments where migration 00059 hasn't run.
- *   4. Otherwise → no staff permissions.
+ *   3. No staff grant and staff_status 'disabled' or 'pending' → no
+ *      permissions, whatever `users.role` says.
+ *   4. No staff grant, status active (or no row) → legacy fallback for
+ *      `users.role` of 'admin' (→ super_admin) or 'teacher' (→ teacher
+ *      preset), which protects environments where migration 00059
+ *      hasn't run.
+ *   5. Otherwise → no staff permissions.
  *
  * In every branch `isStudent` is derived independently from
  * `users.role`, so student functionality is never a casualty of the
@@ -149,6 +152,21 @@ export const getStaffAccess = cache(async (): Promise<StaffAccess> => {
   // roleKey===null must fall through to the legacy fallbacks — a
   // pre-migration `users.role='admin'` user would otherwise be locked
   // out with permissions=[].
+  //
+  // Except when staff_status says otherwise: a disabled or pending
+  // account never regains staff access through the legacy role.
+  if (row && row.status !== "active") {
+    return {
+      user,
+      roleKey: null,
+      status: row.status,
+      permissions: new Set(),
+      isSuperAdmin: false,
+      isLegacyAdminFallback: false,
+      isStudent,
+      isStaff: false,
+    };
+  }
 
   // Legacy fallback: pre-existing role=admin without a staff_role_key.
   if (user.role === "admin") {

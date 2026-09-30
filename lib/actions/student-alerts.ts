@@ -190,7 +190,7 @@ export async function fetchStudentAlerts(): Promise<AdminAlert[]> {
     }
 
     for (const id of staleIds) {
-      dismissNotification(id).catch(() => {});
+      dismissNotification(id, studentId).catch(() => {});
     }
     return result;
   } else {

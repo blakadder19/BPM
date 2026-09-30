@@ -17,17 +17,28 @@ import "server-only";
  *   result that was committed at session creation. No re-pricing.
  */
 
+import type Stripe from "stripe";
 import {
   fulfillStripeCheckout,
   fulfillExistingSubscriptionPayment,
-} from "@/lib/actions/stripe-checkout";
+} from "@/lib/services/stripe-fulfillment";
 import {
   fulfillEventPurchase,
   fulfillPendingEventPurchase,
   fulfillGuestEventPurchase,
-} from "@/lib/actions/event-purchase";
+} from "@/lib/services/event-purchase-fulfillment";
 
 export type FulfillmentSource = "webhook" | "success_page";
+
+/**
+ * A Checkout Session as returned by Stripe — either from
+ * `stripe.checkout.sessions.retrieve` or a signature-verified webhook
+ * event. Never construct one from client input.
+ */
+export type VerifiedStripeSession = Pick<
+  Stripe.Checkout.Session,
+  "id" | "payment_status" | "metadata"
+>;
 
 export interface FulfillmentRouterResult {
   success: boolean;
@@ -39,20 +50,28 @@ export interface FulfillmentRouterResult {
     | "event"
     | "pay_existing"
     | "subscription"
-    | "ignored";
+    | "ignored"
+    | "not_paid";
 }
 
 /**
  * Dispatch to the correct fulfillment helper based on Stripe session
- * metadata. Caller is responsible for passing only sessions whose
- * `payment_status === 'paid'` — guard happens in webhook /
- * reconciliation, NOT here.
+ * metadata. Refuses anything Stripe has not marked as paid, so no caller
+ * can fulfil an unpaid session by forgetting its own check.
  */
 export async function routeStripeSessionFulfillment(
-  sessionId: string,
-  metadata: Record<string, string>,
+  session: VerifiedStripeSession,
   source: FulfillmentSource,
 ): Promise<FulfillmentRouterResult> {
+  const sessionId = session.id;
+  if (session.payment_status !== "paid") {
+    console.warn(
+      `[stripe-fulfill:${source}] session=${sessionId} payment_status=${session.payment_status} — refusing to fulfil.`,
+    );
+    return { success: false, error: "Session is not paid.", branch: "not_paid" };
+  }
+  const metadata = (session.metadata ?? {}) as Record<string, string>;
+
   // Guest event purchase — no student id, uses guest_* metadata fields.
   if (metadata.bpm_purchase_type === "event_guest") {
     console.info(

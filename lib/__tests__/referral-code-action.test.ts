@@ -21,6 +21,7 @@ import type {
   ReferralPatch,
 } from "@/lib/repositories/interfaces/referral-repository";
 
+vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
@@ -143,7 +144,7 @@ vi.mock("@/lib/repositories", () => ({
 const importPreview = async () =>
   import("@/lib/actions/referral-code").then((m) => m.previewReferralCodeAction);
 const importApply = async () =>
-  import("@/lib/actions/referral-code").then(
+  import("@/lib/services/referral-application").then(
     (m) => m.applyPendingReferralForPurchase,
   );
 const importAddReferral = async () =>

@@ -331,27 +331,6 @@ export async function cancelRewardAction(
   });
 }
 
-/**
- * Ensures the authenticated student has a referral code allocated,
- * returning it. Used by the student dashboard so the "your referral
- * code" widget never shows null on first view.
- *
- * Permission: callable by any authenticated user for THEIR OWN id.
- * The caller passes their id explicitly so we can compare.
- */
-export async function ensureMyReferralCodeAction(
-  studentId: string,
-): Promise<ActionResult<{ code: string }>> {
-  return safeAction("ensureMyReferralCode", async () => {
-    // We deliberately don't use requirePermissionForAction here — students
-    // (who have no staff permissions) must still be able to read their own
-    // code. We rely on the caller passing their own id.
-    if (!studentId) return fail("Missing student id.");
-    const code = await getReferralRepo().getCodeForStudent(studentId);
-    return ok({ code });
-  });
-}
-
 /** Exposed so the admin UI can guard reward-status transitions client-side too. */
 export const REFERRAL_REWARD_STATUS_VALUES = REFERRAL_REWARD_STATUSES;
 export type { ReferralRewardStatus };

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import { getSpecialEventRepo } from "@/lib/repositories";
-import { fulfillGuestEventPurchase } from "@/lib/actions/event-purchase";
+import { fulfillGuestEventPurchase } from "@/lib/services/event-purchase-fulfillment";
 import type { EmailSendResult } from "@/lib/communications/event-emails";
 import { ConversionTracker } from "@/components/analytics/conversion-tracker";
 import {
@@ -119,7 +119,7 @@ async function verifyAndFulfill(
   }
 
   console.info(`${tag} Payment verified. Attempting fulfillment...`);
-  const result = await fulfillGuestEventPurchase(sessionId, metadata);
+  const result = await fulfillGuestEventPurchase(session.id, metadata);
 
   if (!result.success) {
     console.error(`${tag} Fulfillment failed: ${result.error}`);

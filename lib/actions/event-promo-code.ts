@@ -29,6 +29,7 @@ import {
 } from "@/lib/services/pricing-service";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { studentHasActiveMembership } from "@/lib/domain/active-membership";
+import { getAuthUser } from "@/lib/auth";
 
 export interface PreviewEventPromoCodeInput {
   eventId: string;
@@ -36,9 +37,9 @@ export interface PreviewEventPromoCodeInput {
   /** Customer-typed code. Trimmed/upper-cased server-side. */
   promoCode: string;
   /**
-   * When the caller is a logged-in student, passing the id enables
-   * per-student `one_use_per_email` enforcement. When omitted (guest
-   * checkout) `guestEmail` is used instead.
+   * Ignored. The student is resolved from the verified session so a
+   * caller cannot probe another student's membership or promo usage.
+   * Kept on the type so existing callers compile.
    */
   studentId?: string | null;
   /** Required for guests when `one_use_per_email` is set on the rule. */
@@ -85,18 +86,21 @@ export async function previewEventPromoCodeAction(
     return { ok: false, error: "Sales are not open for this ticket." };
   }
 
+  const user = await getAuthUser();
+  const studentId = user?.role === "student" ? user.id : null;
+
   // Members-only tickets cannot be discounted for non-members — the
   // preview should reflect the same gate the commit path applies, so
   // the customer never sees a discounted preview they cannot redeem.
   if (product.membersOnly) {
-    if (!input.studentId) {
+    if (!studentId) {
       return {
         ok: false,
         error:
           "This ticket is only available to active members. Please log in to apply a promo code.",
       };
     }
-    const isMember = await studentHasActiveMembership(input.studentId);
+    const isMember = await studentHasActiveMembership(studentId);
     if (!isMember) {
       return {
         ok: false,
@@ -107,7 +111,7 @@ export async function previewEventPromoCodeAction(
   }
 
   const pricing = await priceEventTicketForStudent({
-    studentId: input.studentId ?? null,
+    studentId,
     product: {
       id: product.id,
       productType: product.productType,

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
+import { getStaffAccess } from "@/lib/staff-permissions";
+import { resolveDashboardView } from "@/lib/dashboard-access";
 import {
   getBookingRepo,
   getPenaltyRepo,
@@ -12,7 +14,7 @@ import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentById
 import { getCurrentTerm, getTermWeekNumber } from "@/lib/domain/term-rules";
 import { getTodayStr, isClassEnded, isClassStarted, effectiveInstanceStatus, isEventEnded } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
-import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
+import { lazyExpireSubscriptions } from "@/lib/services/term-lifecycle-service";
 import { daysUntilExpiry } from "@/lib/domain/term-lifecycle";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
@@ -430,6 +432,20 @@ export default async function DashboardPage() {
         studentPreferredRole={student?.preferredRole ?? null}
         dashboardEvents={dashboardEventsList}
       />
+    );
+  }
+
+  const access = await getStaffAccess();
+  if (resolveDashboardView(user.role, access) !== "staff") {
+    return (
+      <div className="mx-auto max-w-lg py-16 text-center">
+        <h1 className="text-lg font-semibold">No staff dashboard access</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {access.status === "disabled"
+            ? "Your staff access is currently disabled. Contact a BPM administrator if you think this is a mistake."
+            : "Your account does not have access to the staff dashboard. Contact a BPM administrator if you need it."}
+        </p>
+      </div>
     );
   }
 

@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ received: true });
     }
 
-    const result = await routeStripeSessionFulfillment(session.id, metadata, "webhook");
+    const result = await routeStripeSessionFulfillment(session, "webhook");
     if (!result.success) {
       console.error(
         `[stripe-webhook] Fulfillment failed for session ${session.id}:`,

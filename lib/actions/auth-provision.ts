@@ -9,9 +9,7 @@ import { ensureSupabaseProfile } from "@/lib/auth-provisioning";
  * Safe to call multiple times (upsert-based).
  *
  * Returns `inviteApplied: true` when staff-invite acceptance changed the
- * user's role/permissions during this call, so the caller (login form)
- * can skip the JWT fast-path cookie and force a fresh DB-backed render
- * on the very first page load after login.
+ * user's role/permissions during this call.
  */
 export async function provisionCurrentUser(): Promise<{
   success: boolean;

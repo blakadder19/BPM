@@ -5,7 +5,7 @@ import { getAuthUser } from "@/lib/auth";
 import { requirePermissionForAction } from "@/lib/staff-permissions";
 import { classifyQrToken } from "@/lib/domain/qr-resolver";
 import { HEARTBEAT_STALE_MS, type ScanReceiver } from "@/lib/domain/scan-receiver";
-import { lookupStudentByQr, type QrLookupResult } from "@/lib/actions/qr-checkin";
+import { lookupStudentByQrAction, type QrLookupResult } from "@/lib/actions/qr-checkin";
 import type { GuestPurchaseQrResult } from "@/lib/actions/qr-checkin";
 import type { GlobalScanResult } from "@/lib/domain/scan-receiver";
 
@@ -162,7 +162,7 @@ export async function processGlobalScanAction(qrCode: string): Promise<{
   const tokenType = classifyQrToken(qrCode);
 
   if (tokenType === "student") {
-    const data: QrLookupResult = await lookupStudentByQr(qrCode);
+    const data: QrLookupResult = await lookupStudentByQrAction(qrCode);
     const result: GlobalScanResult = { type: "student", data };
     return { success: true, result, targetReceiverId };
   }

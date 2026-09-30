@@ -10,8 +10,8 @@ import {
   type ScanContextType,
   type PairedScanResult,
 } from "@/lib/domain/scan-session";
-import { lookupStudentByQr, type QrLookupResult } from "@/lib/actions/qr-checkin";
-import { eventQrLookup, type EventQrLookupResult } from "@/lib/actions/event-checkin";
+import { lookupStudentByQrAction, type QrLookupResult } from "@/lib/actions/qr-checkin";
+import { eventQrLookupAction, type EventQrLookupResult } from "@/lib/actions/event-checkin";
 
 // ── DB helpers (untyped admin client — scan_sessions is not in the generated Database type) ──
 
@@ -137,7 +137,6 @@ export async function processPairedScan(input: {
 }): Promise<ProcessScanResult> {
   const guard = await requirePermissionForAction("checkin:scan");
   if (!guard.ok) return { success: false, error: guard.error };
-  const user = guard.access.user;
 
   const { data, error } = await db()
     .from("scan_sessions")
@@ -159,7 +158,7 @@ export async function processPairedScan(input: {
   const timestamp = new Date().toISOString();
 
   if (session.contextType === "attendance") {
-    const lookupResult: QrLookupResult = await lookupStudentByQr(input.qrCode);
+    const lookupResult: QrLookupResult = await lookupStudentByQrAction(input.qrCode);
     const result: PairedScanResult = {
       sessionId: session.id,
       contextType: "attendance",
@@ -179,10 +178,9 @@ export async function processPairedScan(input: {
     if (!session.contextId) {
       return { success: false, error: "Session is missing event ID" };
     }
-    const lookupResult: EventQrLookupResult = await eventQrLookup(
+    const lookupResult: EventQrLookupResult = await eventQrLookupAction(
       input.qrCode,
       session.contextId,
-      user.id,
     );
     const result: PairedScanResult = {
       sessionId: session.id,

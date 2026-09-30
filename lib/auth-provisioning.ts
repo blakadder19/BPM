@@ -18,10 +18,7 @@ import { acceptPendingStaffInviteForUser } from "@/lib/staff-invite-acceptance";
  * Runs the staff-invite acceptance step at the end of provisioning.
  * Swallows errors so a flaky invite write never blocks login.
  *
- * Returns `true` when an invite was actually applied, so the caller
- * can signal the login UI to bypass its short-lived JWT fast-path
- * cookie (otherwise the very first page load would still render with
- * the pre-invite role).
+ * Returns `true` when an invite was actually applied.
  */
 async function applyPendingStaffInvite(
   authUser: SupabaseAuthUser,
@@ -129,11 +126,14 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       return { success: true, inviteApplied };
     }
 
-    // Step 2: Find or create academy (new user only)
+    // Step 2: Find or create academy (new user only). Always the canonical
+    // (oldest) academy, never user_metadata.academy_id — same rule as the
+    // handle_new_user trigger.
     step = "query academies";
     const { data: existingAcademyRaw, error: acadQueryErr } = await admin
       .from("academies")
       .select("id")
+      .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
 
@@ -163,7 +163,9 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
 
     // Step 3: Insert public.users row (new user)
     step = "upsert users";
-    const role = (meta.role as string) ?? "student";
+    // user_metadata is client-writable, so it never grants a role; staff
+    // roles come only from applyPendingStaffInvite below.
+    const role = "student";
     const fullName = (meta.full_name as string) ?? authUser.email ?? "New User";
     const phone = (meta.phone as string) ?? null;
     const normalizedNewEmail = (authUser.email ?? "").toLowerCase().trim();
@@ -186,25 +188,23 @@ export async function ensureSupabaseProfile(authUser: SupabaseAuthUser): Promise
       return { success: false, error: msg };
     }
 
-    // Step 4: Insert student_profiles row if student (new user)
-    if (role === "student") {
-      step = "upsert student_profiles";
-      const preferredRole = (meta.preferred_role as string) ?? null;
-      const dateOfBirth = (meta.date_of_birth as string) ?? null;
-      const { error: profErr } = await admin.from("student_profiles").upsert(
-        {
-          id: authUser.id,
-          preferred_role: preferredRole,
-          date_of_birth: dateOfBirth,
-          auth_linked_at: new Date().toISOString(),
-        } as never,
-        { onConflict: "id" }
-      );
-      if (profErr) {
-        const msg = `Failed at "${step}": ${profErr.message} (code: ${profErr.code})`;
-        console.error(`[ensureProfile] ${msg}`);
-        return { success: false, error: msg };
-      }
+    // Step 4: Insert student_profiles row (new user)
+    step = "upsert student_profiles";
+    const preferredRole = (meta.preferred_role as string) ?? null;
+    const dateOfBirth = (meta.date_of_birth as string) ?? null;
+    const { error: profErr } = await admin.from("student_profiles").upsert(
+      {
+        id: authUser.id,
+        preferred_role: preferredRole,
+        date_of_birth: dateOfBirth,
+        auth_linked_at: new Date().toISOString(),
+      } as never,
+      { onConflict: "id" }
+    );
+    if (profErr) {
+      const msg = `Failed at "${step}": ${profErr.message} (code: ${profErr.code})`;
+      console.error(`[ensureProfile] ${msg}`);
+      return { success: false, error: msg };
     }
 
     console.info(`[ensureProfile] Provisioned new user (role=${role})`);

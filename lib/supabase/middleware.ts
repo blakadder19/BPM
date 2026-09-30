@@ -1,29 +1,25 @@
 import { createServerClient } from "@supabase/ssr";
-import type { User } from "@supabase/supabase-js";
+import { isAuthRetryableFetchError, type User } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { safeRedirectPath } from "@/lib/safe-redirect";
 
 /**
  * Standard @supabase/ssr middleware session handler.
  *
  * Creates a Supabase server client that can read and refresh auth tokens
- * via cookies. Normally calls getUser() to validate the JWT server-side.
+ * via cookies, and calls getUser() to validate the JWT server-side. The
+ * unverified cookie session is never used as a user, under any failure.
  *
- * Optimization: when `bpm_fresh_jwt` cookie is present (set by the login
- * page immediately after signInWithPassword), we skip the expensive
- * getUser() HTTP call and use getSession() instead (local cookie read).
- * This is safe because the JWT was literally just issued — no refresh or
- * server-side validation is necessary within the first few seconds.
+ * Fail closed:
+ *   - getUser() returns a user            → signed in.
+ *   - Auth rejects the token (4xx)        → signed out; cookies cleared.
+ *   - Auth hangs (timeout), is unreachable, rate-limits or returns 5xx
+ *                                         → `authUnavailable`: no user, and
+ *     the caller serves an auth error instead of the page. Cookies are kept
+ *     so the session works again once Auth recovers.
  *
- * Resilience: if getUser() fails due to a transient error (network hiccup,
- * Supabase cold start, rate limit), the middleware falls back to
- * getSession() to avoid destroying a valid session. signOut() is only
- * called when the session is genuinely unrecoverable (no fallback user).
- *
- * Timeouts: a HUNG Auth call never returns an error, so the fallback above
- * never runs and Vercel kills the invocation with a 504. Every Auth call is
- * therefore bounded. A timeout is reported as `authUnavailable` — neither
- * "signed in" (the session was not validated) nor "signed out" (signing out
- * here would log every user out for the length of an Auth outage).
+ * Every Auth call is bounded: a HUNG call never returns an error, and
+ * Vercel would otherwise kill the invocation with a 504.
  */
 export const AUTH_TIMEOUT_MS = 5000;
 
@@ -50,8 +46,7 @@ function escapeHtml(value: string): string {
 
 /** Minimal self-contained page: rendering the app shell would need Supabase too. */
 export function authUnavailableResponse(retryPath: string): NextResponse {
-  // Same-origin paths only: "//host" would be a protocol-relative link off-site.
-  const safePath = retryPath.startsWith("/") && !retryPath.startsWith("//") ? retryPath : "/";
+  const safePath = safeRedirectPath(retryPath) ?? "/";
   const href = escapeHtml(safePath);
   const html = `<!doctype html>
 <html lang="en">
@@ -75,7 +70,7 @@ export function authUnavailableResponse(retryPath: string): NextResponse {
 export interface UpdateSessionResult {
   supabaseResponse: NextResponse;
   user: User | null;
-  /** Supabase Auth did not answer within AUTH_TIMEOUT_MS. */
+  /** Supabase Auth could not verify the session (timeout, network, 429, 5xx). */
   authUnavailable: boolean;
 }
 
@@ -92,15 +87,14 @@ export async function updateSession(
     return { supabaseResponse, user: null, authUnavailable: false };
   }
 
-  const unavailable = (): UpdateSessionResult => {
+  const unavailable = (reason: string): UpdateSessionResult => {
     console.warn(
-      `[middleware] Supabase Auth did not respond within ${authTimeoutMs}ms path=${request.nextUrl.pathname}`,
+      `[middleware] Supabase Auth could not verify the session (${reason}) path=${request.nextUrl.pathname}`,
     );
     return { supabaseResponse, user: null, authUnavailable: true };
   };
 
   const _m0 = Date.now();
-  const freshJwt = request.cookies.has("bpm_fresh_jwt");
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
@@ -119,59 +113,25 @@ export async function updateSession(
     },
   });
 
-  let user: User | null = null;
+  let userResult;
+  try {
+    userResult = await withTimeout(supabase.auth.getUser(), authTimeoutMs);
+  } catch (err) {
+    return unavailable(`getUser() threw: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  if (userResult === TIMED_OUT) return unavailable(`no response within ${authTimeoutMs}ms`);
+  const { data, error } = userResult;
+  const user: User | null = data.user;
 
-  if (freshJwt) {
-    // getSession() is local unless the access token has expired, in which
-    // case it refreshes over the network — so it needs the bound too.
-    const sessionResult = await withTimeout(supabase.auth.getSession(), authTimeoutMs);
-    if (sessionResult === TIMED_OUT) return unavailable();
-    user = sessionResult.data.session?.user ?? null;
-
-    supabaseResponse.cookies.set("bpm_fresh_jwt", "", {
-      path: "/",
-      maxAge: 0,
-    });
-  } else {
-    const userResult = await withTimeout(supabase.auth.getUser(), authTimeoutMs);
-    if (userResult === TIMED_OUT) return unavailable();
-    const { data, error } = userResult;
-    user = data.user;
-
-    // Graceful fallback: if getUser() failed (transient network error,
-    // Supabase cold start, rate limit) but the request has auth cookies,
-    // try a local session read instead of immediately destroying the
-    // session. This prevents valid sessions from being killed by brief
-    // outages. The local JWT may be slightly stale but is good enough
-    // for middleware gating — server components will re-validate.
-    if (!user && error) {
-      const hasAuthCookies = request.cookies.getAll().some(
-        (c) => c.name.includes("-auth-token")
-      );
-      if (hasAuthCookies) {
-        try {
-          const sessionResult = await withTimeout(supabase.auth.getSession(), authTimeoutMs);
-          if (sessionResult === TIMED_OUT) return unavailable();
-          const { data: { session } } = sessionResult;
-          if (session?.user) {
-            user = session.user;
-            if (process.env.NODE_ENV === "development") {
-              console.warn(
-                `[middleware] getUser() failed (${error.message}) — fell back to getSession()`
-              );
-            }
-          }
-        } catch {
-          // getSession also failed — session is truly unrecoverable
-        }
-      }
-    }
+  const transientAuthError =
+    !!error &&
+    (isAuthRetryableFetchError(error) || error.status === 429 || (error.status ?? 0) >= 500);
+  if (!user && transientAuthError) {
+    return unavailable(`transient error status=${error.status ?? "?"} ${error.message}`);
   }
 
-  // Only sign out when the session is genuinely unrecoverable:
-  // getUser() returned no user, the fallback also returned no user,
-  // but auth cookies are still present. Clear them to prevent the
-  // login page from seeing stale cookies in an infinite loop.
+  // Auth answered and did not accept the session: clear the cookies so the
+  // login page does not see stale cookies in an infinite loop.
   if (!user) {
     const hasAuthCookies = request.cookies.getAll().some(
       (c) => c.name.includes("-auth-token")
@@ -183,7 +143,7 @@ export async function updateSession(
 
   const _m1 = Date.now();
   if (process.env.NODE_ENV === "development") {
-    console.info(`[perf middleware] ${freshJwt ? "getSession(fresh)" : "getUser"}=${_m1 - _m0}ms path=${request.nextUrl.pathname}`);
+    console.info(`[perf middleware] getUser=${_m1 - _m0}ms path=${request.nextUrl.pathname}`);
   }
 
   return { supabaseResponse, user, authUnavailable: false };

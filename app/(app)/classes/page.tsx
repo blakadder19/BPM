@@ -19,7 +19,7 @@ import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operationa
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { isClassInFuture, getTodayStr } from "@/lib/domain/datetime";
 import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
-import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
+import { lazyExpireSubscriptions } from "@/lib/services/term-lifecycle-service";
 
 import { computeBookability, type ClassInstanceInfo, type BookabilityContext } from "@/lib/domain/bookability";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";

@@ -105,11 +105,7 @@ export async function reconcileStripeSessionAction(
     };
   }
 
-  const result = await routeStripeSessionFulfillment(
-    session.id,
-    rawMetadata,
-    "success_page",
-  );
+  const result = await routeStripeSessionFulfillment(session, "success_page");
 
   if (!result.success) {
     console.error(

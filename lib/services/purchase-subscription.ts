@@ -1,0 +1,458 @@
+import "server-only";
+
+/**
+ * Trusted purchase → subscription creation.
+ *
+ * `createPurchaseSubscription` writes a subscription with whatever payment
+ * status it is given, so it must never be reachable as a Server Action.
+ * Callers:
+ *   - `createStudentPurchaseAction` (student, pay at reception → pending)
+ *   - `fulfillStripeCheckout` (lib/services/stripe-fulfillment.ts), only
+ *     after Stripe has confirmed the session is paid.
+ */
+
+import { requireRole, type AuthUser } from "@/lib/auth";
+import { getProductRepo, getTermRepo, getSubscriptionRepo } from "@/lib/repositories";
+import { createSubscription } from "@/lib/services/subscription-service";
+import { getCurrentTerm, getNextTerm, getNextConsecutiveTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
+import { computeSubscriptionValidity } from "@/lib/domain/subscription-validity";
+import {
+  paymentChannelFor,
+  toVatSnapshotFields,
+  EMPTY_VAT_SNAPSHOT,
+} from "@/lib/domain/vat";
+import { getTodayStr } from "@/lib/domain/datetime";
+import { getSettings } from "@/lib/services/settings-store";
+import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { buildDynamicAccessRulesMap } from "@/config/product-access";
+import { buildSnapshotFromProduct } from "@/lib/services/subscription-snapshot-service";
+import {
+  priceProductForStudent,
+  buildAuditDiscountMetadata,
+  detectFirstTimeRaceConflict,
+  releaseDiscountClaim,
+  attachClaimRelations,
+  type FrozenPricing,
+} from "@/lib/services/pricing-service";
+import { logFinanceEvent } from "@/lib/services/finance-audit-log";
+import type { MockProduct } from "@/lib/mock-data";
+import type { PaymentMethod, SalePaymentStatus } from "@/types/domain";
+
+// ── Public types ─────────────────────────────────────────────
+
+export interface PurchaseInput {
+  productId: string;
+  selectedStyleId?: string | null;
+  selectedStyleName?: string | null;
+  selectedStyleIds?: string[] | null;
+  selectedStyleNames?: string[] | null;
+  selectedTermId?: string | null;
+  autoRenew?: boolean | null;
+  /**
+   * Phase 7 — optional referral code from another student.
+   * Validated server-side; an invalid code is silently dropped so it
+   * never blocks a legitimate purchase (per UX brief rules #7/#8).
+   */
+  referralCode?: string | null;
+}
+
+export interface PreparedPurchase {
+  user: AuthUser;
+  product: MockProduct;
+  termId: string | null;
+  validFrom: string;
+  validUntil: string | null;
+  assignedTermName: string | null;
+  selectedStyleId: string | null;
+  selectedStyleName: string | null;
+  selectedStyleIds: string[] | null;
+  selectedStyleNames: string[] | null;
+  autoRenew: boolean;
+  /** Trimmed referral code passed through to subscription creation. */
+  referralCode: string | null;
+}
+
+// ── Shared validation ────────────────────────────────────────
+
+export async function validateAndPreparePurchase(
+  input: PurchaseInput,
+): Promise<PreparedPurchase | { error: string }> {
+  const user = await requireRole(["student"]);
+
+  const product = await getProductRepo().getById(input.productId);
+  if (!product) return { error: "Product not found." };
+  if (!product.isActive) return { error: "This product is no longer available." };
+
+  // ── Style validation (use dynamic rules with real style IDs) ──
+  const danceStyles = getDanceStyles().map((s) => ({ id: s.id, name: s.name }));
+  const allProducts = await getProductRepo().getAll();
+  const dynamicRulesMap = buildDynamicAccessRulesMap(
+    allProducts.map((p) => ({
+      id: p.id,
+      name: p.name,
+      productType: p.productType,
+      allowedLevels: p.allowedLevels ?? null,
+      allowedStyleIds: p.allowedStyleIds ?? null,
+      styleAccessMode: p.styleAccessMode ?? null,
+      styleAccessPickCount: p.styleAccessPickCount ?? null,
+      allowedClassTypes: p.allowedClassTypes ?? null,
+    })),
+    danceStyles,
+  );
+  const accessRule = dynamicRulesMap.get(product.id);
+  const styleMode = accessRule?.styleAccess.type;
+
+  if (styleMode === "selected_style") {
+    if (!input.selectedStyleId || !input.selectedStyleName) {
+      return { error: "Please select a dance style." };
+    }
+    const allowed = accessRule?.styleAccess.type === "selected_style"
+      ? accessRule.styleAccess.allowedStyleIds
+      : null;
+    if (allowed && !allowed.includes(input.selectedStyleId)) {
+      return { error: "Selected style is not available for this product." };
+    }
+  }
+
+  if (styleMode === "course_group") {
+    if (!input.selectedStyleIds?.length || !input.selectedStyleNames?.length) {
+      return { error: "Please select your styles." };
+    }
+    const pool = accessRule?.styleAccess.type === "course_group"
+      ? accessRule.styleAccess.poolStyleIds
+      : [];
+    const pickCount = accessRule?.styleAccess.type === "course_group"
+      ? accessRule.styleAccess.pickCount
+      : 0;
+    if (input.selectedStyleIds.length !== pickCount) {
+      return { error: `Please select exactly ${pickCount} styles.` };
+    }
+    for (const id of input.selectedStyleIds) {
+      if (!pool.includes(id)) {
+        return { error: "One or more selected styles are not available." };
+      }
+    }
+  }
+
+  // ── Term resolution + duplicate check ──────────────────────
+  const allTerms = await getTermRepo().getAll();
+  const todayStr = getTodayStr();
+  const currentTerm = getCurrentTerm(allTerms, todayStr);
+  const nextTerm = getNextTerm(allTerms, todayStr);
+
+  const studentSubs = (await getSubscriptionRepo().getAll()).filter(
+    (s) => s.studentId === user.id && s.status === "active",
+  );
+
+  let termId: string | null = null;
+  let validFrom: string;
+  let validUntil: string | null;
+  let assignedTermName: string | null = null;
+
+  // Resolve which term (if any) applies to this purchase. For
+  // term-bound products this is either the student's explicit pick
+  // or a fallback derived from the current/next term windows.
+  let assignedTerm: typeof currentTerm = null;
+
+  if (product.termBound) {
+    const settings = getSettings();
+    const purchaseWindowDays = settings.termPurchaseWindowDays;
+
+    if (settings.studentTermSelectionEnabled && input.selectedTermId) {
+      assignedTerm = allTerms.find((t) => t.id === input.selectedTermId) ?? null;
+      if (!assignedTerm) {
+        return { error: "Selected term not found." };
+      }
+      if (assignedTerm.id !== currentTerm?.id && assignedTerm.id !== nextTerm?.id) {
+        return { error: "Selected term is not eligible for purchase." };
+      }
+      if (
+        assignedTerm.id === currentTerm?.id &&
+        !isCurrentTermPurchasable(currentTerm.startDate, todayStr, purchaseWindowDays)
+      ) {
+        return { error: "The purchase window for the current term has closed. Please select the next term." };
+      }
+    } else {
+      const currentOk =
+        currentTerm && isCurrentTermPurchasable(currentTerm.startDate, todayStr, purchaseWindowDays);
+      assignedTerm = currentOk ? currentTerm : (nextTerm ?? currentTerm);
+    }
+
+    if (!assignedTerm?.id) {
+      return { error: "No active or upcoming term available. Please check back later." };
+    }
+  }
+
+  // Delegate the (validFrom, validUntil, termId, mode) math to the
+  // canonical helper so student/admin/Stripe/dev-tools purchase paths
+  // all agree on how term-bound vs fixed-duration vs open-ended
+  // subscriptions expire. See lib/domain/subscription-validity.ts.
+  const nextConsecutive = assignedTerm
+    ? getNextConsecutiveTerm(allTerms, assignedTerm.id)
+    : null;
+  const computed = computeSubscriptionValidity({
+    product: {
+      id: product.id,
+      productType: product.productType,
+      termBound: product.termBound,
+      spanTerms: product.spanTerms ?? null,
+      durationDays: product.durationDays ?? null,
+    },
+    purchaseDate: todayStr,
+    chosenTerm: assignedTerm,
+    nextConsecutiveTerm: nextConsecutive,
+  });
+  if (!computed.ok) return { error: computed.error.message };
+  termId = computed.validity.termId;
+  validFrom = computed.validity.validFrom;
+  validUntil = computed.validity.validUntil;
+  assignedTermName = computed.validity.assignedTermName;
+
+  // Stackability: only checked for term-based purchases (drop-ins
+  // and rolling passes are always stackable). Rules unchanged.
+  if (assignedTerm) {
+    const spanTerms = product.spanTerms ?? 1;
+    const isStackable =
+      product.productType === "drop_in" ||
+      product.allowMultipleActivePurchases !== false;
+    if (!isStackable) {
+      const hasDuplicate = studentSubs.some((s) => {
+        if (s.productId !== product.id) return false;
+        if (spanTerms >= 2) {
+          return s.validFrom <= validUntil! && (s.validUntil ?? s.validFrom) >= validFrom;
+        }
+        return s.termId === assignedTerm!.id;
+      });
+      if (hasDuplicate) {
+        return {
+          error: spanTerms >= 2
+            ? `You already have ${product.name} that covers this period.`
+            : `You already have ${product.name} for ${assignedTerm.name}.`,
+        };
+      }
+    }
+  }
+
+  const autoRenew = input.autoRenew != null ? input.autoRenew : product.autoRenew;
+
+  return {
+    user,
+    product,
+    termId,
+    validFrom,
+    validUntil,
+    assignedTermName,
+    selectedStyleId: input.selectedStyleId ?? null,
+    selectedStyleName: input.selectedStyleName ?? null,
+    selectedStyleIds: input.selectedStyleIds ?? null,
+    selectedStyleNames: input.selectedStyleNames ?? null,
+    autoRenew,
+    referralCode: (input.referralCode ?? "").trim() || null,
+  };
+}
+
+// ── Subscription creation helper ─────────────────────────────
+
+export async function createPurchaseSubscription(
+  prepared: PreparedPurchase,
+  payment: {
+    method: PaymentMethod;
+    status: SalePaymentStatus;
+    reference?: string | null;
+    paidAt?: string | null;
+    notes?: string;
+  },
+  /**
+   * Optional frozen pricing — passed by Stripe webhook fulfillment so the
+   * exact pricing the student saw/paid at session creation is persisted
+   * verbatim, instead of re-deriving via mutable rule state.
+   */
+  frozenPricing?: FrozenPricing,
+): Promise<{ success: boolean; error?: string; subscriptionId?: string; pricing?: FrozenPricing }> {
+  const { user, product, termId, validFrom, validUntil } = prepared;
+
+  // Phase 1: freeze product + access-rule state at purchase so future admin
+  // edits cannot retroactively change this subscription's entitlement.
+  const productSnapshot = await buildSnapshotFromProduct(product);
+
+  // Phase 4 hardening: prefer the caller-supplied frozen pricing (Stripe
+  // webhook path — the claim was already created at session creation).
+  // Otherwise, evaluate the discount engine in COMMIT mode so any
+  // first-time discount is atomically claimed before the row is written.
+  let pricingClaimId: string | null = null;
+  const pricing: FrozenPricing = frozenPricing
+    ? frozenPricing
+    : await (async () => {
+        const live = await priceProductForStudent({
+          studentId: user.id,
+          product: {
+            id: product.id,
+            productType: product.productType,
+            priceCents: product.priceCents,
+            // Phase 10 — the referral rule keys off `allowedLevels`
+            // so the engine can gate the discount to beginner products.
+            allowedLevels: product.allowedLevels ?? null,
+          },
+          // Phase 10 — pay-at-reception path: pass the referral code
+          // so the engine can apply the 10% beginner discount BEFORE
+          // the reception amount due is persisted.
+          referralCode: prepared.referralCode ?? null,
+          // Phase 15 — VAT applicability follows the payment method.
+          // Reception/cash/manual payments are excluded by default so
+          // enabling VAT for online checkout never silently changes
+          // what is charged at the desk.
+          vatChannel: paymentChannelFor(payment.method),
+          commit: { source: "catalog_purchase" },
+        });
+        pricingClaimId = live.claim?.id ?? null;
+        return {
+          basePriceCents: live.basePriceCents,
+          totalDiscountCents: live.totalDiscountCents,
+          finalPriceCents: live.finalPriceCents,
+          appliedDiscounts: live.appliedDiscounts,
+          snapshot: live.snapshot,
+          vat: live.vat,
+        };
+      })();
+
+  const result = await createSubscription({
+    studentId: user.id,
+    productId: product.id,
+    productName: product.name,
+    productType: product.productType,
+    status: "active",
+    totalCredits: product.totalCredits,
+    remainingCredits: product.totalCredits,
+    validFrom,
+    validUntil,
+    notes: payment.notes ?? null,
+    termId,
+    paymentMethod: payment.method,
+    paymentStatus: payment.status,
+    // Self-purchase: record the student as the actor so the Finance
+    // BY column can resolve a name. Was null pre-fix, which left the
+    // BY column blank for catalog purchases.
+    assignedBy: user.id,
+    assignedAt: new Date().toISOString(),
+    autoRenew: prepared.autoRenew,
+    classesUsed: 0,
+    classesPerTerm: product.classesPerTerm,
+    selectedStyleId: prepared.selectedStyleId,
+    selectedStyleName: prepared.selectedStyleName,
+    selectedStyleIds: prepared.selectedStyleIds,
+    selectedStyleNames: prepared.selectedStyleNames,
+    paidAt: payment.paidAt ?? null,
+    paymentReference: payment.reference ?? null,
+    // `priceCentsAtPurchase` stays the amount ACTUALLY PAID, which is
+    // the VAT-inclusive total when VAT applied. When VAT is off,
+    // `totalIncVatCents` equals `finalPriceCents`, so this is
+    // byte-identical to the pre-VAT behaviour.
+    priceCentsAtPurchase: pricing.vat.totalIncVatCents,
+    currencyAtPurchase: "EUR",
+    productSnapshot,
+    originalPriceCents: pricing.basePriceCents,
+    discountAmountCents: pricing.totalDiscountCents,
+    appliedDiscount: pricing.snapshot,
+    // Phase 15 — freeze the VAT breakdown. Written as all-null when
+    // VAT did not apply, so the row is indistinguishable from a
+    // pre-VAT row for reporting purposes.
+    ...(pricing.vat.vatApplied
+      ? toVatSnapshotFields(pricing.vat)
+      : EMPTY_VAT_SNAPSHOT),
+  });
+
+  if (result.success && result.subscriptionId) {
+    logFinanceEvent({
+      entityType: "subscription",
+      entityId: result.subscriptionId,
+      action: "created",
+      detail: pricing.snapshot
+        ? `Subscription created with ${pricing.appliedDiscounts.length} discount(s) applied`
+        : "Subscription created",
+      newValue: pricing.snapshot ? `final ${pricing.finalPriceCents}c (saved ${pricing.totalDiscountCents}c)` : null,
+      metadata: buildAuditDiscountMetadata(pricing),
+    });
+
+    // Phase 4 hardening: associate the claim row with the resulting
+    // subscription for audit traceability.
+    if (pricingClaimId) {
+      await attachClaimRelations(pricingClaimId, {
+        relatedSubscriptionId: result.subscriptionId,
+      });
+    }
+
+    // Defense-in-depth anomaly detection: with the atomic claim in place
+    // this should be impossible, but if it ever fires, admin review is
+    // warranted (potential bypass / data corruption).
+    try {
+      const conflict = await detectFirstTimeRaceConflict({
+        studentId: user.id,
+        excludeSubscriptionId: result.subscriptionId,
+        appliedDiscount: pricing.snapshot,
+      });
+      if (conflict.conflicted) {
+        logFinanceEvent({
+          entityType: "subscription",
+          entityId: result.subscriptionId,
+          action: "manual_edit",
+          detail:
+            `First-time discount race detected (claim guard bypassed!): also applied to ${conflict.conflictingSubscriptionIds.join(", ")}.`,
+          metadata: {
+            anomaly: "first_time_race_post_claim",
+            conflictingSubscriptionIds: conflict.conflictingSubscriptionIds,
+          },
+        });
+      }
+    } catch (e) {
+      console.warn("[catalog-purchase] first-time race detection failed:",
+        e instanceof Error ? e.message : e);
+    }
+
+    // Phase 7 — referral-code: if the purchaser entered a referrer's
+    // code, create a `pending` referral row so admin can review and
+    // approve. Best-effort: helper never throws, never blocks the
+    // purchase, never rolls back. Self-referral / duplicate / unknown
+    // codes are silently dropped (validation logged inside helper).
+    if (prepared.referralCode) {
+      try {
+        const { applyPendingReferralForPurchase } = await import(
+          "@/lib/services/referral-application"
+        );
+        const referralResult = await applyPendingReferralForPurchase({
+          rawCode: prepared.referralCode,
+          applicantStudentId: user.id,
+          applicantEmail: user.email,
+        });
+        if (referralResult.created) {
+          logFinanceEvent({
+            entityType: "subscription",
+            entityId: result.subscriptionId,
+            action: "manual_edit",
+            detail: `Pending referral recorded (code ${prepared.referralCode}).`,
+            metadata: {
+              referralId: referralResult.referralId,
+              referrerStudentId: referralResult.referrerStudentId,
+              referralCode: prepared.referralCode,
+            },
+          });
+        }
+      } catch (e) {
+        console.warn(
+          "[catalog-purchase] referral linking failed (purchase unaffected):",
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
+  } else if (pricingClaimId) {
+    // Subscription creation FAILED after we successfully claimed
+    // first-time eligibility — release the claim so the student can
+    // retry. (Stripe webhook path passes frozenPricing, so this branch
+    // is reached only by catalog-reception/manual paths.)
+    await releaseDiscountClaim(
+      pricingClaimId,
+      "subscription_creation_failed",
+    );
+  }
+
+  return { ...result, pricing };
+}

@@ -6,7 +6,7 @@ import { getCurrentTerm, getNextTerm, isCurrentTermPurchasable } from "@/lib/dom
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { getSettings } from "@/lib/services/settings-store";
-import { lazyExpireSubscriptions } from "@/lib/actions/term-lifecycle";
+import { lazyExpireSubscriptions } from "@/lib/services/term-lifecycle-service";
 import { buildDynamicAccessRulesMap, type ProductAccessRule } from "@/config/product-access";
 import { isStripeEnabled } from "@/lib/stripe";
 import { previewPricingForStudent } from "@/lib/services/pricing-service";

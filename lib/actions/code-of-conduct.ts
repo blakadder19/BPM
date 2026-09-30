@@ -5,23 +5,6 @@ import { getAuthUser } from "@/lib/auth";
 import { getCocRepo } from "@/lib/repositories";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 
-export async function getCodeOfConductStatus(studentId: string): Promise<{
-  accepted: boolean;
-  currentVersion: string;
-  acceptedVersion: string | null;
-  acceptedAt: string | null;
-}> {
-  const repo = getCocRepo();
-  const acceptance = await repo.getAcceptance(studentId);
-  const accepted = await repo.hasAcceptedVersion(studentId, CURRENT_CODE_OF_CONDUCT.version);
-  return {
-    accepted,
-    currentVersion: CURRENT_CODE_OF_CONDUCT.version,
-    acceptedVersion: acceptance?.acceptedVersion ?? null,
-    acceptedAt: acceptance?.acceptedAt ?? null,
-  };
-}
-
 export async function acceptCodeOfConductAction(): Promise<{
   success: boolean;
   error?: string;
