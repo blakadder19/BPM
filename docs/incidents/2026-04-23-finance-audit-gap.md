@@ -1,7 +1,7 @@
 # Incidente: hueco en el log de auditoría financiera (`op_finance_audit_log`)
 
-- **Estado:** ABIERTO a 2026-09-30. El fix `822481c` está en `origin/main` desde 2026-09-29 21:18 (Dublín); este documento no verifica cuándo quedó desplegado. La migración `00047` se aplicó en producción el 2026-09-30 a las 08:13 UTC (09:13 Dublín). **La reanudación de la auditoría NO está verificada** (ver §9).
-- **Ventana afectada:** desde 2026-04-23 15:45 UTC (16:45 Europe/Dublin, UTC+1) hasta, como mínimo, 2026-09-30 08:13 UTC. El fin real de la ventana se fijará cuando se compruebe la primera entrada de auditoría escrita correctamente.
+- **Estado:** hueco CERRADO para las correcciones retroactivas de asistencia desde el 2026-09-30 08:23 UTC; el incidente sigue ABIERTO por las comprobaciones pendientes (§9). El fix `822481c` está en `origin/main` desde 2026-09-29 21:18 (Dublín). La migración `00047` se aplicó en producción el 2026-09-30 a las 08:13 UTC (09:13 Dublín). La primera entrada con identidad completa se verificó con el fixture C el 2026-09-30 a las 08:23:12 UTC (§8.4).
+- **Ventana afectada:** desde 2026-04-23 15:45 UTC (16:45 Europe/Dublin, UTC+1) hasta, como mínimo, 2026-09-30 08:13 UTC (aplicación de `00047`). Para las correcciones retroactivas, la escritura correcta está demostrada desde las 08:23:12 UTC. Los otros call sites de `logFinanceEvent` no se han probado uno a uno (§9).
 - **Documento elaborado:** 2026-09-29, con consultas SELECT de solo lectura contra producción (proyecto `npfizqblckcwzfrqrzel`). **Revisado:** 2026-09-30 (afirmaciones no demostradas matizadas, fechas absolutas, acciones del 2026-09-30 en §8 y comprobaciones pendientes en §9).
 
 > **AVISO IMPORTANTE**
@@ -54,6 +54,7 @@ Hay datos que **no se pueden reconstruir**: valores anteriores sobrescritos, act
 | 2026-09-29 21:18 | Fix committeado en `main` como `822481c` ("Stop silently losing finance audit entries") y subido a `origin/main`. La hora de despliegue en producción no está verificada en este documento |
 | 2026-09-30 09:13 | Migración `00047` aplicada en producción (08:13 UTC). Verificadas las 4 columnas, el índice y su acceso por REST (§8) |
 | 2026-09-30 09:15:56 | Código `BPM_TEST_100` desactivado (08:15:56 UTC), conservando la regla y sus usos (§8) |
+| 2026-09-30 09:23:12 | Corrección retroactiva de prueba (fixture C) desde la UI: primera entrada de auditoría con identidad completa verificada (08:23:12 UTC). El fixture y su entrada se borraron después (§8.4) |
 
 **Estado en producción a 2026-09-29 (antes de `00047`):** `op_finance_audit_log` solo tenía las columnas `id, entity_type, entity_id, action, performed_by, detail, previous_value, new_value, created_at, metadata`, y cualquier auditoría generada se perdía. **Desde el 2026-09-30 08:13 UTC** la tabla tiene además `performed_by_user_id`, `performed_by_email`, `performed_by_name` y `performed_at` (14 columnas en total).
 
@@ -423,7 +424,7 @@ where not t.tgisinternal and ns.nspname='public'
 - **Logs de la plataforma:** los mensajes `[op-persistence] saveAuditEntry:` de los logs del servidor podrían contener rastros parciales, pero no se han consultado ni se ha comprobado su retención.
 - **Correcciones retroactivas:** no se ha verificado su origen (despliegue o entorno local conectado a producción). Sí está verificado que esas 2 correcciones no consumieron un crédito adicional (§4.L).
 - **Reintento de auditoría de correcciones retroactivas:** el fix `822481c` añade un botón "Retry audit" que puede escribir a posteriori la entrada de auditoría de una corrección. Si se usa para las 2 correcciones del 2026-09-29, esas entradas se escribirán después del hecho y deberían distinguirse de un registro contemporáneo.
-- **El documento no modifica datos.** Las únicas escrituras en producción asociadas a este incidente son las del 2026-09-30 (§8). El hueco se considerará cerrado solo cuando se verifique en producción una entrada nueva con identidad completa (§9).
+- **El documento no modifica datos.** Las únicas escrituras en producción asociadas a este incidente son las del 2026-09-30 (§8). La escritura con identidad completa quedó verificada el 2026-09-30 para las correcciones retroactivas (§8.4). El resto de flujos sigue pendiente (§9).
 
 ## 8. Acciones del 2026-09-30
 
@@ -443,6 +444,18 @@ Horas en UTC (Dublín = UTC+1).
    - Ninguna otra tabla lo referencia.
 
    Se ejecutó `UPDATE discount_rules SET is_active = false, updated_at = now()` filtrando por su `id` y su `code`. La regla se conserva con sus 13 productos, `max_uses = 20` y el resto de campos intactos, y las 2 compras no se modificaron. El repositorio Supabase de reglas lee de la BD sin caché, así que la desactivación tiene efecto inmediato. Esta acción no generó entrada en `op_finance_audit_log` porque no se hizo a través de la app.
+4. **Verificación de la auditoría con identidad completa (fixture C).**
+   - **Preparación (08:20 UTC):** se creó un pase de prueba Beginners 1 Bachata (4/4 créditos, marcado con `metadata.qa_fixture = audit-identity-00047-fixture-c`) para la cuenta de pruebas Zaria Test. La clase elegida fue Bachata Beginners 1 del 2026-09-26, que no tenía reservas, asistencias, lista de espera ni penalizaciones. Base de partida: 5 filas de auditoría, ninguna `fal-bd-…`.
+   - **Ejecución (08:23:12 UTC):** un administrador hizo la corrección una sola vez desde "Add past attendee" en la UI de producción. La UI no mostró aviso de auditoría; hizo falta recargar para ver la asistencia.
+   - **Verificación en BD:**
+     - **Auditoría:** apareció exactamente 1 fila nueva (6 en total). Su id es `fal-bd-…` y coincide con la codificación inyectiva de la reserva, la asistencia y `marked_at` creadas. `entity_type = subscription`, `entity_id` es el pase del fixture y `action = manual_edit`.
+     - **Identidad:** `performed_by_user_id`, `performed_by_email`, `performed_by_name` y `performed_at` están rellenos. Corresponden al usuario de la tabla `users` de la cuenta de administración de la academia, y coinciden con `adminId` y `adminEmail` del metadata. `performed_at` (08:23:12.357) es posterior a la reserva (.024) y a la asistencia (.186).
+     - **Sin modo degradado:** el reintento degradado omite precisamente esas cuatro columnas, y aquí están todas rellenas.
+     - **Metadata:** coherente con la operación: `bookingCreated`, `attendanceCreated` y `creditConsumed` a true, saldo previo 4 y nuevo 3, `penaltiesVoided = 0`.
+     - **Datos operativos:** 1 única reserva (`source = admin_backdated`, `checked_in`), 1 única asistencia (`present`, nota "Backdated correction: …") y el pase en 3/4. No hubo penalizaciones, lista de espera, notificaciones, claims, pagos ni movimientos de wallet asociados.
+   - **Limpieza (después de las 10:17 Dublín):** en una sola transacción con guardas, que se revierte si algún recuento no coincide, se borraron exactamente la fila de auditoría del fixture, su asistencia, su reserva y su pase. Antes se comprobó que ninguna tabla con clave foránea hacia suscripciones (`payments`, `wallet_transactions`, `bookings`, `student_subscriptions.renewed_from_id`, `referral_rewards`) referenciaba el pase.
+     - **Después del borrado:** `op_finance_audit_log` vuelve a 5 filas, sin ninguna `fal-bd-…`. La clase y Zaria Test quedan con 0 reservas y 0 asistencias. Se conservan la cuenta Zaria Test y su pase anterior (cancelado).
+     - **Consecuencia:** la entrada que demostró la corrección ya no está en la tabla. La evidencia queda en este apartado.
 
 ## 9. Comprobaciones pendientes
 
@@ -468,6 +481,6 @@ Ninguna de estas comprobaciones ha modificado datos. No se ha ejecutado ningún 
    Pendiente:
    - Conciliar cada `payment_reference` con Stripe (cobro real, importe y fecha).
    - Determinar si los marcó el webhook o una persona, y en ese caso quién.
-3. **Reanudación de la auditoría con identidad completa.** Hay que hacer una acción auditada real desde la UI de producción: una corrección retroactiva sobre un fixture aislado de la cuenta de pruebas. Después se comprueba que aparece exactamente una fila nueva en `op_finance_audit_log` con `performed_by_user_id`, `performed_by_email`, `performed_by_name` y `performed_at` rellenos. El despliegue y la migración no bastan para dar el hueco por cerrado.
+3. **Reanudación de la auditoría en el resto de flujos.** Las correcciones retroactivas ya están verificadas con identidad completa (§8.4). Los otros call sites de `logFinanceEvent` (§3) escriben en segundo plano sin esperar el resultado. Con `00047` aplicada deberían persistir, pero no se han probado uno a uno. Pendiente: confirmar que la primera acción financiera real de cada tipo relevante (alta, marcar pagado, reembolso) genera su fila con identidad completa.
 4. **Origen de las 2 correcciones retroactivas del 2026-09-29** (despliegue o entorno local contra producción).
 5. **4 suscripciones referenciadas por claims que no existen** (§4.K): averiguar si llegaron a existir, quién las borró y si el borrado era legítimo. Es posible que no haya fuente que lo permita.
