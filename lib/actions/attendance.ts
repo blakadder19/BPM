@@ -11,6 +11,8 @@ import type { AttendanceMark, CheckInMethod, ClassType } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveAttendanceToDB, saveBookingToDB, savePenaltyToDB, updatePenaltyInDB, deleteAttendanceFromDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { getInstances } from "@/lib/services/schedule-store";
+import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
 import {
   hasAnyPermission,
   hasPermission,
@@ -141,6 +143,34 @@ export async function markStudentAttendance(params: {
     return fail("You do not have permission to change an absent mark.");
   }
 
+  // Timing comes from the stored class in academy time, never from the
+  // caller. Normal marking covers today's classes that have not ended;
+  // ended or earlier classes also need edit_history; later days never.
+  const instance = getInstances().find((i) => i.id === params.bookableClassId);
+  if (!instance) return fail("Class not found.");
+  const today = getTodayStr();
+  if (instance.date > today) {
+    return fail("Attendance cannot be marked for a future class.");
+  }
+  const isHistorical = instance.date < today || isClassEnded(instance.date, instance.endTime);
+  const canEditHistory = hasPermission(access, "attendance:edit_history");
+
+  // A new record with no booking is the "Add Record" flow. It covers
+  // today's classes only; earlier days go through backdateAttendanceAction,
+  // which requires attendance:backdate.
+  const isManualAdd = params.attendanceSource !== undefined || (!params.bookingId && !priorMark);
+  if (isManualAdd) {
+    if (!canEditHistory) {
+      return fail("Adding attendance manually requires the attendance:edit_history permission.");
+    }
+    if (instance.date !== today) {
+      return fail("Attendance for an earlier day must be added with Backdate attendance.");
+    }
+  }
+  if (isHistorical && !canEditHistory) {
+    return fail("Changing attendance for a class that has ended requires the attendance:edit_history permission.");
+  }
+
   if (params.bookingId) {
     const target = bookingSvc.bookings.find((b) => b.id === params.bookingId);
     if (!target || target.studentId !== params.studentId || target.bookableClassId !== params.bookableClassId) {
@@ -158,6 +188,11 @@ export async function markStudentAttendance(params: {
   const student = await getStudentRepo().getById(params.studentId);
   params = {
     ...params,
+    date: instance.date,
+    classTitle: instance.title,
+    classType: instance.classType,
+    danceStyleId: instance.styleId,
+    level: instance.level,
     studentName: student?.fullName ?? params.studentName,
     markedBy: params.attendanceSource !== undefined ? `${actorName} (manual)` : actorName,
   };
