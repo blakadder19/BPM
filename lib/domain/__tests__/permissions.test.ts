@@ -6,8 +6,15 @@ import {
   ROLE_PRESETS,
   isPermissionKey,
   isSensitivePermission,
+  legacyEffectivePermissions,
+  permissionsForRoleChange,
+  presetPermissions,
   type Permission,
+  type StaffRoleKey,
 } from "../permissions";
+
+/** Recommended defaults for a role (what the editor pre-fills). */
+const preset = (role: StaffRoleKey) => new Set<Permission>(ROLE_PRESETS[role]);
 
 describe("expandPermissions", () => {
   it("super_admin always resolves to every permission key", () => {
@@ -35,7 +42,7 @@ describe("expandPermissions", () => {
   });
 
   it("teacher preset includes operational reception perms but no settings/products edit", () => {
-    const set = expandPermissions("teacher", null);
+    const set = preset("teacher");
     expect(set.has("checkin:scan")).toBe(true);
     expect(set.has("checkin:manual_checkin")).toBe(true);
     expect(set.has("payments:mark_paid_reception")).toBe(true);
@@ -47,7 +54,7 @@ describe("expandPermissions", () => {
   });
 
   it("front_desk preset includes operational reception perms but no settings/products edit", () => {
-    const set = expandPermissions("front_desk", null);
+    const set = preset("front_desk");
     expect(set.has("checkin:scan")).toBe(true);
     expect(set.has("payments:mark_paid_reception")).toBe(true);
     expect(set.has("settings:edit")).toBe(false);
@@ -56,7 +63,7 @@ describe("expandPermissions", () => {
   });
 
   it("read_only has zero mutation perms", () => {
-    const set = expandPermissions("read_only", null);
+    const set = preset("read_only");
     for (const p of [
       "products:edit",
       "products:delete",
@@ -80,15 +87,30 @@ describe("expandPermissions", () => {
     }
   });
 
-  it("override extends a preset (additive, not replacement) for non-custom roles", () => {
-    const baseSize = ROLE_PRESETS.teacher.length;
-    const set = expandPermissions(
-      "teacher",
-      ["finance:view"] as Permission[],
-    );
-    expect(set.has("finance:view")).toBe(true);
-    expect(set.has("checkin:scan")).toBe(true); // still has preset perms
-    expect(set.size).toBeGreaterThan(baseSize);
+  it("non-custom roles get EXACTLY the stored list — the preset is never added back", () => {
+    const set = expandPermissions("teacher", ["classes:view"] as Permission[]);
+    expect([...set]).toEqual(["classes:view"]);
+    expect(set.has("checkin:scan")).toBe(false);
+    expect(set.has("payments:view_limited")).toBe(false);
+  });
+
+  it("an unticked preset permission stays denied (teacher without attendance:view)", () => {
+    const stored = ROLE_PRESETS.teacher.filter((p) => p !== "attendance:view");
+    const set = expandPermissions("teacher", stored);
+    expect(set.has("attendance:view")).toBe(false);
+    expect(set.size).toBe(ROLE_PRESETS.teacher.length - 1);
+  });
+
+  it("every non-super role with an empty stored list has no permissions", () => {
+    for (const role of ["admin", "front_desk", "teacher", "read_only", "custom"] as const) {
+      expect(expandPermissions(role, []).size).toBe(0);
+      expect(expandPermissions(role, null).size).toBe(0);
+    }
+  });
+
+  it("drops unknown keys from a stored list", () => {
+    const set = expandPermissions("admin", ["events:view", "made:up"] as Permission[]);
+    expect([...set]).toEqual(["events:view"]);
   });
 
   it("null roleKey + null override = empty set (defensive default)", () => {
@@ -131,16 +153,14 @@ describe("normalizePermissionsForStorage", () => {
     expect(out).toEqual(["events:view"]);
   });
 
-  it("non-custom drops permissions already in the preset (additions only)", () => {
-    // Teacher preset includes checkin:scan and bookings:view.
+  it("non-custom keeps the exact list, preset permissions included", () => {
     const out = normalizePermissionsForStorage("teacher", [
       "checkin:scan",
       "bookings:view",
       "events:view",
+      "events:view",
     ] as Permission[]);
-    expect(out.includes("checkin:scan")).toBe(false);
-    expect(out.includes("bookings:view")).toBe(false);
-    expect(out).toEqual(["events:view"]);
+    expect(out).toEqual(["checkin:scan", "bookings:view", "events:view"]);
   });
 
   it("expandPermissions(role, normalized) reproduces effective set", () => {
@@ -164,24 +184,52 @@ describe("normalizePermissionsForStorage", () => {
     expect(effective.size).toBe(1);
   });
 
-  it("switching admin → teacher does not retain stale admin perms", () => {
-    // Simulate the legacy-buggy storage shape where the override
-    // contained `[adminPreset + extras]`. Once normalized for the
-    // *new* teacher role, only the extras should remain.
-    const adminPreset = ROLE_PRESETS.admin;
-    const oldStored = [...adminPreset, "finance:refund" as Permission];
-    const renormalized = normalizePermissionsForStorage(
-      "teacher",
-      oldStored as Permission[],
-    );
-    // Anything that's now in the teacher preset should be dropped.
-    for (const p of ROLE_PRESETS.teacher) {
-      expect(renormalized.includes(p)).toBe(false);
+  it("what is saved is exactly what is effective", () => {
+    const checked = ["classes:view", "attendance:view"] as Permission[];
+    for (const role of ["admin", "front_desk", "teacher", "read_only", "custom"] as const) {
+      const effective = expandPermissions(role, normalizePermissionsForStorage(role, checked));
+      expect([...effective].sort()).toEqual([...checked].sort());
     }
-    // The non-teacher-preset admin perms remain as overrides — that's
-    // expected for a one-off switch. The editor's role-change UX
-    // resets overrides, so in practice the user clears these.
-    expect(renormalized.includes("finance:refund")).toBe(true);
+  });
+});
+
+describe("role change in the editor", () => {
+  it("teacher → admin loads the admin defaults, without keeping teacher-only picks", () => {
+    const teacherForm = new Set<Permission>([...ROLE_PRESETS.teacher, "students:send_magic_link"]);
+    const next = permissionsForRoleChange("admin", teacherForm);
+    expect([...next].sort()).toEqual([...ROLE_PRESETS.admin].sort());
+    expect(next.has("students:send_magic_link")).toBe(false);
+  });
+
+  it("admin → teacher does not retain admin permissions", () => {
+    const next = permissionsForRoleChange("teacher", preset("admin"));
+    expect(next.has("finance:view")).toBe(false);
+    expect([...next].sort()).toEqual([...ROLE_PRESETS.teacher].sort());
+  });
+
+  it("switching to custom keeps the current checkboxes", () => {
+    const current = new Set<Permission>(["events:view", "classes:view"]);
+    expect([...permissionsForRoleChange("custom", current)].sort()).toEqual(["classes:view", "events:view"]);
+  });
+
+  it("super_admin and custom have no defaults to reset to", () => {
+    expect(presetPermissions("super_admin").size).toBe(0);
+    expect(presetPermissions("custom").size).toBe(0);
+  });
+});
+
+describe("legacyEffectivePermissions (pre-00080 semantics, migration only)", () => {
+  it("unions the preset with stored additions for non-custom roles", () => {
+    const set = legacyEffectivePermissions("teacher", ["events:view"] as Permission[]);
+    for (const p of ROLE_PRESETS.teacher) {
+      expect(set.has(p), p).toBe(p !== "attendance:mark_absent");
+    }
+    expect(set.has("events:view")).toBe(true);
+  });
+
+  it("custom and super_admin match the exact model", () => {
+    expect([...legacyEffectivePermissions("custom", ["events:view"] as Permission[])]).toEqual(["events:view"]);
+    expect(legacyEffectivePermissions("super_admin", null).size).toBe(PERMISSION_KEYS.length);
   });
 });
 
@@ -218,13 +266,13 @@ describe("payments:manual_adjustment", () => {
   });
 
   it("admin preset does NOT get it by default", () => {
-    const set = expandPermissions("admin", null);
+    const set = preset("admin");
     expect(set.has("payments:manual_adjustment")).toBe(false);
   });
 
   it("front_desk / teacher / read_only do NOT get it", () => {
     for (const role of ["front_desk", "teacher", "read_only"] as const) {
-      const set = expandPermissions(role, null);
+      const set = preset(role);
       expect(set.has("payments:manual_adjustment")).toBe(false);
     }
   });
@@ -259,7 +307,7 @@ describe("students:send_magic_link", () => {
       "teacher",
       "read_only",
     ] as const) {
-      const set = expandPermissions(role, null);
+      const set = preset(role);
       expect(set.has("students:send_magic_link")).toBe(false);
     }
   });
@@ -287,7 +335,7 @@ describe("referral permissions", () => {
   });
 
   it("admin preset includes all referral perms", () => {
-    const set = expandPermissions("admin", null);
+    const set = preset("admin");
     for (const k of [
       "referrals:view",
       "referrals:create",
@@ -300,7 +348,7 @@ describe("referral permissions", () => {
   });
 
   it("front_desk preset includes view+create+verify, NOT reward/cancel", () => {
-    const set = expandPermissions("front_desk", null);
+    const set = preset("front_desk");
     expect(set.has("referrals:view")).toBe(true);
     expect(set.has("referrals:create")).toBe(true);
     expect(set.has("referrals:verify")).toBe(true);
@@ -309,7 +357,7 @@ describe("referral permissions", () => {
   });
 
   it("read_only sees referrals but cannot mutate", () => {
-    const set = expandPermissions("read_only", null);
+    const set = preset("read_only");
     expect(set.has("referrals:view")).toBe(true);
     expect(set.has("referrals:create")).toBe(false);
     expect(set.has("referrals:verify")).toBe(false);
@@ -318,7 +366,7 @@ describe("referral permissions", () => {
   });
 
   it("teacher has no referral perms", () => {
-    const set = expandPermissions("teacher", null);
+    const set = preset("teacher");
     expect(set.has("referrals:view")).toBe(false);
     expect(set.has("referrals:create")).toBe(false);
   });

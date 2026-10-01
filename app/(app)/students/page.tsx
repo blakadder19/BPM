@@ -27,6 +27,7 @@ import { AdminStudents } from "@/components/students/admin-students";
 import { getAllRedemptionsForYear, type BirthdayRedemption } from "@/lib/services/birthday-benefit-store";
 import type { MockEventPurchase } from "@/lib/mock-data";
 import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
+import { redactSubscriptionFinance } from "@/lib/domain/student-finance-redaction";
 
 export default async function StudentsPage({
   searchParams,
@@ -35,8 +36,9 @@ export default async function StudentsPage({
 }) {
   const _t0 = performance.now();
   // Front-desk and teacher roles can also reach this page through their
-  // `students:view_limited` permission. The detail panel independently
-  // gates finance-sensitive sections via `students:view_finance`.
+  // `students:view_limited` permission. Money (wallet, penalties, event
+  // purchases, subscription amounts) is only serialized with
+  // `students:view_finance` — see `canViewFinance` below.
   await requireAnyPermission(["students:view", "students:view_limited"]);
   const params = searchParams ? await searchParams : {};
 
@@ -165,17 +167,19 @@ export default async function StudentsPage({
   const _tEnd = performance.now();
   if (process.env.NODE_ENV === "development") console.info(`[perf /students] hydrate=${(_tHydrate-_t0).toFixed(0)}ms db=${(_tDb-_tHydrate).toFixed(0)}ms enrich=${(_tEnd-_tDb).toFixed(0)}ms total=${(_tEnd-_t0).toFixed(0)}ms`);
 
+  const canViewFinance = permissions.canViewFinance;
+
   return (
     <AdminStudents
       students={students}
-      subscriptions={subscriptions}
+      subscriptions={canViewFinance ? subscriptions : subscriptions.map(redactSubscriptionFinance)}
       terms={terms}
       products={products}
       danceStyles={danceStyles}
-      walletTransactions={walletTransactions}
+      walletTransactions={canViewFinance ? walletTransactions : []}
       bookings={bookings}
-      penalties={penalties}
-      eventPurchases={eventPurchases}
+      penalties={canViewFinance ? penalties : []}
+      eventPurchases={canViewFinance ? eventPurchases : []}
       attendanceRecords={attendanceRecords}
       affiliations={affiliations.map((a) => ({
         id: a.id,

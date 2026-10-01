@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/auth";
-import { getStaffAccess } from "@/lib/staff-permissions";
+import { getStaffAccess, hasPermission } from "@/lib/staff-permissions";
 import { resolveDashboardView } from "@/lib/dashboard-access";
 import {
   getBookingRepo,
@@ -664,13 +664,18 @@ export default async function DashboardPage() {
   const studentNameMap: Record<string, string> = {};
   for (const s of allStudents) studentNameMap[s.id] = s.fullName;
 
+  // `dashboard:view` alone must not reveal money or who owes it.
+  const canViewFinance = hasPermission(access, "finance:view");
+
   const dashboardData: AdminDashboardData = {
     todayStr,
     todaysClassCount,
     upcomingBookingCount,
     activeWaitlistCount,
     unresolvedPenaltyCount: unresolvedPenalties.length,
-    unresolvedPenaltyTotal: unresolvedPenalties.reduce((s, p) => s + p.amountCents, 0),
+    unresolvedPenaltyTotal: canViewFinance
+      ? unresolvedPenalties.reduce((s, p) => s + p.amountCents, 0)
+      : 0,
     upcomingClasses: upcomingInstances.slice(0, 8).map(toSummary),
     demandClasses,
     partnerClasses,
@@ -683,10 +688,12 @@ export default async function DashboardPage() {
     studentsWithSub,
     totalStudents: allStudents.length,
     totalProducts: allProducts.filter((p) => p.isActive).length,
-    pendingEventPayments: pendingEventPayments.map((p) => ({
-      ...p,
-      studentName: p.studentId ? (studentNameMap[p.studentId] ?? p.studentId) : "Guest",
-    })),
+    pendingEventPayments: canViewFinance
+      ? pendingEventPayments.map((p) => ({
+          ...p,
+          studentName: p.studentId ? (studentNameMap[p.studentId] ?? p.studentId) : "Guest",
+        }))
+      : [],
     upcomingEvents,
   };
 

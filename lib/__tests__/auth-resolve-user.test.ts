@@ -229,11 +229,11 @@ describe("staff access still works for legitimate staff", () => {
   it("Student + Teacher dual role: DB student with an active teacher grant keeps both", async () => {
     setMetadataRole("student");
     dbRow = dbUser("student");
-    staffRow = grant({ roleKey: "teacher", legacyRole: "teacher" });
+    staffRow = grant({ roleKey: "teacher", legacyRole: "teacher", permissions: ["checkin:scan"] });
 
     const access = await getStaffAccess();
     expect(access).toMatchObject({ isStudent: true, isStaff: true, roleKey: "teacher", isSuperAdmin: false });
-    expect(access.permissions.size).toBeGreaterThan(0);
+    expect([...access.permissions]).toEqual(["checkin:scan"]);
   });
 
   it("an invite-granted role (active staff_role_key) applies to a student account", async () => {

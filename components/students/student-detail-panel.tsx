@@ -327,7 +327,7 @@ export function StudentDetailPanel({
                   ))}
               </div>
             )}
-            {allTxs.length === 0 ? (
+            {!canViewFinance ? null : allTxs.length === 0 ? (
               <p className="text-sm text-gray-400">No transactions.</p>
             ) : (
               <PaginatedTransactions transactions={allTxs} />
@@ -358,21 +358,23 @@ export function StudentDetailPanel({
           </Section>
 
           {/* ── Penalties section ── */}
-          {studentPenalties.length > 0 && (
+          {canViewFinance && studentPenalties.length > 0 && (
             <Section title="Penalties" className="md:col-span-2">
               <PaginatedPenalties penalties={studentPenalties} />
             </Section>
           )}
 
           {/* ── Financial History section ── */}
-          <Section title="Financial History" className="md:col-span-2">
-            <StudentFinancialHistory
-              subscriptions={subs}
-              products={products}
-              penalties={studentPenalties}
-              eventPurchases={(eventPurchases ?? []).filter((ep) => ep.studentId === student.id)}
-            />
-          </Section>
+          {canViewFinance && (
+            <Section title="Financial History" className="md:col-span-2">
+              <StudentFinancialHistory
+                subscriptions={subs}
+                products={products}
+                penalties={studentPenalties}
+                eventPurchases={(eventPurchases ?? []).filter((ep) => ep.studentId === student.id)}
+              />
+            </Section>
+          )}
         </div>
         {removeTarget && (
           <RemoveSubscriptionDialog

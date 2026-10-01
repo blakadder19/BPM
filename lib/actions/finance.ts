@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAnyPermission } from "@/lib/staff-permissions";
+import { requirePermission } from "@/lib/staff-permissions";
 import { getStudentRepo, getSpecialEventRepo, getSubscriptionRepo, getStaffRepo } from "@/lib/repositories";
 import { getPenaltyService } from "@/lib/services/penalty-store";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
@@ -21,8 +21,13 @@ export interface FinanceData {
   auditLog: FinanceAuditEntry[];
 }
 
+/**
+ * Full Finance dataset (every transaction, metrics, audit log).
+ * `finance:view` only — operational payment permissions such as
+ * `payments:view_limited` or `payments:mark_paid_reception` never open it.
+ */
 export async function getFinanceData(): Promise<FinanceData> {
-  await requireAnyPermission(["finance:view", "payments:view", "payments:view_limited"]);
+  await requirePermission("finance:view");
   await ensureOperationalDataHydrated();
 
   const [allStudents, allSubs] = await Promise.all([

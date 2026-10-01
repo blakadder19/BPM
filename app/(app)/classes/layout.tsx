@@ -1,52 +1,16 @@
-"use client";
-
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { type ReactNode } from "react";
-import { useUser } from "@/components/providers/user-provider";
+import { getStaffAccess } from "@/lib/staff-permissions";
+import { visibleClassesTabs } from "@/lib/classes-tabs";
+import { ClassesTabs } from "@/components/classes/classes-tabs";
 
-const ADMIN_TABS = [
-  { label: "Templates", href: "/classes" },
-  { label: "Schedule", href: "/classes/bookable" },
-  { label: "Teachers", href: "/classes/teachers" },
-] as const;
-
-function ClassesTabs() {
-  const pathname = usePathname();
-
-  function isActive(href: string) {
-    if (href === "/classes") return pathname === "/classes";
-    return pathname.startsWith(href);
-  }
-
-  return (
-    <nav className="flex gap-6 border-b border-gray-200">
-      {ADMIN_TABS.map((tab) => (
-        <Link
-          key={tab.href}
-          href={tab.href}
-          className={`pb-2 text-sm font-medium transition-colors ${
-            isActive(tab.href)
-              ? "border-b-2 border-bpm-600 text-bpm-600"
-              : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </nav>
-  );
-}
-
-export default function ClassesLayout({ children }: { children: ReactNode }) {
-  const { role } = useUser();
-  // Hint-only: hide the staff tab strip from students. Each page enforces
-  // its own permission server-side.
-  const showTabs = role !== "student";
+export default async function ClassesLayout({ children }: { children: ReactNode }) {
+  const access = await getStaffAccess();
+  // Display only; each page enforces its own permission server-side.
+  const tabs = visibleClassesTabs(access.user.role, access);
 
   return (
     <div className="space-y-6">
-      {showTabs && <ClassesTabs />}
+      {tabs.length > 0 && <ClassesTabs tabs={tabs} />}
       {children}
     </div>
   );

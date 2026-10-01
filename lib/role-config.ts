@@ -67,7 +67,7 @@ export const NAVIGATION: NavItem[] = [
   { name: "Terms", href: "/terms", iconKey: "terms", roles: ["admin"] },
   { name: "Products", href: "/products", iconKey: "products", roles: ["admin"], permission: "products:view" },
   { name: "Penalties", href: "/penalties", iconKey: "penalties", roles: ["admin"] },
-  { name: "Finance", href: "/finance", iconKey: "finance", roles: ["admin"], permission: ["finance:view", "payments:view", "payments:view_limited"] },
+  { name: "Finance", href: "/finance", iconKey: "finance", roles: ["admin"], permission: "finance:view" },
   { name: "Affiliations", href: "/affiliations", iconKey: "affiliations", roles: ["admin"], permission: "affiliations:view" },
   { name: "Referrals", href: "/referrals", iconKey: "referrals", roles: ["admin"], permission: "referrals:view" },
   { name: "Discount Rules", href: "/discount-rules", iconKey: "discountRules", roles: ["admin"], permission: "discounts:view" },

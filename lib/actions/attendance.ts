@@ -4,14 +4,20 @@ import { revalidatePath } from "next/cache";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
-import { getSubscriptionRepo } from "@/lib/repositories";
+import { getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { updateSubscription } from "@/lib/services/subscription-service";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
 import type { AttendanceMark, CheckInMethod, ClassType } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveAttendanceToDB, saveBookingToDB, savePenaltyToDB, updatePenaltyInDB, deleteAttendanceFromDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
-import { requireAnyPermission, requirePermission, requireSuperAdmin } from "@/lib/staff-permissions";
+import {
+  hasAnyPermission,
+  hasPermission,
+  requireAnyPermission,
+  requirePermission,
+  requireSuperAdmin,
+} from "@/lib/staff-permissions";
 
 export interface MarkAttendanceResult {
   success: boolean;
@@ -95,28 +101,66 @@ export async function markStudentAttendance(params: {
   /** Direct subscription ID for attendance-first flows (walk-in with subscription) */
   directSubscriptionId?: string | null;
 }): Promise<MarkAttendanceResult> {
-  await ensureOperationalDataHydrated();
-  await requireAnyPermission([
+  const access = await requireAnyPermission([
     "attendance:mark_present",
     "attendance:mark_absent",
     "attendance:edit_history",
   ]);
+  await ensureOperationalDataHydrated();
 
-  if (!params.bookableClassId || !params.studentId || !params.markedBy) {
-    return {
-      success: false,
-      status: params.status,
-      penaltyCreated: false,
-      penaltyDescription: null,
-      bookingStatusChange: null,
-      creditRestored: false,
-      error: "Missing required fields: bookableClassId, studentId, and markedBy are required.",
-    };
+  const fail = (error: string): MarkAttendanceResult => ({
+    success: false,
+    status: params.status,
+    penaltyCreated: false,
+    penaltyDescription: null,
+    bookingStatusChange: null,
+    creditRestored: false,
+    error,
+  });
+
+  if (!params.bookableClassId || !params.studentId) {
+    return fail("Missing required fields: bookableClassId and studentId are required.");
   }
 
   const attendanceSvc = getAttendanceService();
   const bookingSvc = getBookingService();
   const penaltySvc = getPenaltyService();
+
+  // Each status needs its own key: an absent mark creates a no-show fee,
+  // and undoing one voids that fee.
+  const statusKey = params.status === "absent" ? "attendance:mark_absent" : "attendance:mark_present";
+  if (!hasPermission(access, statusKey)) {
+    return fail(`You do not have permission to mark students ${params.status}.`);
+  }
+  const priorMark = attendanceSvc.getRecord(params.bookableClassId, params.studentId);
+  if (
+    priorMark?.status === "absent" &&
+    params.status !== "absent" &&
+    !hasAnyPermission(access, ["attendance:mark_absent", "attendance:edit_history"])
+  ) {
+    return fail("You do not have permission to change an absent mark.");
+  }
+
+  if (params.bookingId) {
+    const target = bookingSvc.bookings.find((b) => b.id === params.bookingId);
+    if (!target || target.studentId !== params.studentId || target.bookableClassId !== params.bookableClassId) {
+      return fail("Booking does not match this student and class.");
+    }
+  }
+  if (params.directSubscriptionId) {
+    const directSub = await getSubscriptionRepo().getById(params.directSubscriptionId);
+    if (!directSub || directSub.studentId !== params.studentId) {
+      return fail("Subscription does not belong to this student.");
+    }
+  }
+
+  const actorName = access.user.fullName || access.user.email;
+  const student = await getStudentRepo().getById(params.studentId);
+  params = {
+    ...params,
+    studentName: student?.fullName ?? params.studentName,
+    markedBy: params.attendanceSource !== undefined ? `${actorName} (manual)` : actorName,
+  };
 
   if (!params.bookingId) {
     const existingBooking = bookingSvc.bookings.find(

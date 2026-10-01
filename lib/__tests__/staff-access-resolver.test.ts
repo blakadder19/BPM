@@ -158,15 +158,16 @@ describe("getStaffAccess (RBAC resolver — legacy bypass elimination)", () => {
     expect(access.roleKey).toBe(null);
   });
 
-  it("teacher with no staff row => teacher preset permissions (legacy fallback)", async () => {
+  it("teacher with no staff grant => no implicit teacher preset", async () => {
     CURRENT_USER = baseUser({ role: "teacher" });
     CURRENT_ROW = null;
     const getStaffAccess = await importResolver();
 
     const access = await getStaffAccess();
     expect(access.isSuperAdmin).toBe(false);
-    expect(access.roleKey).toBe("teacher");
-    expect(access.isLegacyAdminFallback).toBe(true);
+    expect(access.roleKey).toBe(null);
+    expect(access.isStaff).toBe(false);
+    expect(access.permissions.size).toBe(0);
   });
 
   it("custom role with explicit events:view extra => exactly that permission", async () => {

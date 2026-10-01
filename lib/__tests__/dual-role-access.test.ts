@@ -11,7 +11,9 @@
  * independent of the base role, while student access survives.
  */
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import type { Permission, StaffRoleKey, StaffStatus } from "@/lib/domain/permissions";
+import { ROLE_PRESETS, type Permission, type StaffRoleKey, type StaffStatus } from "@/lib/domain/permissions";
+
+const TEACHER_DEFAULTS = [...ROLE_PRESETS.teacher];
 
 // ── Mocks ────────────────────────────────────────────────────
 
@@ -134,7 +136,7 @@ describe("pure student", () => {
 
 describe("student + ACTIVE teacher grant", () => {
   beforeEach(() => {
-    STAFF_ROW = staffRow({ roleKey: "teacher", status: "active" });
+    STAFF_ROW = staffRow({ roleKey: "teacher", permissions: TEACHER_DEFAULTS, status: "active" });
   });
 
   it("is BOTH student and staff — neither identity is collapsed", async () => {
@@ -144,11 +146,28 @@ describe("student + ACTIVE teacher grant", () => {
     expect(a.roleKey).toBe("teacher");
   });
 
-  it("receives the Teacher permission preset despite base role 'student'", async () => {
+  it("receives exactly the stored Teacher grant despite base role 'student'", async () => {
     const a = await getStaffAccess();
-    expect(a.permissions.size).toBeGreaterThan(0);
+    expect([...a.permissions].sort()).toEqual([...TEACHER_DEFAULTS].sort());
     expect(hasPermission(a, "attendance:mark_present")).toBe(true);
     expect(hasPermission(a, "students:view_limited")).toBe(true);
+  });
+
+  it("staff functionality follows the exact checked list, student access stays", async () => {
+    STAFF_ROW = staffRow({ roleKey: "teacher", permissions: ["classes:view"], status: "active" });
+    const a = await getStaffAccess();
+    expect(a.isStudent).toBe(true);
+    expect(hasPermission(a, "attendance:view")).toBe(false);
+    expect(hasPermission(a, "checkin:scan")).toBe(false);
+    const hrefs = getNavigationForAccess({
+      isStudent: a.isStudent,
+      permissions: a.permissions,
+      isSuperAdmin: a.isSuperAdmin,
+    }).map((i) => i.href);
+    expect(hrefs).toContain("/catalog");
+    expect(hrefs).toContain("/classes");
+    expect(hrefs).not.toContain("/attendance");
+    expect(hrefs).not.toContain("/finance");
   });
 
   it("does NOT receive super-admin powers", async () => {
@@ -321,21 +340,20 @@ describe("admin and super-admin regression", () => {
     expect(a.isStudent).toBe(false);
   });
 
-  it("legacy role=teacher with NO staff grant still resolves to the teacher preset", async () => {
+  it("legacy role=teacher with NO staff grant gets no implicit teacher preset", async () => {
     CURRENT_USER = student({ role: "teacher" });
     STAFF_ROW = null;
     const a = await getStaffAccess();
-    expect(a.roleKey).toBe("teacher");
-    expect(a.isStaff).toBe(true);
+    expect(a.roleKey).toBeNull();
+    expect(a.isStaff).toBe(false);
     expect(a.isStudent).toBe(false);
-    expect(a.isLegacyAdminFallback).toBe(true);
-    expect(hasPermission(a, "attendance:mark_present")).toBe(true);
-    expect(resolveRoleLabel(a)).toBe("Teacher");
+    expect(a.isLegacyAdminFallback).toBe(false);
+    expect(hasPermission(a, "attendance:mark_present")).toBe(false);
   });
 
   it("a pure teacher does not see Catalog", async () => {
     CURRENT_USER = student({ role: "teacher" });
-    STAFF_ROW = staffRow({ roleKey: "teacher", status: "active" });
+    STAFF_ROW = staffRow({ roleKey: "teacher", permissions: TEACHER_DEFAULTS, status: "active" });
     const a = await getStaffAccess();
     const hrefs = getNavigationForAccess({
       isStudent: a.isStudent,

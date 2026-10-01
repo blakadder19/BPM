@@ -11,6 +11,7 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import type { AuthUser } from "@/lib/auth";
 import type { StaffMember } from "@/lib/repositories/interfaces/staff-repository";
 import { resolveDashboardView } from "@/lib/dashboard-access";
+import { ROLE_PRESETS } from "@/lib/domain/permissions";
 
 let CURRENT_USER: AuthUser | null = null;
 let CURRENT_ROW: StaffMember | null = null;
@@ -87,13 +88,13 @@ describe("legacy fallback respects staff_status", () => {
     expect(access.permissions.size).toBe(0);
   });
 
-  it("an active legacy teacher keeps the teacher preset", async () => {
+  it("an active legacy teacher with no explicit grant gets no implicit preset", async () => {
     CURRENT_USER = user("teacher");
     CURRENT_ROW = row({ legacyRole: "teacher", status: "active" });
     const access = await (await loadResolver())();
-    expect(access.isStaff).toBe(true);
-    expect(access.isLegacyAdminFallback).toBe(true);
-    expect(access.permissions.has("checkin:scan")).toBe(true);
+    expect(access.isStaff).toBe(false);
+    expect(access.isLegacyAdminFallback).toBe(false);
+    expect(access.permissions.size).toBe(0);
   });
 
   it("an active legacy admin keeps the super admin fallback", async () => {
@@ -135,16 +136,25 @@ describe("dashboard follows resolved staff access", () => {
   });
 
   it("active teacher grant is allowed", async () => {
-    expect(await viewFor("teacher", row({ roleKey: "teacher" }))).toBe("staff");
+    expect(
+      await viewFor("teacher", row({ roleKey: "teacher", permissions: [...ROLE_PRESETS.teacher] })),
+    ).toBe("staff");
   });
 
   it("active admin grant is allowed", async () => {
-    expect(await viewFor("admin", row({ roleKey: "admin", legacyRole: "admin" }))).toBe("staff");
+    expect(
+      await viewFor("admin", row({ roleKey: "admin", legacyRole: "admin", permissions: [...ROLE_PRESETS.admin] })),
+    ).toBe("staff");
+  });
+
+  it("active teacher grant with dashboard:view unticked is denied", async () => {
+    const permissions = ROLE_PRESETS.teacher.filter((p) => p !== "dashboard:view");
+    expect(await viewFor("teacher", row({ roleKey: "teacher", permissions }))).toBe("no_staff_access");
   });
 
   it("Student + Teacher keeps the student dashboard and the teacher grant", async () => {
     CURRENT_USER = user("student");
-    CURRENT_ROW = row({ roleKey: "teacher", legacyRole: "student" });
+    CURRENT_ROW = row({ roleKey: "teacher", legacyRole: "student", permissions: [...ROLE_PRESETS.teacher] });
     const access = await (await loadResolver())();
     expect(access.isStudent).toBe(true);
     expect(access.isStaff).toBe(true);

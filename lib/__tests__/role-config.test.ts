@@ -87,13 +87,26 @@ describe("getNavigationForAccess (sidebar visibility)", () => {
     expect(hrefs).not.toContain("/settings");
   });
 
-  it("array-form permission (e.g. Finance) matches if ANY key is held", () => {
+  it("Finance nav requires finance:view — operational payment permissions never show it", () => {
+    const hrefsFor = (perms: Permission[]) =>
+      getNavigationForAccess({
+        isStudent: false,
+        permissions: new Set<Permission>(perms),
+        isSuperAdmin: false,
+      }).map((i) => i.href);
+    expect(hrefsFor(["payments:view_limited"])).not.toContain("/finance");
+    expect(hrefsFor(["payments:view"])).not.toContain("/finance");
+    expect(hrefsFor(["payments:mark_paid_reception"])).not.toContain("/finance");
+    expect(hrefsFor(["finance:view"])).toContain("/finance");
+  });
+
+  it("array-form permission matches if ANY key is held (Students)", () => {
     const items = getNavigationForAccess({
       isStudent: false,
-      permissions: new Set<Permission>(["payments:view_limited"]),
+      permissions: new Set<Permission>(["students:view_limited"]),
       isSuperAdmin: false,
     });
-    expect(items.map((i) => i.href)).toContain("/finance");
+    expect(items.map((i) => i.href)).toContain("/students");
   });
 
   describe("Catalog is student-only — never visible to staff/admin", () => {

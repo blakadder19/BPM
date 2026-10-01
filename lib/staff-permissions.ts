@@ -34,8 +34,8 @@ import {
  * `users.role` to 'teacher', which granted staff access but silently
  * removed their student functionality. That trade-off is now gone.
  *
- * `permissions` is the EFFECTIVE set after expanding the role preset
- * against the per-user override. For super_admin it contains every key.
+ * `permissions` is the EXACT stored grant for an active staff member.
+ * For super_admin it contains every key.
  */
 export interface StaffAccess {
   user: AuthUser;
@@ -80,11 +80,14 @@ export interface StaffAccess {
  *      still reported so admin UI can label it.
  *   3. No staff grant and staff_status 'disabled' or 'pending' → no
  *      permissions, whatever `users.role` says.
- *   4. No staff grant, status active (or no row) → legacy fallback for
- *      `users.role` of 'admin' (→ super_admin) or 'teacher' (→ teacher
- *      preset), which protects environments where migration 00059
- *      hasn't run.
- *   5. Otherwise → no staff permissions.
+ *   4. No staff grant, status active (or no row) → legacy bootstrap
+ *      fallback for `users.role='admin'` only (→ super_admin), so a
+ *      fresh install without migration 00059 is not locked out.
+ *   5. Otherwise (including base-role teachers with no grant) → no
+ *      staff permissions.
+ *
+ * Active grants use the EXACT stored permission list (`expandPermissions`);
+ * role presets are never added back at runtime.
  *
  * In every branch `isStudent` is derived independently from
  * `users.role`, so student functionality is never a casualty of the
@@ -182,23 +185,9 @@ export const getStaffAccess = cache(async (): Promise<StaffAccess> => {
     };
   }
 
-  // Legacy fallback: pre-existing role=teacher without a staff_role_key
-  // gets the standard Teacher preset (QR scan, check-in, mark-paid at
-  // reception, limited student view). This mirrors the migration 00059
-  // backfill and protects environments where the migration hasn't run
-  // yet (e.g. memory mode in tests or freshly-cloned dev DBs).
-  if (user.role === "teacher") {
-    return {
-      user,
-      roleKey: "teacher",
-      status: "active",
-      permissions: expandPermissions("teacher", null),
-      isSuperAdmin: false,
-      isLegacyAdminFallback: true,
-      isStudent: false,
-      isStaff: true,
-    };
-  }
+  // A base-role teacher with no staff grant gets nothing: staff
+  // permissions come only from an explicit, exact grant. Migration 00080
+  // gave every active legacy teacher an explicit Teacher grant.
 
   // Plain student, or a base role with no staff grant at all.
   return {

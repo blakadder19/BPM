@@ -190,12 +190,16 @@ export const STAFF_STATUSES = ["active", "disabled", "pending"] as const;
 export type StaffStatus = (typeof STAFF_STATUSES)[number];
 
 /**
- * Role preset → permission set.
+ * Role preset → RECOMMENDED permission set.
+ *
+ * Presets are templates only: the Staff editor pre-fills the checkboxes
+ * from them when a role is picked, and the Super Admin can then untick
+ * anything. They are never added back at runtime — the stored
+ * `staff_permissions` list is the exact grant (see `expandPermissions`).
  *
  * `super_admin` is a sentinel: implementations should treat it as
  * "all permissions" rather than relying on this list staying exhaustive
- * over time. We still include the full list here for completeness and
- * for the Staff editor UI.
+ * over time.
  */
 export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
   super_admin: PERMISSION_KEYS,
@@ -278,6 +282,7 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
     "bookings:view",
     "attendance:view",
     "attendance:mark_present",
+    "attendance:mark_absent",
     "checkin:view",
     "checkin:scan",
     "checkin:manual_checkin",
@@ -307,65 +312,93 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
 };
 
 /**
- * Produce the effective permission set for a staff member.
+ * Produce the effective permission set for a staff member (exact model).
  *
- * Resolution order (Model A — preset + custom additions):
- *   1. super_admin → ALL permissions (sentinel; ignores `override`)
- *   2. custom     → use `override` verbatim (or empty if missing)
- *   3. otherwise  → ROLE_PRESETS[roleKey] union with `override` (override
- *                   ADDS, never silently removes — to remove a preset
- *                   permission the caller must switch role_key='custom').
+ *   - super_admin → ALL permissions (sentinel; the stored list is ignored)
+ *   - no role     → nothing
+ *   - any other role, including custom → exactly the stored list
  *
- * IMPORTANT: For non-Custom roles, the `override` list is stored as
- * "additions only" (perms NOT already in the preset). `expandPermissions`
- * still does a defensive UNION with the preset so legacy rows that were
- * persisted with `[preset + extras]` continue to expand correctly.
+ * The role preset is NOT unioned back in: a permission the Super Admin
+ * unticked stays denied. Status (disabled / pending) is handled by the
+ * resolver, which grants nothing for a non-active grant.
+ *
+ * Requires migration 00080, which rewrote pre-existing non-custom rows
+ * (stored as "additions on top of the preset") into their full effective
+ * list. See `legacyEffectivePermissions` for the old semantics.
  */
 export function expandPermissions(
   roleKey: StaffRoleKey | null,
-  override: readonly Permission[] | null | undefined,
+  stored: readonly Permission[] | null | undefined,
 ): Set<Permission> {
   if (roleKey === "super_admin") {
     return new Set<Permission>(PERMISSION_KEYS);
   }
-  if (roleKey === "custom") {
-    return new Set<Permission>(override ?? []);
-  }
-  const base = roleKey ? ROLE_PRESETS[roleKey] : [];
-  const out = new Set<Permission>(base);
-  for (const p of override ?? []) out.add(p);
-  return out;
+  if (!roleKey) return new Set<Permission>();
+  return new Set<Permission>((stored ?? []).filter(isPermissionKey));
 }
 
 /**
- * Normalize the permission list saved into `staff_permissions` for
- * persistence. This is the source of truth for the storage shape:
+ * Normalize the permission list saved into `staff_permissions`:
  *
- *   - super_admin → []  (sentinel — preset is ALL keys, no overrides
- *                        ever needed)
- *   - custom      → exact list (deduped, sanitized)
- *   - otherwise   → ADDITIONS ONLY (perms NOT already in the preset),
- *                   deduped and sanitized.
+ *   - super_admin → []  (sentinel — always every permission)
+ *   - otherwise   → the exact list, deduped and sanitized. Preset
+ *                   permissions are kept; nothing is stripped or added.
  *
- * Why "additions only" for non-Custom: if we stored `preset + extras`,
- * then changing the role would leak old preset perms into the override
- * because the stored list still contains them. Storing only the delta
- * makes role changes deterministic and the editor reflect what's
- * actually granted on top of the preset.
- *
- * The function is pure and safe to call from both the client editor
- * (when computing what to send to the server) and the server actions
- * (defence-in-depth).
+ * Pure; used by both the client editor and the server actions.
  */
 export function normalizePermissionsForStorage(
   roleKey: StaffRoleKey,
   permissions: readonly Permission[],
 ): Permission[] {
   if (roleKey === "super_admin") return [];
-  const dedup = Array.from(new Set(permissions.filter(isPermissionKey)));
-  if (roleKey === "custom") return dedup;
-  const presetSet = new Set<Permission>(ROLE_PRESETS[roleKey]);
-  return dedup.filter((p) => !presetSet.has(p));
+  return Array.from(new Set(permissions.filter(isPermissionKey)));
+}
+
+/** Recommended defaults for a role, as a fresh mutable set. */
+export function presetPermissions(roleKey: StaffRoleKey): Set<Permission> {
+  if (roleKey === "super_admin" || roleKey === "custom") return new Set();
+  return new Set<Permission>(ROLE_PRESETS[roleKey]);
+}
+
+/**
+ * What the editor shows after the role dropdown changes. Picking a preset
+ * role loads its recommended defaults (visibly, before Save); Custom keeps
+ * the current checkboxes; Super Admin needs none.
+ */
+export function permissionsForRoleChange(
+  next: StaffRoleKey,
+  current: ReadonlySet<Permission>,
+): Set<Permission> {
+  if (next === "custom") return new Set(current);
+  return presetPermissions(next);
+}
+
+/**
+ * Keys added to a default preset in the same release as migration 00080.
+ * The pre-00080 preset is the current one without these; 00080 grants them
+ * to existing holders of the role.
+ */
+export const PRESET_ADDITIONS_00080: Partial<Record<StaffRoleKey, readonly Permission[]>> = {
+  teacher: ["attendance:mark_absent"],
+};
+
+/**
+ * Pre-00080 semantics ("preset + additions", with the presets as they were
+ * then), kept only so the data migration and its tests can prove what each
+ * existing grant converts to. Never use for authorization.
+ */
+export function legacyEffectivePermissions(
+  roleKey: StaffRoleKey | null,
+  stored: readonly Permission[] | null | undefined,
+): Set<Permission> {
+  if (roleKey === "super_admin") return new Set<Permission>(PERMISSION_KEYS);
+  if (roleKey === "custom") return new Set<Permission>(stored ?? []);
+  const added = (roleKey && PRESET_ADDITIONS_00080[roleKey]) || [];
+  const out = new Set<Permission>(
+    roleKey ? ROLE_PRESETS[roleKey].filter((p) => !added.includes(p)) : [],
+  );
+  for (const p of stored ?? []) out.add(p);
+  return out;
 }
 
 /**

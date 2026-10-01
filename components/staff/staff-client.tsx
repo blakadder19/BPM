@@ -25,12 +25,14 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/utils";
 import {
   PERMISSION_GROUPS,
-  ROLE_PRESETS,
+  PERMISSION_KEYS,
   STAFF_ROLE_KEYS,
   STAFF_ROLE_LABELS,
   expandPermissions,
   isSensitivePermission,
   normalizePermissionsForStorage,
+  permissionsForRoleChange as permissionsAfterRoleChange,
+  presetPermissions as presetSet,
   type Permission,
   type StaffRoleKey,
   type StaffStatus,
@@ -621,23 +623,16 @@ function InviteModal({
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [roleKey, setRoleKey] = useState<StaffRoleKey>("teacher");
-  const [overrides, setOverrides] = useState<Set<Permission>>(new Set());
+  const [permissions, setPermissions] = useState<Set<Permission>>(
+    () => presetSet("teacher"),
+  );
   const [addToRoster, setAddToRoster] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  // Same role-change discipline as the edit modal: never carry stale
-  // override perms across role switches.
   function handleRoleChange(next: StaffRoleKey) {
     if (next === roleKey) return;
-    if (next === "super_admin") {
-      setOverrides(new Set());
-    } else if (next === "custom") {
-      const effective = expandPermissions(roleKey, [...overrides]);
-      setOverrides(new Set(effective));
-    } else {
-      setOverrides(new Set());
-    }
+    setPermissions(permissionsAfterRoleChange(next, permissions));
     setRoleKey(next);
   }
 
@@ -653,7 +648,7 @@ function InviteModal({
           email,
           displayName: displayName.trim() || null,
           roleKey,
-          permissions: normalizePermissionsForStorage(roleKey, [...overrides]),
+          permissions: normalizePermissionsForStorage(roleKey, [...permissions]),
           addToTeacherRoster: roleKey === "teacher" && addToRoster,
         });
       } catch (err) {
@@ -729,8 +724,8 @@ function InviteModal({
 
           <PermissionsEditor
             roleKey={roleKey}
-            overrides={overrides}
-            onChange={setOverrides}
+            permissions={permissions}
+            onChange={setPermissions}
           />
 
           {/* Phase 18 — teaching roster is a separate concept from
@@ -811,11 +806,10 @@ function EditPermissionsModal({
 }) {
   const initialRole: StaffRoleKey = target.roleKey ?? "teacher";
   const [roleKey, setRoleKey] = useState<StaffRoleKey>(initialRole);
-  // Override list is "extras only" for non-Custom; the full effective
-  // set for Custom. Initialize from `target.permissions` which the
-  // server now persists in this exact shape.
-  const [overrides, setOverrides] = useState<Set<Permission>>(
-    new Set(target.permissions),
+  // `target.permissions` is the exact stored grant. A row with no grant
+  // yet starts from the Teacher defaults, which only apply on Save.
+  const [permissions, setPermissions] = useState<Set<Permission>>(() =>
+    target.roleKey ? new Set(target.permissions) : presetSet(initialRole),
   );
   const [fullName, setFullName] = useState<string>(target.fullName ?? "");
   const [submitting, setSubmitting] = useState(false);
@@ -827,30 +821,9 @@ function EditPermissionsModal({
     activeSuperAdmins <= 1;
   const isSelfSuper = target.id === currentUserId && target.roleKey === "super_admin";
 
-  /**
-   * Role-change handler — prevents stale override leakage.
-   *
-   *   - super_admin: clear overrides (all perms granted by sentinel).
-   *   - custom: pre-fill overrides with the user's CURRENT effective
-   *     permissions so the admin starts from a meaningful state and
-   *     can curate down rather than starting from a blank slate.
-   *   - other preset roles: clear overrides (extras start at zero;
-   *     admin can add specific extras on top of the new preset).
-   *
-   * Without this, switching from Admin → Teacher leaves the override
-   * containing the entire previous Admin preset, and `expandPermissions`
-   * unions it with the Teacher preset, effectively keeping Admin power.
-   */
   function handleRoleChange(next: StaffRoleKey) {
     if (next === roleKey) return;
-    if (next === "super_admin") {
-      setOverrides(new Set());
-    } else if (next === "custom") {
-      const effective = expandPermissions(roleKey, [...overrides]);
-      setOverrides(new Set(effective));
-    } else {
-      setOverrides(new Set());
-    }
+    setPermissions(permissionsAfterRoleChange(next, permissions));
     setRoleKey(next);
   }
 
@@ -890,10 +863,7 @@ function EditPermissionsModal({
         }
       }
 
-      // Defensive client-side normalization: server normalizes again,
-      // but doing it here avoids round-tripping preset perms that
-      // would just be filtered out anyway.
-      const stored = normalizePermissionsForStorage(roleKey, [...overrides]);
+      const stored = normalizePermissionsForStorage(roleKey, [...permissions]);
       const r = await updateStaffPermissionsAction({
         userId: target.id,
         roleKey,
@@ -962,8 +932,8 @@ function EditPermissionsModal({
 
           <PermissionsEditor
             roleKey={roleKey}
-            overrides={overrides}
-            onChange={setOverrides}
+            permissions={permissions}
+            onChange={setPermissions}
           />
 
           {target.id === currentUserId && (
@@ -1089,48 +1059,34 @@ function RoleSelect({
 }
 
 /**
- * Permissions editor — Model A (preset + custom additions).
+ * Permissions editor — exact model.
  *
- * Visual rules:
- *   - super_admin → editor is hidden, message only.
- *   - Non-Custom roles:
- *       • Preset perms render as DISABLED checked + "Included in role".
- *         You cannot uncheck them here. To remove, switch the role to
- *         Custom and re-pick exactly what you want.
- *       • Non-preset perms render as ENABLED checkboxes — toggling
- *         them adds/removes from the override (extras-only) list.
- *   - Custom role:
- *       • Every checkbox is enabled. Checked = effective. Unchecked =
- *         denied. The override IS the effective permission set.
- *
- * The editor never silently grants a permission that is not visibly
- * checked, and never silently revokes a permission that IS visibly
- * checked. What you see is what the user gets.
+ *   - super_admin → no checkboxes; always every permission.
+ *   - every other role → every checkbox is editable. Checked = granted,
+ *     unchecked = denied. The role preset only pre-fills the form (on
+ *     role change or "Reset to … defaults"); nothing is applied until Save
+ *     and nothing is added back at runtime.
  */
 function PermissionsEditor({
   roleKey,
-  overrides,
+  permissions,
   onChange,
 }: {
   roleKey: StaffRoleKey;
-  overrides: Set<Permission>;
+  permissions: Set<Permission>;
   onChange: (next: Set<Permission>) => void;
 }) {
-  const presetSet = useMemo(
-    () => new Set<Permission>(ROLE_PRESETS[roleKey] ?? []),
-    [roleKey],
-  );
   const effective = useMemo(
-    () => expandPermissions(roleKey, [...overrides]),
-    [roleKey, overrides],
+    () => expandPermissions(roleKey, [...permissions]),
+    [roleKey, permissions],
   );
 
   if (roleKey === "super_admin") {
     return (
       <div className="rounded-md border border-bpm-200 bg-bpm-50 px-3 py-2 text-xs text-bpm-800">
         <p>
-          Super Admin always has every permission. Per-permission overrides
-          are not used.
+          Super Admin always has every permission. The checkboxes do not
+          apply to this role.
         </p>
         <p className="mt-1 text-[11px] text-bpm-700">
           Effective permissions: <strong>{effective.size}</strong> (all)
@@ -1139,9 +1095,8 @@ function PermissionsEditor({
     );
   }
 
-  function toggle(key: Permission, isPresetLocked: boolean) {
-    if (isPresetLocked) return; // Preset perms are locked in non-Custom modes.
-    const next = new Set(overrides);
+  function toggle(key: Permission) {
+    const next = new Set(permissions);
     if (next.has(key)) next.delete(key);
     else next.add(key);
     onChange(next);
@@ -1153,27 +1108,31 @@ function PermissionsEditor({
     <div className="space-y-3">
       <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
         <p>
-          {isCustom ? (
-            <>
-              <strong>Custom role:</strong> only permissions you check below
-              are granted. Unchecked = denied.
-            </>
-          ) : (
-            <>
-              <strong>{STAFF_ROLE_LABELS[roleKey]} preset:</strong> the
-              permissions marked <em>Included in role</em> are auto-granted
-              and locked. To remove a preset permission, switch this user
-              to <strong>Custom</strong> and pick exactly what they need.
-              Adding extras is fine.
-            </>
+          <strong>Role preset</strong> — choosing a role loads its
+          recommended defaults into the checkboxes below.
+        </p>
+        <p className="mt-1">
+          <strong>Permissions</strong> — these checkboxes are the actual
+          access granted to this user. Checked = granted, unchecked =
+          denied. Changes take effect only when you save.
+        </p>
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] text-gray-600">
+            Effective permissions:{" "}
+            <strong>
+              {effective.size} / {PERMISSION_KEYS.length}
+            </strong>
+          </p>
+          {!isCustom && (
+            <button
+              type="button"
+              onClick={() => onChange(presetSet(roleKey))}
+              className="rounded border border-gray-300 bg-white px-2 py-0.5 text-[11px] font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Reset to {STAFF_ROLE_LABELS[roleKey]} defaults
+            </button>
           )}
-        </p>
-        <p className="mt-1 text-[11px] text-gray-600">
-          Effective permissions:{" "}
-          <strong>
-            {effective.size}/{PERMISSION_GROUPS.reduce((n, g) => n + g.permissions.length, 0)}
-          </strong>
-        </p>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -1184,41 +1143,26 @@ function PermissionsEditor({
             </div>
             <div className="grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-2">
               {g.permissions.map((p) => {
-                const inPreset = !isCustom && presetSet.has(p.key);
-                const explicit = overrides.has(p.key);
-                const granted = inPreset || explicit;
+                const granted = permissions.has(p.key);
                 const sensitive = isSensitivePermission(p.key);
-                const locked = inPreset; // Cannot uncheck preset perms.
                 return (
                   <label
                     key={p.key}
                     className={`flex items-start gap-2 rounded px-1 py-0.5 text-xs ${
                       sensitive && granted ? "bg-amber-50" : ""
-                    } ${locked ? "opacity-95" : ""}`}
+                    }`}
                     title={p.description ?? p.key}
                   >
                     <input
                       type="checkbox"
                       className="mt-0.5"
                       checked={granted}
-                      disabled={locked}
-                      aria-disabled={locked}
-                      onChange={() => toggle(p.key, locked)}
+                      onChange={() => toggle(p.key)}
                     />
                     <span className="flex-1">
-                      <span className={inPreset ? "font-medium text-gray-900" : "text-gray-700"}>
+                      <span className={granted ? "font-medium text-gray-900" : "text-gray-700"}>
                         {p.label}
                       </span>
-                      {locked && (
-                        <span className="ml-1 inline-block rounded-full bg-bpm-100 px-1.5 py-px text-[10px] font-medium uppercase tracking-wider text-bpm-700">
-                          Included in role
-                        </span>
-                      )}
-                      {!locked && explicit && !isCustom && (
-                        <span className="ml-1 inline-block rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-medium uppercase tracking-wider text-emerald-700">
-                          Custom extra
-                        </span>
-                      )}
                       {sensitive && granted && (
                         <span className="ml-1 inline-flex items-center gap-0.5 text-amber-700">
                           <AlertTriangle className="size-3" />
@@ -1242,8 +1186,8 @@ function PermissionsEditor({
           Effective permissions ({effective.size})
         </summary>
         <p className="mt-1 text-[11px] text-gray-600">
-          Resolved keys for this user after applying the {STAFF_ROLE_LABELS[roleKey] ?? roleKey} preset and any custom extras. This is what
-          page guards and server actions check at runtime.
+          Exactly the keys checked above. This is what page guards and
+          server actions check at runtime while the account is active.
         </p>
         {effective.size === 0 ? (
           <p className="mt-2 text-[11px] italic text-gray-500">

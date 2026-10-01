@@ -6,6 +6,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import type { AuthUser } from "@/lib/auth";
 import type { StaffMember } from "@/lib/repositories/interfaces/staff-repository";
+import { ROLE_PRESETS } from "@/lib/domain/permissions";
 
 const h = vi.hoisted(() => ({
   currentUser: null as AuthUser | null,
@@ -114,10 +115,26 @@ describe("inviteStaffAction — existing-account grant", () => {
     const res = await inviteStaffAction({
       email: `${TARGET_ID}@example.test`,
       roleKey: "admin",
-      permissions: [],
+      permissions: [...ROLE_PRESETS.admin],
     });
     expect(res.success).toBe(false);
     expect(h.updateStaff).not.toHaveBeenCalled();
+  });
+
+  it("the ceiling checks the exact checked list, not the role label", async () => {
+    signIn(staffManager());
+    h.rows.set(TARGET_ID, row({ id: TARGET_ID }));
+    const { inviteStaffAction } = await load();
+    const res = await inviteStaffAction({
+      email: `${TARGET_ID}@example.test`,
+      roleKey: "admin",
+      permissions: ["dashboard:view"],
+    });
+    expect(res.success).toBe(true);
+    expect(h.updateStaff).toHaveBeenCalledWith(
+      TARGET_ID,
+      expect.objectContaining({ roleKey: "admin", permissions: ["dashboard:view"] }),
+    );
   });
 
   it("a non-super-admin cannot add extra permissions beyond their own", async () => {
@@ -217,6 +234,59 @@ describe("inviteStaffAction — existing-account grant", () => {
   });
 });
 
+describe("inviteStaffAction — invite-only actor", () => {
+  const inviter = () =>
+    row({
+      id: ACTOR_ID,
+      legacyRole: "admin",
+      roleKey: "custom",
+      permissions: ["dashboard:view", "staff:view", "staff:invite"],
+    });
+
+  it("can grant staff access to an existing student with no grant", async () => {
+    signIn(inviter());
+    h.rows.set(TARGET_ID, row({ id: TARGET_ID }));
+    const { inviteStaffAction } = await load();
+    const res = await inviteStaffAction({
+      email: `${TARGET_ID}@example.test`,
+      roleKey: "custom",
+      permissions: ["dashboard:view"],
+    });
+    expect(res.success).toBe(true);
+  });
+
+  it("cannot rewrite an existing staff grant without staff:edit_permissions", async () => {
+    signIn(inviter());
+    h.rows.set(
+      TARGET_ID,
+      row({ id: TARGET_ID, roleKey: "teacher", permissions: [...ROLE_PRESETS.teacher] }),
+    );
+    const { inviteStaffAction } = await load();
+    const res = await inviteStaffAction({
+      email: `${TARGET_ID}@example.test`,
+      roleKey: "custom",
+      permissions: ["dashboard:view"],
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) expect(res.error).toMatch(/staff:edit_permissions/);
+    expect(h.updateStaff).not.toHaveBeenCalled();
+  });
+
+  it("cannot re-enable a disabled account without staff:disable", async () => {
+    signIn(inviter());
+    h.rows.set(TARGET_ID, row({ id: TARGET_ID, legacyRole: "teacher", status: "disabled" }));
+    const { inviteStaffAction } = await load();
+    const res = await inviteStaffAction({
+      email: `${TARGET_ID}@example.test`,
+      roleKey: "custom",
+      permissions: ["dashboard:view"],
+    });
+    expect(res.success).toBe(false);
+    if (!res.success) expect(res.error).toMatch(/staff:disable/);
+    expect(h.updateStaff).not.toHaveBeenCalled();
+  });
+});
+
 describe("inviteStaffAction — new email", () => {
   it("a non-super-admin cannot create an invite beyond their own permissions", async () => {
     signIn(staffManager());
@@ -224,7 +294,7 @@ describe("inviteStaffAction — new email", () => {
     const res = await inviteStaffAction({
       email: "newcomer@example.test",
       roleKey: "front_desk",
-      permissions: [],
+      permissions: [...ROLE_PRESETS.front_desk],
     });
     expect(res.success).toBe(false);
     expect(h.createInvite).not.toHaveBeenCalled();
@@ -251,7 +321,7 @@ describe("updateStaffPermissionsAction", () => {
     const res = await updateStaffPermissionsAction({
       userId: TARGET_ID,
       roleKey: "admin",
-      permissions: [],
+      permissions: [...ROLE_PRESETS.admin],
     });
     expect(res.success).toBe(false);
     expect(h.updateStaff).not.toHaveBeenCalled();
@@ -270,7 +340,10 @@ describe("setStaffStatusAction / updateStaffProfileAction", () => {
 
   it("a non-super-admin cannot activate a grant broader than their own", async () => {
     signIn(staffManager());
-    h.rows.set(TARGET_ID, row({ id: TARGET_ID, roleKey: "admin", status: "pending" }));
+    h.rows.set(
+      TARGET_ID,
+      row({ id: TARGET_ID, roleKey: "admin", permissions: [...ROLE_PRESETS.admin], status: "pending" }),
+    );
     const { setStaffStatusAction } = await load();
     const res = await setStaffStatusAction({ userId: TARGET_ID, status: "active" });
     expect(res.success).toBe(false);

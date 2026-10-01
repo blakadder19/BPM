@@ -5,11 +5,11 @@ import {
   getStaffAccess,
   hasAnyPermission,
   hasPermission,
-  requireAnyPermission,
+  requirePermission,
 } from "@/lib/staff-permissions";
 
 export default async function FinancePage() {
-  await requireAnyPermission(["finance:view", "payments:view", "payments:view_limited"]);
+  await requirePermission("finance:view");
   const [data, superAdminStatus, access] = await Promise.all([
     getFinanceData(),
     getFinanceSuperAdminStatus(),

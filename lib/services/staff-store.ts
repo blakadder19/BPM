@@ -14,7 +14,12 @@ import type {
   CreateStaffInviteInput,
   UpdateStaffPatch,
 } from "@/lib/repositories/interfaces/staff-repository";
-import type { Permission, StaffRoleKey, StaffStatus } from "@/lib/domain/permissions";
+import {
+  ROLE_PRESETS,
+  type Permission,
+  type StaffRoleKey,
+  type StaffStatus,
+} from "@/lib/domain/permissions";
 
 interface MutableStaff extends StaffMember {}
 interface MutableInvite extends StaffInvite {}
@@ -63,7 +68,7 @@ function init() {
       fullName: "Maria Garcia",
       legacyRole: "teacher",
       roleKey: "teacher",
-      permissions: [],
+      permissions: [...ROLE_PRESETS.teacher],
       status: "active",
       invitedBy: null,
       createdAt: nowIso(),

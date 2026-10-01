@@ -400,7 +400,8 @@ export async function createSubscriptionAction(
 export async function updateSubscriptionAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string }> {
-  await requirePermission("students:edit");
+  const gate = await requirePermissionForAction("students:edit");
+  if (!gate.ok) return { success: false, error: gate.error };
   const id = formData.get("id") as string;
   const statusRaw = formData.get("status") as string;
   const notes = (formData.get("notes") as string)?.trim() || null;
@@ -416,23 +417,33 @@ export async function updateSubscriptionAction(
     return { success: false, error: "Invalid payment status" };
   }
 
-  if (paymentStatusRaw === "refunded") {
-    const existing = await getSubscriptionRepo().getById(id);
-    if (existing && existing.paymentStatus !== "paid") {
-      return {
-        success: false,
-        error: "Only paid items can be refunded. A pending payment was never received.",
-      };
-    }
+  const existing = await getSubscriptionRepo().getById(id);
+  if (!existing) return { success: false, error: "Subscription not found" };
+
+  // `students:edit` covers the entitlement only. A payment-status change
+  // needs the same permission and transition rules as
+  // `applyPaymentChangeAction`.
+  const nextPaymentStatus = paymentStatusRaw as SalePaymentStatus | null;
+  const paymentStatusChanged =
+    nextPaymentStatus !== null && nextPaymentStatus !== existing.paymentStatus;
+  if (paymentStatusChanged) {
+    const guard = await guardPaymentStatusChange(nextPaymentStatus);
+    if (!guard.ok) return { success: false, error: guard.error };
+    const transitionError = paymentTransitionError(existing, nextPaymentStatus);
+    if (transitionError) return { success: false, error: transitionError };
   }
+
+  // Staff without `students:view_finance` receive redacted payment
+  // details, so their form must never overwrite the stored ones.
+  const canEditPaymentDetails = hasPermission(gate.access, "students:view_finance");
 
   const patch: Parameters<typeof updateSubscription>[1] = {
     status: statusRaw as SubscriptionStatus,
     notes,
   };
 
-  if (paymentMethodRaw) patch.paymentMethod = paymentMethodRaw as PaymentMethod;
-  if (paymentStatusRaw) patch.paymentStatus = paymentStatusRaw as SalePaymentStatus;
+  if (paymentMethodRaw && canEditPaymentDetails) patch.paymentMethod = paymentMethodRaw as PaymentMethod;
+  if (paymentStatusChanged) patch.paymentStatus = nextPaymentStatus;
 
   const selectedStyleId = formData.get("selectedStyleId") as string | null;
   const selectedStyleName = formData.get("selectedStyleName") as string | null;
@@ -455,20 +466,22 @@ export async function updateSubscriptionAction(
   const paymentNotes = (formData.get("paymentNotes") as string | null)?.trim() || null;
   const collectedBy = (formData.get("collectedBy") as string | null)?.trim() || null;
 
-  if (paidAtRaw) {
-    const d = new Date(paidAtRaw);
-    patch.paidAt = isNaN(d.getTime()) ? null : d.toISOString();
-  } else {
-    patch.paidAt = null;
+  if (canEditPaymentDetails) {
+    if (paidAtRaw) {
+      const d = new Date(paidAtRaw);
+      patch.paidAt = isNaN(d.getTime()) ? null : d.toISOString();
+    } else {
+      patch.paidAt = null;
+    }
+    patch.paymentReference = paymentReference;
+    patch.paymentNotes = paymentNotes;
+    patch.collectedBy = collectedBy;
   }
-  patch.paymentReference = paymentReference;
-  patch.paymentNotes = paymentNotes;
-  patch.collectedBy = collectedBy;
 
   const result = await updateSubscription(id, patch);
 
   if (result.success) {
-    if (paymentStatusRaw === "paid") {
+    if (paymentStatusChanged && nextPaymentStatus === "paid") {
       try {
         const sub = await getSubscriptionRepo().getById(id);
         if (sub) {
@@ -560,6 +573,53 @@ export async function checkPaymentChangeImpactAction(
 }
 
 /**
+ * Refunds need finance:refund (or payments:refund); marking paid needs
+ * finance:mark_paid or the reception equivalent; every other payment
+ * status needs finance:mark_paid.
+ */
+async function guardPaymentStatusChange(
+  next: SalePaymentStatus,
+): Promise<{ ok: true; user: import("@/lib/auth").AuthUser } | { ok: false; error: string }> {
+  const candidates: import("@/lib/domain/permissions").Permission[] =
+    next === "refunded"
+      ? ["finance:refund", "payments:refund"]
+      : next === "paid"
+        ? ["finance:mark_paid", "payments:mark_paid_reception"]
+        : ["finance:mark_paid"];
+  let lastError: string | null = null;
+  for (const perm of candidates) {
+    const g = await requirePermissionForAction(perm);
+    if (g.ok) return { ok: true, user: g.access.user };
+    lastError = g.error;
+  }
+  return { ok: false, error: lastError ?? "Not authorized" };
+}
+
+function paymentTransitionError(
+  sub: { paymentStatus: SalePaymentStatus; paymentMethod: PaymentMethod; refundedAmountCents?: number | null; stripeRefundId?: string | null },
+  next: SalePaymentStatus,
+): string | null {
+  if (next === "refunded" && sub.paymentStatus !== "paid") {
+    return "Only paid items can be refunded. A pending payment was never received.";
+  }
+  // Finance hardening (Phase 5 / Stripe refunds): the dropdown change
+  // is the legacy BPM-only refund path. Refusing it for Stripe-paid
+  // subscriptions prevents the situation where BPM looks refunded but
+  // the customer was never actually credited. Stripe-paid subscriptions
+  // must go through `issueStripeRefundAction`, which calls Stripe first
+  // and only marks BPM refunded after the refund is accepted.
+  if (
+    next === "refunded" &&
+    sub.paymentMethod === "stripe" &&
+    (sub.refundedAmountCents ?? 0) === 0 &&
+    !sub.stripeRefundId
+  ) {
+    return "This subscription was paid through Stripe. Use the Issue Stripe refund action so the customer actually gets their money back.";
+  }
+  return null;
+}
+
+/**
  * Apply a sensitive payment status change with optional entitlement cancellation.
  * Called from the confirmation modal after the admin has chosen what to do.
  *
@@ -572,60 +632,18 @@ export async function applyPaymentChangeAction(params: {
   newPaymentStatus: SalePaymentStatus;
   cancelEntitlement: boolean;
   refundReason?: string;
-  performedBy?: string;
 }): Promise<{ success: boolean; error?: string }> {
-  // Permission gate: refunds need finance:refund (or payments:refund as
-  // a back-office equivalent); pending→paid transitions need
-  // finance:mark_paid OR the front-desk reception equivalent
-  // (payments:mark_paid_reception). Anything else falls back to the
-  // legacy admin gate so we don't accidentally widen access.
-  const adminGuardCandidates: import("@/lib/domain/permissions").Permission[] =
-    params.newPaymentStatus === "refunded"
-      ? ["finance:refund", "payments:refund"]
-      : params.newPaymentStatus === "paid"
-        ? ["finance:mark_paid", "payments:mark_paid_reception"]
-        : ["finance:mark_paid"];
-  let admin: import("@/lib/auth").AuthUser | null = null;
-  let lastError: string | null = null;
-  for (const perm of adminGuardCandidates) {
-    const g = await requirePermissionForAction(perm);
-    if (g.ok) { admin = g.access.user; break; }
-    lastError = g.error;
-  }
-  if (!admin) {
-    return { success: false, error: lastError ?? "Not authorized" };
-  }
+  const guard = await guardPaymentStatusChange(params.newPaymentStatus);
+  if (!guard.ok) return { success: false, error: guard.error };
+  const admin = guard.user;
 
   const sub = await getSubscriptionRepo().getById(params.subscriptionId);
   if (!sub) return { success: false, error: "Subscription not found" };
 
   const previousStatus = sub.paymentStatus;
 
-  if (params.newPaymentStatus === "refunded" && previousStatus !== "paid") {
-    return {
-      success: false,
-      error: "Only paid items can be refunded. A pending payment was never received.",
-    };
-  }
-
-  // Finance hardening (Phase 5 / Stripe refunds): the dropdown change
-  // is the legacy BPM-only refund path. Refusing it for Stripe-paid
-  // subscriptions prevents the situation where BPM looks refunded but
-  // the customer was never actually credited. Stripe-paid subscriptions
-  // must go through `issueStripeRefundAction`, which calls Stripe first
-  // and only marks BPM refunded after the refund is accepted.
-  if (
-    params.newPaymentStatus === "refunded" &&
-    sub.paymentMethod === "stripe" &&
-    (sub.refundedAmountCents ?? 0) === 0 &&
-    !sub.stripeRefundId
-  ) {
-    return {
-      success: false,
-      error:
-        "This subscription was paid through Stripe. Use the Issue Stripe refund action so the customer actually gets their money back.",
-    };
-  }
+  const transitionError = paymentTransitionError(sub, params.newPaymentStatus);
+  if (transitionError) return { success: false, error: transitionError };
 
   const patch: Parameters<typeof updateSubscription>[1] = {
     paymentStatus: params.newPaymentStatus,
@@ -637,7 +655,7 @@ export async function applyPaymentChangeAction(params: {
 
   if (params.newPaymentStatus === "refunded") {
     patch.refundedAt = new Date().toISOString();
-    patch.refundedBy = params.performedBy ?? admin.fullName ?? admin.email;
+    patch.refundedBy = admin.fullName ?? admin.email;
     patch.refundReason = params.refundReason ?? null;
   }
 
@@ -645,7 +663,7 @@ export async function applyPaymentChangeAction(params: {
   // Finance's BY column resolves to the admin who marked it paid (and
   // not to the original assignedBy / null self-purchase author).
   if (params.newPaymentStatus === "paid" && previousStatus !== "paid") {
-    patch.collectedBy = params.performedBy ?? admin.fullName ?? admin.email;
+    patch.collectedBy = admin.fullName ?? admin.email;
     if (!sub.paidAt) {
       patch.paidAt = new Date().toISOString();
     }
@@ -684,7 +702,6 @@ export async function applyPaymentChangeAction(params: {
       entityId: params.subscriptionId,
       action,
       performer: { userId: admin.id, email: admin.email, name: admin.fullName },
-      performedBy: params.performedBy,
       detail: params.refundReason ?? null,
       previousValue: previousStatus,
       newValue: params.newPaymentStatus,

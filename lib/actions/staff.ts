@@ -38,6 +38,7 @@ import {
 import {
   requirePermissionForAction,
   getStaffAccess,
+  hasPermission,
   type StaffAccess,
 } from "@/lib/staff-permissions";
 
@@ -244,7 +245,7 @@ export async function inviteStaffAction(
     permissions,
   );
   console.info(
-    `[staff] invite: email=${email} role=${input.roleKey} extras=${storedPermissions.length}`,
+    `[staff] invite: email=${email} role=${input.roleKey} permissions=${storedPermissions.length}`,
   );
 
   const repo = getStaffRepo();
@@ -278,6 +279,20 @@ export async function inviteStaffAction(
   if (grantError) return { success: false, error: grantError };
 
   if (existing) {
+    // `staff:invite` only adds new staff. Rewriting an existing grant or
+    // re-enabling an account needs the same keys as the dedicated actions.
+    if (existing.roleKey && !hasPermission(guard.access, "staff:edit_permissions")) {
+      return {
+        success: false,
+        error: "This person already has staff access. Editing it requires the staff:edit_permissions permission.",
+      };
+    }
+    if (existing.status !== "active" && !hasPermission(guard.access, "staff:disable")) {
+      return {
+        success: false,
+        error: "This account's staff access is disabled. Re-enabling it requires the staff:disable permission.",
+      };
+    }
     await repo.updateStaff(existing.id, {
       roleKey: input.roleKey,
       permissions: storedPermissions,
@@ -459,7 +474,7 @@ export async function updateStaffPermissionsAction(
   );
   if (grantError) return { success: false, error: grantError };
   console.info(
-    `[staff] update: user=${input.userId} role=${input.roleKey} extras=${storedPermissions.length}`,
+    `[staff] update: user=${input.userId} role=${input.roleKey} permissions=${storedPermissions.length}`,
   );
 
   await getStaffRepo().updateStaff(input.userId, {

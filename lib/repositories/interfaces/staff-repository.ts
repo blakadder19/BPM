@@ -4,9 +4,10 @@ import type { Permission, StaffRoleKey, StaffStatus } from "@/lib/domain/permiss
  * Staff member as projected from `public.users` + the new
  * `staff_role_key` / `staff_permissions` / `staff_status` columns.
  *
- * `permissions` is the OVERRIDE list stored on the row, NOT the
- * resolved permission set. To get the resolved set callers should
- * use `expandPermissions(roleKey, permissions)` from the domain layer.
+ * `permissions` is the EXACT grant stored on the row (ignored for
+ * super_admin, which always has every permission). It only takes effect
+ * while `status` is active; `expandPermissions(roleKey, permissions)`
+ * gives the effective set.
  */
 export interface StaffMember {
   id: string;
