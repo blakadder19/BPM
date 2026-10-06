@@ -11,6 +11,7 @@ import type { CheckInMethod } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveBookingToDB, saveAttendanceToDB } from "@/lib/supabase/operational-persistence";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { passPaymentDenial } from "@/lib/services/checkin-payment";
 
 function revalidateAll() {
   revalidatePath("/bookings");
@@ -61,6 +62,8 @@ export async function studentSelfCheckInAction(
   if (!eligibility.eligible) {
     return { success: false, error: eligibility.reason };
   }
+  const paymentDenial = await passPaymentDenial(booking.subscriptionId);
+  if (paymentDenial) return { success: false, error: paymentDenial };
 
   const bookingResult = svc.checkInBooking(bookingId);
   if (bookingResult.type === "error") {
@@ -129,6 +132,8 @@ export async function validateTokenCheckInAction(
   if (!eligibility.eligible) {
     return { success: false, error: eligibility.reason };
   }
+  const paymentDenial = await passPaymentDenial(booking.subscriptionId);
+  if (paymentDenial) return { success: false, error: paymentDenial };
 
   const bookingResult = svc.checkInBooking(booking.id);
   if (bookingResult.type === "error") {
@@ -181,5 +186,8 @@ export async function checkSelfCheckInEligibility(
   const cls = svc.getClass(booking.bookableClassId);
   if (!cls) return { eligible: false, reason: "Class not found" };
 
-  return getCheckInEligibility(booking.status, cls.date, cls.startTime, "self");
+  const eligibility = getCheckInEligibility(booking.status, cls.date, cls.startTime, "self");
+  if (!eligibility.eligible) return eligibility;
+  const paymentDenial = await passPaymentDenial(booking.subscriptionId);
+  return paymentDenial ? { eligible: false, reason: paymentDenial } : eligibility;
 }

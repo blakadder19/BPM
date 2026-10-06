@@ -51,6 +51,12 @@ import type { StoredAttendance } from "@/lib/services/attendance-service";
 import { CLASS_TYPE_CONFIG } from "@/config/event-types";
 import { checkStudentPracticePayment } from "@/lib/domain/student-practice-rules";
 import { describeAttendanceSource } from "@/lib/domain/attendance-source-label";
+import {
+  allowedManualSources,
+  allowedManualStatuses,
+  canOpenManualAdd,
+  manualAddClassIds,
+} from "@/lib/domain/manual-attendance";
 
 // ── Prop types (serializable slices of mock data) ────────────
 
@@ -133,6 +139,10 @@ export interface AttendanceClientPermissions {
   canMarkPresent: boolean;
   canMarkAbsent: boolean;
   canEditHistory: boolean;
+  /** `checkin:manual_checkin` — add a walk-in to a class running today. */
+  canManualCheckIn: boolean;
+  /** `checkin:scan` or `checkin:manual_checkin` — what `validateTokenCheckInAction` accepts. */
+  canTokenCheckIn: boolean;
   /** Phase 19 — `attendance:backdate`. Gates the historical correction flow. */
   canBackdate: boolean;
 }
@@ -143,6 +153,8 @@ interface AttendanceClientProps {
   bookings: BookingProp[];
   attendanceRecords: StoredAttendance[];
   allClasses: BookableClassProp[];
+  /** Every class today, with whether it has ended in academy time. */
+  todaysManualAddClasses: { id: string; ended: boolean }[];
   isDev?: boolean;
   studentOptions?: StudentOption[];
   activeSubscriptions?: SubscriptionOption[];
@@ -159,6 +171,7 @@ export function AttendanceClient({
   bookings,
   attendanceRecords,
   allClasses,
+  todaysManualAddClasses,
   isDev,
   studentOptions,
   activeSubscriptions,
@@ -174,10 +187,13 @@ export function AttendanceClient({
     hasContextFilter ? "history" : "today"
   );
   const [showAddAttendance, setShowAddAttendance] = useState(false);
+  const showManualAdd = canOpenManualAdd(permissions, todaysManualAddClasses);
   const isReadOnly =
     !permissions.canMarkPresent &&
     !permissions.canMarkAbsent &&
-    !permissions.canEditHistory;
+    !permissions.canEditHistory &&
+    !permissions.canManualCheckIn &&
+    !permissions.canTokenCheckIn;
 
   return (
     <div className="space-y-6">
@@ -188,10 +204,10 @@ export function AttendanceClient({
         />
         <div className="flex items-center gap-2">
           <AdminHelpButton pageKey="attendance" />
-          {permissions.canEditHistory && (
+          {showManualAdd && (
             <Button onClick={() => setShowAddAttendance(true)}>
               <Plus className="mr-1.5 h-4 w-4" />
-              Add Record
+              Add student
             </Button>
           )}
         </div>
@@ -221,9 +237,7 @@ export function AttendanceClient({
 
       {activeTab === "today" ? (
         <>
-          {(permissions.canMarkPresent || permissions.canEditHistory) && (
-            <TokenCheckInPanel />
-          )}
+          {permissions.canTokenCheckIn && <TokenCheckInPanel />}
           <TodayView
             mockToday={mockToday}
             todaysClasses={todaysClasses}
@@ -246,10 +260,12 @@ export function AttendanceClient({
         />
       )}
 
-      {showAddAttendance && permissions.canEditHistory && (
+      {showAddAttendance && showManualAdd && (
         <AddAttendanceDialog
           students={studentOptions ?? []}
           classes={allClasses}
+          todaysManualAddClasses={todaysManualAddClasses}
+          permissions={permissions}
           today={mockToday}
           subscriptions={activeSubscriptions ?? []}
           attendanceRecords={attendanceRecords}
@@ -458,6 +474,7 @@ function ClassAttendanceCard({
   const [pending, startTransition] = useTransition();
   const [penaltyAlerts, setPenaltyAlerts] = useState<Map<string, string>>(new Map());
   const [creditAlerts, setCreditAlerts] = useState<Map<string, boolean>>(new Map());
+  const [markErrors, setMarkErrors] = useState<Map<string, string>>(new Map());
   const cardMounted = useRef(false);
 
   const [reversalConfirm, setReversalConfirm] = useState<{
@@ -522,6 +539,21 @@ function ClassAttendanceCard({
         status,
         markedBy: currentUserName ?? "Admin",
       });
+
+      setMarkErrors((prev) => {
+        const next = new Map(prev);
+        if (result.success) next.delete(studentId);
+        else next.set(studentId, result.error ?? "Could not mark attendance.");
+        return next;
+      });
+      if (!result.success) {
+        setOptimisticOverrides((prev) => {
+          const next = new Map(prev);
+          next.delete(studentId);
+          return next;
+        });
+        return;
+      }
 
       if (result.penaltyCreated && result.penaltyDescription) {
         setPenaltyAlerts((prev) =>
@@ -631,6 +663,7 @@ function ClassAttendanceCard({
             const currentMark = effectiveMarks.get(row.studentId);
             const alert = penaltyAlerts.get(row.studentId);
             const creditAlert = creditAlerts.get(row.studentId);
+            const markError = markErrors.get(row.studentId);
 
             return (
               <li key={`${row.studentId}-${row.bookingId ?? "walkin"}`} className="px-5 py-3">
@@ -713,6 +746,12 @@ function ClassAttendanceCard({
                   </div>
                 </div>
 
+                {markError && (
+                  <div className="mt-2 flex items-center gap-1.5 rounded-md bg-red-50 px-3 py-1.5 text-xs text-red-700">
+                    <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                    {markError}
+                  </div>
+                )}
                 {alert && (
                   <div className="mt-2 flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-1.5 text-xs text-amber-700">
                     <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
@@ -1349,6 +1388,8 @@ const SOURCE_OPTIONS: { value: AttendanceSource; label: string; hint: string }[]
 function AddAttendanceDialog({
   students,
   classes,
+  todaysManualAddClasses,
+  permissions,
   today: todayProp,
   subscriptions,
   attendanceRecords,
@@ -1357,6 +1398,8 @@ function AddAttendanceDialog({
 }: {
   students: StudentOption[];
   classes: BookableClassProp[];
+  todaysManualAddClasses: { id: string; ended: boolean }[];
+  permissions: AttendanceClientPermissions;
   today: string;
   subscriptions: SubscriptionOption[];
   attendanceRecords: StoredAttendance[];
@@ -1374,12 +1417,12 @@ function AddAttendanceDialog({
   const [status, setStatus] = useState<AttendanceMark>("present");
   const [notes, setNotes] = useState("");
 
-  const eligibleClasses = useMemo(
-    () => classes
-      .filter((c) => c.date === todayProp)
-      .sort((a, b) => b.startTime.localeCompare(a.startTime)),
-    [classes, todayProp]
-  );
+  const eligibleClasses = useMemo(() => {
+    const ids = new Set(manualAddClassIds(permissions, todaysManualAddClasses));
+    return classes
+      .filter((c) => c.date === todayProp && ids.has(c.id))
+      .sort((a, b) => b.startTime.localeCompare(a.startTime));
+  }, [classes, todayProp, permissions, todaysManualAddClasses]);
 
   const studentSubs = useMemo(
     () => subscriptions.filter((s) => s.studentId === studentId),
@@ -1394,6 +1437,20 @@ function AddAttendanceDialog({
     ? CLASS_TYPE_CONFIG[selectedClass.classType as ClassType]
     : null;
   const creditsApply = classTypeConf?.creditsApply ?? true;
+
+  const classEnded = !!selectedClass && todaysManualAddClasses.some((c) => c.id === selectedClass.id && c.ended);
+  const statusOptions = useMemo(
+    () => allowedManualStatuses(permissions, classEnded),
+    [permissions, classEnded]
+  );
+  const allowedSources = useMemo(
+    () => allowedManualSources(permissions, classEnded, status),
+    [permissions, classEnded, status]
+  );
+
+  useEffect(() => {
+    if (statusOptions.length > 0 && !statusOptions.includes(status)) setStatus(statusOptions[0]);
+  }, [statusOptions, status]);
 
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
 
@@ -1427,19 +1484,19 @@ function AddAttendanceDialog({
     setPaymentConfirmed(false);
   }, [studentId, bookableClassId]);
 
-  const effectiveSourceOptions = useMemo(() => {
-    if (!creditsApply) {
-      return SOURCE_OPTIONS.filter((o) => o.value !== "subscription");
-    }
-    return SOURCE_OPTIONS;
-  }, [creditsApply]);
+  const effectiveSourceOptions = useMemo(
+    () => SOURCE_OPTIONS.filter(
+      (o) => allowedSources.includes(o.value) && (creditsApply || o.value !== "subscription")
+    ),
+    [creditsApply, allowedSources]
+  );
 
   useEffect(() => {
-    if (!creditsApply && source === "subscription") {
+    if (!effectiveSourceOptions.some((o) => o.value === source)) {
       setSource("walk_in");
       setSubscriptionId("");
     }
-  }, [creditsApply, source]);
+  }, [effectiveSourceOptions, source]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1486,8 +1543,8 @@ function AddAttendanceDialog({
     <Dialog open onClose={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Attendance Record</DialogTitle>
-          <p className="text-xs text-gray-500">Record a walk-in, drop-in, or subscription attendance directly.</p>
+          <DialogTitle>Add student to class</DialogTitle>
+          <p className="text-xs text-gray-500">Check in a walk-in, drop-in, or subscription student for a class today.</p>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
           <DialogBody className="space-y-4">
@@ -1500,12 +1557,12 @@ function AddAttendanceDialog({
             </div>
 
             <div>
-              <Label>Class * <span className="text-xs font-normal text-gray-400">(today and past only)</span></Label>
+              <Label>Class * <span className="text-xs font-normal text-gray-400">(today only)</span></Label>
               <select value={bookableClassId} onChange={(e) => setBookableClassId(e.target.value)} className={inputCls}>
                 <option value="">Select class…</option>
                 {eligibleClasses.map((c) => <option key={c.id} value={c.id}>{c.title} — {c.date} {c.startTime}</option>)}
               </select>
-              {eligibleClasses.length === 0 && <p className="mt-1 text-xs text-gray-400">No eligible classes (today or past) found.</p>}
+              {eligibleClasses.length === 0 && <p className="mt-1 text-xs text-gray-400">No classes available today.</p>}
               {selectedClass && selectedClass.classType !== "class" && selectedClass.classType !== "student_practice" && (
                 <div className="mt-1.5 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
                   <span className="font-medium">{classTypeConf?.label ?? selectedClass.classType}</span>
@@ -1578,10 +1635,9 @@ function AddAttendanceDialog({
             <div>
               <Label>Status *</Label>
               <select value={status} onChange={(e) => setStatus(e.target.value as AttendanceMark)} className={inputCls}>
-                <option value="present">Present</option>
-                <option value="late">Late</option>
-                <option value="absent">Absent</option>
-                <option value="excused">Excused</option>
+                {statusOptions.map((s) => (
+                  <option key={s} value={s}>{MARK_OPTIONS.find((o) => o.value === s)?.label ?? s}</option>
+                ))}
               </select>
             </div>
 

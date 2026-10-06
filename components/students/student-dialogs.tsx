@@ -29,7 +29,8 @@ import {
 } from "@/lib/actions/subscriptions";
 import { buildDynamicAccessRulesMap, type StyleAccess } from "@/config/product-access";
 import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
-import type { StudentListItem } from "@/types/domain";
+import { isFreeAssignStatus } from "@/lib/domain/assign-payment-status";
+import type { SalePaymentStatus, StudentListItem } from "@/types/domain";
 import type { MockSubscription, MockProduct, MockTerm, MockDanceStyle } from "@/lib/mock-data";
 
 const SELECT_CLASS =
@@ -565,6 +566,7 @@ export function AddSubscriptionDialog({
   terms,
   danceStyles,
   canApplyManualDiscount = false,
+  allowedPaymentStatuses,
   onClose,
   recommendedStyleName,
   qrClassId,
@@ -580,6 +582,8 @@ export function AddSubscriptionDialog({
    * still re-checks the permission so a forged form post is rejected.
    */
   canApplyManualDiscount?: boolean;
+  /** From `allowedAssignPaymentStatuses`; the server re-checks the submitted status. */
+  allowedPaymentStatuses: readonly SalePaymentStatus[];
   onClose: () => void;
   recommendedStyleName?: string | null;
   qrClassId?: string | null;
@@ -595,6 +599,9 @@ export function AddSubscriptionDialog({
   const [postAssignPrompt, setPostAssignPrompt] = useState<{ subscriptionId: string } | null>(null);
   const [manualDiscountEuros, setManualDiscountEuros] = useState("");
   const [manualDiscountReason, setManualDiscountReason] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState<SalePaymentStatus>(
+    allowedPaymentStatuses.includes("paid") ? "paid" : "pending",
+  );
 
   const accessRulesMapFull = useMemo(() => buildDynamicAccessRulesMap(products, danceStyles), [products, danceStyles]);
 
@@ -880,29 +887,46 @@ export function AddSubscriptionDialog({
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label htmlFor="as-payment">Payment Method *</Label>
-                <select
-                  id="as-payment"
-                  name="paymentMethod"
-                  className={SELECT_CLASS}
-                  required
-                >
-                  {PAYMENT_METHOD_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+                {isFreeAssignStatus(paymentStatus) ? (
+                  <>
+                    <input type="hidden" name="paymentMethod" value="complimentary" />
+                    <select id="as-payment" className={SELECT_CLASS} value="complimentary" disabled>
+                      <option value="complimentary">Complimentary</option>
+                    </select>
+                  </>
+                ) : (
+                  <select
+                    id="as-payment"
+                    name="paymentMethod"
+                    className={SELECT_CLASS}
+                    required
+                  >
+                    {PAYMENT_METHOD_OPTIONS.filter((o) => o.value !== "complimentary").map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="as-paymentStatus">Payment Status</Label>
                 <select
                   id="as-paymentStatus"
                   name="paymentStatus"
-                  defaultValue="paid"
+                  value={paymentStatus}
+                  onChange={(e) => setPaymentStatus(e.target.value as SalePaymentStatus)}
                   className={SELECT_CLASS}
                 >
-                  {PAYMENT_STATUS_OPTIONS.map((o) => (
+                  {PAYMENT_STATUS_OPTIONS.filter((o) =>
+                    allowedPaymentStatuses.includes(o.value as SalePaymentStatus),
+                  ).map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
+                {!allowedPaymentStatuses.includes("paid") && (
+                  <p className="text-xs text-gray-500">
+                    Recording a payment needs the &quot;Mark reception payments as paid&quot; permission.
+                  </p>
+                )}
               </div>
             </div>
 

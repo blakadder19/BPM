@@ -13,6 +13,8 @@ import { saveAttendanceToDB, saveBookingToDB, savePenaltyToDB, updatePenaltyInDB
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
+import { isAttended, manualAddDenial } from "@/lib/domain/manual-attendance";
+import { passPaymentDenial } from "@/lib/services/checkin-payment";
 import {
   hasAnyPermission,
   hasPermission,
@@ -40,13 +42,6 @@ export interface MarkAttendanceResult {
  * - changing FROM absent to anything else → waive existing pending penalty
  * - excused → no penalty, booking stays as-is
  */
-/**
- * Whether an attendance status means the student attended.
- */
-function isAttended(status: AttendanceMark): boolean {
-  return status === "present" || status === "late";
-}
-
 /**
  * Whether an attendance status means the student did NOT attend.
  */
@@ -107,6 +102,7 @@ export async function markStudentAttendance(params: {
     "attendance:mark_present",
     "attendance:mark_absent",
     "attendance:edit_history",
+    "checkin:manual_checkin",
   ]);
   await ensureOperationalDataHydrated();
 
@@ -128,12 +124,6 @@ export async function markStudentAttendance(params: {
   const bookingSvc = getBookingService();
   const penaltySvc = getPenaltyService();
 
-  // Each status needs its own key: an absent mark creates a no-show fee,
-  // and undoing one voids that fee.
-  const statusKey = params.status === "absent" ? "attendance:mark_absent" : "attendance:mark_present";
-  if (!hasPermission(access, statusKey)) {
-    return fail(`You do not have permission to mark students ${params.status}.`);
-  }
   const priorMark = attendanceSvc.getRecord(params.bookableClassId, params.studentId);
   if (
     priorMark?.status === "absent" &&
@@ -152,23 +142,45 @@ export async function markStudentAttendance(params: {
   if (instance.date > today) {
     return fail("Attendance cannot be marked for a future class.");
   }
-  const isHistorical = instance.date < today || isClassEnded(instance.date, instance.endTime);
+  const classEnded = isClassEnded(instance.date, instance.endTime);
+  const isHistorical = instance.date < today || classEnded;
   const canEditHistory = hasPermission(access, "attendance:edit_history");
 
-  // A new record with no booking is the "Add Record" flow. It covers
-  // today's classes only; earlier days go through backdateAttendanceAction,
-  // which requires attendance:backdate.
+  // The "Add student" dialog (explicit source) or a mark with no booking and
+  // no record. Today's classes only; earlier days go through
+  // backdateAttendanceAction, which requires attendance:backdate.
   const isManualAdd = params.attendanceSource !== undefined || (!params.bookingId && !priorMark);
-  if (isManualAdd) {
-    if (!canEditHistory) {
-      return fail("Adding attendance manually requires the attendance:edit_history permission.");
-    }
-    if (instance.date !== today) {
-      return fail("Attendance for an earlier day must be added with Backdate attendance.");
-    }
+  if (isManualAdd && instance.date !== today) {
+    return fail("Attendance for an earlier day must be added with Backdate attendance.");
   }
-  if (isHistorical && !canEditHistory) {
-    return fail("Changing attendance for a class that has ended requires the attendance:edit_history permission.");
+
+  if (isManualAdd && !priorMark) {
+    const denial = manualAddDenial({
+      caps: {
+        canManualCheckIn: hasPermission(access, "checkin:manual_checkin"),
+        canEditHistory,
+        canMarkPresent: hasPermission(access, "attendance:mark_present"),
+        canMarkAbsent: hasPermission(access, "attendance:mark_absent"),
+      },
+      status: params.status,
+      source: params.attendanceSource ?? "walk_in",
+      isToday: true,
+      classEnded,
+    });
+    if (denial) return fail(denial);
+  } else {
+    // Each status needs its own key: an absent mark creates a no-show fee,
+    // and undoing one voids that fee.
+    const statusKey = params.status === "absent" ? "attendance:mark_absent" : "attendance:mark_present";
+    if (!hasPermission(access, statusKey)) {
+      return fail(`You do not have permission to mark students ${params.status}.`);
+    }
+    if (isManualAdd && !canEditHistory) {
+      return fail("Changing the source of an existing attendance record requires the attendance:edit_history permission.");
+    }
+    if (isHistorical && !canEditHistory) {
+      return fail("Changing attendance for a class that has ended requires the attendance:edit_history permission.");
+    }
   }
 
   if (params.bookingId) {
@@ -182,6 +194,15 @@ export async function markStudentAttendance(params: {
     if (!directSub || directSub.studentId !== params.studentId) {
       return fail("Subscription does not belong to this student.");
     }
+  }
+  // Checking a student in today uses their pass, which must be paid for.
+  // Corrections to ended classes (edit_history) record what happened.
+  if (isAttended(params.status) && !isAttended(priorMark?.status ?? "absent") && !isHistorical) {
+    const passId = params.bookingId
+      ? bookingSvc.bookings.find((b) => b.id === params.bookingId)?.subscriptionId
+      : params.directSubscriptionId;
+    const paymentDenial = await passPaymentDenial(passId);
+    if (paymentDenial) return fail(paymentDenial);
   }
 
   const actorName = access.user.fullName || access.user.email;

@@ -32,7 +32,7 @@ import {
 } from "@/lib/domain/credit-availability";
 import { qrWalkInCheckInAction } from "@/lib/actions/qr-checkin";
 import type { StudentImpact } from "./student-dialogs";
-import type { StudentListItem } from "@/types/domain";
+import type { SalePaymentStatus, StudentListItem } from "@/types/domain";
 import type {
   MockSubscription,
   MockTerm,
@@ -111,6 +111,10 @@ export interface AffiliationSummary {
 export interface AdminStudentsPermissions {
   canCreate: boolean;
   canEdit: boolean;
+  /** Server-resolved `students:assign_subscription` — gates "Add subscription" and its dialog. */
+  canAssignSubscription: boolean;
+  /** Payment statuses the assign dialog may offer (`allowedAssignPaymentStatuses`). */
+  assignPaymentStatuses: SalePaymentStatus[];
   canDelete: boolean;
   canViewFinance: boolean;
   canManageAffiliations: boolean;
@@ -159,7 +163,10 @@ export function AdminStudents({
   permissions,
 }: AdminStudentsProps) {
   const isReadOnly =
-    !permissions.canCreate && !permissions.canEdit && !permissions.canDelete;
+    !permissions.canCreate &&
+    !permissions.canEdit &&
+    !permissions.canDelete &&
+    !permissions.canAssignSubscription;
   const searchParams = useSearchParams();
   const birthdayUsedSet = new Set(birthdayUsedStudentIds);
   const [search, setSearch] = useState(initialSearch ?? "");
@@ -458,7 +465,7 @@ export function AdminStudents({
                       birthdayClassTitle: birthdayRedemptions[s.id]?.classTitle,
                       birthdayClassDate: birthdayRedemptions[s.id]?.classDate,
                     })}
-                    onAddSub={permissions.canEdit ? () => setAddSubStudentId(s.id) : null}
+                    onAddSub={permissions.canAssignSubscription ? () => setAddSubStudentId(s.id) : null}
                     onEditSub={permissions.canEdit ? setEditSub : null}
                     onExtendSub={permissions.canExtendSubscription ? setExtendSub : null}
                     canViewFinance={permissions.canViewFinance}
@@ -494,13 +501,14 @@ export function AdminStudents({
         />
       )}
 
-      {addSubStudentId && permissions.canEdit && (
+      {addSubStudentId && permissions.canAssignSubscription && (
         <AddSubscriptionDialog
           studentId={addSubStudentId}
           products={products}
           terms={terms}
           danceStyles={danceStyles}
           canApplyManualDiscount={permissions.canApplyManualDiscount}
+          allowedPaymentStatuses={permissions.assignPaymentStatuses}
           onClose={() => setAddSubStudentId(null)}
           recommendedStyleName={searchParams.get("style")}
           qrClassId={searchParams.get("classId")}

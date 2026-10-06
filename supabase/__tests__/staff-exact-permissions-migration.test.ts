@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   PRESET_ADDITIONS_00080,
+  PRESET_ADDITIONS_00081,
   ROLE_PRESETS,
   expandPermissions,
   legacyEffectivePermissions,
@@ -62,18 +63,24 @@ const ROWS: { label: string; roleKey: StaffRoleKey | null; stored: Permission[] 
   },
 ];
 
+/** ROLE_PRESETS as of 00080, i.e. without keys added by later migrations. */
+function presetAt00080(role: (typeof PRESET_ROLES)[number]): string[] {
+  const later = PRESET_ADDITIONS_00081[role] ?? [];
+  return ROLE_PRESETS[role].filter((p) => !later.includes(p)).sort();
+}
+
 describe("migration 00080 — frozen presets", () => {
-  it("contains a frozen copy of every non-super preset equal to today's ROLE_PRESETS", () => {
+  it("contains a frozen copy of every non-super preset equal to ROLE_PRESETS as of 00080", () => {
     const frozen = frozenPresets(MIGRATION);
     for (const role of PRESET_ROLES) {
-      expect(frozen[role]?.slice().sort()).toEqual([...ROLE_PRESETS[role]].sort());
+      expect(frozen[role]?.slice().sort()).toEqual(presetAt00080(role));
     }
   });
 
   it("the read-only diagnostic uses the same presets", () => {
     const frozen = frozenPresets(DIAGNOSTIC);
     for (const role of PRESET_ROLES) {
-      expect(frozen[role]?.slice().sort()).toEqual([...ROLE_PRESETS[role]].sort());
+      expect(frozen[role]?.slice().sort()).toEqual(presetAt00080(role));
     }
   });
 });

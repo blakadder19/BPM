@@ -43,6 +43,7 @@ import {
   type GuestPurchaseQrResult,
 } from "@/lib/actions/qr-checkin";
 import { classifyQrToken } from "@/lib/domain/qr-resolver";
+import { PAYMENT_NOT_CONFIRMED } from "@/lib/domain/checkin-entitlement";
 
 type InputMode = "camera" | "manual";
 
@@ -275,17 +276,6 @@ export function QrCheckInPanel() {
       });
       if (res.success) refreshStudent().catch(() => {});
     });
-  }
-
-  function handlePaymentConfirmKeepPending() {
-    if (!paymentConfirm) return;
-    const pc = paymentConfirm;
-    setPaymentConfirm(null);
-    if (pc.type === "booking" && pc.bookingId) {
-      doCheckIn(pc.bookingId);
-    } else if (pc.type === "walkin" && pc.classId && pc.studentId) {
-      doWalkIn(pc.classId, pc.studentId, pc.subscriptionId);
-    }
   }
 
   function handleEntitlementMarkPaid(subscriptionId: string, method: PaymentMethod) {
@@ -698,14 +688,7 @@ export function QrCheckInPanel() {
                     >
                       {isCheckingIn ? "Processing…" : `Mark as paid (${selectedPayMethod}) and check in`}
                     </Button>
-                    <Button
-                      variant="outline"
-                      onClick={handlePaymentConfirmKeepPending}
-                      disabled={isCheckingIn}
-                      className="w-full"
-                    >
-                      Keep as pending and check in anyway
-                    </Button>
+                    <p className="text-xs text-gray-500 text-center">{PAYMENT_NOT_CONFIRMED}</p>
                   </div>
                 </Overlay>
               )}

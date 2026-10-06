@@ -28,6 +28,7 @@ export const PERMISSION_KEYS = [
   "students:view_limited",
   "students:create",
   "students:edit",
+  "students:assign_subscription",
   "students:delete",
   "students:view_finance",
   "students:manage_affiliations",
@@ -59,6 +60,7 @@ export const PERMISSION_KEYS = [
   "payments:refund",
   "payments:delete_test_data",
   "payments:manual_adjustment",
+  "payments:grant_complimentary",
 
   // Products
   "products:view",
@@ -151,10 +153,14 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "payments:mark_paid_reception",
   "payments:refund",
   "payments:manual_adjustment",
+  // Gives an entitlement away with no payment.
+  "payments:grant_complimentary",
   "discounts:edit",
   "discounts:delete",
   "referrals:reward",
   "students:send_magic_link",
+  // Creates an entitlement, and the assign form also sets its payment status.
+  "students:assign_subscription",
   // Phase 19 -- backdating rewrites factual history AND consumes a
   // real entitlement credit. Super Admin only by default.
   "attendance:backdate",
@@ -209,6 +215,7 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
     "students:view",
     "students:create",
     "students:edit",
+    "students:assign_subscription",
     "students:view_finance",
     "students:manage_affiliations",
     "bookings:view",
@@ -224,6 +231,7 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
     "checkin:manual_checkin",
     "payments:view",
     "payments:mark_paid_reception",
+    "payments:grant_complimentary",
     "products:view",
     "products:create",
     "products:edit",
@@ -383,6 +391,16 @@ export const PRESET_ADDITIONS_00080: Partial<Record<StaffRoleKey, readonly Permi
 };
 
 /**
+ * Keys added to a default preset with migration 00081, which split
+ * `students:assign_subscription` and `payments:grant_complimentary` out of
+ * `students:edit` and grants both to every existing holder of
+ * `students:edit`.
+ */
+export const PRESET_ADDITIONS_00081: Partial<Record<StaffRoleKey, readonly Permission[]>> = {
+  admin: ["students:assign_subscription", "payments:grant_complimentary"],
+};
+
+/**
  * Pre-00080 semantics ("preset + additions", with the presets as they were
  * then), kept only so the data migration and its tests can prove what each
  * existing grant converts to. Never use for authorization.
@@ -393,7 +411,9 @@ export function legacyEffectivePermissions(
 ): Set<Permission> {
   if (roleKey === "super_admin") return new Set<Permission>(PERMISSION_KEYS);
   if (roleKey === "custom") return new Set<Permission>(stored ?? []);
-  const added = (roleKey && PRESET_ADDITIONS_00080[roleKey]) || [];
+  const added = roleKey
+    ? [...(PRESET_ADDITIONS_00080[roleKey] ?? []), ...(PRESET_ADDITIONS_00081[roleKey] ?? [])]
+    : [];
   const out = new Set<Permission>(
     roleKey ? ROLE_PRESETS[roleKey].filter((p) => !added.includes(p)) : [],
   );
@@ -427,6 +447,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "students:view_limited", label: "View limited student info (no finance)" },
       { key: "students:create", label: "Create students" },
       { key: "students:edit", label: "Edit students" },
+      { key: "students:assign_subscription", label: "Assign pass / membership", description: "Manually assign a membership, pass or other catalog product to a student." },
       { key: "students:delete", label: "Delete students", description: "Destructive — usually super-admin only." },
       { key: "students:view_finance", label: "See student finance details" },
       { key: "students:manage_affiliations", label: "Manage student affiliations" },
@@ -474,6 +495,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "payments:refund", label: "Refund payments", description: "Sensitive — affects finance ledger." },
       { key: "payments:delete_test_data", label: "Delete test payments" },
       { key: "payments:manual_adjustment", label: "Apply manual discounts / adjustments", description: "Sensitive — lets admins override the price on a manual subscription assignment. Requires a written reason that is stored in Finance." },
+      { key: "payments:grant_complimentary", label: "Create complimentary / waived pass", description: "Allows assigning a new pass or membership as Complimentary or Waived." },
     ],
   },
   {

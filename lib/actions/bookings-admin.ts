@@ -31,6 +31,7 @@ import { requireAuth } from "@/lib/auth";
 import { requireAnyPermission, requirePermission } from "@/lib/staff-permissions";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import { passPaymentDenial } from "@/lib/services/checkin-payment";
 import { waitlistPromotedEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
 
@@ -482,6 +483,8 @@ export async function adminCheckInBookingAction(
   if (cls && isAfterClosureWindow(cls.date, cls.startTime, getSettings().attendanceClosureMinutes)) {
     return { success: false, error: "Check-in window has closed (60 min after class start)" };
   }
+  const paymentDenial = await passPaymentDenial(booking.subscriptionId);
+  if (paymentDenial) return { success: false, error: paymentDenial };
 
   const result = svc.checkInBooking(bookingId);
   if (result.type === "error") {

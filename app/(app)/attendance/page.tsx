@@ -1,8 +1,9 @@
-import { hasPermission, requirePermission } from "@/lib/staff-permissions";
+import { hasAnyPermission, hasPermission, requirePermission } from "@/lib/staff-permissions";
 import { getAttendanceRepo, getBookingRepo } from "@/lib/repositories";
 import { cachedGetAllStudents, cachedGetAllSubs } from "@/lib/server/cached-queries";
 import { getTodayStr, isClassEnded } from "@/lib/domain/datetime";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
+import { paymentAllowsCheckIn } from "@/lib/domain/checkin-entitlement";
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { AttendanceClient } from "@/components/attendance/attendance-client";
@@ -37,6 +38,10 @@ export default async function AttendancePage({
 
   const todaysClassIds = new Set(todaysClasses.map((bc) => bc.id));
 
+  const todaysManualAddClasses = allInstances
+    .filter((bc) => bc.date === today)
+    .map((bc) => ({ id: bc.id, ended: isClassEnded(bc.date, bc.endTime) }));
+
   const bookings = bookingSvc.bookings
     .filter(
       (b) => todaysClassIds.has(b.bookableClassId) && !TERMINAL_STATUSES.has(b.status)
@@ -65,7 +70,7 @@ export default async function AttendancePage({
   const studentOptions = allStudents.map((s) => ({ id: s.id, fullName: s.fullName }));
 
   const activeSubOptions = allSubs
-    .filter((s) => s.status === "active")
+    .filter((s) => s.status === "active" && paymentAllowsCheckIn(s.paymentStatus))
     .map((s) => ({
       id: s.id,
       studentId: s.studentId,
@@ -83,6 +88,8 @@ export default async function AttendancePage({
     canMarkPresent: hasPermission(access, "attendance:mark_present"),
     canMarkAbsent: hasPermission(access, "attendance:mark_absent"),
     canEditHistory: hasPermission(access, "attendance:edit_history"),
+    canManualCheckIn: hasPermission(access, "checkin:manual_checkin"),
+    canTokenCheckIn: hasAnyPermission(access, ["checkin:scan", "checkin:manual_checkin"]),
     // Phase 19 — sensitive: creates a historical booking and consumes
     // a real credit. Super Admin only by default.
     canBackdate: hasPermission(access, "attendance:backdate"),
@@ -95,6 +102,7 @@ export default async function AttendancePage({
       bookings={bookings}
       attendanceRecords={allRecords}
       allClasses={allInstances}
+      todaysManualAddClasses={todaysManualAddClasses}
       isDev={isDev}
       studentOptions={studentOptions}
       activeSubscriptions={activeSubOptions}

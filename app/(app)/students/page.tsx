@@ -28,6 +28,7 @@ import { getAllRedemptionsForYear, type BirthdayRedemption } from "@/lib/service
 import type { MockEventPurchase } from "@/lib/mock-data";
 import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
 import { redactSubscriptionFinance } from "@/lib/domain/student-finance-redaction";
+import { allowedAssignPaymentStatuses } from "@/lib/domain/assign-payment-status";
 
 export default async function StudentsPage({
   searchParams,
@@ -62,6 +63,8 @@ export default async function StudentsPage({
   const permissions = {
     canCreate: hasPermission(access, "students:create"),
     canEdit: hasPermission(access, "students:edit"),
+    canAssignSubscription: hasPermission(access, "students:assign_subscription"),
+    assignPaymentStatuses: allowedAssignPaymentStatuses((p) => hasPermission(access, p)),
     canDelete: hasPermission(access, "students:delete"),
     canViewFinance: hasPermission(access, "students:view_finance"),
     canManageAffiliations: hasPermission(access, "students:manage_affiliations"),

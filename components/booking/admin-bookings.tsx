@@ -191,7 +191,11 @@ export function AdminBookings({
 
   function handleCheckIn(bookingId: string) {
     startTransition(async () => {
-      await adminCheckInBookingAction(bookingId);
+      const res = await adminCheckInBookingAction(bookingId);
+      if (!res.success) {
+        setRestoreFlash(res.error ?? "Check-in failed");
+        setTimeout(() => setRestoreFlash(null), 5000);
+      }
       router.refresh();
     });
   }

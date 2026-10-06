@@ -14,8 +14,15 @@ import { toVatSnapshotFields, EMPTY_VAT_SNAPSHOT } from "@/lib/domain/vat";
 import { ensureOperationalDataHydrated, invalidateHydration } from "@/lib/supabase/hydrate-operational";
 import { saveBookingToDB, saveAttendanceToDB } from "@/lib/supabase/operational-persistence";
 import { isRealUser } from "@/lib/utils/is-real-user";
-import { isCheckableStatus } from "@/lib/domain/checkin-rules";
-import { isEntitlementValidForClass, diagnoseNoEntitlement } from "@/lib/domain/entitlement-rules";
+import { getCheckInEligibility, isCheckableStatus } from "@/lib/domain/checkin-rules";
+import { isEntitlementValidForClass, diagnoseNoEntitlement, type ClassContext } from "@/lib/domain/entitlement-rules";
+import {
+  PAYMENT_NOT_CONFIRMED,
+  bookingHoldsCredit,
+  classNeedsEntitlement,
+  paymentAllowsCheckIn,
+  withBookedCreditReturned,
+} from "@/lib/domain/checkin-entitlement";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { resolveAccessRuleForSubscription } from "@/lib/domain/subscription-snapshot";
 import { buildSnapshotFromProduct } from "@/lib/services/subscription-snapshot-service";
@@ -30,6 +37,8 @@ import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import type { AuthUser } from "@/lib/auth";
 import type { CheckInMethod, DanceRole } from "@/types/domain";
+import type { MockBookableClass, MockSubscription } from "@/lib/mock-data";
+import type { StoredBooking } from "@/lib/services/booking-service";
 
 function qrPerformer(user: AuthUser) {
   return { userId: user.id, email: user.email, name: user.fullName };
@@ -70,6 +79,34 @@ function revalidateQrAdminSurfaces(): void {
   revalidatePath("/classes/bookable");
   revalidatePath("/classes");
   revalidatePath("/finance");
+}
+
+/** Access rules from the live catalog (fallback for subscriptions without a snapshot). */
+async function liveAccessRules() {
+  const allProducts = await getProductRepo().getAll();
+  return buildDynamicAccessRulesMap(
+    allProducts.map((p) => ({
+      id: p.id,
+      name: p.name,
+      productType: p.productType,
+      allowedLevels: p.allowedLevels ?? null,
+      allowedStyleIds: p.allowedStyleIds ?? null,
+      styleAccessMode: p.styleAccessMode ?? null,
+      styleAccessPickCount: p.styleAccessPickCount ?? null,
+      allowedClassTypes: p.allowedClassTypes ?? null,
+    })),
+    getDanceStyles(),
+  );
+}
+
+function classContextOf(cls: MockBookableClass): ClassContext {
+  return {
+    classType: cls.classType,
+    styleName: cls.styleName ?? null,
+    styleId: cls.styleId ?? null,
+    level: cls.level ?? null,
+    date: cls.date,
+  };
 }
 
 async function consumeCredit(subscriptionId: string): Promise<void> {
@@ -235,12 +272,24 @@ async function lookupStudentByQr(token: string): Promise<QrLookupResult> {
     };
   }
 
+  const accessRulesMap = await liveAccessRules();
+
+  // Phase 1: prefer the frozen-at-purchase snapshot when present so
+  // post-sale admin edits to the live product cannot unlock or revoke
+  // entitlement at check-in. Falls back to the live rule for legacy subs.
+  const passForClass = (cls: MockBookableClass) =>
+    studentSubs.find(
+      (sub) =>
+        sub.status === "active" &&
+        isEntitlementValidForClass(sub, classContextOf(cls), allTerms, resolveAccessRuleForSubscription(sub, accessRulesMap)),
+    ) ?? null;
+
   const todayBookings: QrStudentBooking[] = studentBookings.map((b) => {
     const cls = todayInstances.get(b.bookableClassId)!;
     const attRecord = attSvc.getRecord(b.bookableClassId, b.studentId);
     const isCheckedIn = b.status === "checked_in" || attRecord?.status === "present" || attRecord?.status === "late";
-    const sub = b.subscriptionId ? subMap.get(b.subscriptionId) : undefined;
-    const canCheckIn = isCheckableStatus(b.status);
+    let sub = b.subscriptionId ? subMap.get(b.subscriptionId) : undefined;
+    let canCheckIn = isCheckableStatus(b.status);
 
     let blockedReason: string | null = null;
     if (!isCheckedIn && !canCheckIn) {
@@ -251,6 +300,18 @@ async function lookupStudentByQr(token: string): Promise<QrLookupResult> {
       } else {
         blockedReason = `Booking status "${b.status}" does not allow check-in.`;
       }
+    } else if (!isCheckedIn && !b.subscriptionId && classNeedsEntitlement(cls.classType)) {
+      const pending = passForClass(cls);
+      if (pending?.paymentStatus === "pending") {
+        // Offered so "Mark as paid and check in" attaches it to the booking.
+        sub = pending;
+      } else {
+        canCheckIn = false;
+        blockedReason = NO_PASS_ON_BOOKING;
+      }
+    } else if (!isCheckedIn && sub && sub.paymentStatus !== "pending" && !paymentAllowsCheckIn(sub.paymentStatus)) {
+      canCheckIn = false;
+      blockedReason = PAYMENT_NOT_CONFIRMED;
     }
 
     return {
@@ -306,56 +367,23 @@ async function lookupStudentByQr(token: string): Promise<QrLookupResult> {
       return { ...detail, effectiveGroup };
     });
 
-  const allProducts = await getProductRepo().getAll();
-  const danceStyles = getDanceStyles();
-  const accessRulesMap = buildDynamicAccessRulesMap(
-    allProducts.map((p) => ({
-      id: p.id,
-      name: p.name,
-      productType: p.productType,
-      allowedLevels: p.allowedLevels ?? null,
-      allowedStyleIds: p.allowedStyleIds ?? null,
-      styleAccessMode: p.styleAccessMode ?? null,
-      styleAccessPickCount: p.styleAccessPickCount ?? null,
-      allowedClassTypes: p.allowedClassTypes ?? null,
-    })),
-    danceStyles,
-  );
-
   const todayClasses: QrTodayClass[] = [];
   const bookedClassIds = new Set(studentBookings.map((b) => b.bookableClassId));
   for (const [classId, cls] of todayInstances) {
     if (bookedClassIds.has(classId)) continue;
     if (cls.status === "cancelled") continue;
 
-    const classCtx = {
-      classType: cls.classType,
-      styleName: cls.styleName ?? null,
-      styleId: cls.styleId ?? null,
-      level: cls.level ?? null,
-      date: cls.date,
-    };
-
-    let matchedSub: typeof studentSubs[number] | null = null;
-    for (const sub of studentSubs) {
-      if (sub.status !== "active") continue;
-      // Phase 1: prefer the frozen-at-purchase snapshot when present so
-      // post-sale admin edits to the live product cannot unlock or revoke
-      // entitlement at check-in. Falls back to the live rule for legacy subs.
-      const rule = resolveAccessRuleForSubscription(sub, accessRulesMap);
-      if (isEntitlementValidForClass(sub, classCtx, allTerms, rule)) {
-        matchedSub = sub;
-        break;
-      }
-    }
+    const matchedSub = passForClass(cls);
 
     let blockedReason: string | null = null;
     if (!matchedSub) {
       // Include ALL subs (not just active) so diagnoseNoEntitlement can
       // mention scheduled future memberships and expired products alike.
-      blockedReason = diagnoseNoEntitlement(studentSubs, classCtx, accessRulesMap);
+      blockedReason = diagnoseNoEntitlement(studentSubs, classContextOf(cls), accessRulesMap);
     } else if (matchedSub.paymentStatus === "pending") {
       blockedReason = `Payment pending for ${matchedSub.productName} — confirm payment to check in.`;
+    } else if (!paymentAllowsCheckIn(matchedSub.paymentStatus)) {
+      blockedReason = PAYMENT_NOT_CONFIRMED;
     }
 
     todayClasses.push({
@@ -457,41 +485,12 @@ export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheck
 
   await ensureOperationalDataHydrated();
 
+  const check = await checkBookingCheckIn(bookingId);
+  if (!check.ok) return { success: false, error: check.error };
+  const { booking, cls } = check;
+
+  // The booking's credit was taken when it was booked; check-in takes none.
   const svc = getBookingService();
-  const booking = svc.bookings.find((b) => b.id === bookingId);
-  if (!booking) return { success: false, error: "Booking not found" };
-
-  if (!isCheckableStatus(booking.status)) {
-    if (booking.status === "checked_in") {
-      return { success: false, error: "Already checked in" };
-    }
-    return { success: false, error: `Cannot check in a ${booking.status} booking` };
-  }
-
-  let cls = svc.getClass(booking.bookableClassId);
-  if (!cls) {
-    const allInstances = getInstances();
-    const inst = allInstances.find((c) => c.id === booking.bookableClassId);
-    if (inst) {
-      cls = {
-        id: inst.id,
-        title: inst.title,
-        classType: inst.classType,
-        styleName: inst.styleName,
-        danceStyleRequiresBalance: false,
-        status: inst.status,
-        date: inst.date,
-        startTime: inst.startTime,
-        endTime: inst.endTime,
-        maxCapacity: inst.maxCapacity,
-        leaderCap: inst.leaderCap,
-        followerCap: inst.followerCap,
-        location: inst.location,
-      };
-    }
-  }
-  if (!cls) return { success: false, error: "Class not found" };
-
   const result = svc.checkInBooking(bookingId);
   if (result.type === "error") {
     return { success: false, error: result.reason };
@@ -510,10 +509,6 @@ export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheck
     markedBy: user.fullName,
   });
 
-  if (booking.subscriptionId) {
-    await consumeCredit(booking.subscriptionId);
-  }
-
   if (isRealUser(booking.studentId)) {
     const checkedIn = svc.bookings.find((b) => b.id === bookingId);
     if (checkedIn) await saveBookingToDB(checkedIn);
@@ -524,6 +519,154 @@ export async function qrCheckInBookingAction(bookingId: string): Promise<QrCheck
   revalidateQrAdminSurfaces();
 
   return { success: true, classTitle: cls.title };
+}
+
+type Denied = { ok: false; error: string };
+
+const NO_PASS_ON_BOOKING = "This booking has no pass attached, so it cannot be checked in.";
+const NOT_AWAITING_PAYMENT = "This pass is not awaiting payment.";
+
+/** A scheduled class staff can check students into right now. */
+function openClassForCheckIn(classId: string): { ok: true; cls: MockBookableClass } | Denied {
+  const cls = getInstances().find((c) => c.id === classId);
+  if (!cls) return { ok: false, error: "Class not found" };
+  if (cls.date !== getTodayStr()) return { ok: false, error: "Class is not today" };
+  if (cls.status === "cancelled") return { ok: false, error: "Class is cancelled" };
+  if (isClassEnded(cls.date, cls.endTime)) {
+    return { ok: false, error: "This class has ended. Check-in is only for classes that have not ended." };
+  }
+  return { ok: true, cls };
+}
+
+type EntitlementFields = Pick<
+  MockSubscription,
+  | "productId" | "productName" | "productSnapshot" | "productType" | "status" | "validFrom" | "validUntil"
+  | "remainingCredits" | "totalCredits" | "classesUsed" | "classesPerTerm"
+  | "selectedStyleId" | "selectedStyleName" | "selectedStyleIds" | "selectedStyleNames"
+>;
+
+/**
+ * Same rule the QR lookup uses to offer a pass for a class: status,
+ * validity window, remaining usage, class type, style and level, from the
+ * frozen product snapshot when present.
+ */
+async function entitlementDenial(sub: EntitlementFields, cls: MockBookableClass): Promise<string | null> {
+  const [rules, terms] = await Promise.all([liveAccessRules(), getTermRepo().getAll()]);
+  const ok = isEntitlementValidForClass(
+    // Only the fields picked above are read.
+    sub as MockSubscription,
+    classContextOf(cls),
+    terms,
+    resolveAccessRuleForSubscription(sub, rules),
+  );
+  return ok ? null : `${sub.productName} is not valid for ${cls.title}.`;
+}
+
+/** A pass's payment state allows this use: confirmed for check-in, pending when the caller is about to collect it. */
+function paymentDenial(sub: MockSubscription, paying: boolean): string | null {
+  if (paying) return sub.paymentStatus === "pending" ? null : NOT_AWAITING_PAYMENT;
+  return paymentAllowsCheckIn(sub.paymentStatus) ? null : PAYMENT_NOT_CONFIRMED;
+}
+
+/**
+ * Checks shared by every walk-in path; callers run it before writing
+ * anything. `subscriptionId` null means the caller is about to create the
+ * pass itself (drop-in sale) and checks it separately. `paying`: the
+ * caller is about to mark that pending pass paid. Expects operational
+ * data to be hydrated.
+ */
+async function checkWalkIn(
+  studentId: string,
+  classId: string,
+  subscriptionId: string | null,
+  { paying = false }: { paying?: boolean } = {},
+) {
+  const open = openClassForCheckIn(classId);
+  if (!open.ok) return open;
+  const { cls } = open;
+
+  const student = (await getStudentRepo().getAll()).find((s) => s.id === studentId);
+  if (!student) return { ok: false as const, error: "Student not found" };
+
+  const existing = getBookingService().bookings.find(
+    (b) => b.studentId === studentId && b.bookableClassId === classId && b.status !== "cancelled" && b.status !== "late_cancelled"
+  );
+  if (existing) {
+    return { ok: false as const, error: "Student already has a booking for this class. Use the booking check-in instead." };
+  }
+
+  if (subscriptionId !== null) {
+    const sub = subscriptionId ? await getSubscriptionRepo().getById(subscriptionId) : null;
+    if (!sub || sub.studentId !== studentId) {
+      return { ok: false as const, error: "That pass does not belong to this student." };
+    }
+    const denial = (await entitlementDenial(sub, cls)) ?? paymentDenial(sub, paying);
+    if (denial) return { ok: false as const, error: denial };
+  }
+
+  return { ok: true as const, cls, student };
+}
+
+type BookingCheckIn =
+  | {
+      ok: true;
+      booking: StoredBooking;
+      cls: MockBookableClass;
+      /** The paid pass to attach to a booking that has none; it gives one credit. */
+      attach: MockSubscription | null;
+    }
+  | Denied;
+
+/**
+ * Everything a staff booking check-in needs, checked before any write:
+ * the booking can be checked in now, and its pass is the student's, covers
+ * the class (counting this booking's own credit as still available) and is
+ * paid for. A booking without a pass is only checked in on a class that
+ * needs none.
+ *
+ * `paying`: the caller is about to mark that pending pass paid. It must be
+ * the booking's pass, or, for a booking without one on a class that needs
+ * one, a pass of the student's that covers the class; that pass is
+ * returned as `attach`. Expects operational data to be hydrated.
+ */
+async function checkBookingCheckIn(bookingId: string, paying?: { subscriptionId: string }): Promise<BookingCheckIn> {
+  const booking = getBookingService().bookings.find((b) => b.id === bookingId);
+  if (!booking) return { ok: false, error: "Booking not found" };
+
+  const open = openClassForCheckIn(booking.bookableClassId);
+  if (!open.ok) return open;
+  const { cls } = open;
+
+  const eligibility = getCheckInEligibility(booking.status, cls.date, cls.startTime, "staff");
+  if (!eligibility.eligible) return { ok: false, error: eligibility.reason ?? "Booking cannot be checked in" };
+
+  const needsPass = classNeedsEntitlement(cls.classType);
+  const subscriptionId = paying ? paying.subscriptionId : booking.subscriptionId;
+  if (!subscriptionId) {
+    return needsPass ? { ok: false, error: NO_PASS_ON_BOOKING } : { ok: true, booking, cls, attach: null };
+  }
+
+  const sub = await getSubscriptionRepo().getById(subscriptionId);
+  if (!sub || sub.studentId !== booking.studentId) {
+    return { ok: false, error: "That pass does not belong to the booked student." };
+  }
+  if (booking.subscriptionId && booking.subscriptionId !== sub.id) {
+    return { ok: false, error: "That pass is not the one this booking uses." };
+  }
+  const attach = !booking.subscriptionId;
+  if (attach && !needsPass) {
+    return { ok: false, error: "This class does not need a pass. Check the booking in without taking a payment." };
+  }
+
+  // A birthday booking uses the member's free class, not the pass's usage.
+  if (booking.source !== "birthday") {
+    const denial = await entitlementDenial(bookingHoldsCredit(booking) ? withBookedCreditReturned(sub) : sub, cls);
+    if (denial) return { ok: false, error: denial };
+  }
+  const denial = paymentDenial(sub, !!paying);
+  if (denial) return { ok: false, error: denial };
+
+  return { ok: true, booking, cls, attach: attach ? sub : null };
 }
 
 export async function qrWalkInCheckInAction(
@@ -537,24 +680,10 @@ export async function qrWalkInCheckInAction(
 
   await ensureOperationalDataHydrated();
 
-  const allInstances = getInstances();
-  const cls = allInstances.find((c) => c.id === classId);
-  if (!cls) return { success: false, error: "Class not found" };
-
-  const today = getTodayStr();
-  if (cls.date !== today) return { success: false, error: "Class is not today" };
-
-  const allStudents = await getStudentRepo().getAll();
-  const student = allStudents.find((s) => s.id === studentId);
-  if (!student) return { success: false, error: "Student not found" };
-
+  const check = await checkWalkIn(studentId, classId, subscriptionId);
+  if (!check.ok) return { success: false, error: check.error };
+  const { cls, student } = check;
   const svc = getBookingService();
-  const existing = svc.bookings.find(
-    (b) => b.studentId === studentId && b.bookableClassId === classId && b.status !== "cancelled" && b.status !== "late_cancelled"
-  );
-  if (existing) {
-    return { success: false, error: "Student already has a booking for this class. Use the booking check-in instead." };
-  }
 
   const bookingId = `walk-in-${studentId}-${classId}-${Date.now()}`;
   const newBooking = {
@@ -611,8 +740,13 @@ export async function qrMarkPaidAndCheckInAction(
   const guard = await requireQrPermission("payments:mark_paid_reception");
   if (!guard.ok) return { success: false, error: guard.error };
   const user = guard.user;
+  const checkInGuard = await requireQrPermission("checkin:manual_checkin");
+  if (!checkInGuard.ok) return { success: false, error: checkInGuard.error };
 
   await ensureOperationalDataHydrated();
+
+  const check = await checkBookingCheckIn(bookingId, { subscriptionId });
+  if (!check.ok) return { success: false, error: check.error };
 
   const prevSub = await getSubscriptionRepo().getById(subscriptionId);
 
@@ -642,6 +776,16 @@ export async function qrMarkPaidAndCheckInAction(
     }
   } catch { /* best-effort */ }
 
+  if (check.attach) {
+    // The booking now holds this pass's credit, exactly as if it had been
+    // booked with it, so cancelling it later refunds that credit.
+    const { booking } = check;
+    booking.subscriptionId = check.attach.id;
+    booking.subscriptionName = check.attach.productName;
+    await consumeCredit(check.attach.id);
+    if (isRealUser(booking.studentId)) await saveBookingToDB(booking);
+  }
+
   return qrCheckInBookingAction(bookingId);
 }
 
@@ -654,8 +798,13 @@ export async function qrMarkPaidAndWalkInAction(
   const guard = await requireQrPermission("payments:mark_paid_reception");
   if (!guard.ok) return { success: false, error: guard.error };
   const user = guard.user;
+  const checkInGuard = await requireQrPermission("checkin:manual_checkin");
+  if (!checkInGuard.ok) return { success: false, error: checkInGuard.error };
 
   await ensureOperationalDataHydrated();
+
+  const check = await checkWalkIn(studentId, classId, subscriptionId, { paying: true });
+  if (!check.ok) return { success: false, error: check.error };
 
   const prevSub = await getSubscriptionRepo().getById(subscriptionId);
 
@@ -736,7 +885,13 @@ export async function qrSellDropInAndCheckInAction(
   if (!guard.ok) return { success: false, error: guard.error };
   const user = guard.user;
 
+  const checkInGuard = await requireQrPermission("checkin:manual_checkin");
+  if (!checkInGuard.ok) return { success: false, error: checkInGuard.error };
+
   await ensureOperationalDataHydrated();
+
+  const check = await checkWalkIn(studentId, classId, null);
+  if (!check.ok) return { success: false, error: check.error };
 
   const allProducts = await getProductRepo().getAll();
   const dropInProduct = allProducts.find((p) => p.productType === "drop_in" && p.isActive);
@@ -749,6 +904,28 @@ export async function qrSellDropInAndCheckInAction(
   // so a later admin edit (e.g. narrowing allowedStyleIds) cannot retroactively
   // invalidate this drop-in at check-in time.
   const productSnapshot = await buildSnapshotFromProduct(dropInProduct);
+  const entitlement = {
+    productId: dropInProduct.id,
+    productName: dropInProduct.name,
+    productType: "drop_in" as const,
+    status: "active" as const,
+    totalCredits: dropInProduct.totalCredits ?? 1,
+    remainingCredits: dropInProduct.totalCredits ?? 1,
+    validFrom: today,
+    validUntil: null,
+    classesUsed: 0,
+    classesPerTerm: null,
+    selectedStyleId: null,
+    selectedStyleName: null,
+    selectedStyleIds: null,
+    selectedStyleNames: null,
+    productSnapshot,
+  };
+  // The walk-in check runs again on the stored row after the sale; checking
+  // the same fields here means a drop-in that cannot be used is never sold.
+  const fitDenial = await entitlementDenial(entitlement, check.cls);
+  if (fitDenial) return { success: false, error: fitDenial };
+
   // Phase 4 hardening: commit-mode pricing — the QR drop-in sale is
   // effectively the moment of charge, so any first-time-purchase rule
   // must be atomically claimed here.
@@ -762,14 +939,7 @@ export async function qrSellDropInAndCheckInAction(
   });
   const subResult = await createSubscription({
     studentId,
-    productId: dropInProduct.id,
-    productName: dropInProduct.name,
-    productType: "drop_in" as const,
-    status: "active" as const,
-    totalCredits: dropInProduct.totalCredits ?? 1,
-    remainingCredits: dropInProduct.totalCredits ?? 1,
-    validFrom: today,
-    validUntil: null,
+    ...entitlement,
     notes: `Sold via QR check-in by ${user.fullName}`,
     termId: null,
     paymentMethod: "cash" as const,
@@ -780,14 +950,11 @@ export async function qrSellDropInAndCheckInAction(
     assignedBy: user.id,
     assignedAt: new Date().toISOString(),
     autoRenew: false,
-    classesUsed: 0,
-    classesPerTerm: null,
     priceCentsAtPurchase: pricing.vat.totalIncVatCents,
     currencyAtPurchase: "EUR",
     paidAt: new Date().toISOString(),
     paymentNotes: `Collected by ${user.fullName} via QR check-in`,
     collectedBy: user.fullName,
-    productSnapshot,
     originalPriceCents: pricing.basePriceCents,
     discountAmountCents: pricing.totalDiscountCents,
     appliedDiscount: pricing.snapshot,
@@ -826,7 +993,14 @@ export async function qrSellDropInAndCheckInAction(
     });
   }
 
-  return qrWalkInCheckInAction(studentId, classId, subResult.subscriptionId);
+  const checkIn = await qrWalkInCheckInAction(studentId, classId, subResult.subscriptionId);
+  if (!checkIn.success) {
+    return {
+      success: false,
+      error: `The drop-in was sold and stays on the student's account, but check-in failed: ${checkIn.error ?? "unknown error"}`,
+    };
+  }
+  return checkIn;
 }
 
 // ── Guest purchase QR lookup ──────────────────────────────────

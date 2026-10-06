@@ -22,6 +22,12 @@ import {
 } from "@/lib/domain/vat";
 import { getNextConsecutiveTerm } from "@/lib/domain/term-rules";
 import {
+  assignPaymentStatusDenial,
+  resolveAssignPaymentMethod,
+  DEFAULT_ASSIGN_PAYMENT_STATUS,
+  type AssignPaymentStatus,
+} from "@/lib/domain/assign-payment-status";
+import {
   computeSubscriptionValidity,
   validateSubscriptionExtension,
 } from "@/lib/domain/subscription-validity";
@@ -70,13 +76,15 @@ function parseCredits(raw: string | null): number | null {
 export async function createSubscriptionAction(
   formData: FormData
 ): Promise<{ success: boolean; error?: string; subscriptionId?: string }> {
-  const adminAccess = await requirePermission("students:edit");
+  const gate = await requirePermissionForAction("students:assign_subscription");
+  if (!gate.ok) return { success: false, error: gate.error };
+  const adminAccess = gate.access;
   const adminUser = adminAccess.user;
   const studentId = formData.get("studentId") as string;
   const productId = (formData.get("productId") as string)?.trim();
   const termId = (formData.get("termId") as string)?.trim() || null;
   const paymentMethodRaw = (formData.get("paymentMethod") as string)?.trim();
-  const paymentStatusRaw = (formData.get("paymentStatus") as string)?.trim() || "paid";
+  const paymentStatusRaw = (formData.get("paymentStatus") as string)?.trim() || DEFAULT_ASSIGN_PAYMENT_STATUS;
   const autoRenew = formData.get("autoRenew") === "on" || formData.get("autoRenew") === "true";
   const notes = (formData.get("notes") as string)?.trim() || null;
   const selectedStyleId = (formData.get("selectedStyleId") as string)?.trim() || null;
@@ -142,6 +150,16 @@ export async function createSubscriptionAction(
   if (!VALID_PAYMENT_STATUSES.has(paymentStatusRaw)) {
     return { success: false, error: "Invalid payment status" };
   }
+  const paymentStatusDenial = assignPaymentStatusDenial(paymentStatusRaw, (p) =>
+    hasPermission(adminAccess, p),
+  );
+  if (paymentStatusDenial) return { success: false, error: paymentStatusDenial };
+  const methodResult = resolveAssignPaymentMethod(
+    paymentStatusRaw as AssignPaymentStatus,
+    paymentMethodRaw as PaymentMethod,
+  );
+  if (!methodResult.ok) return { success: false, error: methodResult.error };
+  const paymentMethod = methodResult.method;
 
   const product = await getProductRepo().getById(productId);
   if (!product) return { success: false, error: "Product not found" };
@@ -204,7 +222,7 @@ export async function createSubscriptionAction(
     // Phase 15 — admin manual assignment follows the selected payment
     // method. Everything except Stripe counts as a manual payment,
     // which is excluded from VAT unless an admin opts in.
-    vatChannel: paymentChannelFor(paymentMethodRaw),
+    vatChannel: paymentChannelFor(paymentMethod),
     commit: { source: "admin_manual" },
   });
 
@@ -248,7 +266,7 @@ export async function createSubscriptionAction(
   // the "VAT comes after every discount" rule holds here too.
   const vat =
     manualDiscountCents > 0
-      ? resolveVatFor(finalPriceAfterManualCents, paymentChannelFor(paymentMethodRaw))
+      ? resolveVatFor(finalPriceAfterManualCents, paymentChannelFor(paymentMethod))
       : pricing.vat;
   const notesWithManualReason =
     manualDiscountCents > 0 && manualDiscountReason
@@ -269,7 +287,7 @@ export async function createSubscriptionAction(
     validUntil,
     notes: notesWithManualReason,
     termId,
-    paymentMethod: paymentMethodRaw as PaymentMethod,
+    paymentMethod,
     paymentStatus: paymentStatusRaw as SalePaymentStatus,
     // Supabase column `student_subscriptions.assigned_by` is `uuid
     // REFERENCES users(id)` — must be the auth user id, NEVER the

@@ -241,6 +241,148 @@ describe("Finance requires finance:view only", () => {
   });
 });
 
+// ── Assign pass / membership ──────────────────────────────────
+
+describe("students:assign_subscription: checkbox → UI → server", () => {
+  const src = (p: string) => readFileSync(join(ROOT, p), "utf8");
+
+  it("is a Students checkbox with its own label, default for Admin only", async () => {
+    const { PERMISSION_GROUPS } = await import("@/lib/domain/permissions");
+    const entry = PERMISSION_GROUPS.find((g) => g.key === "students")!.permissions.find(
+      (p) => p.key === "students:assign_subscription",
+    );
+    expect(entry).toEqual({
+      key: "students:assign_subscription",
+      label: "Assign pass / membership",
+      description: "Manually assign a membership, pass or other catalog product to a student.",
+    });
+    expect(ROLE_PRESETS.admin).toContain("students:assign_subscription");
+    for (const role of ["teacher", "front_desk", "read_only"] as const) {
+      expect(ROLE_PRESETS[role]).not.toContain("students:assign_subscription");
+    }
+  });
+
+  it("the page flag, the Add subscription control and its dialog all use it; profile edits keep students:edit", () => {
+    const page = src("app/(app)/students/page.tsx");
+    const ui = src("components/students/admin-students.tsx");
+    expect(page).toContain('canAssignSubscription: hasPermission(access, "students:assign_subscription")');
+    expect(page).toContain('canEdit: hasPermission(access, "students:edit")');
+    expect(ui).toContain("onAddSub={permissions.canAssignSubscription ? () => setAddSubStudentId(s.id) : null}");
+    expect(ui).toContain("{addSubStudentId && permissions.canAssignSubscription && (");
+    expect(ui).not.toMatch(/onAddSub=\{permissions\.canEdit/);
+    expect(ui).not.toMatch(/addSubStudentId && permissions\.canEdit/);
+    expect(ui).toContain("{editStudent && permissions.canEdit && (");
+  });
+
+  it("createSubscriptionAction checks students:assign_subscription; updateStudentAction checks students:edit", () => {
+    const subs = src("lib/actions/subscriptions.ts");
+    const create = subs.slice(subs.indexOf("export async function createSubscriptionAction"));
+    expect(create.slice(0, 400)).toContain('requirePermissionForAction("students:assign_subscription")');
+    expect(create.slice(0, create.indexOf("export async function", 10))).not.toContain('"students:edit"');
+    expect(src("lib/actions/students.ts")).toMatch(
+      /export async function updateStudentAction[\s\S]{0,120}requirePermission\("students:edit"\)/,
+    );
+  });
+
+  it("the dialog offers and the server accepts the same payment statuses", () => {
+    const page = src("app/(app)/students/page.tsx");
+    const ui = src("components/students/admin-students.tsx");
+    const dialog = src("components/students/student-dialogs.tsx");
+    const create = src("lib/actions/subscriptions.ts");
+    expect(page).toContain("assignPaymentStatuses: allowedAssignPaymentStatuses((p) => hasPermission(access, p))");
+    expect(ui).toContain("allowedPaymentStatuses={permissions.assignPaymentStatuses}");
+    expect(dialog).toContain("allowedPaymentStatuses.includes(o.value as SalePaymentStatus)");
+    expect(dialog).toContain('useState<SalePaymentStatus>(\n    allowedPaymentStatuses.includes("paid") ? "paid" : "pending",\n  )');
+    // Complimentary / Waived submit the Complimentary method; Paid / Pending never offer it.
+    expect(dialog).toContain('{isFreeAssignStatus(paymentStatus) ? (');
+    expect(dialog).toContain('<input type="hidden" name="paymentMethod" value="complimentary" />');
+    expect(dialog).toContain('PAYMENT_METHOD_OPTIONS.filter((o) => o.value !== "complimentary")');
+    const body = create.slice(create.indexOf("export async function createSubscriptionAction"));
+    expect(body).toContain('(formData.get("paymentStatus") as string)?.trim() || DEFAULT_ASSIGN_PAYMENT_STATUS');
+    for (const guard of ["assignPaymentStatusDenial(", "resolveAssignPaymentMethod("]) {
+      const guardAt = body.indexOf(guard);
+      expect(guardAt).toBeGreaterThan(0);
+      expect(guardAt).toBeLessThan(body.indexOf("priceProductForStudent("));
+      expect(guardAt).toBeLessThan(body.indexOf("createSubscription("));
+    }
+    expect(body).toContain("const paymentMethod = methodResult.method;");
+  });
+
+  it("payments:grant_complimentary is a sensitive Payments checkbox, default for Admin only", async () => {
+    const { PERMISSION_GROUPS, SENSITIVE_PERMISSIONS } = await import("@/lib/domain/permissions");
+    const entry = PERMISSION_GROUPS.find((g) => g.key === "payments")!.permissions.find(
+      (p) => p.key === "payments:grant_complimentary",
+    );
+    expect(entry).toEqual({
+      key: "payments:grant_complimentary",
+      label: "Create complimentary / waived pass",
+      description: "Allows assigning a new pass or membership as Complimentary or Waived.",
+    });
+    expect(SENSITIVE_PERMISSIONS).toContain("payments:grant_complimentary");
+    expect(ROLE_PRESETS.admin).toContain("payments:grant_complimentary");
+    for (const role of ["teacher", "front_desk", "read_only"] as const) {
+      expect(ROLE_PRESETS[role]).not.toContain("payments:grant_complimentary");
+    }
+  });
+
+  it("does not open Finance", async () => {
+    signIn({ roleKey: "custom", permissions: ["dashboard:view", "students:view_limited", "students:assign_subscription"] });
+    expect(await navHrefs()).not.toContain("/finance");
+    expect(await pageGuardAllows("finance:view")).toBe(false);
+    expect(await financeDataAllowed()).toBe(false);
+  });
+});
+
+// ── Manual check-in ───────────────────────────────────────────
+
+describe("checkin:manual_checkin: checkbox → Attendance UI → server", () => {
+  const src = (p: string) => readFileSync(join(ROOT, p), "utf8");
+
+  it("the page passes it, the button and dialog use the shared rule, and the server uses the same rule", () => {
+    const page = src("app/(app)/attendance/page.tsx");
+    const ui = src("components/attendance/attendance-client.tsx");
+    const action = src("lib/actions/attendance.ts");
+    expect(page).toContain('canManualCheckIn: hasPermission(access, "checkin:manual_checkin")');
+    expect(ui).toContain("const showManualAdd = canOpenManualAdd(permissions, todaysManualAddClasses);");
+    expect(ui).toContain("{showManualAdd && (");
+    expect(ui).toContain("{showAddAttendance && showManualAdd && (");
+    expect(ui).not.toMatch(/permissions\.canEditHistory && \(\s*<Button onClick=\{\(\) => setShowAddAttendance/);
+    expect(action).toContain('canManualCheckIn: hasPermission(access, "checkin:manual_checkin")');
+    expect(action).toContain("manualAddDenial(");
+  });
+
+  it("the token check-in panel is shown to exactly the users validateTokenCheckInAction accepts", () => {
+    const page = src("app/(app)/attendance/page.tsx");
+    const ui = src("components/attendance/attendance-client.tsx");
+    const action = src("lib/actions/checkin.ts");
+    expect(page).toContain('canTokenCheckIn: hasAnyPermission(access, ["checkin:scan", "checkin:manual_checkin"])');
+    expect(ui).toContain("{permissions.canTokenCheckIn && <TokenCheckInPanel />}");
+    expect(action).toContain('hasAnyPermission(access, ["checkin:scan", "checkin:manual_checkin"])');
+  });
+
+  it("Guille's grant does not open Finance or the historical tools", async () => {
+    signIn({
+      baseRole: "student",
+      roleKey: "teacher",
+      permissions: [
+        "attendance:mark_absent", "attendance:mark_present", "attendance:view", "bookings:view",
+        "checkin:scan", "checkin:view", "dashboard:view", "payments:mark_paid_reception",
+        "payments:view_limited", "students:create", "students:manage_affiliations",
+        "students:send_magic_link", "students:view_limited", "checkin:manual_checkin",
+      ],
+    });
+    const a = await access();
+    expect(a.isStudent).toBe(true);
+    expect(a.permissions.has("checkin:manual_checkin")).toBe(true);
+    for (const p of ["attendance:edit_history", "attendance:backdate", "finance:view", "students:edit"] as Permission[]) {
+      expect(a.permissions.has(p), p).toBe(false);
+    }
+    expect(await navHrefs()).not.toContain("/finance");
+    expect(await navHrefs()).toContain("/catalog");
+    expect(await financeDataAllowed()).toBe(false);
+  });
+});
+
 // ── Money on non-finance pages ────────────────────────────────
 
 describe("pages reachable without finance permissions never serialize money", () => {
@@ -437,5 +579,44 @@ describe("Student + Teacher", () => {
     expect(hrefs).not.toContain("/attendance");
     expect(hrefs).not.toContain("/finance");
     expect(await financeDataAllowed()).toBe(false);
+  });
+});
+
+// ── Pending payment at check-in ───────────────────────────────
+
+describe("a pending pass cannot be used to check in: server paths and UI agree", () => {
+  const src = (p: string) => readFileSync(join(ROOT, p), "utf8");
+
+  it("every staff and student check-in path refuses an unpaid pass before writing", () => {
+    const checkin = src("lib/actions/checkin.ts");
+    for (const fn of ["studentSelfCheckInAction", "validateTokenCheckInAction"]) {
+      const body = checkin.slice(checkin.indexOf(`export async function ${fn}`));
+      const at = body.indexOf("passPaymentDenial(booking.subscriptionId)");
+      expect(at, fn).toBeGreaterThan(0);
+      expect(at, fn).toBeLessThan(body.indexOf("checkInBooking("));
+    }
+    const admin = src("lib/actions/bookings-admin.ts");
+    const adminBody = admin.slice(admin.indexOf("export async function adminCheckInBookingAction"));
+    expect(adminBody.indexOf("passPaymentDenial(booking.subscriptionId)")).toBeGreaterThan(0);
+    expect(adminBody.indexOf("passPaymentDenial(booking.subscriptionId)")).toBeLessThan(adminBody.indexOf("checkInBooking("));
+    const attendance = src("lib/actions/attendance.ts");
+    const markBody = attendance.slice(attendance.indexOf("export async function markStudentAttendance"));
+    expect(markBody.indexOf("passPaymentDenial(passId)")).toBeGreaterThan(0);
+    expect(markBody.indexOf("passPaymentDenial(passId)")).toBeLessThan(markBody.indexOf("attendanceSvc.markAttendance("));
+    const qr = src("lib/actions/qr-checkin.ts");
+    expect(qr).toContain("const denial = paymentDenial(sub, !!paying);");
+    expect(qr).toContain("(await entitlementDenial(sub, cls)) ?? paymentDenial(sub, paying)");
+  });
+
+  it("the QR panels only offer mark-paid for a pending pass, and Add student only lists paid-for passes", () => {
+    for (const panel of ["components/attendance/qr-checkin-panel.tsx", "components/scan/student-scan-panel.tsx"]) {
+      const ui = src(panel);
+      expect(ui, panel).not.toContain("check in anyway");
+      expect(ui, panel).not.toContain("handlePaymentConfirmKeepPending");
+      expect(ui, panel).toContain("{PAYMENT_NOT_CONFIRMED}");
+    }
+    expect(src("app/(app)/attendance/page.tsx")).toContain(
+      '.filter((s) => s.status === "active" && paymentAllowsCheckIn(s.paymentStatus))',
+    );
   });
 });
