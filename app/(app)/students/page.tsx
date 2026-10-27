@@ -19,7 +19,7 @@ import {
 } from "@/lib/server/cached-queries";
 import { getWalletTransactions } from "@/lib/services/wallet-service";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { lazyExpireSubscriptions } from "@/lib/services/term-lifecycle-service";
@@ -43,7 +43,7 @@ export default async function StudentsPage({
   await requireAnyPermission(["students:view", "students:view_limited"]);
   const params = searchParams ? await searchParams : {};
 
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
   lazyExpireSubscriptions().catch(() => {});
   const _tHydrate = performance.now();
 

@@ -5,7 +5,7 @@ import {
   cachedGetProducts,
   cachedGetAllEvents,
 } from "@/lib/server/cached-queries";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getTemplates } from "@/lib/services/class-store";
 import { BroadcastsClient } from "@/components/broadcasts/broadcasts-client";
 
@@ -17,7 +17,7 @@ export default async function BroadcastsPage() {
     cachedGetAllStudents(),
     cachedGetProducts(),
     cachedGetAllEvents(),
-    ensureOperationalDataHydrated(),
+    ensurePageDataHydrated(),
   ]);
 
   const studentOptions = students

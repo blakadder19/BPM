@@ -1,11 +1,11 @@
 import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { getStudioHireRepo } from "@/lib/repositories";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { AdminStudioHire } from "@/components/studio-hire/admin-studio-hire";
 
 export default async function StudioHirePage() {
   await requireSuperAdmin();
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
 
   const svc = getStudioHireRepo().getService();
   const entries = svc.getAll();

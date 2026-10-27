@@ -42,15 +42,37 @@ describe("createLastSignInLookup", () => {
     expect(list).toHaveBeenCalledTimes(1);
   });
 
-  it("does not cache a failed listing", async () => {
+  it("holds a failed listing for one window instead of retrying on every load", async () => {
     const list = vi
       .fn<() => Promise<typeof USERS>>()
       .mockRejectedValueOnce(new Error("auth down"))
       .mockResolvedValueOnce(USERS);
-    const lookup = createLastSignInLookup(list, 1000);
+    const c = clock();
+    const lookup = createLastSignInLookup(list, 1000, c.now);
 
     await expect(lookup()).rejects.toThrow("auth down");
+    expect((await lookup()).size).toBe(0);
+    c.advance(999);
+    await lookup();
+    expect(list).toHaveBeenCalledTimes(1);
+
+    c.advance(1);
     expect((await lookup()).get("a")).toBeDefined();
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps serving the last good map after a later failure", async () => {
+    const list = vi
+      .fn<() => Promise<typeof USERS>>()
+      .mockResolvedValueOnce(USERS)
+      .mockRejectedValueOnce(new Error("auth down"));
+    const c = clock();
+    const lookup = createLastSignInLookup(list, 1000, c.now);
+
+    await lookup();
+    c.advance(1000);
+    await expect(lookup()).rejects.toThrow("auth down");
+    expect((await lookup()).get("a")).toBe("2026-09-01T10:00:00Z");
     expect(list).toHaveBeenCalledTimes(2);
   });
 });

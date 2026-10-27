@@ -27,6 +27,12 @@ import type {
 
 // ── Helpers ───────────────────────────────────────────────────
 
+function tallyByEventId(eventIds: string[], rows: { event_id: string }[]): Record<string, number> {
+  const counts: Record<string, number> = Object.fromEntries(eventIds.map((id) => [id, 0]));
+  for (const row of rows) counts[row.event_id] = (counts[row.event_id] ?? 0) + 1;
+  return counts;
+}
+
 /**
  * Normalize a timestamptz string from Supabase into a clean ISO datetime
  * without timezone offset (we store everything as UTC-like for display).
@@ -239,6 +245,14 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     return (data ?? []).map(toSession);
   },
 
+  async countSessionsByEvent(eventIds) {
+    if (eventIds.length === 0) return {};
+    const sb = createAdminClient();
+    const { data, error } = await sb.from("event_sessions").select("event_id").in("event_id", eventIds);
+    if (error) throw new Error(error.message);
+    return tallyByEventId(eventIds, data ?? []);
+  },
+
   async createSession(input: CreateSessionData) {
     const sb = createAdminClient();
     const { data, error } = await sb
@@ -295,6 +309,14 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     const { data, error } = await sb.from("event_products").select("*").eq("event_id", eventId).order("sort_order");
     if (error) throw new Error(error.message);
     return (data ?? []).map(toProduct);
+  },
+
+  async countProductsByEvent(eventIds) {
+    if (eventIds.length === 0) return {};
+    const sb = createAdminClient();
+    const { data, error } = await sb.from("event_products").select("event_id").in("event_id", eventIds);
+    if (error) throw new Error(error.message);
+    return tallyByEventId(eventIds, data ?? []);
   },
 
   async createEventProduct(input: CreateEventProductData) {

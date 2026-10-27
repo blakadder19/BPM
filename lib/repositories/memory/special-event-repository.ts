@@ -48,6 +48,9 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
 
   // ── Sessions ─────────────────────────────────────────────
   async getSessionsByEvent(eventId) { return store.getSessionsForEvent(eventId); },
+  async countSessionsByEvent(eventIds) {
+    return Object.fromEntries(eventIds.map((id) => [id, store.getSessionsForEvent(id).length]));
+  },
 
   async createSession(data: CreateSessionData) {
     return store.addSession({
@@ -71,6 +74,9 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
 
   // ── Event Products ───────────────────────────────────────
   async getProductsByEvent(eventId) { return store.getProductsForEvent(eventId); },
+  async countProductsByEvent(eventIds) {
+    return Object.fromEntries(eventIds.map((id) => [id, store.getProductsForEvent(id).length]));
+  },
 
   async createEventProduct(data: CreateEventProductData) {
     return store.addEventProduct({

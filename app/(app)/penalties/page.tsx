@@ -1,7 +1,7 @@
 import { requireSuperAdmin } from "@/lib/staff-permissions";
 import { getPenaltyRepo, getSettingsRepo } from "@/lib/repositories";
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getTemplates } from "@/lib/services/class-store";
 import { AdminPenalties } from "@/components/penalties/admin-penalties";
 
@@ -14,7 +14,7 @@ export default async function PenaltiesPage({
   await requireSuperAdmin();
   const params = searchParams ? await searchParams : {};
 
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
 
   const svc = getPenaltyRepo().getService();
 

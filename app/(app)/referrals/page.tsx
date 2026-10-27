@@ -8,7 +8,7 @@ import {
   getSubscriptionRepo,
 } from "@/lib/repositories";
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { ReferralsClient } from "@/components/referrals/referrals-client";
 import {
   summarizeReferrals,
@@ -19,7 +19,7 @@ import {
 
 export default async function ReferralsPage() {
   await requirePermission("referrals:view");
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
 
   const repo = getReferralRepo();
   const [referrals, rewards, students, codes, access] = await Promise.all([

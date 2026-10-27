@@ -10,7 +10,7 @@ import {
   getSpecialEventRepo,
 } from "@/lib/repositories";
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { DiscountRulesPanel } from "@/components/discount-rules/discount-rules-panel";
 import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
 
@@ -27,7 +27,7 @@ import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
  */
 export default async function DiscountRulesPage() {
   await requirePermission("discounts:view");
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
 
   const specialEventRepo = getSpecialEventRepo();
   const [rules, products, students, affiliations, access, allEvents, everyPurchase] =

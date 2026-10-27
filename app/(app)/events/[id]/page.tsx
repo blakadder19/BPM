@@ -16,7 +16,7 @@ import {
   cachedCocCheck,
 } from "@/lib/server/cached-queries";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { AdminEventDetail } from "@/components/events/admin-event-detail";
 import { StudentEventDetail } from "@/components/events/student-event-detail";
 import { isStripeEnabled } from "@/lib/stripe";
@@ -33,7 +33,7 @@ export default async function EventDetailPage({
   if (user.role !== "student") {
     await requirePermission("events:view");
   }
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
 
   const event = await cachedGetEventById(id);
   if (!event) notFound();

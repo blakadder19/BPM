@@ -14,7 +14,7 @@ import { SessionGuard } from "@/components/layout/session-guard";
 import { GlobalScanReceiver } from "@/components/scan/global-scan-receiver";
 import { computeAdminAlerts, type AdminAlert } from "@/lib/domain/admin-alerts";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
@@ -41,7 +41,7 @@ export default async function AppLayout({
   // Kick off hydration immediately — pages that await it will join the
   // already-running promise instead of starting a new one.  This moves
   // the cold-start cost earlier so it overlaps with alert/notification work.
-  void ensureOperationalDataHydrated();
+  void ensurePageDataHydrated();
 
   const isDev = process.env.NODE_ENV === "development";
 

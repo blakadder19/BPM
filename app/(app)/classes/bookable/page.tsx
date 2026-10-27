@@ -14,7 +14,7 @@ import { getTermRepo } from "@/lib/repositories";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { AdminSchedule } from "@/components/classes/admin-schedule";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getBookingService } from "@/lib/services/booking-store";
 
 export default async function BookableClassesPage({
@@ -24,7 +24,7 @@ export default async function BookableClassesPage({
 }) {
   await requirePermission("classes:view");
   await ensureScheduleBootstrapped();
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
   const params = searchParams ? await searchParams : {};
 
   const svc = getBookingService();

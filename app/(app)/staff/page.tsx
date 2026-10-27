@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { requirePermission } from "@/lib/staff-permissions";
 import { getStaffRepo } from "@/lib/repositories";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { StaffClient, type StaffClientStaffRow, type StaffClientInviteRow } from "@/components/staff/staff-client";
 import type { Permission } from "@/lib/domain/permissions";
 
@@ -33,7 +33,7 @@ async function resolveBaseUrl(): Promise<string> {
 
 export default async function StaffPage() {
   const access = await requirePermission("staff:view");
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
 
   const repo = getStaffRepo();
   const [staff, invites] = await Promise.all([repo.listStaff(), repo.listInvites()]);

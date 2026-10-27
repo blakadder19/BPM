@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { cachedGetTerms } from "@/lib/server/cached-queries";
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ExplorePage() {
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
 
   const [terms] = await Promise.all([cachedGetTerms()]);
 

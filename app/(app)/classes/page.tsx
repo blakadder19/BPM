@@ -15,7 +15,7 @@ import {
 } from "@/lib/repositories";
 import { cachedGetTerms, cachedGetProducts, cachedCocCheck, cachedGetStudentById, cachedGetStudentSubs } from "@/lib/server/cached-queries";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { isClassInFuture, getTodayStr } from "@/lib/domain/datetime";
 import { getCurrentTerm, getNextTerm } from "@/lib/domain/term-rules";
@@ -40,7 +40,7 @@ export default async function ClassesPage() {
   if (user.role === "student") {
     // Run hydration AND direct-DB queries in parallel
     const [, cocDone, terms, allStudentSubs, allProducts, student, bdayUsed] = await Promise.all([
-      ensureOperationalDataHydrated(),
+      ensurePageDataHydrated(),
       cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
       cachedGetTerms(),
       cachedGetStudentSubs(user.id),
@@ -242,7 +242,7 @@ export default async function ClassesPage() {
     );
   }
 
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
   lazyExpireSubscriptions().catch(() => {});
 
   const danceStyles = getDanceStyles();

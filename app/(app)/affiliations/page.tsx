@@ -5,7 +5,7 @@ import {
 } from "@/lib/staff-permissions";
 import { getAffiliationRepo, getDiscountRuleRepo } from "@/lib/repositories";
 import { cachedGetAllStudents } from "@/lib/server/cached-queries";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { AffiliationsClient } from "@/components/affiliations/affiliations-client";
 
 export default async function AffiliationsPage({
@@ -14,7 +14,7 @@ export default async function AffiliationsPage({
   searchParams?: Promise<{ search?: string }>;
 }) {
   await requirePermission("affiliations:view");
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
   const params = searchParams ? await searchParams : {};
 
   const [affiliations, students, rules, access] = await Promise.all([

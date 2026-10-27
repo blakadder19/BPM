@@ -154,6 +154,13 @@ let _hydratePromise: Promise<void> | null = null;
 const HYDRATE_THROTTLE_MS = 2_000;
 
 /**
+ * Read-only page renders accept data this old. Server actions keep the
+ * 2s default because they decide bookings, check-ins and credit use from
+ * these stores, and so do pages that run attendance closure on render.
+ */
+export const PAGE_HYDRATE_MAX_AGE_MS = 10_000;
+
+/**
  * Hydrate all services from Supabase.
  *
  * Reference data (settings, schedule templates, dance styles) is cached
@@ -163,11 +170,13 @@ const HYDRATE_THROTTLE_MS = 2_000;
  * class instances) is re-read from Supabase, but throttled to avoid
  * redundant queries within the same request cycle.
  */
-export async function ensureOperationalDataHydrated(): Promise<void> {
+export async function ensureOperationalDataHydrated(
+  maxAgeMs: number = HYDRATE_THROTTLE_MS,
+): Promise<void> {
   if (!hasSupabaseConfig()) return;
 
   const now = Date.now();
-  if (now - _lastHydratedAt < HYDRATE_THROTTLE_MS) return;
+  if (now - _lastHydratedAt < maxAgeMs) return;
 
   if (_hydratePromise) return _hydratePromise;
 
@@ -191,6 +200,10 @@ export async function ensureOperationalDataHydrated(): Promise<void> {
   })();
 
   return _hydratePromise;
+}
+
+export function ensurePageDataHydrated(): Promise<void> {
+  return ensureOperationalDataHydrated(PAGE_HYDRATE_MAX_AGE_MS);
 }
 
 /**

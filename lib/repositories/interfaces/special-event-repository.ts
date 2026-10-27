@@ -183,12 +183,16 @@ export interface ISpecialEventRepository {
 
   // Sessions
   getSessionsByEvent(eventId: string): Promise<MockEventSession[]>;
+  /** Every requested id is present in the result; events without sessions map to 0. */
+  countSessionsByEvent(eventIds: string[]): Promise<Record<string, number>>;
   createSession(data: CreateSessionData): Promise<MockEventSession>;
   updateSession(id: string, patch: SessionPatch): Promise<MockEventSession | null>;
   deleteSession(id: string): Promise<boolean>;
 
   // Event Products
   getProductsByEvent(eventId: string): Promise<MockEventProduct[]>;
+  /** Every requested id is present in the result; events without products map to 0. */
+  countProductsByEvent(eventIds: string[]): Promise<Record<string, number>>;
   createEventProduct(data: CreateEventProductData): Promise<MockEventProduct>;
   updateEventProduct(id: string, patch: EventProductPatch): Promise<MockEventProduct | null>;
   deleteEventProduct(id: string): Promise<boolean>;

@@ -19,7 +19,7 @@ import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getInstances } from "@/lib/services/schedule-store";
 import { isClassEnded, getTodayStr } from "@/lib/domain/datetime";
 import { resolveStudentVisibleStatus } from "@/lib/domain/student-visible-status";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { StudentBookings } from "@/components/booking/student-bookings";
@@ -107,7 +107,7 @@ export default async function BookingsPage({
 
   // Overlap hydration with searchParams resolution
   const [, params] = await Promise.all([
-    ensureOperationalDataHydrated(),
+    ensurePageDataHydrated(),
     searchParams ? searchParams : Promise.resolve({} as AdminBookingsFilterParams),
   ]);
   const _tHydrate = performance.now();

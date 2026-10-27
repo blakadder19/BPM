@@ -11,7 +11,7 @@ import {
   cachedCocCheck,
 } from "@/lib/server/cached-queries";
 import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { AdminEvents } from "@/components/events/admin-events";
 import { StudentEvents } from "@/components/events/student-events";
 import { getSpecialEventRepo } from "@/lib/repositories";
@@ -23,7 +23,7 @@ export default async function EventsPage() {
   if (user.role !== "student") {
     await requirePermission("events:view");
   }
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
 
   if (user.role === "student") {
     const [cocDone, events, myPurchases] = await Promise.all([
@@ -49,16 +49,11 @@ export default async function EventsPage() {
   };
 
   const repo = getSpecialEventRepo();
-  const sessionCountMap: Record<string, number> = {};
-  const productCountMap: Record<string, number> = {};
-  for (const evt of events) {
-    const [sessions, products] = await Promise.all([
-      repo.getSessionsByEvent(evt.id),
-      repo.getProductsByEvent(evt.id),
-    ]);
-    sessionCountMap[evt.id] = sessions.length;
-    productCountMap[evt.id] = products.length;
-  }
+  const eventIds = events.map((evt) => evt.id);
+  const [sessionCountMap, productCountMap] = await Promise.all([
+    repo.countSessionsByEvent(eventIds),
+    repo.countProductsByEvent(eventIds),
+  ]);
 
   return (
     <AdminEvents

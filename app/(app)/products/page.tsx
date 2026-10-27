@@ -9,7 +9,7 @@ import {
   cachedGetAllStudents,
 } from "@/lib/server/cached-queries";
 import { AdminProducts } from "@/components/products/admin-products";
-import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
+import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import type { MockProduct } from "@/lib/mock-data";
 
@@ -39,7 +39,7 @@ function describeProductScope(p: MockProduct): { styles: string; levels: string 
 export default async function ProductsPage() {
   const _t0 = performance.now();
   await requirePermission("products:view");
-  await ensureOperationalDataHydrated();
+  await ensurePageDataHydrated();
   const _tHydrate = performance.now();
 
   const [products, subscriptions, students, access] = await Promise.all([
