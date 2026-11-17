@@ -36,6 +36,7 @@ import {
   bpmCtaButton,
   bpmDetailsCard,
   bpmNotice,
+  escapeHtml,
   B,
 } from "./email-brand";
 import { getAppUrl } from "@/lib/utils/app-url";
@@ -127,19 +128,10 @@ function buildHtml(input: SendStaffInviteEmailInput): string {
 
   return bpmEmailWrap({
     appUrl: getAppUrl(),
-    recipientName: escapeHtml(recipientName),
+    recipientName,
     heading: `Join BPM as ${roleLabel}`,
     bodyHtml: [intro, detailsCard, cta, fallbackUrl, note].join("\n"),
   });
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 export async function sendStaffInviteEmail(

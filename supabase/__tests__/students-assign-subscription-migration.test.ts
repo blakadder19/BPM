@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   PRESET_ADDITIONS_00081,
+  PRESET_ADDITIONS_00082,
   ROLE_PRESETS,
   expandPermissions,
   type Permission,
@@ -40,7 +41,10 @@ const withoutNew = (keys: readonly Permission[]) => keys.filter((p) => !NEW_KEYS
 
 // Anisia's production grant shape on 2026-10-05: the Admin preset as it was
 // before 00081, plus send_magic_link. Synthetic identity.
-const ANISIA_SHAPE: Permission[] = [...withoutNew(ROLE_PRESETS.admin), "students:send_magic_link"];
+const ANISIA_SHAPE: Permission[] = [
+  ...withoutNew(ROLE_PRESETS.admin).filter((p) => !(PRESET_ADDITIONS_00082.admin ?? []).includes(p)),
+  "students:send_magic_link",
+];
 
 const ROWS: { label: string; roleKey: StaffRoleKey | null; stored: Permission[] | null }[] = [
   { label: "super admin (null list)", roleKey: "super_admin", stored: null },

@@ -34,6 +34,12 @@ export interface RefundableRecord {
   paymentStatus: string;
   /** Currency code (lowercased, ISO 4217). Used to pass through to Stripe. */
   currency: string | null;
+  /**
+   * State of the most recent Stripe refund attempt on the row. A
+   * `pending` attempt blocks further refunds: its amount is not yet in
+   * `refundedAmountCents`, so the remaining-amount check cannot see it.
+   */
+  refundStatus?: StripeRefundState | null;
 }
 
 export interface RefundRequest {
@@ -52,6 +58,7 @@ export type RefundValidationError =
   | "AMOUNT_INVALID"
   | "AMOUNT_EXCEEDS_REMAINING"
   | "PAID_AMOUNT_UNKNOWN"
+  | "REFUND_PENDING"
   | "REASON_REQUIRED";
 
 /**
@@ -71,6 +78,8 @@ export const REFUND_ERROR_MESSAGES: Record<RefundValidationError, string> = {
     "Refund amount cannot exceed the remaining refundable amount.",
   PAID_AMOUNT_UNKNOWN:
     "Cannot refund this transaction because the original paid amount is unknown.",
+  REFUND_PENDING:
+    "A previous Stripe refund for this payment is still pending. Wait for Stripe to confirm it before issuing another refund.",
   REASON_REQUIRED:
     "A refund reason is required.",
 };
@@ -106,6 +115,7 @@ const STRIPE_REFERENCE_PREFIX = "stripe:";
  *
  *   1. paymentMethod must be "stripe"
  *   2. paymentReference must start with "stripe:" and contain a session id
+ *   2b. no earlier Stripe refund may still be pending
  *   3. row must not already be fully refunded
  *   4. amount > 0 and integer cents
  *   5. amount ≤ remaining refundable
@@ -137,6 +147,12 @@ export function validateStripeRefundRequest(
   const stripeSessionId = ref.slice(STRIPE_REFERENCE_PREFIX.length).trim();
   if (!stripeSessionId) {
     return fail("MISSING_STRIPE_REFERENCE");
+  }
+
+  // 2b) An unconfirmed refund is invisible to the remaining-amount check
+  //     below, so issuing another now could refund the same money twice.
+  if (record.refundStatus === "pending") {
+    return fail("REFUND_PENDING");
   }
 
   // 3) Paid amount is required to compute the refundable cap.
@@ -188,4 +204,84 @@ export function validateStripeRefundRequest(
 
 function fail(error: RefundValidationError): RefundValidationFail {
   return { ok: false, error, message: REFUND_ERROR_MESSAGES[error] };
+}
+
+// ── Outcome of a Stripe refund ──────────────────────────────
+
+export type StripeRefundState = "succeeded" | "pending" | "failed";
+
+/**
+ * Narrow Stripe's refund.status to BPM's enum. Only `succeeded` means the
+ * money has moved. `failed` / `canceled` mean it never will. Everything
+ * else (`pending`, `requires_action`, missing, unknown) is unresolved and
+ * maps to `pending`, so it is neither counted as returned nor treated as
+ * safely failed (which would allow a second refund of the same money).
+ */
+export function mapStripeRefundStatus(status: string | null | undefined): StripeRefundState {
+  if (status === "succeeded") return "succeeded";
+  if (status === "failed" || status === "canceled") return "failed";
+  return "pending";
+}
+
+/** What to write to the purchase row after Stripe reports a refund state. */
+export type StripeRefundPersistencePlan =
+  | {
+      /** Money confirmed returned. */
+      outcome: "confirmed";
+      refundedAmountCents: number;
+      refundStatus: "succeeded";
+      fullRefund: boolean;
+    }
+  | {
+      /** Stripe accepted the request but has not moved the money yet. */
+      outcome: "pending";
+      refundStatus: "pending";
+    }
+  | {
+      /**
+       * Nothing was returned. `refundStatus` is what the row should now
+       * say: a row with an earlier confirmed refund keeps "succeeded";
+       * `writeRow` is false then, because the row is already correct.
+       */
+      outcome: "failed";
+      refundStatus: StripeRefundState;
+      writeRow: boolean;
+    };
+
+/**
+ * Single rule for how a Stripe refund state changes the stored refund.
+ *
+ * `refunded_amount_cents` only ever holds money Stripe has confirmed as
+ * returned, so receipts and Finance can net it off without checking the
+ * attempt's status. A pending or failed attempt never adds to it, never
+ * stamps `refunded_at` and never flips the row to "refunded".
+ */
+export function planStripeRefundPersistence(input: {
+  stripeStatus: StripeRefundState;
+  previousConfirmedRefundedCents: number;
+  refundAmountCents: number;
+  paidAmountCents: number;
+}): StripeRefundPersistencePlan {
+  const previous = Math.max(0, Math.floor(input.previousConfirmedRefundedCents || 0));
+  switch (input.stripeStatus) {
+    case "succeeded": {
+      const refunded = previous + Math.max(0, Math.floor(input.refundAmountCents));
+      return {
+        outcome: "confirmed",
+        refundedAmountCents: refunded,
+        refundStatus: "succeeded",
+        fullRefund: refunded >= input.paidAmountCents,
+      };
+    }
+    case "pending":
+      return { outcome: "pending", refundStatus: "pending" };
+    case "failed":
+      return previous > 0
+        ? { outcome: "failed", refundStatus: "succeeded", writeRow: false }
+        : { outcome: "failed", refundStatus: "failed", writeRow: true };
+    default: {
+      const unreachable: never = input.stripeStatus;
+      throw new Error(`Unhandled Stripe refund state: ${String(unreachable)}`);
+    }
+  }
 }

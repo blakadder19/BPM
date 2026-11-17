@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  mapStripeRefundStatus,
+  planStripeRefundPersistence,
   validateStripeRefundRequest,
   REFUND_ERROR_MESSAGES,
   type RefundableRecord,
@@ -216,6 +218,84 @@ describe("validateStripeRefundRequest", () => {
       const r = validateStripeRefundRequest(record(), { amountCents: 1234.7, reason: "x" });
       expect(r.ok).toBe(true);
       if (r.ok) expect(r.amountCents).toBe(1234);
+    });
+  });
+
+  describe("pending refund gate", () => {
+    it("blocks a new refund while an earlier Stripe refund is pending", () => {
+      const r = validateStripeRefundRequest(record({ refundStatus: "pending" }), { amountCents: 1000, reason: "x" });
+      expect(r.ok).toBe(false);
+      if (!r.ok) {
+        expect(r.error).toBe("REFUND_PENDING");
+        expect(r.message).toBe(REFUND_ERROR_MESSAGES.REFUND_PENDING);
+      }
+    });
+
+    it.each(["succeeded", "failed", null] as const)("allows a refund after a %s attempt", (refundStatus) => {
+      const r = validateStripeRefundRequest(record({ refundStatus }), { amountCents: 1000, reason: "x" });
+      expect(r.ok).toBe(true);
+    });
+  });
+});
+
+describe("mapStripeRefundStatus", () => {
+  it.each([
+    ["succeeded", "succeeded"],
+    ["failed", "failed"],
+    ["canceled", "failed"],
+    ["pending", "pending"],
+    ["requires_action", "pending"],
+    [null, "pending"],
+    [undefined, "pending"],
+    ["something_new", "pending"],
+  ] as const)("%s → %s", (input, expected) => {
+    expect(mapStripeRefundStatus(input)).toBe(expected);
+  });
+});
+
+describe("planStripeRefundPersistence", () => {
+  const base = { previousConfirmedRefundedCents: 0, refundAmountCents: 4000, paidAmountCents: 10_000 };
+
+  it("succeeded: adds to the confirmed amount", () => {
+    expect(planStripeRefundPersistence({ ...base, stripeStatus: "succeeded" })).toEqual({
+      outcome: "confirmed",
+      refundedAmountCents: 4000,
+      refundStatus: "succeeded",
+      fullRefund: false,
+    });
+  });
+
+  it("succeeded: cumulative partial refunds reach a full refund", () => {
+    const first = planStripeRefundPersistence({ ...base, stripeStatus: "succeeded" });
+    if (first.outcome !== "confirmed") throw new Error("expected confirmed");
+    const second = planStripeRefundPersistence({
+      stripeStatus: "succeeded",
+      previousConfirmedRefundedCents: first.refundedAmountCents,
+      refundAmountCents: 6000,
+      paidAmountCents: 10_000,
+    });
+    expect(second).toEqual({ outcome: "confirmed", refundedAmountCents: 10_000, refundStatus: "succeeded", fullRefund: true });
+  });
+
+  it("pending: records the attempt without counting any money", () => {
+    const plan = planStripeRefundPersistence({ ...base, previousConfirmedRefundedCents: 2000, stripeStatus: "pending" });
+    expect(plan).toEqual({ outcome: "pending", refundStatus: "pending" });
+    expect("refundedAmountCents" in plan).toBe(false);
+  });
+
+  it("failed with no prior refund: marks the attempt failed, no money", () => {
+    expect(planStripeRefundPersistence({ ...base, stripeStatus: "failed" })).toEqual({
+      outcome: "failed",
+      refundStatus: "failed",
+      writeRow: true,
+    });
+  });
+
+  it("failed after an earlier confirmed refund: leaves the row as it is", () => {
+    expect(planStripeRefundPersistence({ ...base, previousConfirmedRefundedCents: 2000, stripeStatus: "failed" })).toEqual({
+      outcome: "failed",
+      refundStatus: "succeeded",
+      writeRow: false,
     });
   });
 });

@@ -38,6 +38,7 @@ import {
   attachClaimRelations,
 } from "@/lib/services/pricing-service";
 import { studentHasActiveMembership } from "@/lib/domain/active-membership";
+import { resolvePayExistingChargeCents } from "@/lib/domain/pay-existing";
 
 const MEMBERS_ONLY_BLOCKED_MESSAGE = "This ticket is only available to active members.";
 const MEMBERS_ONLY_GUEST_MESSAGE = "This ticket is only available to active members. Please log in with your member account to purchase.";
@@ -247,14 +248,14 @@ export async function payPendingSubscriptionAction(
   const product = await getProductRepo().getById(sub.productId);
   if (!product) return { success: false, error: "Product not found." };
 
-  const appUrl = await resolveAppUrl();
+  // Charge exactly the amount frozen on the row at creation (incl. any
+  // discount). A row without one is refused outright — falling back to
+  // the live product price would bill a different amount than was agreed.
+  const charge = resolvePayExistingChargeCents(sub);
+  if (!charge.ok) return { success: false, error: charge.error };
+  const chargeCents = charge.chargeCents;
 
-  // Phase 4 hardening: the subscription row already has the correct
-  // price-at-purchase frozen at creation time (incl. any discount that was
-  // applied via priceProductForStudent). We MUST charge exactly that
-  // amount, NOT the live product.priceCents — otherwise discounted pending
-  // subs get billed at full price.
-  const chargeCents = sub.priceCentsAtPurchase ?? product.priceCents;
+  const appUrl = await resolveAppUrl();
 
   try {
     const stripe = getStripe();

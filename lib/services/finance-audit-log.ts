@@ -21,7 +21,8 @@ export type AuditAction =
   | "cancelled"
   | "renewed"
   | "status_changed"
-  | "manual_edit";
+  | "manual_edit"
+  | "receipt_sent";
 
 export interface FinanceAuditEntry {
   id: string;

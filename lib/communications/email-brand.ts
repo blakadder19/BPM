@@ -41,6 +41,19 @@ export const B = {
   SKY_BORDER: "#0284c7",
 };
 
+export const DOWNLOAD_RECEIPT_LABEL = "Download payment receipt";
+export const VIEW_PAYMENTS_LABEL = "View payments & receipts";
+
+/** Escape text (customer names, titles, reasons) before it goes into email HTML. */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // ── Layout primitives ─────────────────────────────────────────
 
 export function bpmEmailDocument(innerHtml: string): string {
@@ -114,7 +127,7 @@ export function bpmCoverImage(imageUrl: string, eventTitle: string): string {
     <tr><td align="center">
       <table role="presentation" cellpadding="0" cellspacing="0" style="border-radius:12px;overflow:hidden;border:1px solid ${B.ZINC_200};">
         <tr><td style="line-height:0;font-size:0;">
-          <img src="${imageUrl}" alt="${eventTitle}" width="360" style="display:block;width:100%;max-width:360px;height:auto;border:0;" />
+          <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(eventTitle)}" width="360" style="display:block;width:100%;max-width:360px;height:auto;border:0;" />
         </td></tr>
       </table>
     </td></tr>
@@ -126,8 +139,8 @@ export function bpmCoverImage(imageUrl: string, eventTitle: string): string {
 export function bpmBodyOpen(recipientName: string, heading: string): string {
   return `
   <tr><td style="padding:36px 32px 0;">
-    <p style="margin:0 0 8px;color:${B.ZINC_500};font-size:14px;line-height:1.5;">Hi ${recipientName},</p>
-    <h1 style="margin:0 0 16px;color:${B.DARK};font-size:22px;font-weight:700;line-height:1.3;">${heading}</h1>
+    <p style="margin:0 0 8px;color:${B.ZINC_500};font-size:14px;line-height:1.5;">Hi ${escapeHtml(recipientName)},</p>
+    <h1 style="margin:0 0 16px;color:${B.DARK};font-size:22px;font-weight:700;line-height:1.3;">${escapeHtml(heading)}</h1>
     <table role="presentation" width="60" cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
       <tr><td style="height:3px;background:${B.BPM_500};font-size:0;line-height:0;border-radius:2px;">&nbsp;</td></tr>
     </table>
@@ -248,6 +261,13 @@ export function bpmCtaButton(url: string, label: string): string {
       <!--<![endif]-->
     </td></tr>
   </table>`;
+}
+
+/** Low-emphasis link under the main call to action. */
+export function bpmTextLink(url: string, label: string): string {
+  return `<p style="margin:4px 0 0;text-align:center;font-size:13px;line-height:1.6;">
+    <a href="${escapeHtml(url)}" style="color:${B.BPM_600};text-decoration:underline;">${escapeHtml(label)}</a>
+  </p>`;
 }
 
 export function bpmQrBlock(token: string): string {

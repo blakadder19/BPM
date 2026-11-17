@@ -26,6 +26,7 @@ export default async function FinancePage() {
       "payments:refund",
     ]),
     canDangerZone: hasPermission(access, "finance:danger_zone"),
+    canViewReceipts: hasPermission(access, "payments:send_receipt"),
   };
 
   return (

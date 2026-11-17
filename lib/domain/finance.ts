@@ -6,6 +6,7 @@
  */
 
 import { allocateRefundedVat } from "@/lib/domain/vat";
+import { evaluateReceiptEligibility } from "@/lib/domain/receipts";
 import type { MockSubscription, MockEventPurchase } from "@/lib/mock-data";
 import type { StoredPenalty } from "@/lib/services/penalty-service";
 
@@ -49,6 +50,8 @@ export interface FinanceTransaction {
    */
   relatedEntityId?: string | null;
   relatedEventId?: string | null;
+  /** The underlying purchase has a Payment Receipt (see `evaluateReceiptEligibility`). */
+  hasReceipt?: boolean;
   /**
    * True when the underlying record carries an explicit super-admin test
    * marker ([test], #test or TEST:) in any of its free-text fields. Used
@@ -246,6 +249,11 @@ export function buildSubscriptionTransactions(
       appliedDiscountSummary: summarizeAppliedDiscount(sub.appliedDiscount),
       relatedEntityId: sub.id,
       relatedEventId: null,
+      hasReceipt: evaluateReceiptEligibility({
+        kind: "subscription",
+        row: sub,
+        customer: { name: student?.name ?? null, email: student?.email ?? null },
+      }).eligible,
       isTest: carriesTestMarker(sub.paymentNotes, sub.notes, sub.paymentReference, sub.refundReason),
       refundedAmountCents: sub.refundedAmountCents ?? 0,
       stripeRefundId: sub.stripeRefundId ?? null,
@@ -314,6 +322,11 @@ export function buildEventPurchaseTransactions(
       refundReason: p.refundReason ?? null,
       relatedEntityId: p.id,
       relatedEventId: p.eventId,
+      hasReceipt: evaluateReceiptEligibility({
+        kind: "event_purchase",
+        row: p,
+        customer: student ? { name: student.name, email: student.email } : null,
+      }).eligible,
       isTest: carriesTestMarker(p.notes, p.paymentReference, p.refundReason),
       refundedAmountCents: p.refundedAmountCents ?? 0,
       stripeRefundId: p.stripeRefundId ?? null,

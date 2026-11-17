@@ -30,3 +30,23 @@ export async function getAcademyId(): Promise<string> {
   cachedAcademyId = (data as { id: string }).id;
   return cachedAcademyId;
 }
+
+let cachedAcademyName: string | null = null;
+
+/** The academy's trading name (`academies.name`); null if it cannot be read. */
+export async function getAcademyName(): Promise<string | null> {
+  if (cachedAcademyName) return cachedAcademyName;
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .from("academies")
+    .select("name")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const name = (data as { name: string | null } | null)?.name?.trim();
+  if (error || !name) return null;
+  cachedAcademyName = name;
+  return cachedAcademyName;
+}

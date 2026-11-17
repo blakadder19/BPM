@@ -6,9 +6,10 @@ import type {
   SessionPatch,
   CreateEventProductData,
   EventProductPatch,
-  CreatePurchaseData,
+  NewEventPurchaseData,
 } from "@/lib/repositories/interfaces/special-event-repository";
 import type { EventPaymentStatus } from "@/types/domain";
+import { freezeEventTitle } from "@/lib/domain/event-title-snapshot";
 
 type Result<T = undefined> = { success: true; data?: T } | { success: false; error: string };
 
@@ -122,9 +123,16 @@ export async function deleteEventProduct(id: string): Promise<Result> {
 export async function getPurchasesByEvent(eventId: string) { return getSpecialEventRepo().getPurchasesByEvent(eventId); }
 export async function getPurchasesByStudent(studentId: string) { return getSpecialEventRepo().getPurchasesByStudent(studentId); }
 
-export async function createPurchase(data: CreatePurchaseData): Promise<Result<string>> {
+/**
+ * The only way event purchases are created. Freezes the event title from
+ * the event record at insert time; callers cannot supply their own.
+ */
+export async function createPurchase(data: NewEventPurchaseData): Promise<Result<string>> {
   try {
-    const purchase = await getSpecialEventRepo().createPurchase(data);
+    const repo = getSpecialEventRepo();
+    const event = await repo.getEventById(data.eventId);
+    if (!event) return { success: false, error: "Event not found" };
+    const purchase = await repo.createPurchase({ ...data, eventTitleSnapshot: freezeEventTitle(event.title) });
     return { success: true, data: purchase.id };
   } catch (e) { return { success: false, error: e instanceof Error ? e.message : "Unknown error" }; }
 }
@@ -143,9 +151,9 @@ export async function updatePurchasePayment(
 export async function refundPurchase(
   id: string,
   patch: {
-    refundedAt: string;
-    refundedBy: string;
-    refundReason: string | null;
+    refundedAt?: string;
+    refundedBy?: string;
+    refundReason?: string | null;
     /** True for full refunds (flips paymentStatus to "refunded"). Default true preserves legacy behaviour. */
     fullRefund?: boolean;
     stripeRefundId?: string | null;

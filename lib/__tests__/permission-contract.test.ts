@@ -140,6 +140,7 @@ const ROUTE_GUARDS: Record<string, Permission | Permission[] | "super_admin" | "
   "/bookings": "bookings:view",
   "/events": "events:view",
   "/catalog": "student",
+  "/payments": "student",
   "/attendance": "attendance:view",
   "/students": ["students:view", "students:view_limited"],
   "/terms": "super_admin",

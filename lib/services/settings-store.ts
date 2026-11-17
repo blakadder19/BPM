@@ -34,6 +34,11 @@ import {
 } from "@/config/business-rules";
 import { DEFAULT_BEGINNER_LEVEL_NAMES } from "@/config/class-levels";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import {
+  EMPTY_RECEIPT_BUSINESS_SETTINGS,
+  normalizeReceiptBusinessSettings,
+  type ReceiptBusinessSettings,
+} from "@/lib/domain/receipt-settings";
 import type { ProductType } from "@/types/domain";
 
 export interface AppSettings {
@@ -133,6 +138,14 @@ export interface AppSettings {
    */
   applyVatToManualPayments: boolean;
 
+  // Payment Receipts (Phase 23)
+  /**
+   * Business identity printed on Payment Receipts. Every field optional;
+   * unset fields are simply not printed. Read through
+   * {@link getReceiptBusinessSettings}, which re-normalises the stored value.
+   */
+  receiptBusiness: ReceiptBusinessSettings;
+
   // Admin alert preferences
   disabledAlertIds: string[];
 
@@ -183,6 +196,8 @@ function defaults(): AppSettings {
     vatPriceMode: VAT_PRICE_MODE_DEFAULT,
     applyVatToOnlinePayments: VAT_APPLY_TO_ONLINE_DEFAULT,
     applyVatToManualPayments: VAT_APPLY_TO_MANUAL_DEFAULT,
+
+    receiptBusiness: { ...EMPTY_RECEIPT_BUSINESS_SETTINGS },
 
     disabledAlertIds: [],
 
@@ -312,6 +327,10 @@ export function getSettings(): AppSettings {
   return readFromDisk();
 }
 
+export function getReceiptBusinessSettings(): ReceiptBusinessSettings {
+  return normalizeReceiptBusinessSettings(getSettings().receiptBusiness);
+}
+
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   const current = getSettings();
   const updated = { ...current, ...patch };
@@ -330,6 +349,55 @@ export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSe
   }
 
   return { ...updated };
+}
+
+/**
+ * Replace only `receiptBusiness`. Unlike `updateSettings`, the rest of
+ * the blob is re-read from the database first (this instance's cache may
+ * be stale) and any read or write failure is reported, so a save can
+ * never write defaults or an old copy over the other settings.
+ */
+export async function updateReceiptBusinessSettings(
+  next: ReceiptBusinessSettings,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const receiptBusiness = normalizeReceiptBusinessSettings(next);
+  if (!hasSupabaseConfig()) {
+    writeToDisk({ ...readFromDisk(), receiptBusiness });
+    return { ok: true };
+  }
+
+  const client = getSupabaseClient();
+  if (!client) return { ok: false, error: "Settings storage is not configured." };
+  const { data, error } = await client
+    .from("business_rules")
+    .select("value, academy_id")
+    .eq("key", SETTINGS_KEY)
+    .maybeSingle();
+  if (error) return { ok: false, error: "Could not load the current settings. Nothing was saved." };
+
+  let academyId: string | undefined = data?.academy_id ?? g.__bpm_settingsAcademyId;
+  if (!academyId) {
+    const { data: academy, error: academyError } = await client.from("academies").select("id").limit(1).maybeSingle();
+    if (academyError || !academy) return { ok: false, error: "Could not resolve the academy. Nothing was saved." };
+    academyId = academy.id as string;
+  }
+
+  const fresh: AppSettings = { ...defaults(), ...((data?.value as Partial<AppSettings> | null) ?? {}), receiptBusiness };
+  const { error: writeError } = await client.from("business_rules").upsert(
+    {
+      academy_id: academyId,
+      key: SETTINGS_KEY,
+      value: fresh as unknown as Record<string, unknown>,
+      description: "Full app settings blob (managed by Settings page)",
+    },
+    { onConflict: "academy_id,key" },
+  );
+  if (writeError) return { ok: false, error: "The settings could not be saved." };
+
+  g.__bpm_settingsAcademyId = academyId;
+  g.__bpm_settings = fresh;
+  g.__bpm_settingsHydrated = true;
+  return { ok: true };
 }
 
 // ── Hydration (called from hydrate-operational.ts on cold start) ──

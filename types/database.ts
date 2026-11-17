@@ -353,6 +353,9 @@ export interface Database {
           refunded_by: string | null;
           refund_reason: string | null;
           product_snapshot: Record<string, unknown> | null;
+          // Migration 00082. Absent until it is applied, hence optional.
+          product_name_snapshot?: string | null;
+          product_type_snapshot?: string | null;
           original_price_cents: number | null;
           discount_amount_cents: number;
           applied_discount: Record<string, unknown> | null;

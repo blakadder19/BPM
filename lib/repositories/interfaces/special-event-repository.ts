@@ -151,6 +151,12 @@ export interface CreatePurchaseData {
   productNameSnapshot?: string | null;
   productTypeSnapshot?: string | null;
   /**
+   * Event title frozen at creation (00082). Required: set by
+   * `special-event-service.createPurchase` from the event record, never by
+   * callers — see {@link NewEventPurchaseData}.
+   */
+  eventTitleSnapshot: string;
+  /**
    * Phase 2 — frozen discount snapshot (same shape as
    * `student_subscriptions.applied_discount`). Persists into the
    * `applied_discount` jsonb column added by migration 00066. Pass
@@ -170,6 +176,9 @@ export interface CreatePurchaseData {
   vatPriceMode?: "exclusive" | "inclusive" | null;
   totalIncVatCents?: number | null;
 }
+
+/** What purchase creation paths supply; the service adds the frozen event title. */
+export type NewEventPurchaseData = Omit<CreatePurchaseData, "eventTitleSnapshot">;
 
 // ── Repository Interface ─────────────────────────────────────
 
@@ -217,9 +226,13 @@ export interface ISpecialEventRepository {
   refundPurchase(
     id: string,
     patch: {
-      refundedAt: string;
-      refundedBy: string;
-      refundReason: string | null;
+      /**
+       * When money was confirmed returned. Omitted (left untouched) while
+       * a Stripe refund is still pending or after it failed.
+       */
+      refundedAt?: string;
+      refundedBy?: string;
+      refundReason?: string | null;
       /**
        * When true, flips payment_status to "refunded". Partial refunds
        * leave the status untouched and surface the partial state via

@@ -56,6 +56,7 @@ import {
   ConfirmDeleteDialog,
 } from "./event-dialogs";
 import { EventAnnouncementDialog } from "./event-announcement-dialog";
+import { PurchaseReceiptActions } from "./purchase-receipt-actions";
 import { markEventPurchasePaidAction, refundEventPurchaseAction } from "@/lib/actions/event-purchase";
 import { resendEventPurchaseEmailAction, sendEventReminderAction } from "@/lib/actions/event-emails";
 import {
@@ -93,6 +94,7 @@ export interface AdminEventDetailPermissions {
   canMarkPaid: boolean;
   canRefund: boolean;
   canScan: boolean;
+  canSendReceipt: boolean;
 }
 
 interface Props {
@@ -102,6 +104,10 @@ interface Props {
   purchases: MockEventPurchase[];
   studentInfoMap: Record<string, StudentInfo>;
   permissions: AdminEventDetailPermissions;
+  /** Purchases with a Payment Receipt. Empty unless `canSendReceipt`. */
+  receiptEligiblePurchaseIds: string[];
+  /** Guest purchases whose receipt link is currently active. */
+  activeReceiptLinkPurchaseIds: string[];
 }
 
 import { formatEventDateRange, formatEventDT, formatSessionTimeRange } from "@/lib/utils";
@@ -158,8 +164,12 @@ export function AdminEventDetail({
   purchases,
   studentInfoMap,
   permissions,
+  receiptEligiblePurchaseIds,
+  activeReceiptLinkPurchaseIds,
 }: Props) {
   const router = useRouter();
+  const receiptEligible = new Set(receiptEligiblePurchaseIds);
+  const activeReceiptLinks = new Set(activeReceiptLinkPurchaseIds);
   const isReadOnly = !permissions.canEdit && !permissions.canDelete && !permissions.canMarkPaid;
 
   const [showEditEvent, setShowEditEvent] = useState(false);
@@ -861,6 +871,15 @@ export function AdminEventDetail({
                         >
                           {fb ? (fb.ok ? "Sent ✓" : `Failed`) : "Resend email"}
                         </button>
+                      )}
+                      {permissions.canSendReceipt && receiptEligible.has(pur.id) && (
+                        <PurchaseReceiptActions
+                          purchaseId={pur.id}
+                          buyerName={buyerName}
+                          guestEmail={isGuest ? (pur.guestEmail ?? null) : null}
+                          isGuest={isGuest}
+                          hasActiveLink={activeReceiptLinks.has(pur.id)}
+                        />
                       )}
                     </div>
                   </Td>

@@ -62,6 +62,7 @@ export interface FinanceClientPermissions {
   canMarkPaid: boolean;
   canRefund: boolean;
   canDangerZone: boolean;
+  canViewReceipts: boolean;
 }
 
 interface FinanceClientProps {
@@ -526,6 +527,7 @@ export function FinanceClient({ transactions, metrics, auditLog = [], superAdmin
                   isToggling={togglingId === tx.id}
                   isMarkingPaid={markingPaidId === tx.id}
                   wasJustMarkedPaid={wasMarkedPaidLocally}
+                  showReceiptLink={permissions.canViewReceipts}
                   onIssueStripeRefund={
                     permissions.canRefund && tx.relatedEntityId && (tx.source === "subscription" || tx.source === "event_purchase")
                       ? () => {
@@ -693,6 +695,7 @@ function TxRow({
   isToggling = false,
   isMarkingPaid = false,
   wasJustMarkedPaid = false,
+  showReceiptLink = false,
   onMarkPaid,
   onToggleTest,
   onIssueStripeRefund,
@@ -703,6 +706,7 @@ function TxRow({
   isToggling?: boolean;
   isMarkingPaid?: boolean;
   wasJustMarkedPaid?: boolean;
+  showReceiptLink?: boolean;
   onMarkPaid?: () => void;
   onToggleTest?: () => void;
   /** When set, the "Issue Stripe refund" button is rendered on Stripe-paid rows. */
@@ -741,6 +745,11 @@ function TxRow({
     && (tx.status === "paid")
     && remainingRefundable > 0;
   const isPartiallyRefunded = isStripePaid && refundedSoFar > 0 && tx.status !== "refunded";
+
+  const receiptKind = tx.source === "subscription" ? "subscription" : tx.source === "event_purchase" ? "event" : null;
+  const receiptHref = showReceiptLink && tx.hasReceipt && receiptKind && tx.relatedEntityId
+    ? `/api/receipts/staff/${receiptKind}/${tx.relatedEntityId}`
+    : null;
 
   // Discount indicator (Bug 3): show only when the frozen subscription
   // snapshot recorded a non-zero discount.
@@ -841,6 +850,18 @@ function TxRow({
               Issue Stripe refund
             </button>
           )}
+          {receiptHref && (
+            <a
+              href={receiptHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50"
+              title="Open the Payment Receipt PDF"
+            >
+              <FileText className="h-3 w-3" />
+              Receipt
+            </a>
+          )}
         </div>
       </Td>
       <Td className="font-medium tabular-nums">
@@ -911,6 +932,7 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   renewed: "Renewed",
   status_changed: "Status changed",
   manual_edit: "Manual edit",
+  receipt_sent: "Receipt sent",
 };
 
 const AUDIT_ACTION_COLORS: Record<string, string> = {

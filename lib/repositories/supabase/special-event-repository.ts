@@ -24,8 +24,20 @@ import type {
   EventProductPatch,
   CreatePurchaseData,
 } from "../interfaces/special-event-repository";
+import { freezeEventTitle } from "@/lib/domain/event-title-snapshot";
 
 // ── Helpers ───────────────────────────────────────────────────
+
+/**
+ * Only a rejection naming the 00082 column justifies retrying without it,
+ * so a deploy that lands before 00082 cannot fail a paid Stripe
+ * fulfilment. 00082's backfill only fills NULLs, so rows written in that
+ * window are frozen when it runs.
+ */
+export function isMissingEventTitleColumnError(error: { code?: string; message?: string }): boolean {
+  if (!error.message?.includes("event_title_snapshot")) return false;
+  return error.code === "PGRST204" || error.code === "42703" || !error.code;
+}
 
 function tallyByEventId(eventIds: string[], rows: { event_id: string }[]): Record<string, number> {
   const counts: Record<string, number> = Object.fromEntries(eventIds.map((id) => [id, 0]));
@@ -133,6 +145,7 @@ function toPurchase(r: any): MockEventPurchase {
     currency: r.currency ?? null,
     productNameSnapshot: r.product_name_snapshot ?? null,
     productTypeSnapshot: r.product_type_snapshot ?? null,
+    eventTitleSnapshot: r.event_title_snapshot ?? null,
     appliedDiscount: r.applied_discount ?? null,
     // Phase 15 VAT — `?? null` (never `?? 0`) so a legacy row stays
     // distinguishable from one where VAT came out at zero.
@@ -408,38 +421,46 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
 
   async createPurchase(input: CreatePurchaseData) {
     const sb = createAdminClient();
-    const { data, error } = await sb
-      .from("event_purchases")
-      .insert({
-        student_id: input.studentId,
-        event_product_id: input.eventProductId,
-        event_id: input.eventId,
-        guest_name: input.guestName ?? null,
-        guest_email: input.guestEmail ?? null,
-        guest_phone: input.guestPhone ?? null,
-        qr_token: input.qrToken ?? null,
-        payment_method: input.paymentMethod,
-        payment_status: input.paymentStatus ?? "pending",
-        payment_reference: input.paymentReference ?? null,
-        paid_at: input.paidAt ?? null,
-        notes: input.notes ?? null,
-        unit_price_cents_at_purchase: input.unitPriceCentsAtPurchase ?? null,
-        original_amount_cents: input.originalAmountCents ?? null,
-        discount_amount_cents: input.discountAmountCents ?? 0,
-        paid_amount_cents: input.paidAmountCents ?? null,
-        currency: input.currency ?? "eur",
-        product_name_snapshot: input.productNameSnapshot ?? null,
-        product_type_snapshot: input.productTypeSnapshot ?? null,
-        applied_discount: input.appliedDiscount ?? null,
-        subtotal_ex_vat_cents: input.subtotalExVatCents ?? null,
-        vat_amount_cents: input.vatAmountCents ?? null,
-        vat_rate_percent: input.vatRatePercent ?? null,
-        vat_price_mode: input.vatPriceMode ?? null,
-        total_inc_vat_cents: input.totalIncVatCents ?? null,
-      } as never)
-      .select()
-      .single();
+    const eventTitleSnapshot = freezeEventTitle(input.eventTitleSnapshot);
+    const baseRow = {
+      student_id: input.studentId,
+      event_product_id: input.eventProductId,
+      event_id: input.eventId,
+      guest_name: input.guestName ?? null,
+      guest_email: input.guestEmail ?? null,
+      guest_phone: input.guestPhone ?? null,
+      qr_token: input.qrToken ?? null,
+      payment_method: input.paymentMethod,
+      payment_status: input.paymentStatus ?? "pending",
+      payment_reference: input.paymentReference ?? null,
+      paid_at: input.paidAt ?? null,
+      notes: input.notes ?? null,
+      unit_price_cents_at_purchase: input.unitPriceCentsAtPurchase ?? null,
+      original_amount_cents: input.originalAmountCents ?? null,
+      discount_amount_cents: input.discountAmountCents ?? 0,
+      paid_amount_cents: input.paidAmountCents ?? null,
+      currency: input.currency ?? "eur",
+      product_name_snapshot: input.productNameSnapshot ?? null,
+      product_type_snapshot: input.productTypeSnapshot ?? null,
+      applied_discount: input.appliedDiscount ?? null,
+      subtotal_ex_vat_cents: input.subtotalExVatCents ?? null,
+      vat_amount_cents: input.vatAmountCents ?? null,
+      vat_rate_percent: input.vatRatePercent ?? null,
+      vat_price_mode: input.vatPriceMode ?? null,
+      total_inc_vat_cents: input.totalIncVatCents ?? null,
+    };
+    const insert = (row: Record<string, unknown>) =>
+      sb.from("event_purchases").insert(row as never).select().single();
+
+    let { data, error } = await insert({ ...baseRow, event_title_snapshot: eventTitleSnapshot });
+    if (error && isMissingEventTitleColumnError(error)) {
+      console.error(
+        "[special-event-repo] event_purchases has no event_title_snapshot column — migration 00082 is not applied. Row written without it; 00082's backfill will freeze it.",
+      );
+      ({ data, error } = await insert(baseRow));
+    }
     if (error) throw new Error(error.message);
+    if (!data) throw new Error("Event purchase insert returned no row.");
     return toPurchase(data);
   },
 
@@ -470,11 +491,10 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
 
   async refundPurchase(id, patch) {
     const sb = createAdminClient();
-    const fields: Record<string, unknown> = {
-      refunded_at: patch.refundedAt,
-      refunded_by: patch.refundedBy,
-      refund_reason: patch.refundReason,
-    };
+    const fields: Record<string, unknown> = {};
+    if (patch.refundedAt !== undefined) fields.refunded_at = patch.refundedAt;
+    if (patch.refundedBy !== undefined) fields.refunded_by = patch.refundedBy;
+    if (patch.refundReason !== undefined) fields.refund_reason = patch.refundReason;
     // Stripe-side refund metadata (new in 00072). Only persisted when the
     // caller actually issued a refund through Stripe; manual refund paths
     // leave these undefined so the columns stay null/0.

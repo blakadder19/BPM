@@ -14,7 +14,8 @@ import "server-only";
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { createPurchase, updatePurchasePayment } from "@/lib/services/special-event-service";
 import { sendEventPurchaseEmail, type EmailSendResult } from "@/lib/communications/event-emails";
-import { sendPaymentConfirmationEmail } from "@/lib/services/event-payment-email";
+import { sendPaymentConfirmationEmail, trackEmailSend } from "@/lib/services/event-payment-email";
+import { claimInitialGuestReceiptUrl } from "@/lib/services/guest-receipt-delivery";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
 import {
@@ -204,25 +205,32 @@ export async function fulfillGuestEventPurchase(
 
   console.info(`${tag} Purchase created successfully. Sending confirmation email...`);
 
+  // Only the call that created the purchase reaches this point (replays
+  // return above), so the confirmation and its receipt link go out once.
   let emailResult: EmailSendResult = { sent: false, reason: "Email send was not attempted" };
+  const purchaseId = result.data ?? null;
 
   try {
     if (product) {
+      const created = purchaseId ? await repo.getPurchaseById(purchaseId).catch(() => null) : null;
+      const receiptUrl = created ? await claimInitialGuestReceiptUrl(created.id) : null;
       emailResult = await sendEventPurchaseEmail({
         studentId: null,
         studentName: guestName ?? "Guest",
         directEmail: guestEmail,
-        eventTitle: event?.title ?? "Special Event",
+        eventTitle: created?.eventTitleSnapshot ?? event?.title ?? "Special Event",
         eventId,
-        productName: product.name,
-        productType: product.productType,
-        priceLabel: centsToEuros(frozen?.finalPriceCents ?? product.priceCents),
+        productName: created?.productNameSnapshot ?? product.name,
+        productType: created?.productTypeSnapshot ?? product.productType,
+        priceLabel: centsToEuros(created?.paidAmountCents ?? buildFinancialSnapshotFromFrozen(product, frozen, true).paidAmountCents),
         paymentStatus: "paid",
         inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
         qrToken,
         coverImageUrl: event?.coverImageUrl ?? undefined,
+        receiptUrl: receiptUrl ?? undefined,
       });
       console.info(`${tag} Email result: sent=${emailResult.sent}${!emailResult.sent ? ` reason="${emailResult.reason}"` : ""}`);
+      if (purchaseId) await trackEmailSend(purchaseId, "purchase_confirmation", emailResult);
     } else {
       emailResult = { sent: false, reason: `Could not resolve product ${eventProductId}` };
       console.warn(`${tag} ${emailResult.reason} — email skipped.`);
@@ -291,9 +299,7 @@ export async function fulfillEventPurchase(
   if (result.success) {
     try {
       if (product) {
-        const paidLabel = centsToEuros(
-          frozen?.finalPriceCents ?? product.priceCents,
-        );
+        const paidLabel = centsToEuros(buildFinancialSnapshotFromFrozen(product, frozen, true).paidAmountCents);
         sendEventPurchaseEmail({
           studentId,
           studentName: student?.fullName ?? "Student",

@@ -1,8 +1,11 @@
 import { getStaffAccess, hasPermission, requirePermission } from "@/lib/staff-permissions";
-import { getSettings } from "@/lib/services/settings-store";
+import { getReceiptBusinessSettings, getSettings, hydrateSettings } from "@/lib/services/settings-store";
 import { DANCE_STYLES } from "@/lib/mock-data";
 import { SettingsForm, type SupabaseStatus } from "@/components/settings/settings-form";
 import { StaffAccessCard } from "@/components/settings/staff-access-card";
+import { ReceiptBusinessCard } from "@/components/settings/receipt-business-card";
+import { isMemoryMode } from "@/lib/config/data-provider";
+import { getAcademyName } from "@/lib/supabase/academy";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 async function probeSupabaseStatus(): Promise<SupabaseStatus> {
@@ -46,6 +49,10 @@ export default async function SettingsPage() {
     canEdit: hasPermission(access, "settings:edit"),
   };
 
+  await hydrateSettings();
+  const receiptBusiness = getReceiptBusinessSettings();
+  const academyName = isMemoryMode() ? null : await getAcademyName().catch(() => null);
+
   return (
     <div className="space-y-6">
       <SettingsForm
@@ -54,6 +61,11 @@ export default async function SettingsPage() {
         supabaseStatus={supabaseStatus}
         isDev={isDev}
         permissions={permissions}
+      />
+      <ReceiptBusinessCard
+        initialSettings={receiptBusiness}
+        fallbackTradingName={academyName}
+        canEdit={permissions.canEdit}
       />
       {canSeeStaffAccessCard && <StaffAccessCard />}
     </div>
