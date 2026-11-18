@@ -1,6 +1,7 @@
 /**
- * GET /receipt/<token>: a valid token yields that one purchase's PDF with
- * private, no-referrer, noindex headers; every other case is the same 404.
+ * Guest receipts: the token is posted to /receipt/open (never in a URL).
+ * A valid token yields that one purchase's PDF with private, no-referrer,
+ * noindex headers; every other case is the same response.
  * Real handler, token service, memory token repository and PDF renderer.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +25,7 @@ vi.mock("@/lib/repositories", () => ({
   getSubscriptionRepo: () => ({}),
 }));
 
-import { handleGuestReceiptRequest } from "../guest-receipt-route";
+import { handleGuestReceiptPost, handleGuestReceiptRequest } from "../guest-receipt-route";
 import { issueGuestEventReceiptToken } from "@/lib/services/receipt-token-service";
 
 const GUEST_A = "8d7c6b5a-4e3f-4a1b-8c9d-0e1f2a3b4c5d";
@@ -81,7 +82,7 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
-describe("GET /receipt/[token]", () => {
+describe("guest receipt token resolution", () => {
   it("serves the token's own purchase as a private PDF", async () => {
     const res = await handleGuestReceiptRequest(await issue(GUEST_A));
     expect(res.status).toBe(200);
@@ -145,5 +146,47 @@ describe("GET /receipt/[token]", () => {
     const missing = await snapshot(await handleGuestReceiptRequest(generateReceiptToken().rawToken));
     expect(failed).toEqual(missing);
     expect(error.mock.calls.flat().map(String).join("\n")).not.toContain(token);
+  });
+});
+
+function post(body: string) {
+  return new Request("https://preview.example.test/receipt/open", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+}
+
+describe("POST /receipt/open", () => {
+  it("downloads the PDF for a token sent in the form body", async () => {
+    const token = await issue(GUEST_A);
+    const res = await handleGuestReceiptPost(post(new URLSearchParams({ token }).toString()));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(res.headers.get("content-disposition")).toMatch(/^attachment;/);
+    expect(res.headers.get("content-disposition")).toContain(formatReceiptReference("event_purchase", GUEST_A));
+    expect(res.headers.get("cache-control")).toBe("private, no-store, max-age=0");
+  });
+
+  it("every failure is the same redirect to the explanation page, never carrying the token", async () => {
+    const revoked = await issue(GUEST_A);
+    await issue(GUEST_A);
+    const bodies = [
+      new URLSearchParams({ token: generateReceiptToken().rawToken }).toString(),
+      new URLSearchParams({ token: revoked }).toString(),
+      new URLSearchParams({ token: GUEST_A }).toString(),
+      "token=",
+      "",
+      "other=1",
+      `token=${"a".repeat(2000)}`,
+    ];
+    const snaps = await Promise.all(bodies.map(async (b) => snapshot(await handleGuestReceiptPost(post(b)))));
+    for (const s of snaps) {
+      expect(s.status).toBe(303);
+      expect(s).toEqual(snaps[0]);
+    }
+    expect(snaps[0].headers.location).toBe("/receipt?unavailable=1");
+    expect(snaps[0].headers["cache-control"]).toContain("no-store");
+    expect(JSON.stringify(snaps)).not.toContain(revoked);
   });
 });

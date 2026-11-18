@@ -24,7 +24,7 @@ import { buildEmailContent } from "../email-templates";
 import { buildEmailData } from "@/lib/services/event-payment-email";
 import type { MockEventProduct, MockEventPurchase, MockSpecialEvent } from "@/lib/mock-data";
 
-const RECEIPT_URL = "https://preview.example.test/receipt/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcde";
+const RECEIPT_URL = "https://preview.example.test/receipt#AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcde";
 const HOSTILE = `<img src=x onerror="alert(1)">`;
 
 function guestEmail(over: Partial<EventPurchaseEmailData> = {}): EventPurchaseEmailData {
@@ -68,7 +68,7 @@ describe("guest event confirmation", () => {
     expect(lastHtml()).not.toContain("Download payment receipt");
     await sendEventPurchaseEmail(guestEmail({ paymentStatus: "pending" }));
     expect(lastHtml()).not.toContain("Download payment receipt");
-    expect(lastHtml()).not.toContain("/receipt/");
+    expect(lastHtml()).not.toContain("/receipt#");
   });
 
   it("escapes guest name, event title, product and inclusion text", async () => {
@@ -83,7 +83,7 @@ describe("guest event confirmation", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
     await sendEventPurchaseEmail(guestEmail());
     const logged = info.mock.calls.flat().map(String).join("\n");
-    expect(logged).not.toContain("/receipt/");
+    expect(logged).not.toContain("/receipt#");
     expect(logged).toContain("hasReceiptLink=true");
   });
 });
@@ -93,7 +93,7 @@ describe("logged-in student emails", () => {
     await sendEventPurchaseEmail(guestEmail({ studentId: "student-1", directEmail: undefined, receiptUrl: RECEIPT_URL }));
     expect(lastHtml()).toContain(`href="https://preview.example.test/payments"`);
     expect(lastHtml()).toContain("View payments &amp; receipts");
-    expect(lastHtml()).not.toContain("/receipt/");
+    expect(lastHtml()).not.toContain("/receipt#");
   });
 
   it("a pending student purchase has no receipts link", async () => {
@@ -110,7 +110,7 @@ describe("logged-in student emails", () => {
     });
     expect(html).toContain(`href="https://preview.example.test/payments"`);
     expect(html).not.toContain("<img src=x");
-    expect(html).not.toContain("/receipt/");
+    expect(html).not.toContain("/receipt#");
   });
 });
 

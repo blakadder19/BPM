@@ -70,7 +70,7 @@ describe("sendGuestReceiptAction", () => {
       performer: { userId: "staff-1" },
       metadata: { receiptTokenId: "tok-2", replacedPreviousLink: false },
     });
-    expect(JSON.stringify(entry)).not.toContain("/receipt/");
+    expect(JSON.stringify(entry)).not.toContain("/receipt#");
   });
 
   it("surfaces the delivery error and does not audit a send that did not happen", async () => {

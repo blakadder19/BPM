@@ -5,8 +5,8 @@ import { updateSession, authUnavailableResponse } from "@/lib/supabase/middlewar
 // page (which then offers a sign-in link that returns them here). The
 // page itself enforces authentication and email matching before it
 // grants anything — the token is not a bearer credential.
-// `/receipt/<token>` is public on purpose: it serves one guest Payment
-// Receipt and the route itself verifies the token (see
+// `/receipt` and `/receipt/open` are public on purpose: they serve one
+// guest Payment Receipt and the route itself verifies the token (see
 // lib/server/guest-receipt-route.ts). Matching is exact or by "/"
 // segment, so `/api/receipts/**` (student and staff downloads) still
 // requires a session.

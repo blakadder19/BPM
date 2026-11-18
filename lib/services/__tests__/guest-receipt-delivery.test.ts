@@ -103,7 +103,7 @@ function guestPurchase(id: string, over: Record<string, unknown> = {}) {
 }
 
 function tokenFromUrl(url: string): string {
-  const prefix = "https://preview.example.test/receipt/";
+  const prefix = "https://preview.example.test/receipt#";
   expect(url.startsWith(prefix)).toBe(true);
   return url.slice(prefix.length);
 }
@@ -135,7 +135,7 @@ function expectNoTokenLogged(...rawTokens: string[]) {
   for (const t of rawTokens) {
     expect(all).not.toContain(t);
   }
-  expect(all).not.toContain("/receipt/");
+  expect(all).not.toContain("/receipt#");
 }
 
 describe("claimInitialGuestReceiptUrl (automatic confirmation email)", () => {

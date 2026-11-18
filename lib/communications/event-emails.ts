@@ -46,7 +46,7 @@ export interface EventPurchaseEmailData {
   qrToken?: string;
   coverImageUrl?: string;
   /**
-   * Guest receipt link (`/receipt/<token>`). Only for a paid,
+   * Guest receipt link (`/receipt#<token>`). Only for a paid,
    * receipt-eligible guest purchase whose token was just issued; never
    * logged.
    */
@@ -240,7 +240,7 @@ export interface GuestReceiptEmailData {
   productName: string;
   /** Formatted from the frozen amount paid. */
   amountLabel: string;
-  /** `/receipt/<token>`; never logged. */
+  /** `/receipt#<token>`; never logged. */
   receiptUrl: string;
 }
 

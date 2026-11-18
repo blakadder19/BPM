@@ -31,6 +31,14 @@ export function receiptNotFoundResponse(): Response {
   });
 }
 
+/** Guest form posts: every failure lands on the same explanation page. */
+export function receiptUnavailableRedirect(): Response {
+  return new Response(null, {
+    status: 303,
+    headers: { ...PRIVATE_HEADERS, Location: "/receipt?unavailable=1" },
+  });
+}
+
 export function receiptUnauthenticatedResponse(): Response {
   return new Response("Sign in to download receipts", {
     status: 401,

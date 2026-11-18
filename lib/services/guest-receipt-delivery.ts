@@ -31,8 +31,12 @@ import {
 import { sendGuestReceiptEmail, type EmailSendResult } from "@/lib/communications/event-emails";
 import type { MockEventPurchase } from "@/lib/mock-data";
 
+/**
+ * The token goes in the fragment, which browsers never send to the server,
+ * so request logs only see `/receipt` (see guest-receipt-route.ts).
+ */
 export function guestReceiptUrl(rawToken: string): string {
-  return `${getAppUrl()}/receipt/${rawToken}`;
+  return `${getAppUrl()}/receipt#${rawToken}`;
 }
 
 /** Amount actually paid, from the frozen purchase fields only. */

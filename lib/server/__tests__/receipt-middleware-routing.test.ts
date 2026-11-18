@@ -1,5 +1,5 @@
 /**
- * Only `/receipt/<token>` is reachable without a session. Student and staff
+ * Only the guest receipt page and its POST are reachable without a session. Student and staff
  * receipt downloads under `/api/receipts/**` and look-alike paths still go
  * through the session check.
  */
@@ -38,8 +38,11 @@ afterAll(() => {
 });
 
 describe("middleware receipt routing", () => {
-  it("lets a signed-out visitor reach /receipt/<token> without an auth lookup", async () => {
-    const res = await middleware(request("/receipt/AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcde"));
+  it.each([
+    ["GET", "/receipt"],
+    ["POST", "/receipt/open"],
+  ])("lets a signed-out visitor %s %s without an auth lookup", async (method, path) => {
+    const res = await middleware(new NextRequest(new URL(path, "https://preview.example.test"), { method }));
     expect(res.status).toBe(200);
     expect(res.headers.get("location")).toBeNull();
     expect(res.headers.get("x-frame-options")).toBe("DENY");
