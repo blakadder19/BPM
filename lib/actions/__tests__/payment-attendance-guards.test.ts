@@ -127,7 +127,10 @@ vi.mock("@/lib/supabase/operational-persistence", () => ({
 }));
 vi.mock("@/lib/utils/is-real-user", () => ({ isRealUser: () => true }));
 vi.mock("@/lib/services/schedule-store", () => ({ getInstances: () => h.instances }));
-vi.mock("@/lib/services/settings-store", () => ({ getSettings: () => ({ refundCreditOnAbsent: false, attendanceClosureMinutes: 60, selfCheckInEnabled: true, selfCheckInOpensMinutesBefore: 30 }) }));
+vi.mock("@/lib/services/settings-store", () => {
+  const settings = () => ({ refundCreditOnAbsent: false, attendanceClosureMinutes: 60, selfCheckInEnabled: true, selfCheckInOpensMinutesBefore: 30 });
+  return { getSettings: settings, getLoadedSettings: settings };
+});
 vi.mock("@/lib/services/term-store", () => ({ getTerms: () => [] }));
 vi.mock("@/lib/services/dance-style-store", () => ({ getDanceStyles: () => [] }));
 vi.mock("@/lib/services/entitlement-consumption", () => ({ consumeEntitlementCredit: vi.fn() }));

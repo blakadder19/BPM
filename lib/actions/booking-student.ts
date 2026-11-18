@@ -6,7 +6,7 @@ import { getBookingService } from "@/lib/services/booking-store";
 import { getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { updateSubscription } from "@/lib/services/subscription-service";
 import { getPenaltyService } from "@/lib/services/penalty-store";
-import { getSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings } from "@/lib/services/settings-store";
 import { isClassStarted, minutesUntilStart } from "@/lib/domain/datetime";
 import {
   getCancellationContext,
@@ -109,7 +109,7 @@ export async function studentCancelBookingAction(
   let penaltyDescription: string | undefined;
 
   if (isLate && penaltiesApplyTo(cls.classType)) {
-    const settings = getSettings();
+    const settings = getLoadedSettings();
     if (settings.lateCancelPenaltiesEnabled) {
       const penaltySvc = getPenaltyService();
       const feeCents = penaltyFeeCents("late_cancel");

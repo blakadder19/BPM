@@ -31,7 +31,7 @@ let SETTINGS: Partial<AppSettings> = {};
 let HYDRATE: () => Promise<void> = async () => {};
 
 vi.mock("@/lib/services/settings-store", () => ({
-  getSettings: () => ({
+  getLoadedSettings: () => ({
     vatEnabled: false,
     vatRatePercent: 0,
     vatPriceMode: "exclusive",

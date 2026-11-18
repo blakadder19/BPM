@@ -332,7 +332,7 @@ function writeToDisk(settings: AppSettings): void {
  * Supabase mode: throws SettingsUnavailableError while a load is in flight
  * or after one failed, rather than serving defaults. Paths that read before
  * any load was attempted keep the legacy defaults fallback (logged once);
- * financial entry points await hydrateSettings() first so they never do.
+ * code that applies business rules uses getLoadedSettings() instead.
  */
 export function getSettings(): AppSettings {
   if (!hasSupabaseConfig()) return readFromDisk();
@@ -345,6 +345,21 @@ export function getSettings(): AppSettings {
     console.warn("[settings-store] getSettings() called before hydrateSettings(); using defaults");
   }
   return readFromDisk();
+}
+
+/**
+ * Settings for code that applies business rules (pricing/VAT, penalties,
+ * credits, check-in, booking and purchase eligibility).
+ *
+ * Supabase mode: throws SettingsUnavailableError unless settings were read
+ * from the database — it never serves defaults, even when no load has been
+ * attempted yet. Callers must await hydrateSettings() (directly or through
+ * ensureOperationalDataHydrated / ensurePageDataHydrated) first.
+ */
+export function getLoadedSettings(): AppSettings {
+  if (!hasSupabaseConfig()) return readFromDisk();
+  if (g.__bpm_settingsHydrated && g.__bpm_settings) return g.__bpm_settings;
+  throw new SettingsUnavailableError("Business settings are not loaded");
 }
 
 function mergeSettings(current: AppSettings, patch: Partial<AppSettings>): AppSettings {

@@ -22,7 +22,7 @@ import {
   EMPTY_VAT_SNAPSHOT,
 } from "@/lib/domain/vat";
 import { getTodayStr } from "@/lib/domain/datetime";
-import { getSettings, hydrateSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings, hydrateSettings } from "@/lib/services/settings-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { buildSnapshotFromProduct } from "@/lib/services/subscription-snapshot-service";
@@ -156,7 +156,7 @@ export async function validateAndPreparePurchase(
   let assignedTerm: typeof currentTerm = null;
 
   if (product.termBound) {
-    const settings = getSettings();
+    const settings = getLoadedSettings();
     const purchaseWindowDays = settings.termPurchaseWindowDays;
 
     if (settings.studentTermSelectionEnabled && input.selectedTermId) {

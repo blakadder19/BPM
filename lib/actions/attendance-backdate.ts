@@ -31,7 +31,7 @@ import { getStudentRepo, getSubscriptionRepo, getProductRepo } from "@/lib/repos
 import { getInstances } from "@/lib/services/schedule-store";
 import { getTerms } from "@/lib/services/term-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
-import { getSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings } from "@/lib/services/settings-store";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getCreditSnapshot } from "@/lib/domain/credit-availability";
@@ -144,7 +144,7 @@ export async function previewBackdatedAttendanceAction(input: {
   const classification = existing
     ? classifyExistingBooking(existing.status, {
         previousAttendanceStatus: attendance?.status ?? null,
-        refundCreditOnAbsent: getSettings().refundCreditOnAbsent,
+        refundCreditOnAbsent: getLoadedSettings().refundCreditOnAbsent,
       })
     : null;
 
@@ -293,7 +293,7 @@ export async function backdateAttendanceAction(input: {
   const classification = existingBooking
     ? classifyExistingBooking(existingBooking.status, {
         previousAttendanceStatus: existingAttendance?.status ?? null,
-        refundCreditOnAbsent: getSettings().refundCreditOnAbsent,
+        refundCreditOnAbsent: getLoadedSettings().refundCreditOnAbsent,
       })
     : null;
 

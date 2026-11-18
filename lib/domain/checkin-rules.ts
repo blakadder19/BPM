@@ -6,7 +6,7 @@
  */
 
 import { classStartDT, getNow } from "./datetime";
-import { getSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings } from "@/lib/services/settings-store";
 import type { BookingStatus } from "@/types/domain";
 
 const CHECKABLE_STATUSES: BookingStatus[] = ["confirmed"];
@@ -37,7 +37,7 @@ function minutesToStart(date: string, startTime: string): number {
  * Whether the attendance closure window has passed.
  */
 function isAfterClosure(date: string, startTime: string): boolean {
-  const settings = getSettings();
+  const settings = getLoadedSettings();
   const start = classStartDT(date, startTime);
   const closureMs = start.getTime() + settings.attendanceClosureMinutes * 60_000;
   return getNow().getTime() > closureMs;
@@ -67,7 +67,7 @@ export function canSelfCheckIn(
   date: string,
   startTime: string,
 ): CheckInEligibility {
-  const settings = getSettings();
+  const settings = getLoadedSettings();
   if (!settings.selfCheckInEnabled) {
     return { eligible: false, reason: "Self check-in is not enabled" };
   }
@@ -89,7 +89,7 @@ export function canQrCheckIn(
   date: string,
   startTime: string,
 ): CheckInEligibility {
-  const settings = getSettings();
+  const settings = getLoadedSettings();
   if (!settings.qrCheckInEnabled) {
     return { eligible: false, reason: "QR check-in is not enabled" };
   }

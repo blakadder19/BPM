@@ -50,7 +50,7 @@ import {
   type StudentAffiliation,
 } from "@/lib/domain/pricing-engine";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
-import { getSettings, hydrateSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings, hydrateSettings } from "@/lib/services/settings-store";
 import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
 import {
   computeVatForPayment,
@@ -135,7 +135,7 @@ export function resolveVatFor(
   finalPriceCents: number,
   channel: VatPaymentChannel,
 ): VatBreakdown {
-  const s = getSettings();
+  const s = getLoadedSettings();
   return computeVatForPayment({
     settings: {
       vatEnabled: s.vatEnabled,
