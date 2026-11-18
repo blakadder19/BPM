@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermissionForAction } from "@/lib/staff-permissions";
 import {
   getSettings,
+  hydrateSettings,
   updateSettings,
   type AppSettings,
 } from "@/lib/services/settings-store";
@@ -11,6 +12,11 @@ import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { validateVatRatePercent } from "@/lib/domain/vat";
 import { CLASS_LEVEL_NAMES } from "@/config/class-levels";
 import type { ProductType } from "@/types/domain";
+
+const SETTINGS_UNAVAILABLE_ERROR =
+  "Settings are temporarily unavailable. Nothing was saved — please try again in a moment.";
+const SETTINGS_SAVE_FAILED_ERROR =
+  "Settings could not be saved. Nothing was changed — please try again.";
 
 const VALID_CLASS_LEVELS = new Set(CLASS_LEVEL_NAMES);
 const VALID_DEDUCTION_TYPES: readonly ProductType[] = ["pass", "drop_in", "membership"];
@@ -40,6 +46,11 @@ export async function saveSettings(
     // Return a minimal failure shape that the existing caller already
     // handles (success=false / error).
     return { success: false, settings: {} as AppSettings, error: guard.error };
+  }
+  try {
+    await hydrateSettings();
+  } catch {
+    return { success: false, settings: {} as AppSettings, error: SETTINGS_UNAVAILABLE_ERROR };
   }
   // --- Numbers ---
   const numericFields = {
@@ -222,7 +233,13 @@ export async function saveSettings(
     ...vatPatch,
   };
 
-  const updated = await updateSettings(patch);
+  let updated: AppSettings;
+  try {
+    updated = await updateSettings(patch);
+  } catch (e) {
+    console.error("[settings] save failed:", e instanceof Error ? e.message : e);
+    return { success: false, settings: getSettings(), error: SETTINGS_SAVE_FAILED_ERROR };
+  }
   revalidatePath("/settings");
   revalidatePath("/penalties");
   revalidatePath("/catalog");

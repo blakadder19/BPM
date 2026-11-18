@@ -22,7 +22,7 @@ import {
   EMPTY_VAT_SNAPSHOT,
 } from "@/lib/domain/vat";
 import { getTodayStr } from "@/lib/domain/datetime";
-import { getSettings } from "@/lib/services/settings-store";
+import { getSettings, hydrateSettings } from "@/lib/services/settings-store";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
 import { buildDynamicAccessRulesMap } from "@/config/product-access";
 import { buildSnapshotFromProduct } from "@/lib/services/subscription-snapshot-service";
@@ -78,6 +78,7 @@ export async function validateAndPreparePurchase(
   input: PurchaseInput,
 ): Promise<PreparedPurchase | { error: string }> {
   const user = await requireRole(["student"]);
+  await hydrateSettings();
 
   const product = await getProductRepo().getById(input.productId);
   if (!product) return { error: "Product not found." };

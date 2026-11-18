@@ -34,6 +34,9 @@ async function probeSupabaseStatus(): Promise<SupabaseStatus> {
 export default async function SettingsPage() {
   await requirePermission("settings:view");
 
+  // The layout starts hydration without awaiting it; rendering the form
+  // from unloaded settings would let a save write defaults back.
+  await hydrateSettings();
   const settings = getSettings();
   const allStyles = DANCE_STYLES.map((s) => ({ id: s.id, name: s.name }));
   const supabaseStatus = await probeSupabaseStatus();
@@ -49,7 +52,6 @@ export default async function SettingsPage() {
     canEdit: hasPermission(access, "settings:edit"),
   };
 
-  await hydrateSettings();
   const receiptBusiness = getReceiptBusinessSettings();
   const academyName = isMemoryMode() ? null : await getAcademyName().catch(() => null);
 

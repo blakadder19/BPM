@@ -41,7 +41,8 @@ export default async function AppLayout({
   // Kick off hydration immediately — pages that await it will join the
   // already-running promise instead of starting a new one.  This moves
   // the cold-start cost earlier so it overlaps with alert/notification work.
-  void ensurePageDataHydrated();
+  // Pages that need the data await it themselves and surface failures.
+  void ensurePageDataHydrated().catch(() => {});
 
   const isDev = process.env.NODE_ENV === "development";
 

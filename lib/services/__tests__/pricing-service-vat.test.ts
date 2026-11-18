@@ -28,6 +28,7 @@ vi.mock("@/lib/services/finance-audit-log", () => ({
 
 // ── Mutable settings the tests drive ────────────────────────
 let SETTINGS: Partial<AppSettings> = {};
+let HYDRATE: () => Promise<void> = async () => {};
 
 vi.mock("@/lib/services/settings-store", () => ({
   getSettings: () => ({
@@ -38,6 +39,7 @@ vi.mock("@/lib/services/settings-store", () => ({
     applyVatToManualPayments: false,
     ...SETTINGS,
   }),
+  hydrateSettings: () => HYDRATE(),
 }));
 
 let RULES: MockDiscountRule[] = [];
@@ -120,6 +122,38 @@ function percentRule(over: Partial<MockDiscountRule> = {}): MockDiscountRule {
 beforeEach(() => {
   RULES = [];
   SETTINGS = {};
+  HYDRATE = async () => {};
+});
+
+// ── 0. Settings must be loaded before anything is priced ────
+
+describe("settings availability", () => {
+  it("refuses to price a product when the configured settings cannot be loaded", async () => {
+    HYDRATE = async () => {
+      throw new Error("Business settings could not be loaded");
+    };
+    SETTINGS = { vatEnabled: false };
+    await expect(
+      priceProductForStudent({
+        studentId: "s-1",
+        product: { id: "p-1", productType: "membership", priceCents: 6500 },
+        now: NOW,
+      }),
+    ).rejects.toThrow("Business settings could not be loaded");
+  });
+
+  it("refuses to price an event ticket when the configured settings cannot be loaded", async () => {
+    HYDRATE = async () => {
+      throw new Error("Business settings could not be loaded");
+    };
+    await expect(
+      priceEventTicketForStudent({
+        studentId: "s-1",
+        product: { id: "ep-1", productType: "full_pass", priceCents: 10000 },
+        now: NOW,
+      }),
+    ).rejects.toThrow("Business settings could not be loaded");
+  });
 });
 
 // ── 1. VAT disabled → no pricing change at all ──────────────
