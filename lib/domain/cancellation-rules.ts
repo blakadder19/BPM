@@ -3,7 +3,7 @@
  * Uses shared datetime utilities from datetime.ts.
  */
 
-import { getSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings } from "@/lib/services/settings-store";
 import { classStartDT, getNow, minutesUntilStart } from "@/lib/domain/datetime";
 import type { ClassType, PenaltyReason } from "@/types/domain";
 
@@ -24,21 +24,21 @@ export function isLateCancellation(
   cancelledAt: Date,
   cutoffMinutes?: number
 ): boolean {
-  const cutoff = cutoffMinutes ?? getSettings().lateCancelCutoffMinutes;
+  const cutoff = cutoffMinutes ?? getLoadedSettings().lateCancelCutoffMinutes;
   const msUntilClass = classStart.getTime() - cancelledAt.getTime();
   if (msUntilClass < 0) return true; // past class — should not reach here
   return msUntilClass < cutoff * 60 * 1000;
 }
 
 export function penaltiesApplyTo(classType: ClassType): boolean {
-  const s = getSettings();
+  const s = getLoadedSettings();
   if (classType === "social") return !s.socialsExcludedFromPenalties;
   if (classType === "student_practice") return !s.penaltiesApplyToClassOnly;
   return true;
 }
 
 export function penaltyFeeCents(reason: PenaltyReason): number {
-  const s = getSettings();
+  const s = getLoadedSettings();
   return reason === "late_cancel" ? s.lateCancelFeeCents : s.noShowFeeCents;
 }
 
@@ -57,7 +57,7 @@ export function getCancellationContext(
   minutesUntilStart: number;
   cutoffMinutes: number;
 } {
-  const s = getSettings();
+  const s = getLoadedSettings();
   const cutoffMinutes = cutoffMinutesOverride ?? s.lateCancelCutoffMinutes;
   const mins = minutesUntilStart(classDate, classStartTime);
   const classStart = classStartDT(classDate, classStartTime);

@@ -31,7 +31,6 @@ vi.mock("@/lib/services/finance-audit-log", () => ({ hydrateAuditLog: () => {} }
 vi.mock("@/lib/services/schedule-bootstrap", () => ({ ensureScheduleBootstrapped: async () => {} }));
 vi.mock("@/lib/services/settings-store", () => ({
   hydrateSettings: async () => {},
-  resetSettingsHydration: () => {},
 }));
 vi.mock("@/lib/repositories/supabase/schedule-repository", () => ({
   supabaseScheduleRepo: { getInstances: async () => [] },

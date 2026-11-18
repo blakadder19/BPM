@@ -18,7 +18,7 @@ import { ensurePageDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getInstances } from "@/lib/services/schedule-store";
 import { getAssignments } from "@/lib/services/teacher-store";
 import { getTodayStr } from "@/lib/domain/datetime";
-import { getSettings } from "@/lib/services/settings-store";
+import { getSettings, hydrateSettings } from "@/lib/services/settings-store";
 
 export default async function AppLayout({
   children,
@@ -83,7 +83,7 @@ export default async function AppLayout({
     if (!canSeeAdminAlerts) return [];
     try {
       await ensureScheduleBootstrapped();
-      const terms = await cachedGetTerms();
+      const [terms] = await Promise.all([cachedGetTerms(), hydrateSettings()]);
       const settings = getSettings();
       return computeAdminAlerts({
         terms,

@@ -101,9 +101,10 @@ vi.mock("@/lib/supabase/operational-persistence", () => ({
 vi.mock("@/lib/utils/is-real-user", () => ({ isRealUser: () => true }));
 vi.mock("@/lib/services/schedule-store", () => ({ getInstances: () => h.instances }));
 vi.mock("@/lib/services/dance-style-store", () => ({ getDanceStyles: () => [] }));
-vi.mock("@/lib/services/settings-store", () => ({
-  getSettings: () => ({ attendanceClosureMinutes: 60, qrCheckInEnabled: true, selfCheckInEnabled: true, selfCheckInOpensMinutesBefore: 30 }),
-}));
+vi.mock("@/lib/services/settings-store", () => {
+  const settings = () => ({ attendanceClosureMinutes: 60, qrCheckInEnabled: true, selfCheckInEnabled: true, selfCheckInOpensMinutesBefore: 30 });
+  return { getSettings: settings, getLoadedSettings: settings };
+});
 
 const STUDENT_TWO_QR = `bpm-${"ab".repeat(16)}`;
 const PAYMENT_NOT_CONFIRMED = "Payment must be confirmed before check-in.";

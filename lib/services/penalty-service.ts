@@ -12,7 +12,7 @@ import {
   classStartDateTime,
 } from "@/lib/domain/cancellation-rules";
 import { resolvePenalty } from "@/lib/domain/penalty-rules";
-import { getSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings } from "@/lib/services/settings-store";
 import type { ActiveSubscription, ClassContext } from "@/lib/domain/credit-rules";
 import { generateId } from "@/lib/utils";
 import type { PenaltyReason, PenaltyResolution, TxType, ClassType } from "@/types/domain";
@@ -90,7 +90,7 @@ export class PenaltyService {
     subscriptions: ActiveSubscription[];
     classContext: ClassContext;
   }): PenaltyOutcome {
-    if (!getSettings().lateCancelPenaltiesEnabled) {
+    if (!getLoadedSettings().lateCancelPenaltiesEnabled) {
       return noPenalty("No penalty — late cancel penalties are disabled.");
     }
 
@@ -121,7 +121,7 @@ export class PenaltyService {
     subscriptions: ActiveSubscription[];
     classContext: ClassContext;
   }): PenaltyOutcome {
-    if (!getSettings().noShowPenaltiesEnabled) {
+    if (!getLoadedSettings().noShowPenaltiesEnabled) {
       return noPenalty("No penalty — no-show penalties are disabled.");
     }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LogOut,
@@ -77,6 +77,51 @@ const ROLE_COLORS: Record<string, string> = {
   student: "bg-sky-100 text-sky-700",
 };
 
+/**
+ * Sidebar links prefetch on intent (hover, focus, touch) instead of on
+ * viewport: viewport prefetch requested every nav route — each one a
+ * middleware auth check plus a server render — on every page load.
+ */
+function NavLink({
+  href,
+  className,
+  onClick,
+  children,
+}: {
+  href: string;
+  className?: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  const prefetch = () => router.prefetch(href);
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      onMouseEnter={prefetch}
+      onFocus={prefetch}
+      onTouchStart={prefetch}
+      onClick={onClick}
+      className={className}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function NavPendingIndicator() {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <span
+      aria-hidden
+      data-nav-pending
+      className="ml-auto h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-gray-200 border-t-bpm-600"
+    />
+  );
+}
+
 interface SidebarProps {
   user: AuthUser;
   /**
@@ -110,7 +155,7 @@ export function Sidebar({ user, navItems: navItemsProp, roleLabel }: SidebarProp
   const navContent = (
     <>
       <div className="flex h-20 items-center justify-between border-b border-gray-200 px-6">
-        <Link href="/dashboard" className="flex items-center">
+        <NavLink href="/dashboard" className="flex items-center">
           <Image
             src="/branding/bpm-logo-full.jpg"
             alt="BPM"
@@ -119,7 +164,7 @@ export function Sidebar({ user, navItems: navItemsProp, roleLabel }: SidebarProp
             className="h-14 w-auto object-contain"
             priority
           />
-        </Link>
+        </NavLink>
         <button
           onClick={close}
           className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 md:hidden"
@@ -133,10 +178,8 @@ export function Sidebar({ user, navItems: navItemsProp, roleLabel }: SidebarProp
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = NAV_ICONS[item.iconKey] ?? Circle;
-          // Default (auto) prefetch only: `prefetch={true}` fully rendered
-          // every nav route — all its Supabase reads — on each page load.
           return (
-            <Link
+            <NavLink
               key={item.name}
               href={item.href}
               onClick={close}
@@ -156,7 +199,8 @@ export function Sidebar({ user, navItems: navItemsProp, roleLabel }: SidebarProp
                 )}
               />
               {item.name}
-            </Link>
+              <NavPendingIndicator />
+            </NavLink>
           );
         })}
       </nav>
