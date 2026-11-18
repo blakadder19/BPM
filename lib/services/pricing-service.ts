@@ -50,7 +50,7 @@ import {
   type StudentAffiliation,
 } from "@/lib/domain/pricing-engine";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
-import { getSettings } from "@/lib/services/settings-store";
+import { getSettings, hydrateSettings } from "@/lib/services/settings-store";
 import { purchasesForEvents } from "@/lib/domain/event-purchase-grouping";
 import {
   computeVatForPayment,
@@ -152,6 +152,7 @@ export function resolveVatFor(
 export async function priceProductForStudent(
   input: PriceForStudentInput,
 ): Promise<PriceForStudentResult> {
+  await hydrateSettings();
   const now = input.now ?? new Date().toISOString();
 
   const [rules, affiliations] = await Promise.all([
@@ -438,6 +439,7 @@ const PROMO_CODE_ERROR_DEFAULTS: Record<PromoCodeError["kind"], string> = {
 export async function priceEventTicketForStudent(
   input: PriceEventTicketInput,
 ): Promise<PriceEventTicketResult> {
+  await hydrateSettings();
   const now = input.now ?? new Date().toISOString();
   const base = input.product.priceCents;
   const typedCode = (input.promoCode ?? "").trim();

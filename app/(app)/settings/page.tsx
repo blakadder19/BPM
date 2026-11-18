@@ -1,5 +1,5 @@
 import { getStaffAccess, hasPermission, requirePermission } from "@/lib/staff-permissions";
-import { getSettings } from "@/lib/services/settings-store";
+import { getSettings, hydrateSettings } from "@/lib/services/settings-store";
 import { DANCE_STYLES } from "@/lib/mock-data";
 import { SettingsForm, type SupabaseStatus } from "@/components/settings/settings-form";
 import { StaffAccessCard } from "@/components/settings/staff-access-card";
@@ -31,6 +31,9 @@ async function probeSupabaseStatus(): Promise<SupabaseStatus> {
 export default async function SettingsPage() {
   await requirePermission("settings:view");
 
+  // The layout starts hydration without awaiting it; rendering the form
+  // from unloaded settings would let a save write defaults back.
+  await hydrateSettings();
   const settings = getSettings();
   const allStyles = DANCE_STYLES.map((s) => ({ id: s.id, name: s.name }));
   const supabaseStatus = await probeSupabaseStatus();
