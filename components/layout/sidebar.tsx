@@ -131,11 +131,12 @@ export function Sidebar({ user, navItems: navItemsProp, roleLabel }: SidebarProp
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = NAV_ICONS[item.iconKey] ?? Circle;
+          // Default (auto) prefetch only: `prefetch={true}` fully rendered
+          // every nav route — all its Supabase reads — on each page load.
           return (
             <Link
               key={item.name}
               href={item.href}
-              prefetch={true}
               onClick={close}
               className={cn(
                 "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
