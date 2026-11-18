@@ -11,7 +11,12 @@ import {
   type ReceiptData,
   type ReceiptSourceType,
 } from "@/lib/domain/receipts";
-import { hasConfiguredVatNumber, resolveReceiptIssuer, type ReceiptIssuer } from "@/lib/domain/receipt-settings";
+import {
+  hasConfiguredVatNumber,
+  resolveReceiptIssuer,
+  type ReceiptBusinessSettings,
+  type ReceiptIssuer,
+} from "@/lib/domain/receipt-settings";
 import { sortPaymentHistory, toPaymentHistoryItem, type PaymentHistoryItem } from "@/lib/domain/payment-history";
 
 /**
@@ -36,10 +41,14 @@ export async function loadReceiptBusinessSettings() {
   return getReceiptBusinessSettings();
 }
 
-export async function loadReceiptIssuer(): Promise<ReceiptIssuer> {
-  const settings = await loadReceiptBusinessSettings();
-  const fallbackName = isMemoryMode() ? null : await getAcademyName().catch(() => null);
-  return resolveReceiptIssuer(settings, fallbackName);
+export async function loadReceiptIssuer(
+  settings: Promise<ReceiptBusinessSettings> = loadReceiptBusinessSettings(),
+): Promise<ReceiptIssuer> {
+  const [business, fallbackName] = await Promise.all([
+    settings,
+    isMemoryMode() ? null : getAcademyName().catch(() => null),
+  ]);
+  return resolveReceiptIssuer(business, fallbackName);
 }
 
 export async function getOwnedStudentReceipt(

@@ -4,7 +4,7 @@ import { getAuthUser } from "@/lib/auth";
 import type { ReceiptSourceType } from "@/lib/domain/receipts";
 import { getStaffAccess, hasPermission } from "@/lib/staff-permissions";
 import { getStaffReceipt } from "@/lib/services/staff-receipts";
-import { loadReceiptIssuer } from "@/lib/services/student-receipts";
+import { loadReceiptBusinessSettings, loadReceiptIssuer } from "@/lib/services/student-receipts";
 import { loadReceiptPdfAssets, renderReceiptPdf } from "@/lib/services/receipt-pdf";
 import {
   receiptNotFoundResponse,
@@ -35,9 +35,14 @@ export async function handleStaffReceiptRequest(kind: string, id: string): Promi
     const sourceType = sourceTypeForKind(kind);
     if (!sourceType) return receiptNotFoundResponse();
 
-    const receipt = await getStaffReceipt(sourceType, id);
+    // One settings load, shared: concurrent loads could read defaults.
+    const settings = loadReceiptBusinessSettings();
+    const [receipt, issuer, assets] = await Promise.all([
+      getStaffReceipt(sourceType, id, settings),
+      loadReceiptIssuer(settings),
+      loadReceiptPdfAssets(),
+    ]);
     if (!receipt) return receiptNotFoundResponse();
-    const [issuer, assets] = await Promise.all([loadReceiptIssuer(), loadReceiptPdfAssets()]);
     const pdf = await renderReceiptPdf({ receipt, issuer, issuedAt: new Date(), assets });
     return receiptPdfResponse(pdf);
   } catch (err) {

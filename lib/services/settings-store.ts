@@ -210,6 +210,7 @@ function defaults(): AppSettings {
 const g = globalThis as unknown as {
   __bpm_settings?: AppSettings;
   __bpm_settingsHydrated?: boolean;
+  __bpm_settingsHydration?: Promise<void>;
   __bpm_settingsAcademyId?: string;
 };
 
@@ -402,23 +403,36 @@ export async function updateReceiptBusinessSettings(
 
 // ── Hydration (called from hydrate-operational.ts on cold start) ──
 
+// Concurrent callers await the in-flight load: until it settles the cache
+// holds no DB settings, and receipts must not render from defaults.
 export async function hydrateSettings(): Promise<void> {
-  if (g.__bpm_settingsHydrated || !hasSupabaseConfig()) return;
+  if (!hasSupabaseConfig()) return;
+  if (g.__bpm_settingsHydration) return g.__bpm_settingsHydration;
+  if (g.__bpm_settingsHydrated) return;
   g.__bpm_settingsHydrated = true;
 
+  const load = (async () => {
+    try {
+      const dbSettings = await loadSettingsFromDB();
+      g.__bpm_settings = dbSettings
+        ? { ...defaults(), ...dbSettings }
+        : defaults();
+    } catch (e) {
+      console.warn("[settings-store] Hydration failed, using defaults:", e instanceof Error ? e.message : e);
+      g.__bpm_settings = defaults();
+    }
+  })();
+  g.__bpm_settingsHydration = load;
   try {
-    const dbSettings = await loadSettingsFromDB();
-    g.__bpm_settings = dbSettings
-      ? { ...defaults(), ...dbSettings }
-      : defaults();
-  } catch (e) {
-    console.warn("[settings-store] Hydration failed, using defaults:", e instanceof Error ? e.message : e);
-    g.__bpm_settings = defaults();
+    await load;
+  } finally {
+    if (g.__bpm_settingsHydration === load) g.__bpm_settingsHydration = undefined;
   }
 }
 
 export function resetSettingsHydration(): void {
   g.__bpm_settingsHydrated = false;
+  g.__bpm_settingsHydration = undefined;
   g.__bpm_settings = undefined;
   g.__bpm_settingsAcademyId = undefined;
 }

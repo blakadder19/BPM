@@ -13,7 +13,14 @@ const h = vi.hoisted(() => ({
   access: null as null | { isSuperAdmin: boolean; permissions: Set<string> },
   subs: new Map<string, Record<string, unknown>>(),
   purchases: new Map<string, Record<string, unknown>>(),
+  reads: [] as string[],
+  readGate: null as null | Promise<void>,
 }));
+
+async function read(name: string) {
+  h.reads.push(name);
+  if (h.readGate) await h.readGate;
+}
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth", () => ({ getAuthUser: async () => h.user }));
@@ -23,13 +30,25 @@ vi.mock("@/lib/staff-permissions", () => ({
     access.isSuperAdmin || access.permissions.has(key),
 }));
 vi.mock("@/lib/config/data-provider", () => ({ isMemoryMode: () => false }));
-vi.mock("@/lib/supabase/academy", () => ({ getAcademyName: async () => "Balance Power Motion" }));
+vi.mock("@/lib/supabase/academy", () => ({
+  getAcademyName: async () => {
+    await read("academy");
+    return "Balance Power Motion";
+  },
+}));
 vi.mock("@/lib/services/settings-store", () => ({
-  hydrateSettings: async () => {},
+  hydrateSettings: async () => {
+    await read("settings");
+  },
   getReceiptBusinessSettings: () => ({ ...EMPTY_RECEIPT_BUSINESS_SETTINGS }),
 }));
 vi.mock("@/lib/repositories", () => ({
-  getSubscriptionRepo: () => ({ getById: async (id: string) => h.subs.get(id) ?? null }),
+  getSubscriptionRepo: () => ({
+    getById: async (id: string) => {
+      await read("subscription");
+      return h.subs.get(id) ?? null;
+    },
+  }),
   getSpecialEventRepo: () => ({ getPurchaseById: async (id: string) => h.purchases.get(id) ?? null }),
   getStudentRepo: () => ({
     getById: async (id: string) => (id === "student-1" ? { id, fullName: "Zaria Test", email: "zaria.test@example.com" } : null),
@@ -100,6 +119,8 @@ async function snapshot(res: Response) {
 beforeEach(() => {
   h.subs.clear();
   h.purchases.clear();
+  h.reads.length = 0;
+  h.readGate = null;
   h.subs.set(SUB, {
     id: SUB,
     studentId: "student-1",
@@ -166,6 +187,30 @@ describe("GET /api/receipts/staff/[kind]/[id]", () => {
     for (const [kind, id] of [["event", EVT_FREE], ["refund", SUB], ["subscription", EVT_STUDENT], ["event", "not-a-uuid"]]) {
       expect((await handleStaffReceiptRequest(kind, id)).status).toBe(404);
     }
+  });
+
+  it("starts the purchase, business settings and issuer reads together, loading settings once", async () => {
+    withPermissions(ROLE_PRESETS.admin);
+    let release!: () => void;
+    h.readGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const pending = handleStaffReceiptRequest("subscription", SUB);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect([...h.reads].sort()).toEqual(["academy", "settings", "subscription"]);
+
+    release();
+    const res = await pending;
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(h.reads.filter((r) => r === "settings")).toHaveLength(1);
+  });
+
+  it("reads no receipt data for staff without the permission", async () => {
+    withPermissions(ROLE_PRESETS.teacher);
+    expect((await handleStaffReceiptRequest("subscription", SUB)).status).toBe(404);
+    expect(h.reads).toEqual([]);
   });
 
   it("requires a session", async () => {

@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   readError: null as null | { message: string },
   writeError: null as null | { message: string },
   upserts: [] as Record<string, unknown>[],
+  readGate: null as null | Promise<void>,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -18,7 +19,12 @@ vi.mock("@supabase/supabase-js", () => ({
   createClient: () => ({
     from: (table: string) => ({
       select: () => ({
-        eq: () => ({ maybeSingle: async () => ({ data: h.readError ? null : h.row, error: h.readError }) }),
+        eq: () => ({
+          maybeSingle: async () => {
+            if (h.readGate) await h.readGate;
+            return { data: h.readError ? null : h.row, error: h.readError };
+          },
+        }),
         limit: () => ({ maybeSingle: async () => ({ data: table === "academies" ? { id: "acad-1" } : null, error: null }) }),
       }),
       upsert: async (row: Record<string, unknown>) => {
@@ -60,8 +66,33 @@ beforeEach(async () => {
   h.readError = null;
   h.writeError = null;
   h.upserts.length = 0;
+  h.readGate = null;
   h.row = { value: { lateCancelFeeCents: 200 }, academy_id: "acad-1" };
   await hydrateSettings();
+});
+
+describe("hydrateSettings", () => {
+  it("makes concurrent callers wait for the in-flight load instead of reading defaults", async () => {
+    resetSettingsHydration();
+    h.row = { value: { receiptBusiness: details }, academy_id: "acad-1" };
+    let release!: () => void;
+    h.readGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const first = hydrateSettings();
+    let secondSettled = false;
+    const second = hydrateSettings().then(() => {
+      secondSettled = true;
+      return getReceiptBusinessSettings();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(secondSettled).toBe(false);
+
+    release();
+    await first;
+    expect((await second).vatNumber).toBe("IE1234567X");
+  });
 });
 
 describe("updateReceiptBusinessSettings", () => {

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSpecialEventRepo, getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
-import { hasConfiguredVatNumber } from "@/lib/domain/receipt-settings";
+import { hasConfiguredVatNumber, type ReceiptBusinessSettings } from "@/lib/domain/receipt-settings";
 import {
   buildReceiptData,
   type ReceiptCustomer,
@@ -23,22 +23,27 @@ async function studentCustomer(studentId: string): Promise<ReceiptCustomer | nul
   return student ? { name: student.fullName, email: student.email } : null;
 }
 
-export async function getStaffReceipt(sourceType: ReceiptSourceType, id: string): Promise<ReceiptData | null> {
+export async function getStaffReceipt(
+  sourceType: ReceiptSourceType,
+  id: string,
+  settings: Promise<ReceiptBusinessSettings> = loadReceiptBusinessSettings(),
+): Promise<ReceiptData | null> {
   if (!UUID_RE.test(id)) return null;
-  const ctx = { businessHasVatNumber: hasConfiguredVatNumber(await loadReceiptBusinessSettings()) };
 
   switch (sourceType) {
     case "subscription": {
-      const row = await getSubscriptionRepo().getById(id);
+      const [business, row] = await Promise.all([settings, getSubscriptionRepo().getById(id)]);
       if (!row) return null;
+      const ctx = { businessHasVatNumber: hasConfiguredVatNumber(business) };
       const customer = await studentCustomer(row.studentId);
       if (!customer) return null;
       const built = buildReceiptData({ kind: "subscription", row, customer }, ctx);
       return built.ok ? built.receipt : null;
     }
     case "event_purchase": {
-      const row = await getSpecialEventRepo().getPurchaseById(id);
+      const [business, row] = await Promise.all([settings, getSpecialEventRepo().getPurchaseById(id)]);
       if (!row) return null;
+      const ctx = { businessHasVatNumber: hasConfiguredVatNumber(business) };
       const customer = row.studentId ? await studentCustomer(row.studentId) : null;
       if (row.studentId && !customer) return null;
       const built = buildReceiptData({ kind: "event_purchase", row, customer }, ctx);
