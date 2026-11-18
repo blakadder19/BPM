@@ -11,27 +11,46 @@ type View = "opening" | "missing" | "unavailable";
  */
 export function GuestReceiptOpener({ unavailable }: { unavailable: boolean }) {
   const formRef = useRef<HTMLFormElement>(null);
-  const tokenRef = useRef<HTMLInputElement>(null);
+  const tokenInputRef = useRef<HTMLInputElement>(null);
+  const tokenRef = useRef<string | null>(null);
   const [view, setView] = useState<View>(unavailable ? "unavailable" : "opening");
+
+  function postToken() {
+    const input = tokenInputRef.current;
+    if (!input || !tokenRef.current) return;
+    input.value = tokenRef.current;
+    formRef.current?.submit();
+    // submit() captures the form data synchronously; the token stays out of the DOM.
+    input.value = "";
+  }
 
   useEffect(() => {
     if (unavailable) return;
     const token = window.location.hash.slice(1);
     if (!token) {
-      if (!tokenRef.current?.value) setView("missing");
+      if (!tokenRef.current) setView("missing");
       return;
     }
     window.history.replaceState(null, "", window.location.pathname);
-    if (tokenRef.current) tokenRef.current.value = token;
-    formRef.current?.submit();
+    tokenRef.current = token;
+    postToken();
   }, [unavailable]);
 
   return (
     <div className="mx-auto max-w-sm rounded-lg border border-gray-200 bg-white p-6 text-center space-y-3">
       <h1 className="text-lg font-semibold text-gray-900">Payment receipt</h1>
       {view === "opening" && (
-        <form ref={formRef} method="post" action="/receipt/open" className="space-y-3">
-          <input ref={tokenRef} type="hidden" name="token" />
+        <form
+          ref={formRef}
+          method="post"
+          action="/receipt/open"
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            postToken();
+          }}
+        >
+          <input ref={tokenInputRef} type="hidden" name="token" />
           <p className="text-sm text-gray-600">Your receipt (PDF) should start downloading.</p>
           <button
             type="submit"
