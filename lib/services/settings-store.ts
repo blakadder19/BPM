@@ -4,8 +4,8 @@
  * In production (Supabase mode), settings are stored in the `business_rules`
  * table under key `app_settings`. On cold start the row is loaded into a
  * globalThis cache; reads stay synchronous so pure domain logic can call
- * getSettings() without async. Writes update the cache and fire-and-forget
- * a DB upsert.
+ * getSettings() without async. Writes merge into the current DB row, upsert
+ * it, then update the cache.
  *
  * In local dev (memory mode / no Supabase config), settings fall back to
  * .data/settings.json on disk.
@@ -194,9 +194,27 @@ function defaults(): AppSettings {
 
 const g = globalThis as unknown as {
   __bpm_settings?: AppSettings;
+  /** True only once settings were read from the database. */
   __bpm_settingsHydrated?: boolean;
+  __bpm_settingsHydration?: Promise<void>;
+  __bpm_settingsLastFailure?: { at: number; error: SettingsUnavailableError };
   __bpm_settingsAcademyId?: string;
+  __bpm_settingsUnhydratedReadWarned?: boolean;
 };
+
+/** After a failed load, callers fail fast for this long before the next DB attempt. */
+export const SETTINGS_RETRY_COOLDOWN_MS = 2_000;
+
+/**
+ * Thrown instead of returning defaults when the configured settings could
+ * not be read: defaults differ from production (VAT, fees, booking rules).
+ */
+export class SettingsUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SettingsUnavailableError";
+  }
+}
 
 // ── Supabase helpers ─────────────────────────────────────────
 
@@ -226,6 +244,9 @@ const SETTINGS_KEY = "app_settings";
 /**
  * Load the full AppSettings blob from business_rules.
  * Also resolves the academy_id for future writes.
+ *
+ * Returns null only when the row genuinely does not exist; a failed read
+ * throws so it is never mistaken for "no settings saved yet".
  */
 async function loadSettingsFromDB(): Promise<Partial<AppSettings> | null> {
   const client = getSupabaseClient();
@@ -237,7 +258,11 @@ async function loadSettingsFromDB(): Promise<Partial<AppSettings> | null> {
     .eq("key", SETTINGS_KEY)
     .maybeSingle();
 
-  if (!error && data) {
+  if (error) {
+    throw new Error(error.message ?? "business_rules read failed");
+  }
+
+  if (data) {
     g.__bpm_settingsAcademyId = data.academy_id;
     return data.value as Partial<AppSettings>;
   }
@@ -257,26 +282,22 @@ async function loadSettingsFromDB(): Promise<Partial<AppSettings> | null> {
 
 async function saveSettingsToDB(settings: AppSettings): Promise<void> {
   const client = getSupabaseClient();
-  if (!client) return;
+  if (!client) throw new Error("Supabase is not configured");
   const academyId = g.__bpm_settingsAcademyId;
-  if (!academyId) return;
+  if (!academyId) throw new Error("No academy found to save settings for");
 
-  try {
-    const { error } = await client
-      .from("business_rules")
-      .upsert(
-        {
-          academy_id: academyId,
-          key: SETTINGS_KEY,
-          value: settings as unknown as Record<string, unknown>,
-          description: "Full app settings blob (managed by Settings page)",
-        },
-        { onConflict: "academy_id,key" }
-      );
-    if (error) console.warn("[settings-store] DB write failed:", error.message);
-  } catch (e) {
-    console.warn("[settings-store] DB write error:", e instanceof Error ? e.message : e);
-  }
+  const { error } = await client
+    .from("business_rules")
+    .upsert(
+      {
+        academy_id: academyId,
+        key: SETTINGS_KEY,
+        value: settings as unknown as Record<string, unknown>,
+        description: "Full app settings blob (managed by Settings page)",
+      },
+      { onConflict: "academy_id,key" }
+    );
+  if (error) throw new Error(error.message ?? "business_rules write failed");
 }
 
 // ── File-based fallback (local dev / memory mode) ────────────
@@ -305,15 +326,43 @@ function writeToDisk(settings: AppSettings): void {
 
 // ── Public API ───────────────────────────────────────────────
 
+/**
+ * Synchronous read of the cached settings.
+ *
+ * Supabase mode: throws SettingsUnavailableError while a load is in flight
+ * or after one failed, rather than serving defaults. Paths that read before
+ * any load was attempted keep the legacy defaults fallback (logged once);
+ * code that applies business rules uses getLoadedSettings() instead.
+ */
 export function getSettings(): AppSettings {
-  if (hasSupabaseConfig() && g.__bpm_settingsHydrated) {
-    return g.__bpm_settings ?? defaults();
+  if (!hasSupabaseConfig()) return readFromDisk();
+  if (g.__bpm_settingsHydrated && g.__bpm_settings) return g.__bpm_settings;
+  if (g.__bpm_settingsHydration || g.__bpm_settingsLastFailure) {
+    throw new SettingsUnavailableError("Business settings are not loaded");
+  }
+  if (!g.__bpm_settingsUnhydratedReadWarned) {
+    g.__bpm_settingsUnhydratedReadWarned = true;
+    console.warn("[settings-store] getSettings() called before hydrateSettings(); using defaults");
   }
   return readFromDisk();
 }
 
-export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
-  const current = getSettings();
+/**
+ * Settings for code that applies business rules (pricing/VAT, penalties,
+ * credits, check-in, booking and purchase eligibility).
+ *
+ * Supabase mode: throws SettingsUnavailableError unless settings were read
+ * from the database — it never serves defaults, even when no load has been
+ * attempted yet. Callers must await hydrateSettings() (directly or through
+ * ensureOperationalDataHydrated / ensurePageDataHydrated) first.
+ */
+export function getLoadedSettings(): AppSettings {
+  if (!hasSupabaseConfig()) return readFromDisk();
+  if (g.__bpm_settingsHydrated && g.__bpm_settings) return g.__bpm_settings;
+  throw new SettingsUnavailableError("Business settings are not loaded");
+}
+
+function mergeSettings(current: AppSettings, patch: Partial<AppSettings>): AppSettings {
   const updated = { ...current, ...patch };
   if (patch.roleBalancedStyleNames) {
     updated.roleBalancedStyleNames = [...patch.roleBalancedStyleNames];
@@ -321,36 +370,76 @@ export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSe
   if (patch.disabledAlertIds) {
     updated.disabledAlertIds = [...patch.disabledAlertIds];
   }
+  return updated;
+}
 
-  if (hasSupabaseConfig()) {
-    g.__bpm_settings = updated;
-    await saveSettingsToDB(updated);
-  } else {
+/**
+ * Supabase mode merges the patch into the row as it is in the database
+ * right now (never a stale or default cache) and throws if the read or
+ * write fails, so a failed save is never reported as success.
+ */
+export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
+  if (!hasSupabaseConfig()) {
+    const updated = mergeSettings(readFromDisk(), patch);
     writeToDisk(updated);
+    return { ...updated };
   }
 
+  const dbSettings = await loadSettingsFromDB();
+  const updated = mergeSettings({ ...defaults(), ...(dbSettings ?? {}) }, patch);
+  await saveSettingsToDB(updated);
+  g.__bpm_settings = updated;
+  g.__bpm_settingsHydrated = true;
+  g.__bpm_settingsLastFailure = undefined;
   return { ...updated };
 }
 
 // ── Hydration (called from hydrate-operational.ts on cold start) ──
 
+/**
+ * Loads settings once per instance. Concurrent callers share the in-flight
+ * read. A failed read rejects, leaves the cache unloaded, and is retried by
+ * the next call after SETTINGS_RETRY_COOLDOWN_MS.
+ */
 export async function hydrateSettings(): Promise<void> {
-  if (g.__bpm_settingsHydrated || !hasSupabaseConfig()) return;
-  g.__bpm_settingsHydrated = true;
+  if (!hasSupabaseConfig() || g.__bpm_settingsHydrated) return;
+  if (g.__bpm_settingsHydration) return g.__bpm_settingsHydration;
 
+  const failure = g.__bpm_settingsLastFailure;
+  if (failure && Date.now() - failure.at < SETTINGS_RETRY_COOLDOWN_MS) {
+    throw failure.error;
+  }
+
+  const load = (async () => {
+    try {
+      const dbSettings = await loadSettingsFromDB();
+      // A save that finished while this read was in flight is newer.
+      if (!g.__bpm_settingsHydrated) {
+        g.__bpm_settings = { ...defaults(), ...(dbSettings ?? {}) };
+        g.__bpm_settingsHydrated = true;
+      }
+      g.__bpm_settingsLastFailure = undefined;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const error = new SettingsUnavailableError(`Business settings could not be loaded: ${message}`);
+      g.__bpm_settingsLastFailure = { at: Date.now(), error };
+      console.warn("[settings-store] Hydration failed; settings stay unloaded until a retry succeeds:", message);
+      throw error;
+    }
+  })();
+  g.__bpm_settingsHydration = load;
   try {
-    const dbSettings = await loadSettingsFromDB();
-    g.__bpm_settings = dbSettings
-      ? { ...defaults(), ...dbSettings }
-      : defaults();
-  } catch (e) {
-    console.warn("[settings-store] Hydration failed, using defaults:", e instanceof Error ? e.message : e);
-    g.__bpm_settings = defaults();
+    await load;
+  } finally {
+    if (g.__bpm_settingsHydration === load) g.__bpm_settingsHydration = undefined;
   }
 }
 
 export function resetSettingsHydration(): void {
   g.__bpm_settingsHydrated = false;
+  g.__bpm_settingsHydration = undefined;
+  g.__bpm_settingsLastFailure = undefined;
   g.__bpm_settings = undefined;
   g.__bpm_settingsAcademyId = undefined;
+  g.__bpm_settingsUnhydratedReadWarned = undefined;
 }

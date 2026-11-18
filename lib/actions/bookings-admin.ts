@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getBookingService } from "@/lib/services/booking-store";
 import { getAttendanceService } from "@/lib/services/attendance-store";
 import { getPenaltyService } from "@/lib/services/penalty-store";
-import { getSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings } from "@/lib/services/settings-store";
 import { getSubscriptionRepo, getTermRepo } from "@/lib/repositories";
 import { updateSubscription as repoUpdateSub } from "@/lib/services/subscription-service";
 import { findTermForDate, getTermWeekNumber, isDateInTerm } from "@/lib/domain/term-rules";
@@ -244,7 +244,7 @@ export async function adminCreateBookingAction(
       classTerm = findTermForDate(allTerms, cls.date);
     }
     if (classTerm) {
-      const settings = getSettings();
+      const settings = getLoadedSettings();
       const weekNumber = getTermWeekNumber(cls.date, classTerm);
 
       if (!settings.allowAdminLateEntryIntoTermBound && weekNumber > 1) {
@@ -384,7 +384,7 @@ export async function adminCancelBookingAction(
 
   let penaltyCreated = false;
   if (isLate && penaltiesApplyTo(cls.classType)) {
-    const settings = getSettings();
+    const settings = getLoadedSettings();
     if (settings.lateCancelPenaltiesEnabled) {
       const penaltySvc = getPenaltyService();
       const penalty = penaltySvc.addPenalty({
@@ -480,7 +480,7 @@ export async function adminCheckInBookingAction(
   if (!booking) return { success: false, error: "Booking not found" };
 
   const cls = svc.getClass(booking.bookableClassId);
-  if (cls && isAfterClosureWindow(cls.date, cls.startTime, getSettings().attendanceClosureMinutes)) {
+  if (cls && isAfterClosureWindow(cls.date, cls.startTime, getLoadedSettings().attendanceClosureMinutes)) {
     return { success: false, error: "Check-in window has closed (60 min after class start)" };
   }
   const paymentDenial = await passPaymentDenial(booking.subscriptionId);
@@ -634,7 +634,7 @@ export async function checkLateCancelStatusAction(
     return { success: false, error: "Invalid class date/time data" };
   }
 
-  const settings = getSettings();
+  const settings = getLoadedSettings();
 
   return {
     success: true,
@@ -787,7 +787,7 @@ export async function computeBookingConsequencesAction(
   const isLate = ctx ? !isNaN(ctx.classStart.getTime()) && ctx.isLate : false;
   const hasStarted = ctx ? !isNaN(ctx.classStart.getTime()) && ctx.hasStarted : false;
 
-  const settings = getSettings();
+  const settings = getLoadedSettings();
 
   const isActive = booking.status === "confirmed" || booking.status === "checked_in";
 

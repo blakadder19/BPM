@@ -30,7 +30,7 @@ import {
 import { getStudioHireService } from "@/lib/services/studio-hire-store";
 import { hydrateAuditLog } from "@/lib/services/finance-audit-log";
 import { ensureScheduleBootstrapped } from "@/lib/services/schedule-bootstrap";
-import { hydrateSettings, resetSettingsHydration } from "@/lib/services/settings-store";
+import { hydrateSettings } from "@/lib/services/settings-store";
 
 function hasSupabaseConfig(): boolean {
   return !!(
@@ -215,8 +215,14 @@ export function invalidateHydration(): void {
 }
 
 /**
- * Reset hydration flags. Called when stores are re-created (e.g. HMR version bump).
+ * Called when an operational store is re-created (first use on an instance,
+ * HMR version bump) or purged: forces the next hydration to re-read
+ * operational data into it.
+ *
+ * Must not reset business settings. Stores are first created inside
+ * refreshOperationalData(), right after hydrateSettings() succeeded, so
+ * clearing settings here left every cold instance without settings.
  */
 export function resetHydrationFlags(): void {
-  resetSettingsHydration();
+  invalidateHydration();
 }

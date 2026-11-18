@@ -7,6 +7,7 @@ import { getPenaltyService } from "@/lib/services/penalty-store";
 import { getStudentRepo, getSubscriptionRepo } from "@/lib/repositories";
 import { updateSubscription } from "@/lib/services/subscription-service";
 import { runAttendanceClosure } from "@/lib/domain/attendance-closure";
+import { getLoadedSettings } from "@/lib/services/settings-store";
 import type { AttendanceMark, CheckInMethod, ClassType } from "@/types/domain";
 import { isRealUser } from "@/lib/utils/is-real-user";
 import { saveAttendanceToDB, saveBookingToDB, savePenaltyToDB, updatePenaltyInDB, deleteAttendanceFromDB } from "@/lib/supabase/operational-persistence";
@@ -325,8 +326,7 @@ export async function markStudentAttendance(params: {
   }
 
   if (subId && !skipCredits) {
-    const { getSettings } = await import("@/lib/services/settings-store");
-    const settings = getSettings();
+    const settings = getLoadedSettings();
     let prevConsumed: boolean;
     if (previousStatus === null) {
       prevConsumed = isAttendanceFirst ? false : true;

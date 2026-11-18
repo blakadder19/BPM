@@ -5,7 +5,7 @@ import { CURRENT_CODE_OF_CONDUCT } from "@/config/code-of-conduct";
 import { getCurrentTerm, getNextTerm, isCurrentTermPurchasable } from "@/lib/domain/term-rules";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
-import { getSettings } from "@/lib/services/settings-store";
+import { getLoadedSettings, hydrateSettings } from "@/lib/services/settings-store";
 import { lazyExpireSubscriptions } from "@/lib/services/term-lifecycle-service";
 import { buildDynamicAccessRulesMap, type ProductAccessRule } from "@/config/product-access";
 import { isStripeEnabled } from "@/lib/stripe";
@@ -71,12 +71,14 @@ export default async function CatalogPage() {
   // every student visit to the catalog (it was previously called
   // for free from the layout, but this page used to await it
   // explicitly, which deferred render until the full hydration round
-  // trip completed).
+  // trip completed). Business settings (term purchase window) are a
+  // single-row read and must be loaded, never defaulted.
   const [cocDone, products, terms, allStudentSubs] = await Promise.all([
     cachedCocCheck(user.id, CURRENT_CODE_OF_CONDUCT.version),
     cachedGetProducts(),
     cachedGetTerms(),
     cachedGetStudentSubs(user.id),
+    hydrateSettings(),
   ]);
   if (!cocDone) redirect("/onboarding");
   lazyExpireSubscriptions().catch(() => {});
@@ -134,7 +136,7 @@ export default async function CatalogPage() {
     }
   }
 
-  const { studentTermSelectionEnabled, termPurchaseWindowDays } = getSettings();
+  const { studentTermSelectionEnabled, termPurchaseWindowDays } = getLoadedSettings();
 
   const rawEligibleTerms: TermOption[] = [];
   if (currentTerm && isCurrentTermPurchasable(currentTerm.startDate, todayStr, termPurchaseWindowDays)) {
