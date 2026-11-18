@@ -211,6 +211,8 @@ export interface ISpecialEventRepository {
   getPurchasesByStudent(studentId: string): Promise<MockEventPurchase[]>;
   getPurchaseByQrToken(token: string): Promise<MockEventPurchase | null>;
   getPurchaseById(id: string): Promise<MockEventPurchase | null>;
+  /** Oldest purchase carrying this reference. Throws when the lookup fails. */
+  getPurchaseByPaymentReference(paymentReference: string): Promise<MockEventPurchase | null>;
   /** Used by Finance super-admin tooling to enumerate all rows for the candidate scan. */
   getAllPurchases(): Promise<MockEventPurchase[]>;
   createPurchase(data: CreatePurchaseData): Promise<MockEventPurchase>;

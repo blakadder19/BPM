@@ -65,6 +65,7 @@ vi.mock("@/lib/repositories", () => {
     ],
     getPurchasesByStudent: async () => [],
     getPurchasesByEvent: async () => [],
+    getPurchaseByPaymentReference: async () => null,
     createPurchase: async (data: Record<string, unknown>) => {
       h.created.push(data);
       const now = new Date().toISOString();

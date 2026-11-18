@@ -409,6 +409,19 @@ export const supabaseSpecialEventRepo: ISpecialEventRepository = {
     return data ? toPurchase(data) : null;
   },
 
+  async getPurchaseByPaymentReference(ref) {
+    const sb = createAdminClient();
+    const { data, error } = await sb
+      .from("event_purchases")
+      .select("*")
+      .eq("payment_reference", ref)
+      .order("purchased_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return data ? toPurchase(data) : null;
+  },
+
   async getAllPurchases() {
     const sb = createAdminClient();
     const { data, error } = await sb

@@ -28,6 +28,28 @@ import {
   EMPTY_VAT_SNAPSHOT,
 } from "@/lib/domain/vat";
 
+/** Partial unique index on `payment_reference LIKE 'stripe:%'` (migration 00083). */
+const STRIPE_REFERENCE_UNIQUE_INDEX = "ux_event_purchases_stripe_reference";
+
+function isStripeReferenceConflict(error: string | undefined): boolean {
+  return !!error && error.includes(STRIPE_REFERENCE_UNIQUE_INDEX);
+}
+
+const inFlightBySession = new Map<string, Promise<unknown>>();
+
+/**
+ * The webhook and the success page can fulfil the same session at the same
+ * moment. Callers on one instance share a single run; across instances only
+ * the unique index from 00083 makes the insert atomic.
+ */
+function oncePerSession<T>(sessionId: string, run: () => Promise<T>): Promise<T> {
+  const pending = inFlightBySession.get(sessionId);
+  if (pending) return pending as Promise<T>;
+  const started = run().finally(() => inFlightBySession.delete(sessionId));
+  inFlightBySession.set(sessionId, started);
+  return started;
+}
+
 export function centsToEuros(c: number): string {
   return `€${(c / 100).toFixed(2)}`;
 }
@@ -139,7 +161,19 @@ async function rehydrateFrozenPricing(
  * Webhook fulfillment for guest event purchases paid via Stripe.
  * Generates QR immediately since payment is already confirmed.
  */
-export async function fulfillGuestEventPurchase(
+export function fulfillGuestEventPurchase(
+  sessionId: string,
+  metadata: Record<string, string>,
+): Promise<{ success: boolean; error?: string; emailResult?: EmailSendResult }> {
+  return oncePerSession(sessionId, () => fulfillGuestEventPurchaseOnce(sessionId, metadata));
+}
+
+const ALREADY_FULFILLED_EMAIL: EmailSendResult = {
+  sent: false,
+  reason: "Already fulfilled (email was sent on first fulfillment)",
+};
+
+async function fulfillGuestEventPurchaseOnce(
   sessionId: string,
   metadata: Record<string, string>,
 ): Promise<{ success: boolean; error?: string; emailResult?: EmailSendResult }> {
@@ -159,11 +193,10 @@ export async function fulfillGuestEventPurchase(
   const paymentRef = `stripe:${sessionId}`;
   const repo = getSpecialEventRepo();
 
-  const allPurchases = await repo.getPurchasesByEvent(eventId);
-  const alreadyFulfilled = allPurchases.find((p) => p.paymentReference === paymentRef);
+  const alreadyFulfilled = await repo.getPurchaseByPaymentReference(paymentRef);
   if (alreadyFulfilled) {
     console.info(`${tag} Already fulfilled (idempotent skip). purchaseId=${alreadyFulfilled.id}`);
-    return { success: true, emailResult: { sent: false, reason: "Already fulfilled (email was sent on first fulfillment)" } };
+    return { success: true, emailResult: ALREADY_FULFILLED_EMAIL };
   }
 
   const qrToken = generateGuestPurchaseQrToken();
@@ -180,6 +213,12 @@ export async function fulfillGuestEventPurchase(
   // `applied_discount` snapshot on the purchase row.
   // Phase 15 — also rehydrates the frozen VAT breakdown.
   const frozen = await rehydrateFrozenPricing(metadata, product?.priceCents ?? 0);
+
+  const fulfilledMeanwhile = await repo.getPurchaseByPaymentReference(paymentRef);
+  if (fulfilledMeanwhile) {
+    console.info(`${tag} Fulfilled concurrently (idempotent skip). purchaseId=${fulfilledMeanwhile.id}`);
+    return { success: true, emailResult: ALREADY_FULFILLED_EMAIL };
+  }
 
   const result = await createPurchase({
     studentId: null,
@@ -199,6 +238,10 @@ export async function fulfillGuestEventPurchase(
   });
 
   if (!result.success) {
+    if (isStripeReferenceConflict(result.error)) {
+      console.info(`${tag} Fulfilled concurrently (unique reference). Skipping.`);
+      return { success: true, emailResult: ALREADY_FULFILLED_EMAIL };
+    }
     console.error(`${tag} createPurchase FAILED: ${result.error}`);
     return result;
   }
@@ -206,7 +249,8 @@ export async function fulfillGuestEventPurchase(
   console.info(`${tag} Purchase created successfully. Sending confirmation email...`);
 
   // Only the call that created the purchase reaches this point (replays
-  // return above), so the confirmation and its receipt link go out once.
+  // and concurrent runs return above), so the confirmation and its receipt
+  // link go out once.
   let emailResult: EmailSendResult = { sent: false, reason: "Email send was not attempted" };
   const purchaseId = result.data ?? null;
 
@@ -247,7 +291,14 @@ export async function fulfillGuestEventPurchase(
 /**
  * Webhook fulfillment: marks an event purchase as paid after Stripe confirms.
  */
-export async function fulfillEventPurchase(
+export function fulfillEventPurchase(
+  sessionId: string,
+  metadata: Record<string, string>,
+): Promise<{ success: boolean; error?: string }> {
+  return oncePerSession(sessionId, () => fulfillEventPurchaseOnce(sessionId, metadata));
+}
+
+async function fulfillEventPurchaseOnce(
   sessionId: string,
   metadata: Record<string, string>,
 ): Promise<{ success: boolean; error?: string }> {
@@ -261,9 +312,7 @@ export async function fulfillEventPurchase(
   const paymentRef = `stripe:${sessionId}`;
   const repo = getSpecialEventRepo();
 
-  const existing = await repo.getPurchasesByStudent(studentId);
-  const alreadyFulfilled = existing.find((p) => p.paymentReference === paymentRef);
-  if (alreadyFulfilled) return { success: true };
+  if (await repo.getPurchaseByPaymentReference(paymentRef)) return { success: true };
 
   // Rehydrate the frozen pricing snapshot the checkout action stuffed
   // into Stripe metadata. This is what makes pricing tamper-proof: the
@@ -285,6 +334,8 @@ export async function fulfillEventPurchase(
     ? buildFinancialSnapshotFromFrozen(product, frozen, true)
     : {};
 
+  if (await repo.getPurchaseByPaymentReference(paymentRef)) return { success: true };
+
   const result = await createPurchase({
     studentId,
     eventProductId,
@@ -295,6 +346,7 @@ export async function fulfillEventPurchase(
     paidAt: new Date().toISOString(),
     ...snapshot,
   });
+  if (!result.success && isStripeReferenceConflict(result.error)) return { success: true };
 
   if (result.success) {
     try {

@@ -104,6 +104,9 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
   async getPurchasesByStudent(studentId) { return store.getPurchasesForStudent(studentId); },
   async getPurchaseByQrToken(token) { return store.getPurchaseByQrToken(token); },
   async getPurchaseById(id) { return store.getPurchaseById(id); },
+  async getPurchaseByPaymentReference(ref) {
+    return store.getAllPurchases().find((p) => p.paymentReference === ref) ?? null;
+  },
   async getAllPurchases() { return store.getAllPurchases(); },
 
   async createPurchase(data: CreatePurchaseData) {

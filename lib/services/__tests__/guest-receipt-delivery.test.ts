@@ -24,6 +24,8 @@ vi.mock("@/lib/repositories", () => ({
   getSpecialEventRepo: () => ({
     getPurchaseById: async (id: string) => h.purchases.get(id) ?? null,
     getPurchasesByEvent: async (eventId: string) => [...h.purchases.values()].filter((p) => p.eventId === eventId),
+    getPurchaseByPaymentReference: async (ref: string) =>
+      [...h.purchases.values()].find((p) => p.paymentReference === ref) ?? null,
     getEventById: async (id: string) => ({ id, title: "Salsa <Night> & Co", coverImageUrl: null }),
     getProductsByEvent: async () => [
       { id: "prod-1", name: "Full Pass", productType: "full_pass", priceCents: 9999, inclusionRule: "all_sessions", includedSessionIds: [] },
