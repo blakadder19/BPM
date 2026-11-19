@@ -1,5 +1,6 @@
 import Script from "next/script";
 import { getGtmId, getMetaPixelId } from "@/lib/analytics/tracking";
+import { AnalyticsRouteGate } from "@/components/analytics/analytics-route-gate";
 
 /**
  * Root-layout analytics scripts.
@@ -19,7 +20,8 @@ import { getGtmId, getMetaPixelId } from "@/lib/analytics/tracking";
  * Neither runs unless the platform is configured.
  *
  * Security note: only these public NEXT_PUBLIC_ IDs appear in the
- * markup. No server keys or secrets are exposed by this file.
+ * markup. No server keys or secrets are exposed by this file. Pages in
+ * `isAnalyticsExcludedPath` (guest receipts) render none of it.
  */
 
 export function AnalyticsScripts() {
@@ -29,7 +31,7 @@ export function AnalyticsScripts() {
   if (!gtmId && !metaPixelId) return null;
 
   return (
-    <>
+    <AnalyticsRouteGate>
       {gtmId && (
         <>
           <Script id="bpm-gtm" strategy="afterInteractive">
@@ -77,6 +79,6 @@ fbq('track', 'PageView');`}
           </noscript>
         </>
       )}
-    </>
+    </AnalyticsRouteGate>
   );
 }

@@ -11,6 +11,7 @@ import type {
   CreatePurchaseData,
 } from "../interfaces/special-event-repository";
 import type { EventPaymentStatus } from "@/types/domain";
+import { freezeEventTitle } from "@/lib/domain/event-title-snapshot";
 
 export const memorySpecialEventRepo: ISpecialEventRepository = {
   // ── Events ───────────────────────────────────────────────
@@ -103,6 +104,9 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
   async getPurchasesByStudent(studentId) { return store.getPurchasesForStudent(studentId); },
   async getPurchaseByQrToken(token) { return store.getPurchaseByQrToken(token); },
   async getPurchaseById(id) { return store.getPurchaseById(id); },
+  async getPurchaseByPaymentReference(ref) {
+    return store.getAllPurchases().find((p) => p.paymentReference === ref) ?? null;
+  },
   async getAllPurchases() { return store.getAllPurchases(); },
 
   async createPurchase(data: CreatePurchaseData) {
@@ -130,6 +134,7 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
       currency: data.currency ?? "eur",
       productNameSnapshot: data.productNameSnapshot ?? null,
       productTypeSnapshot: data.productTypeSnapshot ?? null,
+      eventTitleSnapshot: freezeEventTitle(data.eventTitleSnapshot),
       appliedDiscount: data.appliedDiscount ?? null,
       subtotalExVatCents: data.subtotalExVatCents ?? null,
       vatAmountCents: data.vatAmountCents ?? null,
@@ -171,20 +176,19 @@ export const memorySpecialEventRepo: ISpecialEventRepository = {
   async refundPurchase(
     id,
     patch: {
-      refundedAt: string;
-      refundedBy: string;
-      refundReason: string | null;
+      refundedAt?: string;
+      refundedBy?: string;
+      refundReason?: string | null;
       fullRefund?: boolean;
       stripeRefundId?: string | null;
       refundedAmountCents?: number;
       refundStatus?: "succeeded" | "pending" | "failed" | null;
     },
   ) {
-    const fields: Parameters<typeof store.patchPurchase>[1] = {
-      refundedAt: patch.refundedAt,
-      refundedBy: patch.refundedBy,
-      refundReason: patch.refundReason,
-    };
+    const fields: Parameters<typeof store.patchPurchase>[1] = {};
+    if (patch.refundedAt !== undefined) fields.refundedAt = patch.refundedAt;
+    if (patch.refundedBy !== undefined) fields.refundedBy = patch.refundedBy;
+    if (patch.refundReason !== undefined) fields.refundReason = patch.refundReason;
     if (patch.stripeRefundId !== undefined) fields.stripeRefundId = patch.stripeRefundId;
     if (patch.refundedAmountCents !== undefined) fields.refundedAmountCents = patch.refundedAmountCents;
     if (patch.refundStatus !== undefined) fields.refundStatus = patch.refundStatus;

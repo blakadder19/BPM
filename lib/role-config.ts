@@ -16,6 +16,7 @@ export type NavIconKey =
   | "bookings"
   | "events"
   | "catalog"
+  | "payments"
   | "attendance"
   | "students"
   | "terms"
@@ -62,6 +63,7 @@ export const NAVIGATION: NavItem[] = [
   { name: "Bookings", href: "/bookings", iconKey: "bookings", roles: ["admin", "teacher", "student"], permission: "bookings:view" },
   { name: "Events", href: "/events", iconKey: "events", roles: ["admin", "student"], permission: "events:view" },
   { name: "Catalog", href: "/catalog", iconKey: "catalog", roles: ["student"] },
+  { name: "Payments", href: "/payments", iconKey: "payments", roles: ["student"] },
   { name: "Attendance", href: "/attendance", iconKey: "attendance", roles: ["admin", "teacher"], permission: "attendance:view" },
   { name: "Students", href: "/students", iconKey: "students", roles: ["admin"], permission: ["students:view", "students:view_limited"] },
   { name: "Terms", href: "/terms", iconKey: "terms", roles: ["admin"] },
@@ -153,6 +155,7 @@ const ROUTE_ACCESS: { prefix: string; roles: UserRole[] }[] = [
   { prefix: "/bookings", roles: ["admin", "teacher", "student"] },
   { prefix: "/events", roles: ["admin", "student"] },
   { prefix: "/catalog", roles: ["student"] },
+  { prefix: "/payments", roles: ["student"] },
   { prefix: "/attendance", roles: ["admin", "teacher"] },
   // Operational admin pages — staff with limited roles (front_desk,
   // teacher) need access to these to do their jobs. Page-level

@@ -30,6 +30,7 @@ import {
   Ticket,
   CheckCircle2,
   AlertTriangle,
+  Receipt,
 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { PageHeader } from "@/components/ui/page-header";
@@ -497,6 +498,12 @@ export function StudentDashboard({
           <span className="text-lg font-bold text-gray-900">{waitlistedCount}</span>
           <span className="text-xs text-gray-500">waitlisted</span>
         </div>
+        <ArrowRight className="h-3.5 w-3.5 text-gray-400 ml-auto" />
+      </Link>
+
+      <Link href="/payments" className="flex items-center gap-2 rounded-md border border-gray-200 bg-white px-3 py-2.5 hover:bg-gray-50 transition-colors">
+        <Receipt className="h-4 w-4 text-bpm-600" />
+        <span className="text-sm font-medium text-gray-900">Payments &amp; receipts</span>
         <ArrowRight className="h-3.5 w-3.5 text-gray-400 ml-auto" />
       </Link>
 

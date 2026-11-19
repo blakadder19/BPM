@@ -5,11 +5,12 @@ import type Stripe from "stripe";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import { requireAnyPermissionForAction } from "@/lib/staff-permissions";
 import { getSpecialEventRepo, getSubscriptionRepo } from "@/lib/repositories";
-import { updateSubscription } from "@/lib/services/subscription-service";
-import { refundPurchase } from "@/lib/services/special-event-service";
+import { applyStripeRefundOutcome } from "@/lib/services/stripe-refund-outcome";
 import { logFinanceEvent, type AuditPerformer } from "@/lib/services/finance-audit-log";
 import { allocateRefundedVat } from "@/lib/domain/vat";
 import {
+  mapStripeRefundStatus,
+  planStripeRefundPersistence,
   validateStripeRefundRequest,
   type RefundableRecord,
 } from "@/lib/domain/stripe-refund-rules";
@@ -30,7 +31,10 @@ import type { AuthUser } from "@/lib/auth";
  *     and has a `stripe:<sessionId>` reference.
  *   * Validates the amount against the cumulative refunded amount on
  *     the row (supports partial refunds, blocks over-refunds).
- *   * Only flips BPM state AFTER Stripe accepts the refund.
+ *   * Records returned money only once Stripe reports the refund as
+ *     `succeeded`. A `pending` refund is recorded as pending (and blocks
+ *     further refunds) until the `refund.updated` webhook resolves it;
+ *     a `failed` one changes no money field.
  *   * Writes a finance-audit entry with the Stripe refund id, the
  *     stripe-side status, and the original payment reference.
  *   * Never logs raw Stripe secrets or full session metadata.
@@ -90,17 +94,6 @@ async function resolvePaymentIntent(
   }
 }
 
-/**
- * Convert Stripe's refund.status into BPM's narrower enum. Stripe can
- * also return `canceled` or `requires_action`; we map those to
- * `failed` so BPM never marks the row refunded for them.
- */
-function mapStripeRefundStatus(status: string | null | undefined): "succeeded" | "pending" | "failed" | null {
-  if (!status) return null;
-  if (status === "succeeded" || status === "pending" || status === "failed") return status;
-  return "failed";
-}
-
 export async function issueStripeRefundAction(
   input: IssueStripeRefundInput,
 ): Promise<IssueStripeRefundResult> {
@@ -134,6 +127,7 @@ export async function issueStripeRefundAction(
       refundedAmountCents: sub.refundedAmountCents ?? 0,
       paymentStatus: sub.paymentStatus,
       currency: sub.currencyAtPurchase ?? "EUR",
+      refundStatus: sub.refundStatus ?? null,
     };
     label = sub.productName || "Subscription";
     currency = (sub.currencyAtPurchase ?? "EUR").toLowerCase();
@@ -141,8 +135,7 @@ export async function issueStripeRefundAction(
     rowVatRatePercent = sub.vatRatePercent ?? null;
   } else {
     // event_purchase
-    const all = await getSpecialEventRepo().getAllPurchases();
-    const purchase = all.find((p) => p.id === input.id);
+    const purchase = await getSpecialEventRepo().getPurchaseById(input.id);
     if (!purchase) return { success: false, error: "Event purchase not found." };
     record = {
       paymentMethod: purchase.paymentMethod,
@@ -151,6 +144,7 @@ export async function issueStripeRefundAction(
       refundedAmountCents: purchase.refundedAmountCents ?? 0,
       paymentStatus: purchase.paymentStatus,
       currency: purchase.currency ?? "eur",
+      refundStatus: purchase.refundStatus ?? null,
     };
     label = purchase.productNameSnapshot || "Event purchase";
     currency = (purchase.currency ?? "eur").toLowerCase();
@@ -196,67 +190,65 @@ export async function issueStripeRefundAction(
   const stripeRefundId = refund.id;
   const stripeStatus = mapStripeRefundStatus(refund.status);
 
-  // ── 7) Persist BPM-side state (only after Stripe accepted) ──
-  const refundedAtIso = new Date().toISOString();
+  // ── 7) Persist BPM-side state, per what Stripe actually reported ──
+  // Only a `succeeded` refund adds to the confirmed refunded amount,
+  // stamps refunded_at or flips the row to "refunded".
+  const plan = planStripeRefundPersistence({
+    stripeStatus,
+    previousConfirmedRefundedCents: record.refundedAmountCents,
+    refundAmountCents: v.amountCents,
+    paidAmountCents: record.paidAmountCents ?? 0,
+  });
   const refundedByDisplay = admin.fullName?.trim() || admin.email || admin.id;
-  let persistError: string | null = null;
-
-  if (input.kind === "subscription") {
-    const patch: Parameters<typeof updateSubscription>[1] = {
-      stripeRefundId,
-      refundedAmountCents: v.newRefundedAmountCents,
-      refundStatus: stripeStatus,
-      refundedAt: refundedAtIso,
-      refundedBy: refundedByDisplay,
-      refundReason: v.reason,
-    };
-    if (v.fullRefund && stripeStatus !== "failed") {
-      patch.paymentStatus = "refunded";
-    }
-    const r = await updateSubscription(input.id, patch);
-    if (!r.success) persistError = r.error ?? "Failed to update subscription after refund.";
-  } else {
-    const r = await refundPurchase(input.id, {
-      refundedAt: refundedAtIso,
-      refundedBy: refundedByDisplay,
-      refundReason: v.reason,
-      stripeRefundId,
-      refundedAmountCents: v.newRefundedAmountCents,
-      refundStatus: stripeStatus,
-      fullRefund: v.fullRefund && stripeStatus !== "failed",
-    });
-    if (!r.success) persistError = r.error ?? "Failed to update event purchase after refund.";
-  }
+  const persisted = await applyStripeRefundOutcome({
+    kind: input.kind,
+    id: input.id,
+    plan,
+    stripeRefundId,
+    confirmedAtIso: new Date().toISOString(),
+    ...(plan.outcome === "failed" ? {} : { refundedBy: refundedByDisplay, refundReason: v.reason }),
+  });
+  const persistError = persisted.success ? null : persisted.error ?? "Failed to update the purchase after refund.";
+  const confirmed = plan.outcome === "confirmed";
+  const confirmedRefundedCents = confirmed ? plan.refundedAmountCents : record.refundedAmountCents;
 
   // ── 8) Finance audit (always written, even if BPM-side persistence
-  //        failed — the money has moved on Stripe and we need the trail).
+  //        failed — Stripe holds a refund object and we need the trail).
   logFinanceEvent({
     entityType: input.kind === "subscription" ? "subscription" : "event_purchase",
     entityId: input.id,
-    action: "refunded",
+    action: confirmed ? "refunded" : "status_changed",
     performer: performerFromUser(admin),
     detail: v.reason,
     previousValue: record.paymentStatus,
-    newValue: v.fullRefund ? "refunded" : "partially_refunded",
+    newValue: confirmed
+      ? plan.fullRefund
+        ? "refunded"
+        : "partially_refunded"
+      : plan.outcome === "pending"
+        ? "refund_pending"
+        : "refund_failed",
     metadata: {
       mode: "stripe",
       stripeRefundId,
-      stripeRefundStatus: stripeStatus,
-      refundedAmountCents: v.amountCents,
-      cumulativeRefundedAmountCents: v.newRefundedAmountCents,
+      stripeRefundStatus: refund.status ?? null,
+      refundedAmountCents: confirmed ? v.amountCents : 0,
+      requestedRefundAmountCents: v.amountCents,
+      cumulativeRefundedAmountCents: confirmedRefundedCents,
       paidAmountCents: record.paidAmountCents,
       currency,
       originalPaymentReference: record.paymentReference,
       stripePaymentIntent: piResult.paymentIntent,
       label,
-      fullRefund: v.fullRefund,
+      fullRefund: confirmed && plan.fullRefund,
       bpmPersistenceError: persistError,
-      // Phase 15 — VAT being handed back. `vatReversedCents` is the
-      // slice attributable to THIS refund; `cumulativeVatReversedCents`
-      // is the running total after it, which is what Finance nets out
-      // of "VAT collected". A full refund always reverses the whole
-      // VAT amount exactly, never a rounded approximation of it.
-      ...(rowVatAmountCents != null
+      // Phase 15 — VAT being handed back, only once money has moved.
+      // `vatReversedCents` is the slice attributable to THIS refund;
+      // `cumulativeVatReversedCents` is the running total after it, which
+      // is what Finance nets out of "VAT collected". A full refund always
+      // reverses the whole VAT amount exactly, never a rounded
+      // approximation of it.
+      ...(confirmed && rowVatAmountCents != null
         ? {
             vatAmountOnPurchaseCents: rowVatAmountCents,
             vatRatePercent: rowVatRatePercent,
@@ -264,7 +256,7 @@ export async function issueStripeRefundAction(
               allocateRefundedVat({
                 vatAmountCents: rowVatAmountCents,
                 totalIncVatCents: record.paidAmountCents ?? 0,
-                refundedAmountCents: v.newRefundedAmountCents,
+                refundedAmountCents: confirmedRefundedCents,
               }) -
               allocateRefundedVat({
                 vatAmountCents: rowVatAmountCents,
@@ -274,7 +266,7 @@ export async function issueStripeRefundAction(
             cumulativeVatReversedCents: allocateRefundedVat({
               vatAmountCents: rowVatAmountCents,
               totalIncVatCents: record.paidAmountCents ?? 0,
-              refundedAmountCents: v.newRefundedAmountCents,
+              refundedAmountCents: confirmedRefundedCents,
             }),
           }
         : {}),
@@ -287,16 +279,38 @@ export async function issueStripeRefundAction(
   revalidatePath("/dashboard");
   if (input.kind === "event_purchase") revalidatePath("/events");
 
+  if (plan.outcome === "pending") {
+    return {
+      success: false,
+      error: `Stripe accepted the refund (${stripeRefundId}) but has not confirmed it yet. BPM will record it as refunded only when Stripe confirms it.${persistError ? ` BPM-side update also failed: ${persistError}` : ""}`,
+      stripeRefundId,
+      refundStatus: "pending",
+      refundedAmountCents: 0,
+      fullRefund: false,
+    };
+  }
+
+  if (plan.outcome === "failed") {
+    return {
+      success: false,
+      error: `Stripe reported the refund (${stripeRefundId}) as failed. No money was returned and BPM was not marked refunded.`,
+      stripeRefundId,
+      refundStatus: "failed",
+      refundedAmountCents: 0,
+      fullRefund: false,
+    };
+  }
+
   if (persistError) {
-    // Stripe succeeded but BPM-side write failed — surface a partial-success
-    // message so the admin knows to reconcile, but don't pretend it failed.
+    // Stripe returned the money but the BPM-side write failed — surface a
+    // partial-success message so the admin knows to reconcile.
     return {
       success: false,
       error: `Stripe refund created (${stripeRefundId}) but BPM-side update failed: ${persistError}`,
       stripeRefundId,
       refundStatus: stripeStatus,
       refundedAmountCents: v.amountCents,
-      fullRefund: v.fullRefund,
+      fullRefund: plan.fullRefund,
     };
   }
 
@@ -305,6 +319,6 @@ export async function issueStripeRefundAction(
     stripeRefundId,
     refundStatus: stripeStatus,
     refundedAmountCents: v.amountCents,
-    fullRefund: v.fullRefund,
+    fullRefund: plan.fullRefund,
   };
 }

@@ -34,6 +34,11 @@ import {
 } from "@/config/business-rules";
 import { DEFAULT_BEGINNER_LEVEL_NAMES } from "@/config/class-levels";
 import { getDanceStyles } from "@/lib/services/dance-style-store";
+import {
+  EMPTY_RECEIPT_BUSINESS_SETTINGS,
+  normalizeReceiptBusinessSettings,
+  type ReceiptBusinessSettings,
+} from "@/lib/domain/receipt-settings";
 import type { ProductType } from "@/types/domain";
 
 export interface AppSettings {
@@ -133,6 +138,14 @@ export interface AppSettings {
    */
   applyVatToManualPayments: boolean;
 
+  // Payment Receipts (Phase 23)
+  /**
+   * Business identity printed on Payment Receipts. Every field optional;
+   * unset fields are simply not printed. Read through
+   * {@link getReceiptBusinessSettings}, which re-normalises the stored value.
+   */
+  receiptBusiness: ReceiptBusinessSettings;
+
   // Admin alert preferences
   disabledAlertIds: string[];
 
@@ -183,6 +196,8 @@ function defaults(): AppSettings {
     vatPriceMode: VAT_PRICE_MODE_DEFAULT,
     applyVatToOnlinePayments: VAT_APPLY_TO_ONLINE_DEFAULT,
     applyVatToManualPayments: VAT_APPLY_TO_MANUAL_DEFAULT,
+
+    receiptBusiness: { ...EMPTY_RECEIPT_BUSINESS_SETTINGS },
 
     disabledAlertIds: [],
 
@@ -280,24 +295,76 @@ async function loadSettingsFromDB(): Promise<Partial<AppSettings> | null> {
   return null;
 }
 
-async function saveSettingsToDB(settings: AppSettings): Promise<void> {
+const SETTINGS_WRITE_ATTEMPTS = 3;
+
+/** Another save changed the settings row on every attempt; nothing was written. */
+export class SettingsWriteConflictError extends Error {
+  constructor() {
+    super("The settings were changed by another save at the same time. Nothing was saved — reload and try again.");
+    this.name = "SettingsWriteConflictError";
+  }
+}
+
+/**
+ * Read-modify-write of the settings row as a compare-and-swap: the update
+ * only applies if `updated_at` (set to now() by a BEFORE UPDATE trigger on
+ * every write) still has the value that was read, so two concurrent saves
+ * cannot silently drop each other's fields. On a lost race the row is
+ * re-read and `apply` re-run. Read and write failures throw.
+ */
+async function writeSettingsRow(apply: (current: AppSettings) => AppSettings): Promise<AppSettings> {
   const client = getSupabaseClient();
   if (!client) throw new Error("Supabase is not configured");
-  const academyId = g.__bpm_settingsAcademyId;
-  if (!academyId) throw new Error("No academy found to save settings for");
 
-  const { error } = await client
-    .from("business_rules")
-    .upsert(
-      {
-        academy_id: academyId,
-        key: SETTINGS_KEY,
-        value: settings as unknown as Record<string, unknown>,
-        description: "Full app settings blob (managed by Settings page)",
-      },
-      { onConflict: "academy_id,key" }
-    );
-  if (error) throw new Error(error.message ?? "business_rules write failed");
+  for (let attempt = 0; attempt < SETTINGS_WRITE_ATTEMPTS; attempt++) {
+    const { data, error } = await client
+      .from("business_rules")
+      .select("value, academy_id, updated_at")
+      .eq("key", SETTINGS_KEY)
+      .maybeSingle();
+    if (error) throw new Error(error.message ?? "business_rules read failed");
+
+    const next = apply({ ...defaults(), ...((data?.value as Partial<AppSettings> | null) ?? {}) });
+    const value = next as unknown as Record<string, unknown>;
+
+    if (data) {
+      const { data: written, error: writeError } = await client
+        .from("business_rules")
+        .update({ value })
+        .eq("academy_id", data.academy_id)
+        .eq("key", SETTINGS_KEY)
+        .eq("updated_at", data.updated_at)
+        .select("id");
+      if (writeError) throw new Error(writeError.message ?? "business_rules write failed");
+      if (Array.isArray(written) && written.length === 1) {
+        g.__bpm_settingsAcademyId = data.academy_id;
+        return next;
+      }
+      continue;
+    }
+
+    const academyId = await resolveAcademyId(client);
+    const { error: insertError } = await client.from("business_rules").insert({
+      academy_id: academyId,
+      key: SETTINGS_KEY,
+      value,
+      description: "Full app settings blob (managed by Settings page)",
+    });
+    if (!insertError) {
+      g.__bpm_settingsAcademyId = academyId;
+      return next;
+    }
+    if (insertError.code !== "23505") throw new Error(insertError.message ?? "business_rules write failed");
+  }
+  throw new SettingsWriteConflictError();
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function resolveAcademyId(client: any): Promise<string> {
+  if (g.__bpm_settingsAcademyId) return g.__bpm_settingsAcademyId;
+  const { data, error } = await client.from("academies").select("id").limit(1).maybeSingle();
+  if (error || !data) throw new Error("No academy found to save settings for");
+  return data.id as string;
 }
 
 // ── File-based fallback (local dev / memory mode) ────────────
@@ -362,6 +429,10 @@ export function getLoadedSettings(): AppSettings {
   throw new SettingsUnavailableError("Business settings are not loaded");
 }
 
+export function getReceiptBusinessSettings(): ReceiptBusinessSettings {
+  return normalizeReceiptBusinessSettings(getLoadedSettings().receiptBusiness);
+}
+
 function mergeSettings(current: AppSettings, patch: Partial<AppSettings>): AppSettings {
   const updated = { ...current, ...patch };
   if (patch.roleBalancedStyleNames) {
@@ -375,8 +446,9 @@ function mergeSettings(current: AppSettings, patch: Partial<AppSettings>): AppSe
 
 /**
  * Supabase mode merges the patch into the row as it is in the database
- * right now (never a stale or default cache) and throws if the read or
- * write fails, so a failed save is never reported as success.
+ * right now (never a stale or default cache, never over a concurrent save)
+ * and throws if the read or write fails, so a failed save is never
+ * reported as success.
  */
 export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSettings> {
   if (!hasSupabaseConfig()) {
@@ -385,13 +457,41 @@ export async function updateSettings(patch: Partial<AppSettings>): Promise<AppSe
     return { ...updated };
   }
 
-  const dbSettings = await loadSettingsFromDB();
-  const updated = mergeSettings({ ...defaults(), ...(dbSettings ?? {}) }, patch);
-  await saveSettingsToDB(updated);
+  const updated = await writeSettingsRow((current) => mergeSettings(current, patch));
   g.__bpm_settings = updated;
   g.__bpm_settingsHydrated = true;
   g.__bpm_settingsLastFailure = undefined;
   return { ...updated };
+}
+
+/**
+ * Replace only `receiptBusiness`, merged into the row as it is in the
+ * database now (this instance's cache may be stale) with the same
+ * compare-and-swap as `updateSettings`. Failures are returned, so a save
+ * can never write defaults or an old copy over the other settings.
+ */
+export async function updateReceiptBusinessSettings(
+  next: ReceiptBusinessSettings,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const receiptBusiness = normalizeReceiptBusinessSettings(next);
+  if (!hasSupabaseConfig()) {
+    writeToDisk({ ...readFromDisk(), receiptBusiness });
+    return { ok: true };
+  }
+
+  let fresh: AppSettings;
+  try {
+    fresh = await writeSettingsRow((current) => ({ ...current, receiptBusiness }));
+  } catch (e) {
+    if (e instanceof SettingsWriteConflictError) return { ok: false, error: e.message };
+    console.warn("[settings-store] Receipt business settings save failed:", e instanceof Error ? e.message : e);
+    return { ok: false, error: "The settings could not be saved. Nothing was changed." };
+  }
+
+  g.__bpm_settings = fresh;
+  g.__bpm_settingsHydrated = true;
+  g.__bpm_settingsLastFailure = undefined;
+  return { ok: true };
 }
 
 // ── Hydration (called from hydrate-operational.ts on cold start) ──

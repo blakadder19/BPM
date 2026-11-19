@@ -5,7 +5,12 @@ import { updateSession, authUnavailableResponse } from "@/lib/supabase/middlewar
 // page (which then offers a sign-in link that returns them here). The
 // page itself enforces authentication and email matching before it
 // grants anything — the token is not a bearer credential.
-const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/reset-password", "/update-password", "/checkout", "/embed-entry", "/explore", "/event", "/invite"];
+// `/receipt` and `/receipt/open` are public on purpose: they serve one
+// guest Payment Receipt and the route itself verifies the token (see
+// lib/server/guest-receipt-route.ts). Matching is exact or by "/"
+// segment, so `/api/receipts/**` (student and staff downloads) still
+// requires a session.
+const PUBLIC_ROUTES = ["/login", "/signup", "/auth/callback", "/auth/confirm", "/reset-password", "/update-password", "/checkout", "/embed-entry", "/explore", "/event", "/invite", "/receipt"];
 const API_ROUTES_SELF_AUTH = ["/api/lifecycle", "/api/webhooks"];
 
 const EMBED_ALLOWED_ORIGINS = [
@@ -101,7 +106,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // Prevent BFCache from showing stale protected pages after logout
-  supabaseResponse.headers.set("Cache-Control", "no-store, must-revalidate");
+  supabaseResponse.headers.set("Cache-Control", "private, no-store, must-revalidate");
   applyFrameHeaders(supabaseResponse, pathname);
   return supabaseResponse;
 }

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   PRESET_ADDITIONS_00080,
   PRESET_ADDITIONS_00081,
+  PRESET_ADDITIONS_00082,
   ROLE_PRESETS,
   expandPermissions,
   legacyEffectivePermissions,
@@ -65,7 +66,7 @@ const ROWS: { label: string; roleKey: StaffRoleKey | null; stored: Permission[] 
 
 /** ROLE_PRESETS as of 00080, i.e. without keys added by later migrations. */
 function presetAt00080(role: (typeof PRESET_ROLES)[number]): string[] {
-  const later = PRESET_ADDITIONS_00081[role] ?? [];
+  const later = [...(PRESET_ADDITIONS_00081[role] ?? []), ...(PRESET_ADDITIONS_00082[role] ?? [])];
   return ROLE_PRESETS[role].filter((p) => !later.includes(p)).sort();
 }
 

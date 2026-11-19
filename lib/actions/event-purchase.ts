@@ -9,6 +9,8 @@ import { sendEventPurchaseEmail, sendEventRefundEmail } from "@/lib/communicatio
 import { centsToEuros, buildInclusionSummary } from "@/lib/services/event-purchase-fulfillment";
 import { generateGuestPurchaseQrToken } from "@/lib/domain/checkin-token";
 import { logFinanceEvent, type AuditPerformer } from "@/lib/services/finance-audit-log";
+import { manualFullRefundFields } from "@/lib/domain/manual-refund";
+import { claimInitialGuestReceiptUrl } from "@/lib/services/guest-receipt-delivery";
 import { studentHasActiveMembership } from "@/lib/domain/active-membership";
 import {
   buildAuditDiscountMetadata,
@@ -561,19 +563,23 @@ export async function markEventPurchasePaidAction(input: {
           repo.getProductsByEvent(input.eventId).then((ps) => ps.find((p) => p.id === purchase.eventProductId)).catch(() => null),
         ]);
         if (product) {
+          // Runs once per pending → paid transition; the receipt link is
+          // claimed without revoking any link issued earlier.
+          const receiptUrl = await claimInitialGuestReceiptUrl(input.purchaseId);
           const emailResult = await sendEventPurchaseEmail({
             studentId: null,
             studentName: purchase.guestName ?? "Guest",
             directEmail: purchase.guestEmail,
             eventTitle: event?.title ?? "Special Event",
             eventId: input.eventId,
-            productName: product.name,
-            productType: product.productType,
-            priceLabel: centsToEuros(product.priceCents),
+            productName: purchase.productNameSnapshot ?? product.name,
+            productType: purchase.productTypeSnapshot ?? product.productType,
+            priceLabel: centsToEuros(paidAmountCents ?? product.priceCents),
             paymentStatus: "paid",
             inclusionSummary: buildInclusionSummary(product.inclusionRule, product.includedSessionIds),
             qrToken: qrToken ?? undefined,
             coverImageUrl: event?.coverImageUrl ?? undefined,
+            receiptUrl: receiptUrl ?? undefined,
           });
           try {
             await repo.updatePurchaseEmailTracking(input.purchaseId, {
@@ -642,12 +648,13 @@ export async function refundEventPurchaseAction(input: {
     };
   }
 
-  const refundedAt = new Date().toISOString();
-
+  // Full refund only (the dialog collects no amount): record exactly the
+  // frozen amount paid, never a live product price.
   const result = await refundPurchase(input.purchaseId, {
-    refundedAt,
+    ...manualFullRefundFields({ frozenPaidCents: purchase.paidAmountCents, refundedAtIso: new Date().toISOString() }),
     refundedBy: user.id,
     refundReason: input.refundReason?.trim() || null,
+    fullRefund: true,
   });
 
   if (!result.success) return result;

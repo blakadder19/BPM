@@ -34,6 +34,7 @@ import {
 import { ensureOperationalDataHydrated } from "@/lib/supabase/hydrate-operational";
 import { getBookingService } from "@/lib/services/booking-store";
 import { logFinanceEvent } from "@/lib/services/finance-audit-log";
+import { CLEARED_MANUAL_REFUND_FIELDS, manualFullRefundFields } from "@/lib/domain/manual-refund";
 import { getTodayStr } from "@/lib/domain/datetime";
 import { paymentPendingEvent, paymentConfirmedEvent, subscriptionRefundedEvent } from "@/lib/communications/builders";
 import { dispatchCommEvents } from "@/lib/communications/dispatch";
@@ -461,7 +462,11 @@ export async function updateSubscriptionAction(
   };
 
   if (paymentMethodRaw && canEditPaymentDetails) patch.paymentMethod = paymentMethodRaw as PaymentMethod;
-  if (paymentStatusChanged) patch.paymentStatus = nextPaymentStatus;
+  if (paymentStatusChanged) {
+    patch.paymentStatus = nextPaymentStatus;
+    const actor = gate.access.user.fullName ?? gate.access.user.email;
+    Object.assign(patch, manualRefundPatch(existing, existing.paymentStatus, nextPaymentStatus, actor, null));
+  }
 
   const selectedStyleId = formData.get("selectedStyleId") as string | null;
   const selectedStyleName = formData.get("selectedStyleName") as string | null;
@@ -638,6 +643,30 @@ function paymentTransitionError(
 }
 
 /**
+ * Refund fields for a manual (non-Stripe) payment-status change. Both the
+ * edit form and the confirmation modal reach "refunded" here; neither
+ * collects an amount, so the refund is the full frozen amount paid.
+ */
+function manualRefundPatch(
+  sub: { paymentMethod: PaymentMethod; stripeRefundId?: string | null; priceCentsAtPurchase: number | null },
+  previous: SalePaymentStatus,
+  next: SalePaymentStatus,
+  actor: string,
+  reason: string | null,
+): Parameters<typeof updateSubscription>[1] {
+  if (next === "refunded" && previous !== "refunded") {
+    return {
+      ...manualFullRefundFields({ frozenPaidCents: sub.priceCentsAtPurchase, refundedAtIso: new Date().toISOString() }),
+      refundedBy: actor,
+      refundReason: reason,
+    };
+  }
+  const viaStripe = sub.paymentMethod === "stripe" || !!sub.stripeRefundId;
+  if (previous === "refunded" && next !== "refunded" && !viaStripe) return { ...CLEARED_MANUAL_REFUND_FIELDS };
+  return {};
+}
+
+/**
  * Apply a sensitive payment status change with optional entitlement cancellation.
  * Called from the confirmation modal after the admin has chosen what to do.
  *
@@ -671,11 +700,10 @@ export async function applyPaymentChangeAction(params: {
     patch.status = "cancelled";
   }
 
-  if (params.newPaymentStatus === "refunded") {
-    patch.refundedAt = new Date().toISOString();
-    patch.refundedBy = admin.fullName ?? admin.email;
-    patch.refundReason = params.refundReason ?? null;
-  }
+  Object.assign(
+    patch,
+    manualRefundPatch(sub, previousStatus, params.newPaymentStatus, admin.fullName ?? admin.email, params.refundReason ?? null),
+  );
 
   // Pending → paid transition: stamp the actor + payment timestamp so
   // Finance's BY column resolves to the admin who marked it paid (and

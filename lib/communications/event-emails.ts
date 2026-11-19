@@ -4,8 +4,13 @@ import "server-only";
  * Transactional emails for special event purchases.
  *
  * Separate from the generic CommEvent system because event purchases
- * are a distinct domain that doesn't need in-app bell notifications
- * or idempotency tracking for purchase confirmations.
+ * are a distinct domain that doesn't need in-app bell notifications.
+ * Duplicate suppression lives with the callers: a confirmation is sent
+ * only by the call that created or marked the purchase paid, and a guest
+ * receipt link only when a new token could be claimed for the purchase.
+ *
+ * Every interpolated value is escaped: guest names, titles and reasons
+ * are user-provided text.
  */
 
 import { isEmailEnabled, sendEmail } from "./email-provider";
@@ -18,6 +23,10 @@ import {
   bpmNotice,
   bpmCtaButton,
   bpmQrBlock,
+  bpmTextLink,
+  escapeHtml,
+  DOWNLOAD_RECEIPT_LABEL,
+  VIEW_PAYMENTS_LABEL,
   B,
 } from "./email-brand";
 
@@ -36,6 +45,12 @@ export interface EventPurchaseEmailData {
   inclusionSummary: string;
   qrToken?: string;
   coverImageUrl?: string;
+  /**
+   * Guest receipt link (`/receipt#<token>`). Only for a paid,
+   * receipt-eligible guest purchase whose token was just issued; never
+   * logged.
+   */
+  receiptUrl?: string;
 }
 
 export type EmailSendResult = { sent: true } | { sent: false; reason: string };
@@ -61,7 +76,9 @@ export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Prom
     return { sent: false, reason };
   }
 
-  console.info(`${tag} Preparing email to ${email} (paymentStatus=${data.paymentStatus}, hasQr=${!!data.qrToken})`);
+  console.info(
+    `${tag} Preparing email to ${email} (paymentStatus=${data.paymentStatus}, hasQr=${!!data.qrToken}, hasReceiptLink=${!!data.receiptUrl})`,
+  );
 
   const isGuest = !data.studentId;
   const isPaid = data.paymentStatus === "paid";
@@ -79,16 +96,16 @@ export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Prom
 
   // Purchase details card
   const detailRows = [
-    { label: "Event", valueHtml: `<strong>${data.eventTitle}</strong>` },
-    { label: "Product", valueHtml: data.productName },
-    { label: "Price", valueHtml: `<strong>${data.priceLabel}</strong>` },
+    { label: "Event", valueHtml: `<strong>${escapeHtml(data.eventTitle)}</strong>` },
+    { label: "Product", valueHtml: escapeHtml(data.productName) },
+    { label: "Price", valueHtml: `<strong>${escapeHtml(data.priceLabel)}</strong>` },
     { label: "Status", valueHtml: bpmStatusBadge(data.paymentStatus) },
   ];
   const detailsHtml = bpmDetailsCard(detailRows);
 
   // Inclusion summary
   const inclusionHtml = data.inclusionSummary
-    ? bpmNotice("coral", `<strong>What's included:</strong> ${data.inclusionSummary}`)
+    ? bpmNotice("coral", `<strong>What's included:</strong> ${escapeHtml(data.inclusionSummary)}`)
     : "";
 
   // Pending payment notice
@@ -107,9 +124,17 @@ export async function sendEventPurchaseEmail(data: EventPurchaseEmailData): Prom
     checkinHtml = bpmNotice("info", "When attending, use your normal BPM student QR code for check-in. No separate event QR is needed.");
   }
 
+  // Receipts: a guest gets a one-purchase link; a student finds every
+  // receipt on /payments and never gets a public token.
+  const receiptHtml = isPaid
+    ? isGuest
+      ? data.receiptUrl ? bpmCtaButton(data.receiptUrl, DOWNLOAD_RECEIPT_LABEL) : ""
+      : bpmTextLink(`${appUrl}/payments`, VIEW_PAYMENTS_LABEL)
+    : "";
+
   const ctaHtml = bpmCtaButton(eventUrl, "View event details");
 
-  const bodyHtml = `${detailsHtml}${inclusionHtml}${pendingHtml}${checkinHtml}${ctaHtml}`;
+  const bodyHtml = `${detailsHtml}${inclusionHtml}${pendingHtml}${checkinHtml}${ctaHtml}${receiptHtml}`;
 
   const html = bpmEmailWrap({
     appUrl,
@@ -168,13 +193,13 @@ export async function sendEventRefundEmail(data: EventRefundEmailData): Promise<
   const subject = `Refund processed: ${data.productName} — ${data.eventTitle}`;
 
   const detailRows = [
-    { label: "Event", valueHtml: `<strong>${data.eventTitle}</strong>` },
-    { label: "Product", valueHtml: data.productName },
-    { label: "Refunded amount", valueHtml: `<strong>${data.amountLabel}</strong>` },
+    { label: "Event", valueHtml: `<strong>${escapeHtml(data.eventTitle)}</strong>` },
+    { label: "Product", valueHtml: escapeHtml(data.productName) },
+    { label: "Refunded amount", valueHtml: `<strong>${escapeHtml(data.amountLabel)}</strong>` },
     { label: "Status", valueHtml: `<span style="color:${B.BPM_500};font-weight:600;">Refunded</span>` },
   ];
   if (data.refundReason) {
-    detailRows.push({ label: "Reason", valueHtml: data.refundReason });
+    detailRows.push({ label: "Reason", valueHtml: escapeHtml(data.refundReason) });
   }
   const detailsHtml = bpmDetailsCard(detailRows);
 
@@ -203,4 +228,50 @@ export async function sendEventRefundEmail(data: EventRefundEmailData): Promise<
     console.error(`${tag} FAILED — ${reason}.`);
     return { sent: false, reason };
   }
+}
+
+// ── Guest Payment Receipt link (staff send / resend) ───────────
+
+export interface GuestReceiptEmailData {
+  /** Always the guest email frozen on the purchase. */
+  to: string;
+  recipientName: string;
+  eventTitle: string;
+  productName: string;
+  /** Formatted from the frozen amount paid. */
+  amountLabel: string;
+  /** `/receipt#<token>`; never logged. */
+  receiptUrl: string;
+}
+
+export async function sendGuestReceiptEmail(data: GuestReceiptEmailData): Promise<EmailSendResult> {
+  const tag = "[guest-receipt-email]";
+  if (!isEmailEnabled()) {
+    const reason = "BREVO_API_KEY not configured";
+    console.warn(`${tag} ${reason} — email NOT sent.`);
+    return { sent: false, reason };
+  }
+
+  const appUrl = getAppUrl();
+  const detailsHtml = bpmDetailsCard([
+    { label: "Event", valueHtml: `<strong>${escapeHtml(data.eventTitle)}</strong>` },
+    { label: "Product", valueHtml: escapeHtml(data.productName) },
+    { label: "Paid", valueHtml: `<strong>${escapeHtml(data.amountLabel)}</strong>` },
+  ]);
+  const noticeHtml = bpmNotice(
+    "info",
+    "Your payment receipt is ready. This link is personal to this purchase — please don't share it. Any earlier receipt link for this purchase no longer works.",
+  );
+  const html = bpmEmailWrap({
+    appUrl,
+    recipientName: data.recipientName,
+    heading: "Your payment receipt",
+    bodyHtml: `${detailsHtml}${noticeHtml}${bpmCtaButton(data.receiptUrl, DOWNLOAD_RECEIPT_LABEL)}`,
+  });
+
+  const ok = await sendEmail({ to: data.to, subject: `Payment receipt: ${data.productName} — ${data.eventTitle}`, html });
+  if (ok) return { sent: true };
+  const reason = "Brevo API did not accept the email";
+  console.error(`${tag} FAILED — ${reason}.`);
+  return { sent: false, reason };
 }

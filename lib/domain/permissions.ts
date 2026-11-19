@@ -61,6 +61,9 @@ export const PERMISSION_KEYS = [
   "payments:delete_test_data",
   "payments:manual_adjustment",
   "payments:grant_complimentary",
+  // Phase 23 — generate / view a customer's Payment Receipt and send or
+  // resend the receipt link. Not implied by any view permission.
+  "payments:send_receipt",
 
   // Products
   "products:view",
@@ -232,6 +235,7 @@ export const ROLE_PRESETS: Record<StaffRoleKey, readonly Permission[]> = {
     "payments:view",
     "payments:mark_paid_reception",
     "payments:grant_complimentary",
+    "payments:send_receipt",
     "products:view",
     "products:create",
     "products:edit",
@@ -401,6 +405,15 @@ export const PRESET_ADDITIONS_00081: Partial<Record<StaffRoleKey, readonly Permi
 };
 
 /**
+ * Keys added to a default preset with migration 00082 (Payment Receipts).
+ * 00082 grants them to current active / pending Admin grants and pending
+ * Admin invites.
+ */
+export const PRESET_ADDITIONS_00082: Partial<Record<StaffRoleKey, readonly Permission[]>> = {
+  admin: ["payments:send_receipt"],
+};
+
+/**
  * Pre-00080 semantics ("preset + additions", with the presets as they were
  * then), kept only so the data migration and its tests can prove what each
  * existing grant converts to. Never use for authorization.
@@ -412,7 +425,11 @@ export function legacyEffectivePermissions(
   if (roleKey === "super_admin") return new Set<Permission>(PERMISSION_KEYS);
   if (roleKey === "custom") return new Set<Permission>(stored ?? []);
   const added = roleKey
-    ? [...(PRESET_ADDITIONS_00080[roleKey] ?? []), ...(PRESET_ADDITIONS_00081[roleKey] ?? [])]
+    ? [
+        ...(PRESET_ADDITIONS_00080[roleKey] ?? []),
+        ...(PRESET_ADDITIONS_00081[roleKey] ?? []),
+        ...(PRESET_ADDITIONS_00082[roleKey] ?? []),
+      ]
     : [];
   const out = new Set<Permission>(
     roleKey ? ROLE_PRESETS[roleKey].filter((p) => !added.includes(p)) : [],
@@ -496,6 +513,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "payments:delete_test_data", label: "Delete test payments" },
       { key: "payments:manual_adjustment", label: "Apply manual discounts / adjustments", description: "Sensitive — lets admins override the price on a manual subscription assignment. Requires a written reason that is stored in Finance." },
       { key: "payments:grant_complimentary", label: "Create complimentary / waived pass", description: "Allows assigning a new pass or membership as Complimentary or Waived." },
+      { key: "payments:send_receipt", label: "View / send Payment Receipts", description: "Generate or view a customer's Payment Receipt and send or resend the receipt link to the email already on the purchase." },
     ],
   },
   {

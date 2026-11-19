@@ -3,10 +3,26 @@ import type { MockSubscription } from "@/lib/mock-data";
 import type { Database } from "@/types/database";
 import type { PaymentMethod, ProductType, SubscriptionStatus } from "@/types/domain";
 import type { ISubscriptionRepository, CreateSubscriptionData, SubscriptionPatch } from "../interfaces/subscription-repository";
-import type { SubscriptionProductSnapshot } from "@/lib/domain/subscription-snapshot";
+import { freezeProductIdentity, type SubscriptionProductSnapshot } from "@/lib/domain/subscription-snapshot";
 import type { AppliedDiscountSnapshot } from "@/lib/domain/pricing-engine";
 
 type SubRow = Database["public"]["Tables"]["student_subscriptions"]["Row"];
+
+/** Columns added by migration 00082; absent until it is applied. */
+const PRODUCT_IDENTITY_COLUMNS = ["product_name_snapshot", "product_type_snapshot"] as const;
+
+/**
+ * Only a rejection naming the 00082 columns justifies retrying without
+ * them — the same narrow rule as the 00047 audit-identity fallback. It
+ * exists so a deploy that lands before 00082 cannot fail a Stripe
+ * fulfilment after the customer has already paid; 00082's backfill only
+ * fills NULLs, so any row written in that window is frozen when it runs.
+ */
+export function isMissingProductIdentityColumnError(error: { code?: string; message?: string }): boolean {
+  const named = PRODUCT_IDENTITY_COLUMNS.some((c) => error.message?.includes(c));
+  if (!named) return false;
+  return error.code === "PGRST204" || error.code === "42703" || !error.code;
+}
 
 function toMockSubscription(row: SubRow): MockSubscription {
   return {
@@ -44,6 +60,8 @@ function toMockSubscription(row: SubRow): MockSubscription {
     refundedBy: row.refunded_by,
     refundReason: row.refund_reason,
     productSnapshot: (row.product_snapshot as SubscriptionProductSnapshot | null) ?? null,
+    productNameSnapshot: row.product_name_snapshot ?? null,
+    productTypeSnapshot: row.product_type_snapshot ?? null,
     originalPriceCents: row.original_price_cents ?? null,
     discountAmountCents: row.discount_amount_cents ?? 0,
     appliedDiscount: (row.applied_discount as AppliedDiscountSnapshot | null) ?? null,
@@ -115,53 +133,69 @@ export const supabaseSubscriptionRepo: ISubscriptionRepository = {
 
   async create(input: CreateSubscriptionData) {
     const supabase = createAdminClient();
-    const { data, error } = await supabase
-      .from("student_subscriptions")
-      .insert({
-        student_id: input.studentId,
-        product_id: input.productId,
-        status: input.status as SubRow["status"],
-        total_credits: input.totalCredits,
-        remaining_credits: input.remainingCredits,
-        valid_from: input.validFrom,
-        valid_until: input.validUntil,
-        notes: input.notes,
-        term_id: input.termId,
-        payment_method: input.paymentMethod,
-        payment_status: input.paymentStatus ?? "paid",
-        assigned_by: input.assignedBy ?? null,
-        assigned_at: input.assignedAt ?? new Date().toISOString(),
-        auto_renew: input.autoRenew,
-        classes_used: input.classesUsed,
-        classes_per_term: input.classesPerTerm,
-        selected_style_names: input.selectedStyleNames ?? (input.selectedStyleName ? [input.selectedStyleName] : null),
-        selected_style_ids: input.selectedStyleIds ?? null,
-        dance_style_id: input.selectedStyleId ?? null,
-        renewed_from_id: input.renewedFromId ?? null,
-        paid_at: input.paidAt ?? null,
-        payment_reference: input.paymentReference ?? null,
-        payment_notes: input.paymentNotes ?? null,
-        collected_by: input.collectedBy ?? null,
-        price_cents_at_purchase: input.priceCentsAtPurchase ?? null,
-        currency_at_purchase: input.currencyAtPurchase ?? "EUR",
-        product_snapshot: input.productSnapshot ?? null,
-        original_price_cents: input.originalPriceCents ?? null,
-        discount_amount_cents: input.discountAmountCents ?? 0,
-        applied_discount: input.appliedDiscount ?? null,
-        manual_discount_cents: input.manualDiscountCents ?? 0,
-        manual_discount_reason: input.manualDiscountReason ?? null,
-        manual_discount_by: input.manualDiscountBy ?? null,
-        subtotal_ex_vat_cents: input.subtotalExVatCents ?? null,
-        vat_amount_cents: input.vatAmountCents ?? null,
-        vat_rate_percent: input.vatRatePercent ?? null,
-        vat_price_mode: input.vatPriceMode ?? null,
-        total_inc_vat_cents: input.totalIncVatCents ?? null,
-      } as never)
-      .select("*, products(name, product_type)")
-      .single();
-    if (error) throw new Error(error.message);
+    const identity = freezeProductIdentity(input);
+    const baseRow = {
+      student_id: input.studentId,
+      product_id: input.productId,
+      status: input.status as SubRow["status"],
+      total_credits: input.totalCredits,
+      remaining_credits: input.remainingCredits,
+      valid_from: input.validFrom,
+      valid_until: input.validUntil,
+      notes: input.notes,
+      term_id: input.termId,
+      payment_method: input.paymentMethod,
+      payment_status: input.paymentStatus ?? "paid",
+      assigned_by: input.assignedBy ?? null,
+      assigned_at: input.assignedAt ?? new Date().toISOString(),
+      auto_renew: input.autoRenew,
+      classes_used: input.classesUsed,
+      classes_per_term: input.classesPerTerm,
+      selected_style_names: input.selectedStyleNames ?? (input.selectedStyleName ? [input.selectedStyleName] : null),
+      selected_style_ids: input.selectedStyleIds ?? null,
+      dance_style_id: input.selectedStyleId ?? null,
+      renewed_from_id: input.renewedFromId ?? null,
+      paid_at: input.paidAt ?? null,
+      payment_reference: input.paymentReference ?? null,
+      payment_notes: input.paymentNotes ?? null,
+      collected_by: input.collectedBy ?? null,
+      price_cents_at_purchase: input.priceCentsAtPurchase ?? null,
+      currency_at_purchase: input.currencyAtPurchase ?? "EUR",
+      product_snapshot: input.productSnapshot ?? null,
+      original_price_cents: input.originalPriceCents ?? null,
+      discount_amount_cents: input.discountAmountCents ?? 0,
+      applied_discount: input.appliedDiscount ?? null,
+      manual_discount_cents: input.manualDiscountCents ?? 0,
+      manual_discount_reason: input.manualDiscountReason ?? null,
+      manual_discount_by: input.manualDiscountBy ?? null,
+      subtotal_ex_vat_cents: input.subtotalExVatCents ?? null,
+      vat_amount_cents: input.vatAmountCents ?? null,
+      vat_rate_percent: input.vatRatePercent ?? null,
+      vat_price_mode: input.vatPriceMode ?? null,
+      total_inc_vat_cents: input.totalIncVatCents ?? null,
+    };
+    const insert = (row: Record<string, unknown>) =>
+      supabase
+        .from("student_subscriptions")
+        .insert(row as never)
+        .select("*, products(name, product_type)")
+        .single();
 
-    const row = data as SubRow & { products?: { name: string; product_type: string } };
+    let { data, error } = await insert({
+      ...baseRow,
+      product_name_snapshot: identity.productNameSnapshot,
+      product_type_snapshot: identity.productTypeSnapshot,
+    });
+    if (error && isMissingProductIdentityColumnError(error)) {
+      console.error(
+        "[subscription-repo] student_subscriptions has no product identity snapshot columns — migration 00082 is not applied. Row written without them; 00082's backfill will freeze it.",
+      );
+      ({ data, error } = await insert(baseRow));
+    }
+    if (error) throw new Error(error.message);
+    if (!data) throw new Error("Subscription insert returned no row.");
+
+    const row = data as unknown as SubRow & { products?: { name: string; product_type: string } };
     const sub = enrichWithProduct(toMockSubscription(row), row.products ?? undefined);
     if (!sub.productName) sub.productName = input.productName;
     if (sub.productType === "membership" && input.productType !== "membership") sub.productType = input.productType;

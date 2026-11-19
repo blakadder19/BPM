@@ -602,6 +602,15 @@ export interface MockSubscription {
    */
   productSnapshot: import("./domain/subscription-snapshot").SubscriptionProductSnapshot | null;
   /**
+   * Phase 23: product name/type frozen when the row was created
+   * (migration 00082). `productName` / `productType` above stay the LIVE
+   * product values used by operational screens; receipts read these.
+   * Rows that predate 00082 were backfilled with the name known at
+   * migration time. Undefined/null only before 00082 is applied.
+   */
+  productNameSnapshot?: string | null;
+  productTypeSnapshot?: string | null;
+  /**
    * Phase 4: list price at purchase time (BEFORE discount). Null on
    * legacy rows. priceCentsAtPurchase remains the FINAL paid amount.
    */
@@ -801,6 +810,12 @@ export interface MockEventPurchase {
   currency: string | null;
   productNameSnapshot: string | null;
   productTypeSnapshot: string | null;
+  /**
+   * Event title frozen when the purchase was created (migration 00082).
+   * Rows created before 00082 were backfilled with the title current at
+   * migration time. Receipts read only this, never the live event title.
+   */
+  eventTitleSnapshot?: string | null;
   /**
    * Frozen pricing snapshot — populated when an affiliation discount
    * was applied at purchase time. Mirrors

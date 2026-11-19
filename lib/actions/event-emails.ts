@@ -14,6 +14,7 @@ import {
   bpmNotice,
   bpmCtaButton,
   bpmQrBlock,
+  escapeHtml,
 } from "@/lib/communications/email-brand";
 import { formatEventDateRange } from "@/lib/utils";
 
@@ -149,14 +150,14 @@ export async function sendEventReminderAction(input: {
     if (!email) { failedCount++; continue; }
 
     const detailRows: { label: string; valueHtml: string }[] = [
-      { label: "Event", valueHtml: `<strong>${event.title}</strong>` },
-      { label: "When", valueHtml: dateRange },
+      { label: "Event", valueHtml: `<strong>${escapeHtml(event.title)}</strong>` },
+      { label: "When", valueHtml: escapeHtml(dateRange) },
     ];
     if (event.location) {
-      detailRows.push({ label: "Where", valueHtml: event.location });
+      detailRows.push({ label: "Where", valueHtml: escapeHtml(event.location) });
     }
     detailRows.push(
-      { label: "Product", valueHtml: product?.name ?? "Event pass" },
+      { label: "Product", valueHtml: escapeHtml(product?.name ?? "Event pass") },
       { label: "Status", valueHtml: bpmStatusBadge(isPaid ? "paid" : "pending") },
     );
     const detailsHtml = bpmDetailsCard(detailRows, "Your event");

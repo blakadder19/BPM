@@ -2,16 +2,19 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe, isStripeEnabled } from "@/lib/stripe";
 import { routeStripeSessionFulfillment } from "@/lib/services/stripe-fulfillment-router";
+import { reconcileStripeRefundUpdate } from "@/lib/services/stripe-refund-outcome";
 
 /**
  * Stripe webhook endpoint.
  *
- * Handles checkout.session.completed for one-time payment fulfillment.
- * Verifies the webhook signature using STRIPE_WEBHOOK_SECRET.
+ * Handles checkout.session.completed for one-time payment fulfillment,
+ * and refund updates that resolve a refund Stripe first reported as
+ * pending. Verifies the webhook signature using STRIPE_WEBHOOK_SECRET.
  *
  * Setup: in Stripe Dashboard → Developers → Webhooks, add endpoint:
  *   URL:    https://<your-domain>/api/webhooks/stripe
- *   Events: checkout.session.completed
+ *   Events: checkout.session.completed, refund.updated, refund.failed,
+ *           charge.refund.updated
  *
  * For local dev: use `stripe listen --forward-to localhost:3000/api/webhooks/stripe`
  */
@@ -87,6 +90,19 @@ export async function POST(request: Request) {
         { error: "Fulfillment failed" },
         { status: 500 },
       );
+    }
+  }
+
+  if (
+    event.type === "refund.updated" ||
+    event.type === "refund.failed" ||
+    event.type === "charge.refund.updated"
+  ) {
+    const refund = event.data.object as Stripe.Refund;
+    const result = await reconcileStripeRefundUpdate(refund);
+    if (result.error) {
+      console.error(`[stripe-webhook] Refund ${refund.id} reconciliation failed:`, result.error);
+      return NextResponse.json({ error: "Refund reconciliation failed" }, { status: 500 });
     }
   }
 

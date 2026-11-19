@@ -22,6 +22,8 @@ import { StudentEventDetail } from "@/components/events/student-event-detail";
 import { isStripeEnabled } from "@/lib/stripe";
 import { hasActiveMembership } from "@/lib/domain/active-membership";
 import { shouldShowEventToStudent } from "@/lib/domain/event-visibility";
+import { evaluateReceiptEligibility } from "@/lib/domain/receipts";
+import { getReceiptTokenRepo } from "@/lib/repositories";
 
 export default async function EventDetailPage({
   params,
@@ -91,7 +93,23 @@ export default async function EventDetailPage({
     // independently enforce the same gate.
     canRefund: hasPermission(access, "finance:refund") || hasPermission(access, "payments:refund"),
     canScan: hasPermission(access, "checkin:scan"),
+    canSendReceipt: hasPermission(access, "payments:send_receipt"),
   };
+
+  let receiptEligiblePurchaseIds: string[] = [];
+  let activeReceiptLinkPurchaseIds: string[] = [];
+  if (permissions.canSendReceipt) {
+    const eligible = purchases.filter((row) => {
+      const student = row.studentId ? studentInfoMap[row.studentId] : null;
+      const customer = student ? { name: student.fullName, email: student.email } : null;
+      return evaluateReceiptEligibility({ kind: "event_purchase", row, customer }).eligible;
+    });
+    receiptEligiblePurchaseIds = eligible.map((row) => row.id);
+    const withActiveLink = await getReceiptTokenRepo()
+      .listPurchasesWithActiveToken(eligible.filter((row) => !row.studentId).map((row) => row.id))
+      .catch(() => new Set<string>());
+    activeReceiptLinkPurchaseIds = [...withActiveLink];
+  }
 
   return (
     <AdminEventDetail
@@ -101,6 +119,8 @@ export default async function EventDetailPage({
       purchases={purchases}
       studentInfoMap={studentInfoMap}
       permissions={permissions}
+      receiptEligiblePurchaseIds={receiptEligiblePurchaseIds}
+      activeReceiptLinkPurchaseIds={activeReceiptLinkPurchaseIds}
     />
   );
 }

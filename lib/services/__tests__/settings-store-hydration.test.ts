@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
  * defaults, and the store recovers once the database is reachable again.
  */
 
-type Row = { value: Record<string, unknown>; academy_id: string } | null;
+type Row = { value: Record<string, unknown>; academy_id: string; updated_at?: string } | null;
 
 const h = vi.hoisted(() => ({
   row: null as Row,
@@ -15,7 +15,8 @@ const h = vi.hoisted(() => ({
   readGate: null as null | Promise<void>,
   reads: 0,
   writeError: null as null | { message: string },
-  upserts: [] as Record<string, unknown>[],
+  writes: [] as Record<string, unknown>[],
+  version: 0,
 }));
 
 vi.mock("server-only", () => ({}));
@@ -29,16 +30,34 @@ vi.mock("@supabase/supabase-js", () => ({
             h.reads += 1;
             if (h.readGate) await h.readGate;
             if (h.readThrows) throw h.readThrows;
-            return { data: h.readError ? null : h.row, error: h.readError };
+            const data = h.readError || !h.row ? null : { ...h.row, updated_at: h.row.updated_at ?? "v0" };
+            return { data, error: h.readError };
           },
         }),
         limit: () => ({
           maybeSingle: async () => ({ data: table === "academies" ? { id: "acad-1" } : null, error: null }),
         }),
       }),
-      upsert: async (row: Record<string, unknown>) => {
+      update: (patch: { value: Record<string, unknown> }) => {
+        const filters: Record<string, unknown> = {};
+        const chain = {
+          eq: (column: string, value: unknown) => {
+            filters[column] = value;
+            return chain;
+          },
+          select: async () => {
+            if (h.writeError) return { data: null, error: h.writeError };
+            if (!h.row || (h.row.updated_at ?? "v0") !== filters.updated_at) return { data: [], error: null };
+            h.row = { ...h.row, value: patch.value, updated_at: `v${++h.version}` };
+            h.writes.push(patch);
+            return { data: [{ id: "row-1" }], error: null };
+          },
+        };
+        return chain;
+      },
+      insert: async (row: Record<string, unknown>) => {
         if (h.writeError) return { error: h.writeError };
-        h.upserts.push(row);
+        h.writes.push(row);
         return { error: null };
       },
     }),
@@ -89,7 +108,8 @@ beforeEach(() => {
   h.readGate = null;
   h.reads = 0;
   h.writeError = null;
-  h.upserts.length = 0;
+  h.writes.length = 0;
+  h.version = 0;
   resetSettingsHydration();
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -231,7 +251,7 @@ describe("updateSettings", () => {
     await hydrateSettings();
     h.row = { value: { ...CONFIGURED, noShowFeeCents: 900 }, academy_id: "acad-1" };
     await updateSettings({ lateCancelFeeCents: 250 });
-    const written = h.upserts.at(-1)?.value as Record<string, unknown>;
+    const written = h.writes.at(-1)?.value as Record<string, unknown>;
     expect(written.noShowFeeCents).toBe(900);
     expect(written.lateCancelFeeCents).toBe(250);
     expect(written.vatRatePercent).toBe(23);
@@ -242,7 +262,7 @@ describe("updateSettings", () => {
     await hydrateSettings().catch(() => {});
     h.readError = null;
     await updateSettings({ lateCancelFeeCents: 250 });
-    const written = h.upserts.at(-1)?.value as Record<string, unknown>;
+    const written = h.writes.at(-1)?.value as Record<string, unknown>;
     expect(written.vatEnabled).toBe(true);
     expect(written.vatRatePercent).toBe(23);
     expect(getSettings().lateCancelFeeCents).toBe(250);
@@ -252,7 +272,7 @@ describe("updateSettings", () => {
     await hydrateSettings();
     h.readError = SCHEMA_CACHE_OUTAGE;
     await expect(updateSettings({ lateCancelFeeCents: 250 })).rejects.toThrow();
-    expect(h.upserts).toHaveLength(0);
+    expect(h.writes).toHaveLength(0);
     expect(getSettings().lateCancelFeeCents).toBe(300);
   });
 

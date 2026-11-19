@@ -10,6 +10,7 @@ import "server-only";
 
 import { getSpecialEventRepo } from "@/lib/repositories";
 import { sendEventPurchaseEmail, type EventPurchaseEmailData, type EmailSendResult } from "@/lib/communications/event-emails";
+import { claimInitialGuestReceiptUrl } from "@/lib/services/guest-receipt-delivery";
 import type { MockEventPurchase, MockEventProduct, MockSpecialEvent } from "@/lib/mock-data";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -38,6 +39,17 @@ export async function trackEmailSend(purchaseId: string, emailType: string, resu
   } catch { /* non-critical */ }
 }
 
+/**
+ * What the buyer paid (or owes), from the purchase's frozen amounts. The
+ * live product price is only a last resort for legacy rows with no
+ * amounts at all.
+ */
+function frozenPriceCents(purchase: MockEventPurchase, product: MockEventProduct): number {
+  if (purchase.paymentStatus === "paid" && purchase.paidAmountCents != null) return purchase.paidAmountCents;
+  if (purchase.originalAmountCents != null) return purchase.originalAmountCents - (purchase.discountAmountCents ?? 0);
+  return product.priceCents;
+}
+
 export function buildEmailData(
   purchase: MockEventPurchase,
   product: MockEventProduct,
@@ -48,13 +60,11 @@ export function buildEmailData(
     studentId: purchase.studentId,
     studentName: isGuest ? (purchase.guestName ?? "Guest") : "Student",
     directEmail: isGuest ? (purchase.guestEmail ?? undefined) : undefined,
-    eventTitle: event.title,
+    eventTitle: purchase.eventTitleSnapshot ?? event.title,
     eventId: event.id,
     productName: purchase.productNameSnapshot ?? product.name,
     productType: purchase.productTypeSnapshot ?? product.productType,
-    priceLabel: purchase.originalAmountCents != null
-      ? centsToEuros(purchase.originalAmountCents)
-      : centsToEuros(product.priceCents),
+    priceLabel: centsToEuros(frozenPriceCents(purchase, product)),
     paymentStatus: purchase.paymentStatus === "paid" ? "paid" : "pending",
     inclusionSummary: buildInclusionSummary(product.inclusionRule),
     qrToken: (isGuest && purchase.paymentStatus === "paid" && purchase.qrToken) ? purchase.qrToken : undefined,
@@ -87,6 +97,9 @@ export async function sendPaymentConfirmationEmail(
     const data = buildEmailData(purchase, product, event);
     if (qrToken) data.qrToken = qrToken;
     data.paymentStatus = "paid";
+    if (!purchase.studentId) {
+      data.receiptUrl = (await claimInitialGuestReceiptUrl(purchase.id)) ?? undefined;
+    }
 
     console.info(`${tag} Sending payment confirmation email…`);
     const result = await sendEventPurchaseEmail(data);

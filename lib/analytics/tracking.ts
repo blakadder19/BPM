@@ -21,6 +21,19 @@
  *     accept queued calls before load.
  */
 
+// ── pages without third-party scripts ─────────────────────────
+
+/**
+ * `/receipt` holds a guest receipt credential in its URL fragment and a
+ * form field, so no third-party script may run there.
+ */
+const ANALYTICS_EXCLUDED_PATHS = ["/receipt"] as const;
+
+export function isAnalyticsExcludedPath(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return ANALYTICS_EXCLUDED_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 // ── env-driven configuration ──────────────────────────────────
 
 /**

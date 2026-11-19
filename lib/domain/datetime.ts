@@ -15,7 +15,7 @@
  * because the academy timezone is a fixed constant).
  */
 
-const ACADEMY_TIMEZONE = process.env.APP_TIMEZONE || "Europe/Dublin";
+export const ACADEMY_TIMEZONE = process.env.APP_TIMEZONE || "Europe/Dublin";
 
 const DEFAULT_CLOSURE_MINUTES = 60;
 

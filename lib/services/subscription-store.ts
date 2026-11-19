@@ -15,7 +15,7 @@ import { SUBSCRIPTIONS, type MockSubscription } from "@/lib/mock-data";
 import { generateId } from "@/lib/utils";
 import { isSupabaseMode } from "@/lib/config/data-provider";
 import type { PaymentMethod, SalePaymentStatus, ProductType, SubscriptionStatus } from "@/types/domain";
-import type { SubscriptionProductSnapshot } from "@/lib/domain/subscription-snapshot";
+import { freezeProductIdentity, type SubscriptionProductSnapshot } from "@/lib/domain/subscription-snapshot";
 import type { AppliedDiscountSnapshot } from "@/lib/domain/pricing-engine";
 
 const g = globalThis as unknown as {
@@ -81,12 +81,15 @@ export function createSubscription(data: {
   totalIncVatCents?: number | null;
 }): MockSubscription {
   const list = init();
+  const identity = freezeProductIdentity(data);
   const sub: MockSubscription = {
     id: generateId("sub"),
     studentId: data.studentId,
     productId: data.productId,
     productName: data.productName,
     productType: data.productType,
+    productNameSnapshot: identity.productNameSnapshot,
+    productTypeSnapshot: identity.productTypeSnapshot,
     status: data.status,
     totalCredits: data.totalCredits,
     remainingCredits: data.remainingCredits,

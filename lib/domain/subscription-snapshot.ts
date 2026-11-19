@@ -55,6 +55,31 @@ export interface SubscriptionProductSnapshot {
   styleAccessStyleNames: string[] | null;
 }
 
+// ── Product identity (Phase 23) ─────────────────────────────
+
+export interface FrozenProductIdentity {
+  productNameSnapshot: string;
+  productTypeSnapshot: string;
+}
+
+/**
+ * The product name/type a new subscription row must freeze
+ * (`product_name_snapshot` / `product_type_snapshot`, migration 00082).
+ * Every insert goes through the subscription repository, which calls this,
+ * so no creation path can write a row without them. Throws rather than
+ * freezing a blank name: a receipt must never show an empty item.
+ */
+export function freezeProductIdentity(input: {
+  productName: string;
+  productType: string;
+}): FrozenProductIdentity {
+  const name = input.productName?.trim();
+  const type = input.productType?.trim();
+  if (!name) throw new Error("Cannot create a subscription without a product name to freeze.");
+  if (!type) throw new Error("Cannot create a subscription without a product type to freeze.");
+  return { productNameSnapshot: name, productTypeSnapshot: type };
+}
+
 // ── Builder ─────────────────────────────────────────────────
 
 /**

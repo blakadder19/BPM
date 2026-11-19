@@ -25,6 +25,7 @@ import type { IDiscountRuleRepository } from "./interfaces/discount-rule-reposit
 import type { IDiscountClaimRepository } from "./interfaces/discount-claim-repository";
 import type { IStaffRepository } from "./interfaces/staff-repository";
 import type { IReferralRepository } from "./interfaces/referral-repository";
+import type { IReceiptTokenRepository } from "./interfaces/receipt-token-repository";
 
 import { memorySettingsRepo } from "./memory/settings-repository";
 import { memoryBookingRepo } from "./memory/booking-repository";
@@ -180,5 +181,13 @@ export function getReferralRepo(): IReferralRepository {
   return resolveRepo(memoryReferralRepo, () => {
     const { supabaseReferralRepo } = require("./supabase/referral-repository");
     return supabaseReferralRepo;
+  });
+}
+
+export function getReceiptTokenRepo(): IReceiptTokenRepository {
+  const { memoryReceiptTokenRepo } = require("./memory/receipt-token-repository");
+  return resolveRepo(memoryReceiptTokenRepo, () => {
+    const { supabaseReceiptTokenRepo } = require("./supabase/receipt-token-repository");
+    return supabaseReceiptTokenRepo;
   });
 }

@@ -14,6 +14,9 @@ import {
   bpmDetailsCard,
   bpmNotice,
   bpmCtaButton,
+  bpmTextLink,
+  escapeHtml,
+  VIEW_PAYMENTS_LABEL,
   B,
 } from "./email-brand";
 import type {
@@ -184,9 +187,9 @@ function paymentConfirmed(
 ): EmailContent {
   const appUrl = getAppUrl();
   const rows = [
-    { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
+    { label: "Plan", valueHtml: `<strong>${escapeHtml(p.productName)}</strong>` },
     ...pricingRows(p),
-    ...(p.paymentMethod ? [{ label: "Method", valueHtml: p.paymentMethod }] : []),
+    ...(p.paymentMethod ? [{ label: "Method", valueHtml: escapeHtml(p.paymentMethod) }] : []),
     { label: "Status", valueHtml: bpmStatusBadge("paid") },
   ];
 
@@ -194,6 +197,7 @@ function paymentConfirmed(
     bpmDetailsCard(rows, "Payment details"),
     bpmNotice("info", "Your payment has been received and your plan is now fully active. Thank you!"),
     bpmCtaButton(`${appUrl}/dashboard`, "Go to dashboard"),
+    bpmTextLink(`${appUrl}/payments`, VIEW_PAYMENTS_LABEL),
   ].join("\n");
 
   return {
@@ -208,10 +212,10 @@ function subscriptionRefunded(
 ): EmailContent {
   const appUrl = getAppUrl();
   const rows = [
-    { label: "Plan", valueHtml: `<strong>${p.productName}</strong>` },
-    ...(p.amountLabel ? [{ label: "Refunded", valueHtml: `<strong>${p.amountLabel}</strong>` }] : []),
+    { label: "Plan", valueHtml: `<strong>${escapeHtml(p.productName)}</strong>` },
+    ...(p.amountLabel ? [{ label: "Refunded", valueHtml: `<strong>${escapeHtml(p.amountLabel)}</strong>` }] : []),
     { label: "Status", valueHtml: `<span style="color:${B.BPM_500};font-weight:600;">Refunded</span>` },
-    ...(p.refundReason ? [{ label: "Reason", valueHtml: p.refundReason }] : []),
+    ...(p.refundReason ? [{ label: "Reason", valueHtml: escapeHtml(p.refundReason) }] : []),
     { label: "Entitlement", valueHtml: p.entitlementCancelled ? "Cancelled" : "Still active" },
   ];
 
